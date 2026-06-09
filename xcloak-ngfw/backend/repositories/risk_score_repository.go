@@ -1,0 +1,67 @@
+package repositories
+
+import (
+	"xcloak-ngfw/database"
+	"xcloak-ngfw/models"
+)
+
+func UpsertRiskScore(
+	score models.AssetRiskScore,
+) error {
+
+	_, err := database.DB.Exec(`
+		INSERT INTO asset_risk_scores
+		(
+			agent_id,
+			risk_score,
+			risk_level
+		)
+		VALUES ($1,$2,$3)
+
+		ON CONFLICT (agent_id)
+
+		DO UPDATE SET
+
+		risk_score = EXCLUDED.risk_score,
+		risk_level = EXCLUDED.risk_level,
+		updated_at = NOW()
+	`,
+		score.AgentID,
+		score.RiskScore,
+		score.RiskLevel,
+	)
+
+	return err
+}
+
+func GetRiskScore(
+	agentID string,
+) (*models.AssetRiskScore, error) {
+
+	var score models.AssetRiskScore
+
+	err := database.DB.QueryRow(`
+		SELECT
+			id,
+			agent_id,
+			risk_score,
+			risk_level,
+			updated_at
+		FROM asset_risk_scores
+		WHERE agent_id=$1
+	`,
+		agentID,
+	).Scan(
+		&score.ID,
+		&score.AgentID,
+		&score.RiskScore,
+		&score.RiskLevel,
+		&score.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &score, nil
+}

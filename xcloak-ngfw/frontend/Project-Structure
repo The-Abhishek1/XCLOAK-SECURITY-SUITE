@@ -1,0 +1,55 @@
+xcloak-soc-dashboard/
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx (redirect to login)
+│   ├── login/
+│   │   └── page.tsx
+│   ├── dashboard/
+│   │   └── page.tsx
+│   ├── agents/
+│   │   ├── page.tsx
+│   │   └── [id]/
+│   │       └── page.tsx
+│   ├── alerts/
+│   │   └── page.tsx
+│   ├── incidents/
+│   │   └── page.tsx
+│   ├── playbooks/
+│   │   └── page.tsx
+│   ├── threat-intel/
+│   │   └── page.tsx
+│   ├── vulnerabilities/
+│   │   └── page.tsx
+│   ├── settings/
+│   │   └── page.tsx
+│   └── timeline/
+│       └── page.tsx
+├── components/
+│   ├── layout/
+│   │   ├── Sidebar.tsx
+│   │   ├── Header.tsx
+│   │   └── RootLayout.tsx
+│   ├── dashboard/
+│   │   ├── StatsCards.tsx
+│   │   ├── AlertsChart.tsx
+│   │   ├── RiskChart.tsx
+│   │   ├── TopThreats.tsx
+│   │   └── RiskTable.tsx
+│   ├── agents/
+│   │   ├── AgentProcesses.tsx
+│   │   ├── AgentConnections.tsx
+│   │   ├── AgentServices.tsx
+│   │   ├── AgentPackages.tsx
+│   │   ├── AgentUsers.tsx
+│   │   └── AgentTimeline.tsx
+│   └── ui/
+├── lib/
+│   ├── api.ts
+│   ├── auth.ts
+│   └── utils.ts
+├── types/
+│   └── index.ts
+├── hooks/
+│   ├── useAuth.ts
+│   └── useWebSocket.ts
+└── middleware.ts

@@ -1,0 +1,10 @@
+title: Sudo Usage
+
+severity: medium
+
+mitre_tactic: Privilege Escalation
+mitre_technique: T1548
+mitre_name: Abuse Elevation Control Mechanism
+
+keywords:
+  - "sudo:"

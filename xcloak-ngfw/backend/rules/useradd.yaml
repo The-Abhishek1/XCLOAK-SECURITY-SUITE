@@ -1,0 +1,10 @@
+title: New User Created
+
+severity: high
+
+mitre_tactic: Persistence
+mitre_technique: T1136
+mitre_name: Create Account
+
+keywords:
+  - useradd

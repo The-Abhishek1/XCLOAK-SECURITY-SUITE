@@ -1,0 +1,344 @@
+Current XCloak-Security-Suite Architecture
+                    XCloak-Security-Suite Platform
+
+        ┌──────────────────────────────┐
+        │          Dashboard           │
+        └──────────────┬───────────────┘
+                       │
+                       ▼
+        ┌──────────────────────────────┐
+        │         REST API             │
+        └──────────────┬───────────────┘
+                       │
+      ┌────────────────┼─────────────────┐
+      ▼                ▼                 ▼
+
+  Firewall          SIEM              EDR/XDR
+1. Authentication & Security
+
+Completed:
+
+✔ User Registration
+✔ User Login
+✔ JWT Authentication
+✔ Role Based Access Control (RBAC)
+✔ Admin/User Roles
+✔ Request ID Middleware
+✔ Request Logging Middleware
+✔ Audit Logging
+
+Endpoints:
+
+POST /api/auth/register
+POST /api/auth/login
+GET  /api/audit/logs
+2. NGFW Module
+
+Completed:
+
+✔ Firewall Rule CRUD
+✔ PostgreSQL Rule Storage
+✔ Enable/Disable Rules
+✔ Firewall Sync Engine
+
+Endpoints:
+
+POST   /api/firewall/rules
+GET    /api/firewall/rules
+GET    /api/firewall/rules/:id
+PUT    /api/firewall/rules/:id
+DELETE /api/firewall/rules/:id
+3. Agent Management
+
+Completed:
+
+✔ Agent Registration
+✔ Heartbeats
+✔ Agent Status Tracking
+✔ Online/Offline Detection
+✔ Agent Summary API
+✔ Dashboard Overview
+
+Endpoints:
+
+POST /api/agents/register
+POST /api/agents/heartbeat
+GET  /api/agents
+GET  /api/agents/:id
+GET  /api/agents/:id/summary
+4. Endpoint Inventory Collection
+
+Completed:
+
+Processes
+✔ collect_processes
+✔ endpoint_processes table
+Connections
+✔ collect_connections
+✔ endpoint_connections table
+Services
+✔ collect_services
+✔ endpoint_services table
+Packages
+✔ collect_packages
+✔ endpoint_packages table
+Users
+✔ collect_users
+✔ endpoint_users table
+5. Agent Tasking Framework
+
+Completed:
+
+✔ Task Queue
+✔ Pending Tasks
+✔ Running Tasks
+✔ Completed Tasks
+✔ Result Submission
+✔ Agent Polling
+
+Endpoints:
+
+POST /api/tasks
+GET  /api/tasks/agent/:id
+POST /api/tasks/result
+6. EDR Response Actions
+
+Completed:
+
+Kill Process
+task_type:
+kill_process
+Execute Script
+task_type:
+execute_script
+Collect File
+task_type:
+collect_file
+
+Stored in:
+
+collected_files
+Quarantine File
+task_type:
+quarantine_file
+
+Stored in:
+
+quarantined_files
+7. Log Collection
+
+Completed:
+
+✔ collect_auth_logs
+✔ endpoint_logs table
+✔ log ingestion pipeline
+
+Stored:
+
+auth.log
+8. Detection Engine
+
+Started as:
+
+strings.Contains()
+
+Now upgraded to:
+
+Sigma-Lite Engine
+
+Completed:
+
+✔ Dynamic Rules
+✔ PostgreSQL Rule Storage
+✔ Rule Testing
+✔ MITRE Mapping
+9. Sigma Rule Management
+
+Completed:
+
+✔ Create Rule
+✔ List Rules
+✔ Get Rule
+✔ Update Rule
+✔ Delete Rule
+✔ Enable Rule
+✔ Disable Rule
+✔ Rule Testing API
+
+Endpoints:
+
+POST   /api/rules
+GET    /api/rules
+GET    /api/rules/:id
+PUT    /api/rules/:id
+DELETE /api/rules/:id
+
+PATCH  /api/rules/:id/enable
+PATCH  /api/rules/:id/disable
+
+POST   /api/rules/test
+10. MITRE ATT&CK Integration
+
+Completed:
+
+✔ MITRE Tactic
+✔ MITRE Technique
+✔ MITRE Name
+
+Example:
+
+Failed Password
+↓
+Credential Access
+↓
+T1110
+11. Alert Management
+
+Completed:
+
+✔ Alert Creation
+✔ Alert Deduplication
+✔ Alert Storage
+✔ MITRE Context
+
+Table:
+
+alerts
+12. Incident Engine (XDR)
+
+Completed:
+
+✔ Incident Creation
+✔ Incident Deduplication
+✔ Incident Timeline
+✔ Correlation Engine
+
+Tables:
+
+incidents
+incident_events
+
+Example:
+
+Sudo Usage
+↓
+Incident
+↓
+Timeline Event
+13. IOC Engine
+
+Completed:
+
+✔ IOC Database
+✔ IOC CRUD
+✔ Enable IOC
+✔ Disable IOC
+✔ IOC Matching
+
+Current IOC Type:
+
+IP Address
+
+Endpoints:
+
+POST   /api/iocs
+GET    /api/iocs
+GET    /api/iocs/:id
+PUT    /api/iocs/:id
+DELETE /api/iocs/:id
+
+PATCH  /api/iocs/:id/enable
+PATCH  /api/iocs/:id/disable
+Current Maturity
+
+Today XCloak-Security-Suite is roughly:
+
+NGFW        70%
+SIEM        75%
+EDR         80%
+XDR         55%
+SOAR        15%
+
+
+What We Haven't Built Yet
+
+High-value remaining features:
+
+□ IOC Matching for Files
+□ IOC Matching for Processes
+□ IOC Matching for Packages
+
+□ Threat Feed Import
+□ AbuseIPDB Integration
+□ AlienVault OTX Integration
+
+□ SOAR Playbooks
+□ Automated Response Chains
+
+□ Real Sigma Parser
+□ Sigma Import
+
+□ YARA Scanning
+□ File Hash Collection
+
+□ Vulnerability Scanner
+□ CVE Detection
+
+□ Frontend Dashboard
+□ Case Management
+□ Multi-Tenant Support
+My Recommended Next 5 Features
+
+In order:
+
+1. File Hash Collection
+2. IOC Matching on File Hashes
+3. Threat Feed Import
+4. YARA Scanning
+5. SOAR Playbooks
+
+Because once file hashes and YARA are added, XCloak-Security-Suite moves from:
+
+Log-based Detection
+
+to
+
+Malware Detection
+
+NGFW
+├── Firewall Rules
+
+EDR
+├── Process Collection
+├── Connection Collection
+├── Service Collection
+├── Package Collection
+├── User Collection
+├── File Collection
+├── File Hash Collection
+├── Quarantine
+├── Isolate Host
+├── Kill Process
+├── Execute Script
+
+SIEM
+├── Log Collection
+├── Alerts
+├── Incidents
+├── Correlation
+
+Threat Detection
+├── Sigma Engine
+├── IOC Engine
+├── Hash Detection
+├── YARA Detection
+
+Threat Intelligence
+├── IOC CRUD
+├── Threat Feeds
+├── Bulk IOC Import
+
+SOAR
+├── Playbooks
+├── Multi-Step Actions
+├── Execution Logs
