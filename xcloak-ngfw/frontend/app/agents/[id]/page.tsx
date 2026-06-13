@@ -1,312 +1,452 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { agentsAPI } from '@/lib/api';
-import { Agent, AgentSummary, Vulnerability, TimelineEvent } from '@/types';
-import { formatDate, getStatusColor } from '@/lib/utils';
-import { Activity, Database, Network, Package, Users, Clock, Bug, AlertCircle } from 'lucide-react';
+import { agentsAPI, alertsAPI, tasksAPI } from '@/lib/api';
+import { Agent, AgentSummary, Vulnerability, TimelineEvent, Alert } from '@/types';
+import { sevClass, formatDate, timeAgo } from '@/lib/utils';
+import {
+  ArrowLeft, Activity, Network, Database, Package,
+  Users, Clock, Bug, FileSearch, Bell, Play, ShieldAlert, Search,
+} from 'lucide-react';
+
+const TABS = [
+  { id: 'alerts',         label: 'Alerts',         icon: Bell },
+  { id: 'processes',      label: 'Processes',       icon: Activity },
+  { id: 'connections',    label: 'Connections',     icon: Network },
+  { id: 'services',       label: 'Services',        icon: Database },
+  { id: 'packages',       label: 'Packages',        icon: Package },
+  { id: 'users',          label: 'Users',           icon: Users },
+  { id: 'timeline',       label: 'Timeline',        icon: Clock },
+  { id: 'vulnerabilities',label: 'Vulnerabilities', icon: Bug },
+  { id: 'filehashes',     label: 'File Hashes',     icon: FileSearch },
+];
 
 export default function AgentDetailPage() {
-  const params = useParams();
+  const params  = useParams();
   const agentId = parseInt(params.id as string);
-  
-  const [agent, setAgent] = useState<Agent | null>(null);
-  const [summary, setSummary] = useState<AgentSummary | null>(null);
-  const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
+
+  const [agent, setAgent]       = useState<Agent | null>(null);
+  const [summary, setSummary]   = useState<AgentSummary | null>(null);
+  const [vulns, setVulns]       = useState<Vulnerability[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [agentAlerts, setAgentAlerts] = useState<Alert[]>([]);
+  const [riskScore, setRiskScore] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState('alerts');
+  const [loading, setLoading]   = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [toast, setToast]       = useState<string | null>(null);
 
-  useEffect(() => {
-    if (agentId && !isNaN(agentId)) {
-      fetchAgentDetails();
-    }
-  }, [agentId]);
+  // Tab data — loaded lazily on tab click
+  const [processes, setProcesses]     = useState<any[] | null>(null);
+  const [connections, setConnections] = useState<any[] | null>(null);
+  const [services, setServices]       = useState<any[] | null>(null);
+  const [users, setUsers]             = useState<any[] | null>(null);
+  const [packages, setPackages]       = useState<any[] | null>(null);
+  const [tabLoading, setTabLoading]   = useState(false);
+  const [search, setSearch]           = useState('');
 
-  const fetchAgentDetails = async () => {
+  const load = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Fetching agent details for ID:', agentId);
-      
-      // Fetch agent basic info
       const agentRes = await agentsAPI.getById(agentId);
       setAgent(agentRes.data);
-      
-      // Fetch summary
-      try {
-        const summaryRes = await agentsAPI.getSummary(agentId);
-        setSummary(summaryRes.data);
-      } catch (err) {
-        console.error('Failed to fetch summary:', err);
-        setSummary(null);
-      }
-      
-      // Fetch vulnerabilities (might fail if not implemented)
-      try {
-        const vulnRes = await agentsAPI.getVulnerabilities(agentId);
-        setVulnerabilities(vulnRes.data || []);
-      } catch (err) {
-        console.error('Failed to fetch vulnerabilities:', err);
-        setVulnerabilities([]);
-      }
-      
-      // Fetch timeline (might fail if not implemented)
-      try {
-        const timelineRes = await agentsAPI.getTimeline(agentId);
-        setTimeline(timelineRes.data || []);
-      } catch (err) {
-        console.error('Failed to fetch timeline:', err);
-        setTimeline([]);
-      }
-      
-    } catch (err: any) {
-      console.error('Failed to fetch agent details:', err);
-      setError(err.response?.data?.error || 'Failed to load agent details');
-    } finally {
+    } catch {
+      setNotFound(true);
       setLoading(false);
+      return;
+    }
+
+    const results = await Promise.allSettled([
+      agentsAPI.getSummary(agentId),
+      agentsAPI.getVulnerabilities(agentId),
+      agentsAPI.getTimeline(agentId),
+      alertsAPI.getByAgent(agentId),
+      agentsAPI.getRisk(agentId),
+    ]);
+
+    if (results[0].status === 'fulfilled') setSummary(results[0].value.data);
+    if (results[1].status === 'fulfilled') setVulns(results[1].value.data || []);
+    if (results[2].status === 'fulfilled') setTimeline(results[2].value.data || []);
+    if (results[3].status === 'fulfilled') setAgentAlerts(results[3].value.data || []);
+    if (results[4].status === 'fulfilled' && results[4].value.data) {
+      setRiskScore(results[4].value.data.risk_score ?? null);
+    }
+
+    setLoading(false);
+  }, [agentId]);
+
+  useEffect(() => { if (!isNaN(agentId)) load(); }, [agentId, load]);
+
+  // Lazy-load tab data on switch
+  const loadTabData = useCallback(async (tab: string) => {
+    setSearch('');
+    setTabLoading(true);
+    try {
+      switch (tab) {
+        case 'processes':
+          if (processes === null) { const r = await agentsAPI.getProcesses(agentId); setProcesses(r.data || []); }
+          break;
+        case 'connections':
+          if (connections === null) { const r = await agentsAPI.getConnections(agentId); setConnections(r.data || []); }
+          break;
+        case 'services':
+          if (services === null) { const r = await agentsAPI.getServices(agentId); setServices(r.data || []); }
+          break;
+        case 'users':
+          if (users === null) { const r = await agentsAPI.getUsers(agentId); setUsers(r.data || []); }
+          break;
+        case 'packages':
+          if (packages === null) { const r = await agentsAPI.getPackages(agentId); setPackages(r.data || []); }
+          break;
+      }
+    } finally {
+      setTabLoading(false);
+    }
+  }, [agentId, processes, connections, services, users, packages]);
+
+  const selectTab = (tab: string) => {
+    setActiveTab(tab);
+    loadTabData(tab);
+  };
+
+  const dispatch = async (taskType: string, refreshTab?: string) => {
+    setDispatching(true);
+    try {
+      await tasksAPI.create({ agent_id: agentId, task_type: taskType, payload: {} });
+      setToast('✓ Task dispatched — refresh in ~15s');
+      setTimeout(() => setToast(null), 4000);
+
+      // Force-refresh the relevant tab's cache after a delay
+      if (refreshTab) {
+        setTimeout(async () => {
+          switch (refreshTab) {
+            case 'processes':   setProcesses(null);   if (activeTab === 'processes')   loadTabData('processes'); break;
+            case 'connections': setConnections(null); if (activeTab === 'connections') loadTabData('connections'); break;
+            case 'services':    setServices(null);    if (activeTab === 'services')    loadTabData('services'); break;
+            case 'users':       setUsers(null);       if (activeTab === 'users')       loadTabData('users'); break;
+            case 'packages':    setPackages(null);    if (activeTab === 'packages')    loadTabData('packages'); break;
+          }
+          load(); // refresh summary counts too
+        }, 8000);
+      }
+    } catch {
+      setToast('Failed to dispatch task');
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setDispatching(false);
     }
   };
 
-  if (loading) {
-    return (
-      <RootLayout>
-        <div className="flex items-center justify-center h-full min-h-screen">
-          <div className="text-lg">Loading agent details...</div>
-        </div>
-      </RootLayout>
-    );
-  }
+  const statsCards = [
+    { label: 'Processes',   val: summary?.processes   ?? 0, icon: Activity  },
+    { label: 'Connections', val: summary?.connections ?? 0, icon: Network   },
+    { label: 'Services',    val: summary?.services    ?? 0, icon: Database  },
+    { label: 'Packages',    val: summary?.packages    ?? 0, icon: Package   },
+    { label: 'Users',       val: summary?.users       ?? 0, icon: Users     },
+    { label: 'Risk Score',  val: riskScore !== null ? riskScore : '—', icon: ShieldAlert },
+  ];
 
-  if (error || !agent) {
-    return (
-      <RootLayout>
-        <div className="flex items-center justify-center h-full min-h-screen">
-          <Card className="w-[500px]">
-            <CardHeader>
-              <CardTitle className="text-red-600 flex items-center gap-2">
-                <AlertCircle className="h-5 w-5" />
-                Error Loading Agent
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600">{error || 'Agent not found'}</p>
-              <button 
-                onClick={() => window.location.href = '/agents'}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Back to Agents
-              </button>
-            </CardContent>
-          </Card>
-        </div>
-      </RootLayout>
-    );
-  }
+  if (loading) return (
+    <RootLayout title="Loading agent…">
+      <div className="flex h-64 items-center justify-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading agent…</div>
+    </RootLayout>
+  );
 
-  return (
-    <RootLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">{agent.hostname}</h1>
-            <p className="text-gray-500 mt-1">{agent.os} • {agent.ip_address}</p>
-          </div>
-          <Badge className={getStatusColor(agent.status)}>
-            {agent.status}
-          </Badge>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Processes</CardTitle>
-              <Activity className="h-4 w-4 text-gray-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.processes || 0}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Connections</CardTitle>
-              <Network className="h-4 w-4 text-gray-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.connections || 0}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Services</CardTitle>
-              <Database className="h-4 w-4 text-gray-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.services || 0}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Packages</CardTitle>
-              <Package className="h-4 w-4 text-gray-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.packages || 0}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="processes" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="processes">Processes</TabsTrigger>
-            <TabsTrigger value="connections">Connections</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="packages">Packages</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="vulnerabilities">Vulnerabilities</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="processes">
-            <Card>
-              <CardHeader>
-                <CardTitle>Running Processes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-gray-500">Process collection feature coming soon. Agent data will appear here once collected.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="connections">
-            <Card>
-              <CardHeader>
-                <CardTitle>Network Connections</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-gray-500">Connection data coming soon. Network connections will be displayed here.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="services">
-            <Card>
-              <CardHeader>
-                <CardTitle>System Services</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-gray-500">Service data coming soon. Running services will be displayed here.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="packages">
-            <Card>
-              <CardHeader>
-                <CardTitle>Installed Packages</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-gray-500">Package data coming soon. Installed software packages will be displayed here.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="users">
-            <Card>
-              <CardHeader>
-                <CardTitle>System Users</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-gray-500">User data coming soon. System users will be displayed here.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="timeline">
-            <Card>
-              <CardHeader>
-                <CardTitle>Attack Timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {timeline && timeline.length > 0 ? (
-                  <div className="space-y-4">
-                    {timeline.map((event, index) => (
-                      <div key={index} className="flex items-start space-x-3 pb-4 border-b last:border-0">
-                        <div className="flex-shrink-0">
-                          <Clock className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{event.message}</p>
-                          <p className="text-xs text-gray-500">{formatDate(event.created_at)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500">No timeline events available for this agent.</p>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="vulnerabilities">
-            <Card>
-              <CardHeader>
-                <CardTitle>Vulnerabilities</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {vulnerabilities && vulnerabilities.length > 0 ? (
-                  <div className="space-y-4">
-                    {vulnerabilities.map((vuln) => (
-                      <div key={vuln.id} className="border-b pb-3 last:border-0">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium">{vuln.name}</h4>
-                          <Badge
-                            variant="outline"
-                            className={
-                              vuln.severity === 'critical'
-                                ? 'border-red-500 text-red-600'
-                                : vuln.severity === 'high'
-                                ? 'border-orange-500 text-orange-600'
-                                : vuln.severity === 'medium'
-                                ? 'border-yellow-500 text-yellow-600'
-                                : 'border-blue-500 text-blue-600'
-                            }
-                          >
-                            {vuln.severity}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">{vuln.description}</p>
-                        <p className="text-xs text-gray-500">
-                          Remediation: {vuln.remediation}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500">No vulnerabilities found for this agent.</p>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+  if (notFound || !agent) return (
+    <RootLayout title="Agent Not Found">
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <ShieldAlert className="h-10 w-10" style={{ color: 'var(--text-3)' }} />
+        <p className="text-sm" style={{ color: 'var(--text-2)' }}>Agent not found or unreachable.</p>
+        <Link href="/agents" className="text-xs" style={{ color: 'var(--accent)' }}>← Back to agents</Link>
       </div>
     </RootLayout>
+  );
+
+  return (
+    <RootLayout title={agent.hostname} subtitle={`${agent.os} · ${agent.ip_address}`} onRefresh={load}>
+
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
+
+      <div className="space-y-5">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <Link href="/agents" className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
+            <ArrowLeft className="h-3.5 w-3.5" /> All agents
+          </Link>
+          <span className={agent.status === 'online' ? 's-online' : 's-offline'}>{agent.status}</span>
+        </div>
+
+        <div className="g-card p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+            <div><p style={{ color: 'var(--text-3)' }}>Agent ID</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{agent.id}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>Machine ID</p><p className="mt-0.5 mono truncate" style={{ color: 'var(--text-1)' }}>{agent.machine_id ? agent.machine_id.slice(0, 16) + '…' : '—'}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>IP Address</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{agent.ip_address}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>Last Seen</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{timeAgo(agent.last_seen)}</p></div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          {statsCards.map(({ label, val, icon: Icon }) => (
+            <div key={label} className="g-card p-3 flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--accent)' }} />
+                <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+              </div>
+              <p className="text-xl font-semibold tabular-nums" style={{ color: 'var(--text-1)' }}>{val}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="g-card overflow-hidden">
+          <div className="flex overflow-x-auto" style={{ borderBottom: '1px solid var(--border)' }}>
+            {TABS.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button key={tab.id} onClick={() => selectTab(tab.id)}
+                  className="flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[11px] font-medium transition-colors"
+                  style={{
+                    color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-2)',
+                    borderBottom: activeTab === tab.id ? '2px solid var(--accent)' : '2px solid transparent',
+                  }}>
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="p-5">
+            {/* Alerts */}
+            {activeTab === 'alerts' && (
+              <div className="space-y-2">
+                {agentAlerts.length === 0 ? <EmptyState msg="No alerts for this agent." /> :
+                  agentAlerts.map(a => (
+                    <div key={a.id} className="flex items-start gap-3 rounded-lg p-3" style={{ background: 'var(--glass-bg-2)' }}>
+                      <span className="mt-1 h-2 w-2 rounded-full shrink-0"
+                        style={{ background: a.severity === 'critical' ? 'var(--red)' : a.severity === 'high' ? 'var(--orange)' : a.severity === 'medium' ? 'var(--yellow)' : 'var(--blue)' }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{a.rule_name}</p>
+                        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-2)' }}>{a.log_message}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span className={sevClass(a.severity)}>{a.severity}</span>
+                        <p className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Timeline */}
+            {activeTab === 'timeline' && (
+              timeline.length === 0 ? <EmptyState msg="No timeline events." /> : (
+                <div className="relative pl-5 space-y-4">
+                  <div className="absolute left-2 top-0 bottom-0 w-px" style={{ background: 'var(--border-md)' }} />
+                  {timeline.map((ev, i) => (
+                    <div key={i} className="relative">
+                      <div className="absolute -left-3 top-1.5 h-2 w-2 rounded-full" style={{ background: 'var(--accent)' }} />
+                      <p className="text-sm" style={{ color: 'var(--text-1)' }}>{ev.message}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{formatDate(ev.created_at)} · {ev.event_type}</p>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* Vulnerabilities */}
+            {activeTab === 'vulnerabilities' && (
+              <div className="space-y-3">
+                <div className="flex justify-end">
+                  <button onClick={() => dispatch('vulnerability_scan')} disabled={dispatching} className="g-btn g-btn-primary text-xs">
+                    <Play className="h-3 w-3" /> {dispatching ? 'Scanning…' : 'Run Scan'}
+                  </button>
+                </div>
+                {vulns.length === 0 ? <EmptyState msg="No vulnerabilities found. Run a scan." /> :
+                  vulns.map(v => (
+                    <div key={v.id} className="rounded-lg p-4 space-y-1.5" style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{v.name}</p>
+                        <span className={sevClass(v.severity)}>{v.severity}</span>
+                      </div>
+                      <p className="text-xs" style={{ color: 'var(--text-2)' }}>{v.description}</p>
+                      <p className="text-xs" style={{ color: 'var(--accent)' }}>Fix: {v.remediation}</p>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {/* Processes table */}
+            {activeTab === 'processes' && (
+              <DataTable
+                data={processes} loading={tabLoading} search={search} setSearch={setSearch}
+                onCollect={() => dispatch('collect_processes', 'processes')} dispatching={dispatching}
+                collectLabel="Collect Processes" searchKeys={['process_name', 'pid']}
+                columns={[
+                  { key: 'pid', label: 'PID', width: '80px', mono: true },
+                  { key: 'process_name', label: 'Name' },
+                  { key: 'collected_at', label: 'Collected', width: '120px', fmt: formatDate },
+                ]}
+              />
+            )}
+
+            {/* Connections table */}
+            {activeTab === 'connections' && (
+              <DataTable
+                data={connections} loading={tabLoading} search={search} setSearch={setSearch}
+                onCollect={() => dispatch('collect_connections', 'connections')} dispatching={dispatching}
+                collectLabel="Collect Connections" searchKeys={['local_address', 'remote_address', 'protocol', 'state']}
+                columns={[
+                  { key: 'protocol', label: 'Proto', width: '70px', mono: true, upper: true },
+                  { key: 'state', label: 'State', width: '90px' },
+                  { key: 'local_address', label: 'Local', mono: true },
+                  { key: 'remote_address', label: 'Remote', mono: true },
+                ]}
+              />
+            )}
+
+            {/* Services table */}
+            {activeTab === 'services' && (
+              <DataTable
+                data={services} loading={tabLoading} search={search} setSearch={setSearch}
+                onCollect={() => dispatch('collect_services', 'services')} dispatching={dispatching}
+                collectLabel="Collect Services" searchKeys={['service_name', 'service_state']}
+                columns={[
+                  { key: 'service_name', label: 'Service Name', mono: true },
+                  { key: 'service_state', label: 'State', width: '100px', badge: true },
+                ]}
+              />
+            )}
+
+            {/* Packages table */}
+            {activeTab === 'packages' && (
+              <DataTable
+                data={packages} loading={tabLoading} search={search} setSearch={setSearch}
+                onCollect={() => dispatch('collect_file_hashes', 'packages')} dispatching={dispatching}
+                collectLabel="Refresh (via hash scan)" searchKeys={['package_name', 'version']}
+                columns={[
+                  { key: 'package_name', label: 'Package', mono: true },
+                  { key: 'version', label: 'Version', width: '160px', mono: true },
+                ]}
+              />
+            )}
+
+            {/* Users table */}
+            {activeTab === 'users' && (
+              <DataTable
+                data={users} loading={tabLoading} search={search} setSearch={setSearch}
+                onCollect={() => dispatch('collect_users', 'users')} dispatching={dispatching}
+                collectLabel="Collect Users" searchKeys={['username', 'shell']}
+                columns={[
+                  { key: 'username', label: 'Username', mono: true },
+                  { key: 'uid', label: 'UID', width: '80px', mono: true },
+                  { key: 'shell', label: 'Shell', mono: true },
+                ]}
+              />
+            )}
+
+            {/* File hashes */}
+            {activeTab === 'filehashes' && (
+              <div className="space-y-3">
+                <div className="flex justify-end">
+                  <button onClick={() => dispatch('collect_file_hashes')} disabled={dispatching} className="g-btn g-btn-primary text-xs">
+                    <Play className="h-3 w-3" /> {dispatching ? 'Collecting…' : 'Collect Hashes'}
+                  </button>
+                </div>
+                <EmptyState msg="Dispatch 'Collect Hashes' to populate file inventory." />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </RootLayout>
+  );
+}
+
+function EmptyState({ msg }: { msg: string }) {
+  return <p className="py-10 text-center text-sm" style={{ color: 'var(--text-2)' }}>{msg}</p>;
+}
+
+interface Column {
+  key: string;
+  label: string;
+  width?: string;
+  mono?: boolean;
+  upper?: boolean;
+  badge?: boolean;
+  fmt?: (v: any) => string;
+}
+
+function DataTable({
+  data, loading, search, setSearch, onCollect, dispatching, collectLabel, searchKeys, columns,
+}: {
+  data: any[] | null; loading: boolean; search: string; setSearch: (s: string) => void;
+  onCollect: () => void; dispatching: boolean; collectLabel: string;
+  searchKeys: string[]; columns: Column[];
+}) {
+  const rows = data || [];
+  const filtered = search
+    ? rows.filter(r => searchKeys.some(k => String(r[k] ?? '').toLowerCase().includes(search.toLowerCase())))
+    : rows;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter…"
+            className="g-input pl-8" style={{ height: 32, fontSize: 12 }} />
+        </div>
+        <button onClick={onCollect} disabled={dispatching} className="g-btn g-btn-primary text-xs">
+          <Play className="h-3 w-3" /> {dispatching ? 'Dispatching…' : collectLabel}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <EmptyState msg="No data yet. Dispatch the collect task above." />
+      ) : (
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          <div className="g-thead grid gap-3 px-3"
+            style={{ gridTemplateColumns: columns.map(c => c.width || '1fr').join(' ') }}>
+            {columns.map(c => <span key={c.key}>{c.label}</span>)}
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="py-8 text-center text-xs" style={{ color: 'var(--text-3)' }}>No matches for "{search}"</div>
+            ) : filtered.map((row, i) => (
+              <div key={i} className="g-tr grid gap-3 items-center px-3 py-2"
+                style={{ gridTemplateColumns: columns.map(c => c.width || '1fr').join(' ') }}>
+                {columns.map(c => {
+                  const val = c.fmt ? c.fmt(row[c.key]) : row[c.key];
+                  if (c.badge) {
+                    return (
+                      <span key={c.key} className={String(row[c.key]).toLowerCase().includes('running') || String(row[c.key]).toLowerCase().includes('active') ? 's-online' : 's-offline'}>
+                        {val}
+                      </span>
+                    );
+                  }
+                  return (
+                    <span key={c.key}
+                      className={`text-xs truncate ${c.mono ? 'mono' : ''} ${c.upper ? 'uppercase' : ''}`}
+                      style={{ color: c.mono ? 'var(--text-2)' : 'var(--text-1)' }}>
+                      {val ?? '—'}
+                    </span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {rows.length > 0 && (
+        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+          Showing {filtered.length} of {rows.length}
+        </p>
+      )}
+    </div>
   );
 }

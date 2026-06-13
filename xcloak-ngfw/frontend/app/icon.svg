@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield body -->
+  <path d="M32 3 L56 12 V30 C56 46 46 56 32 61 C18 56 8 46 8 30 V12 Z"
+        fill="url(#bg)"/>
+
+  <!-- Inner shield (slightly darker, for depth) -->
+  <path d="M32 8 L51 15.5 V30 C51 43 43 51.5 32 55.5 C21 51.5 13 43 13 30 V15.5 Z"
+        fill="#0F172A" fill-opacity="0.18"/>
+
+  <!-- X mark -->
+  <g stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round">
+    <line x1="23" y1="22" x2="41" y2="40"/>
+    <line x1="41" y1="22" x2="23" y2="40"/>
+  </g>
+</svg>

@@ -2,14 +2,11 @@ package agent
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
@@ -60,11 +57,7 @@ func CollectUsers(agentID int) {
 
 	body, _ := json.Marshal(users)
 
-	resp, err := http.Post(
-		config.ServerURL+"/api/agents/users",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	resp, err := authPost("/api/agents/users", body)
 
 	if err != nil {
 		println("Failed sending users")

@@ -2,13 +2,10 @@ package agent
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os/exec"
 	"strings"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
@@ -64,11 +61,7 @@ func CollectPackages(agentID int) {
 		packages,
 	)
 
-	resp, err := http.Post(
-		config.ServerURL+"/api/agents/packages",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	resp, err := authPost("/api/agents/packages", body)
 
 	if err != nil {
 		println("Failed sending packages")

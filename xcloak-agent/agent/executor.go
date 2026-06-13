@@ -1,79 +1,52 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
-func ExecuteTask(task models.AgentTask) {
+func ExecuteTask(client *AuthClient, task models.AgentTask) {
 
 	var output string
 
 	switch task.TaskType {
 
 	case "collect_processes":
-
 		CollectProcesses(task.AgentID)
-
 		output = "process inventory collected"
 
 	case "collect_connections":
-
 		CollectConnections(task.AgentID)
-
 		output = "connection inventory collected"
 
 	case "collect_services":
-
 		CollectServices(task.AgentID)
-
 		output = "service inventory collected"
 
 	case "collect_packages":
-
 		CollectPackages(task.AgentID)
-
 		output = "package inventory collected"
 
 	case "collect_users":
-
-		CollectUsers(
-			task.AgentID,
-		)
-
+		CollectUsers(task.AgentID)
 		output = "user inventory collected"
 
 	case "collect_auth_logs":
-
-		CollectAuthLogs(
-			task.AgentID,
-		)
-
+		CollectAuthLogs(task.AgentID)
 		output = "auth logs collected"
 
 	case "kill_process":
-
-		KillProcess(
-			task,
-		)
-
+		KillProcess(task)
 		output = "process terminated"
 
 	case "collect_file":
-
 		CollectFile(task)
-
 		output = "file collected"
 
 	case "isolate_host":
-
 		err := IsolateHost(task)
-
 		if err != nil {
 			output = err.Error()
 		} else {
@@ -81,9 +54,7 @@ func ExecuteTask(task models.AgentTask) {
 		}
 
 	case "quarantine_file":
-
 		err := QuarantineFile(task)
-
 		if err != nil {
 			output = err.Error()
 		} else {
@@ -91,9 +62,7 @@ func ExecuteTask(task models.AgentTask) {
 		}
 
 	case "execute_script":
-
 		result, err := ExecuteScript(task)
-
 		if err != nil {
 			output = err.Error() + "\n" + result
 		} else {
@@ -101,49 +70,22 @@ func ExecuteTask(task models.AgentTask) {
 		}
 
 	case "collect_file_hashes":
-
-		hashes := CollectFileHashes(
-			task.AgentID,
-		)
-
-		SendFileHashes(
-			hashes,
-		)
-
+		hashes := CollectFileHashes(task.AgentID)
+		SendFileHashes(client, hashes)
 		output = "file hashes collected"
 
 	case "scan_yara":
-
 		var payload models.TaskPayload
-
-		json.Unmarshal(
-			task.Payload,
-			&payload,
-		)
-
+		json.Unmarshal(task.Payload, &payload)
 		if payload.Path == "" {
-
 			output = "missing path"
-
 			break
 		}
-
-		matches := ScanWithYara(
-			task.AgentID,
-			payload.Path,
-		)
-
-		SendYaraMatches(
-			matches,
-		)
-
-		output = fmt.Sprintf(
-			"YARA matches found: %d",
-			len(matches),
-		)
+		matches := ScanWithYara(task.AgentID, payload.Path)
+		SendYaraMatches(client, matches)
+		output = fmt.Sprintf("YARA matches found: %d", len(matches))
 
 	default:
-
 		output = "unknown task"
 	}
 
@@ -152,25 +94,11 @@ func ExecuteTask(task models.AgentTask) {
 		Result: output,
 	}
 
-	body, _ := json.Marshal(
-		taskResult,
-	)
-
-	_, err := http.Post(
-		config.ServerURL+"/api/tasks/result",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
-
+	_, err := client.Post("/api/tasks/result", taskResult)
 	if err != nil {
-		println(
-			"Failed sending task result",
-		)
+		println("Failed sending task result")
 		return
 	}
 
-	println(
-		"Executed:",
-		task.TaskType,
-	)
+	println("Executed:", task.TaskType)
 }

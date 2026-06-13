@@ -1,22 +1,40 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
+import { ThemeProvider } from '@/context/ThemeContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 
 export const metadata: Metadata = {
-  title: 'XCloak SOC Dashboard',
-  description: 'Enterprise Security Orchestration Platform',
+  title: 'XCloak Security Suite',
+  description: 'Enterprise Security Operations Platform',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+// Runs before React hydrates / before first paint, so the correct theme
+// is applied immediately — no flash of the wrong theme on refresh.
+const THEME_INIT_SCRIPT = `
+(function() {
+  try {
+    var saved = localStorage.getItem('xcloak-theme');
+    var theme = saved === 'dark' || saved === 'light' ? saved : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+`;
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body>
+        <ThemeProvider>
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

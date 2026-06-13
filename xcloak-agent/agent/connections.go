@@ -2,13 +2,10 @@ package agent
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os/exec"
 	"strings"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
@@ -69,11 +66,7 @@ func CollectConnections(agentID int) {
 		connections,
 	)
 
-	resp, err := http.Post(
-		config.ServerURL+"/api/agents/connections",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	resp, err := authPost("/api/agents/connections", body)
 
 	if err != nil {
 		println("Failed sending connections")

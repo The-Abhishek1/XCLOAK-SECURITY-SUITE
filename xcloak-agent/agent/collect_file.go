@@ -1,15 +1,11 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
 
-	"net/http"
-
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
@@ -49,11 +45,14 @@ func CollectFile(
 
 	body, _ := json.Marshal(upload)
 
-	http.Post(
-		config.ServerURL+"/api/agents/file",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	resp, err := authPost("/api/agents/file", body)
+
+	if err != nil {
+		println("Failed sending collected file")
+		return
+	}
+
+	defer resp.Body.Close()
 
 	println(
 		"Collected:",

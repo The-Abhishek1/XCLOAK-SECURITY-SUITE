@@ -1,0 +1,45 @@
+// ADD THESE TWO FUNCTIONS to the END of:
+// xcloak-ngfw/backend/repositories/threat_feed_repository.go
+// (the file already has package repositories + imports database/models)
+
+package repositories
+
+import (
+	"time"
+
+	"xcloak-ngfw/database"
+	"xcloak-ngfw/models"
+)
+
+func GetThreatFeedByID(id string) (*models.ThreatFeed, error) {
+
+	var feed models.ThreatFeed
+
+	err := database.DB.QueryRow(`
+		SELECT id, name, source, enabled, last_sync, created_at
+		FROM threat_feeds
+		WHERE id = $1
+	`, id).Scan(
+		&feed.ID,
+		&feed.Name,
+		&feed.Source,
+		&feed.Enabled,
+		&feed.LastSync,
+		&feed.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &feed, nil
+}
+
+func UpdateThreatFeedLastSync(id int, t time.Time) error {
+
+	_, err := database.DB.Exec(`
+		UPDATE threat_feeds SET last_sync = $1 WHERE id = $2
+	`, t, id)
+
+	return err
+}

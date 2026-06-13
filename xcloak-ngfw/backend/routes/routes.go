@@ -80,6 +80,7 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.POST(
 		"/api/agents/heartbeat",
+		middleware.RequireAgentAuth(),
 		api.Heartbeat,
 	)
 
@@ -91,36 +92,43 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.GET(
 		"/api/tasks/agent/:id",
+		middleware.RequireAgentAuth(),
 		api.GetAgentTasks,
 	)
 
 	router.POST(
 		"/api/tasks/result",
+		middleware.RequireAgentAuth(),
 		api.SubmitTaskResult,
 	)
 
 	router.POST(
 		"/api/agents/processes",
+		middleware.RequireAgentAuth(),
 		api.ReceiveProcesses,
 	)
 
 	router.POST(
 		"/api/agents/connections",
+		middleware.RequireAgentAuth(),
 		api.ReceiveConnections,
 	)
 
 	router.POST(
 		"/api/agents/services",
+		middleware.RequireAgentAuth(),
 		api.ReceiveServices,
 	)
 
 	router.POST(
 		"/api/agents/packages",
+		middleware.RequireAgentAuth(),
 		api.ReceivePackages,
 	)
 
 	router.POST(
 		"/api/agents/users",
+		middleware.RequireAgentAuth(),
 		api.ReceiveUsers,
 	)
 	router.GET(
@@ -137,6 +145,7 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.POST(
 		"/api/agents/logs",
+		middleware.RequireAgentAuth(),
 		api.ReceiveLogs,
 	)
 
@@ -148,11 +157,13 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.POST(
 		"/api/agents/file",
+		middleware.RequireAgentAuth(),
 		api.ReceiveFile,
 	)
 
 	router.POST(
 		"/api/agents/quarantine",
+		middleware.RequireAgentAuth(),
 		api.ReceiveQuarantinedFile,
 	)
 
@@ -374,10 +385,131 @@ func SetupRoutes(router *gin.Engine) {
 		api.GetAgentFileHashes,
 	)
 
+	// ── Agent data list endpoints (NEW) ─────────────────────────────────
 	router.GET(
-		"/api/agents/:id/filehashes",
+		"/api/agents/:id/processes",
 		middleware.RequireAuth(),
-		api.GetAgentFileHashes,
+		api.GetAgentProcesses,
+	)
+
+	router.GET(
+		"/api/agents/:id/connections",
+		middleware.RequireAuth(),
+		api.GetAgentConnections,
+	)
+
+	router.GET(
+		"/api/agents/:id/services",
+		middleware.RequireAuth(),
+		api.GetAgentServicesList,
+	)
+
+	router.GET(
+		"/api/agents/:id/users",
+		middleware.RequireAuth(),
+		api.GetAgentUsersList,
+	)
+
+	router.GET(
+		"/api/agents/:id/packages",
+		middleware.RequireAuth(),
+		api.GetAgentPackagesList,
+	)
+
+	// ── Playbook CRUD (NEW) ──────────────────────────────────────────────
+	router.PUT(
+		"/api/playbooks/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.UpdatePlaybook,
+	)
+
+	router.DELETE(
+		"/api/playbooks/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DeletePlaybook,
+	)
+
+	router.PATCH(
+		"/api/playbooks/:id/enable",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.EnablePlaybook,
+	)
+
+	router.PATCH(
+		"/api/playbooks/:id/disable",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DisablePlaybook,
+	)
+
+	// ADD THESE ROUTES to xcloak-ngfw/backend/routes/routes.go inside SetupRoutes.
+
+	// ── YARA Rule Management (NEW) ───────────────────────────────────────
+	router.POST(
+		"/api/yara/rules",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.CreateYaraRule,
+	)
+
+	router.GET(
+		"/api/yara/rules",
+		middleware.RequireAuth(),
+		api.GetYaraRules,
+	)
+
+	// Agent-facing: fetch only enabled rules before a scan_yara task.
+	// Uses RequireAgentAuth so agents authenticate with their bearer token.
+	router.GET(
+		"/api/yara/rules/enabled",
+		middleware.RequireAgentAuth(),
+		api.GetEnabledYaraRules,
+	)
+
+	router.PUT(
+		"/api/yara/rules/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.UpdateYaraRule,
+	)
+
+	router.DELETE(
+		"/api/yara/rules/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DeleteYaraRule,
+	)
+
+	router.PATCH(
+		"/api/yara/rules/:id/enable",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.EnableYaraRule,
+	)
+
+	router.PATCH(
+		"/api/yara/rules/:id/disable",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DisableYaraRule,
+	)
+
+	// GET /api/yara/matches — list all matches, or ?agent_id=N for one agent.
+	router.GET(
+		"/api/yara/matches",
+		middleware.RequireAuth(),
+		api.GetYaraMatches,
+	)
+
+	// ── Threat Feed Sync (NEW) ────────────────────────────────────────────
+	router.POST(
+		"/api/threat-feeds/:id/sync",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.SyncThreatFeed,
 	)
 
 }

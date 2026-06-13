@@ -7,13 +7,10 @@ import (
 	"xcloak-ngfw/models"
 )
 
-func CreateSigmaRule(
-	rule models.SigmaRule,
-) error {
+func CreateSigmaRule(rule models.SigmaRule) error {
 
-	keywordsJSON, _ := json.Marshal(
-		rule.Keywords,
-	)
+	keywordsJSON, _ := json.Marshal(rule.Keywords)
+	selectionsJSON, _ := json.Marshal(rule.Selections)
 
 	_, err := database.DB.Exec(`
 		INSERT INTO sigma_rules
@@ -24,9 +21,11 @@ func CreateSigmaRule(
 			mitre_technique,
 			mitre_name,
 			keywords,
+			selections,
+			condition,
 			enabled
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 	`,
 		rule.Title,
 		rule.Severity,
@@ -34,100 +33,22 @@ func CreateSigmaRule(
 		rule.MitreTechnique,
 		rule.MitreName,
 		keywordsJSON,
+		selectionsJSON,
+		rule.Condition,
 		rule.Enabled,
 	)
 
 	return err
 }
 
-func GetRules() (
-	[]models.SigmaRule,
-	error,
-) {
-
-	rows, err := database.DB.Query(`
-		SELECT
-			id,
-			title,
-			severity,
-			mitre_tactic,
-			mitre_technique,
-			mitre_name,
-			keywords,
-			enabled,
-			created_at
-		FROM sigma_rules
-		ORDER BY id
-	`)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	var rules []models.SigmaRule
-
-	for rows.Next() {
-
-		var rule models.SigmaRule
-
-		var keywords []byte
-
-		err := rows.Scan(
-			&rule.ID,
-			&rule.Title,
-			&rule.Severity,
-			&rule.MitreTactic,
-			&rule.MitreTechnique,
-			&rule.MitreName,
-			&keywords,
-			&rule.Enabled,
-			&rule.CreatedAt,
-		)
-
-		if err != nil {
-			continue
-		}
-
-		json.Unmarshal(
-			keywords,
-			&rule.Keywords,
-		)
-
-		rules = append(
-			rules,
-			rule,
-		)
-	}
-
-	return rules, nil
-}
-
-func GetSigmaRuleByID(
-	id string,
-) (*models.SigmaRule, error) {
+func scanSigmaRule(row interface {
+	Scan(dest ...interface{}) error
+}) (*models.SigmaRule, error) {
 
 	var rule models.SigmaRule
+	var keywords, selections []byte
 
-	var keywords []byte
-
-	err := database.DB.QueryRow(`
-		SELECT
-			id,
-			title,
-			severity,
-			mitre_tactic,
-			mitre_technique,
-			mitre_name,
-			keywords,
-			enabled,
-			created_at
-		FROM sigma_rules
-		WHERE id = $1
-	`,
-		id,
-	).Scan(
+	err := row.Scan(
 		&rule.ID,
 		&rule.Title,
 		&rule.Severity,
@@ -135,6 +56,8 @@ func GetSigmaRuleByID(
 		&rule.MitreTechnique,
 		&rule.MitreName,
 		&keywords,
+		&selections,
+		&rule.Condition,
 		&rule.Enabled,
 		&rule.CreatedAt,
 	)
@@ -143,22 +66,67 @@ func GetSigmaRuleByID(
 		return nil, err
 	}
 
-	json.Unmarshal(
-		keywords,
-		&rule.Keywords,
-	)
+	json.Unmarshal(keywords, &rule.Keywords)
+	json.Unmarshal(selections, &rule.Selections)
 
 	return &rule, nil
 }
 
-func UpdateSigmaRule(
-	id string,
-	rule models.SigmaRule,
-) error {
+const sigmaSelectCols = `
+	id,
+	title,
+	severity,
+	mitre_tactic,
+	mitre_technique,
+	mitre_name,
+	keywords,
+	COALESCE(selections, '{}'::jsonb),
+	COALESCE(condition, ''),
+	enabled,
+	created_at
+`
 
-	keywordsJSON, _ := json.Marshal(
-		rule.Keywords,
-	)
+func GetRules() ([]models.SigmaRule, error) {
+
+	rows, err := database.DB.Query(`
+		SELECT ` + sigmaSelectCols + `
+		FROM sigma_rules
+		ORDER BY id
+	`)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rules []models.SigmaRule
+
+	for rows.Next() {
+		rule, err := scanSigmaRule(rows)
+		if err != nil {
+			continue
+		}
+		rules = append(rules, *rule)
+	}
+
+	return rules, nil
+}
+
+func GetSigmaRuleByID(id string) (*models.SigmaRule, error) {
+
+	row := database.DB.QueryRow(`
+		SELECT `+sigmaSelectCols+`
+		FROM sigma_rules
+		WHERE id = $1
+	`, id)
+
+	return scanSigmaRule(row)
+}
+
+func UpdateSigmaRule(id string, rule models.SigmaRule) error {
+
+	keywordsJSON, _ := json.Marshal(rule.Keywords)
+	selectionsJSON, _ := json.Marshal(rule.Selections)
 
 	_, err := database.DB.Exec(`
 		UPDATE sigma_rules
@@ -169,8 +137,10 @@ func UpdateSigmaRule(
 			mitre_technique = $4,
 			mitre_name = $5,
 			keywords = $6,
-			enabled = $7
-		WHERE id = $8
+			selections = $7,
+			condition = $8,
+			enabled = $9
+		WHERE id = $10
 	`,
 		rule.Title,
 		rule.Severity,
@@ -178,6 +148,8 @@ func UpdateSigmaRule(
 		rule.MitreTechnique,
 		rule.MitreName,
 		keywordsJSON,
+		selectionsJSON,
+		rule.Condition,
 		rule.Enabled,
 		id,
 	)
@@ -185,66 +157,42 @@ func UpdateSigmaRule(
 	return err
 }
 
-func DeleteSigmaRule(
-	id string,
-) error {
+func DeleteSigmaRule(id string) error {
 
 	_, err := database.DB.Exec(`
 		DELETE FROM sigma_rules
 		WHERE id = $1
-	`,
-		id,
-	)
+	`, id)
 
 	return err
 }
 
-func EnableRule(
-	id string,
-) error {
+func EnableRule(id string) error {
 
 	_, err := database.DB.Exec(`
 		UPDATE sigma_rules
 		SET enabled = true
 		WHERE id = $1
-	`,
-		id,
-	)
+	`, id)
 
 	return err
 }
 
-func DisableRule(
-	id string,
-) error {
+func DisableRule(id string) error {
 
 	_, err := database.DB.Exec(`
 		UPDATE sigma_rules
 		SET enabled = false
 		WHERE id = $1
-	`,
-		id,
-	)
+	`, id)
 
 	return err
 }
 
-func GetEnabledRules() (
-	[]models.SigmaRule,
-	error,
-) {
+func GetEnabledRules() ([]models.SigmaRule, error) {
 
 	rows, err := database.DB.Query(`
-		SELECT
-			id,
-			title,
-			severity,
-			mitre_tactic,
-			mitre_technique,
-			mitre_name,
-			keywords,
-			enabled,
-			created_at
+		SELECT ` + sigmaSelectCols + `
 		FROM sigma_rules
 		WHERE enabled = true
 	`)
@@ -252,41 +200,16 @@ func GetEnabledRules() (
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	var rules []models.SigmaRule
 
 	for rows.Next() {
-
-		var rule models.SigmaRule
-		var keywords []byte
-
-		err := rows.Scan(
-			&rule.ID,
-			&rule.Title,
-			&rule.Severity,
-			&rule.MitreTactic,
-			&rule.MitreTechnique,
-			&rule.MitreName,
-			&keywords,
-			&rule.Enabled,
-			&rule.CreatedAt,
-		)
-
+		rule, err := scanSigmaRule(rows)
 		if err != nil {
 			continue
 		}
-
-		json.Unmarshal(
-			keywords,
-			&rule.Keywords,
-		)
-
-		rules = append(
-			rules,
-			rule,
-		)
+		rules = append(rules, *rule)
 	}
 
 	return rules, nil

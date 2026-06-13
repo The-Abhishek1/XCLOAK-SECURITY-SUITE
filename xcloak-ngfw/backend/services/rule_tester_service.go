@@ -6,37 +6,23 @@ import (
 	"xcloak-ngfw/models"
 )
 
-func TestRules(
-	message string,
-) []models.RuleTestResult {
+// TestRules runs every enabled Sigma rule against a sample log message using
+// the SAME evaluation logic as live detection (MatchSigmaRule), so the
+// "Test" button in the UI accurately reflects what would alert in production.
+func TestRules(message string) []models.RuleTestResult {
 
 	rules, err := GetEnabledSigmaRules()
-
 	if err != nil {
 		return nil
 	}
 
-	var results []models.RuleTestResult
+	messageLower := strings.ToLower(message)
 
-	message = strings.ToLower(
-		message,
-	)
+	var results []models.RuleTestResult
 
 	for _, rule := range rules {
 
-		matched := false
-
-		for _, keyword := range rule.Keywords {
-
-			if strings.Contains(
-				message,
-				strings.ToLower(keyword),
-			) {
-
-				matched = true
-				break
-			}
-		}
+		matched := MatchSigmaRule(rule, messageLower)
 
 		results = append(
 			results,

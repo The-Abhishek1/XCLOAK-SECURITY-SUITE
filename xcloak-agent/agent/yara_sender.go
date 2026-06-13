@@ -1,29 +1,29 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
-func SendYaraMatches(
-	matches []models.YaraMatch,
-) {
+func SendYaraMatches(matches []models.YaraMatch) {
 
-	body, _ := json.Marshal(
-		matches,
-	)
+	if len(matches) == 0 {
+		fmt.Println("No YARA matches to send")
+		return
+	}
+
+	body, _ := json.Marshal(matches)
 
 	fmt.Println("Sending matches:", len(matches))
 
-	http.Post(
-		config.ServerURL+
-			"/api/yara/matches",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	resp, err := authPost("/api/yara/matches", body)
+
+	if err != nil {
+		fmt.Println("Failed sending YARA matches:", err)
+		return
+	}
+
+	defer resp.Body.Close()
 }

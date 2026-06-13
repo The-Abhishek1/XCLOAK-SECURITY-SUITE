@@ -2,12 +2,9 @@ package agent
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
@@ -47,11 +44,14 @@ func CollectAuthLogs(agentID int) {
 
 	body, _ := json.Marshal(logs)
 
-	http.Post(
-		config.ServerURL+"/api/agents/logs",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	resp, err := authPost("/api/agents/logs", body)
+
+	if err != nil {
+		println("Failed sending auth logs")
+		return
+	}
+
+	defer resp.Body.Close()
 
 	println(
 		"Auth logs sent:",

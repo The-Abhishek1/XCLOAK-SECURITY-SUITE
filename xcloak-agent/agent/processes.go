@@ -2,14 +2,11 @@ package agent
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
 
-	"xcloak-agent/config"
 	"xcloak-agent/models"
 )
 
@@ -70,9 +67,17 @@ func CollectProcesses(agentID int) {
 		processes,
 	)
 
-	http.Post(
-		config.ServerURL+"/api/agents/processes",
-		"application/json",
-		bytes.NewBuffer(body),
+	resp, err := authPost("/api/agents/processes", body)
+
+	if err != nil {
+		println("Failed sending processes")
+		return
+	}
+
+	defer resp.Body.Close()
+
+	println(
+		"Processes sent:",
+		len(processes),
 	)
 }
