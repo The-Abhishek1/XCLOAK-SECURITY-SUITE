@@ -45,16 +45,6 @@ func SetupRoutes(router *gin.Engine) {
 		api.UpdateRule,
 	)
 
-	router.POST(
-		"/api/auth/register",
-		api.Register,
-	)
-
-	router.POST(
-		"/api/auth/login",
-		api.Login,
-	)
-
 	router.GET(
 		"/api/audit/logs",
 		middleware.RequireAuth(),
@@ -445,8 +435,6 @@ func SetupRoutes(router *gin.Engine) {
 		api.DisablePlaybook,
 	)
 
-	// ADD THESE ROUTES to xcloak-ngfw/backend/routes/routes.go inside SetupRoutes.
-
 	// ── YARA Rule Management (NEW) ───────────────────────────────────────
 	router.POST(
 		"/api/yara/rules",
@@ -510,6 +498,166 @@ func SetupRoutes(router *gin.Engine) {
 		middleware.RequireAuth(),
 		middleware.RequireRole("admin"),
 		api.SyncThreatFeed,
+	)
+
+	router.POST("/api/auth/register",
+		middleware.RateLimitAuth(),
+		api.Register,
+	)
+	router.POST("/api/auth/login",
+		middleware.RateLimitAuth(),
+		api.Login,
+	)
+
+	// ── Paginated endpoints (NEW) ─────────────────────────────────
+	router.GET("/api/alerts/paginated",
+		middleware.RequireAuth(),
+		middleware.RateLimitAPI(),
+		api.GetAlertsPaginated,
+	)
+	router.GET("/api/incidents/paginated",
+		middleware.RequireAuth(),
+		middleware.RateLimitAPI(),
+		api.GetIncidentsPaginated,
+	)
+	router.GET("/api/audit/logs/paginated",
+		middleware.RequireAuth(),
+		middleware.RateLimitAPI(),
+		api.GetAuditLogsPaginated,
+	)
+
+	// ── User management (NEW) ─────────────────────────────────────
+	router.GET("/api/users",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.GetUsers,
+	)
+	router.PUT("/api/users/:id/role",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.UpdateUserRole,
+	)
+	router.PATCH("/api/users/:id/toggle",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.ToggleUserActive,
+	)
+	router.DELETE("/api/users/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DeleteUser,
+	)
+
+	// ADD THESE ROUTES to routes/routes.go inside SetupRoutes()
+
+	// ── Compliance Reports ────────────────────────────────────────
+	router.POST("/api/compliance/reports",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.GenerateReport,
+	)
+	router.GET("/api/compliance/reports",
+		middleware.RequireAuth(),
+		api.GetReports,
+	)
+	router.GET("/api/compliance/reports/:id",
+		middleware.RequireAuth(),
+		api.GetReport,
+	)
+	router.DELETE("/api/compliance/reports/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DeleteReport,
+	)
+
+	// ── CSV / JSON Exports ────────────────────────────────────────
+	router.GET("/api/export/alerts",
+		middleware.RequireAuth(),
+		api.ExportAlertsCSV,
+	)
+	router.GET("/api/export/incidents",
+		middleware.RequireAuth(),
+		api.ExportIncidentsCSV,
+	)
+	router.GET("/api/export/vulnerabilities",
+		middleware.RequireAuth(),
+		api.ExportVulnerabilitiesCSV,
+	)
+	router.GET("/api/export/audit",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.ExportAuditJSON,
+	)
+
+	// ── CVE Lookup ────────────────────────────────────────────────
+	router.GET("/api/cve/:id",
+		middleware.RequireAuth(),
+		api.GetCVEDetails,
+	)
+
+	// ── AI Layer ──────────────────────────────────────────────────
+
+	// On-demand alert triage
+	router.POST("/api/ai/triage/:id",
+		middleware.RequireAuth(),
+		api.TriageAlertHandler,
+	)
+
+	// Incident AI summarization
+	router.POST("/api/ai/incidents/:id/summarize",
+		middleware.RequireAuth(),
+		api.SummarizeIncidentHandler,
+	)
+
+	// Anomaly detection
+	router.POST("/api/ai/anomaly/:agent_id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.RunAnomalyDetectionHandler,
+	)
+	router.GET("/api/ai/anomalies",
+		middleware.RequireAuth(),
+		api.GetAnomaliesHandler,
+	)
+
+	// AI Chat assistant
+	router.POST("/api/ai/chat",
+		middleware.RequireAuth(),
+		api.AIChatHandler,
+	)
+	router.GET("/api/ai/chat/history",
+		middleware.RequireAuth(),
+		api.GetChatHistoryHandler,
+	)
+	router.DELETE("/api/ai/chat/history",
+		middleware.RequireAuth(),
+		api.ClearChatHistoryHandler,
+	)
+
+	// ── File Integrity Monitoring ────────────────────────────────
+	router.POST("/api/agents/fim",
+		middleware.RequireAgentAuth(),
+		api.ReceiveFIMScan,
+	)
+	router.GET("/api/agents/:id/fim/baseline",
+		middleware.RequireAuth(),
+		api.GetFIMBaseline,
+	)
+	router.GET("/api/agents/:id/fim/alerts",
+		middleware.RequireAuth(),
+		api.GetFIMAlerts,
+	)
+
+	// ── Live log SSE stream ───────────────────────────────────────
+	router.GET("/api/agents/:id/logs/stream",
+		middleware.RequireAuth(),
+		api.LiveLogsSSE,
+	)
+
+	// ── MITRE mappings ────────────────────────────────────────────
+	router.GET("/api/mitre/mappings",
+		middleware.RequireAuth(),
+		api.GetMITREMappings,
 	)
 
 }

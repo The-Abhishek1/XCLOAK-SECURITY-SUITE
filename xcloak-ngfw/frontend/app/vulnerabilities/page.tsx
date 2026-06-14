@@ -2,143 +2,238 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { agentsAPI } from '@/lib/api';
-import { Agent, Vulnerability } from '@/types';
-import { sevClass, formatDate } from '@/lib/utils';
-import { Bug, Play, Search, CheckCircle2 } from 'lucide-react';
+import { agentsAPI, exportAPI, cveAPI } from '@/lib/api';
+import { Vulnerability, Agent } from '@/types';
+import { sevClass, timeAgo } from '@/lib/utils';
+import {
+  Bug, Search, Download, Play, ChevronDown,
+  ExternalLink, Shield, AlertTriangle,
+} from 'lucide-react';
+
+interface CVEData {
+  cve_id: string;
+  cvss_score: number;
+  severity: string;
+  description: string;
+  published_at: string | null;
+}
 
 export default function VulnerabilitiesPage() {
-  const [agents, setAgents]   = useState<Agent[]>([]);
-  const [vulns, setVulns]     = useState<{ agent: Agent; vuln: Vulnerability }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState<number | null>(null);
-  const [filter, setFilter]   = useState('all');
-  const [search, setSearch]   = useState('');
-  const [toast, setToast]     = useState<string | null>(null);
+  const [agents, setAgents]       = useState<Agent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
+  const [vulns, setVulns]         = useState<Vulnerability[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [scanning, setScanning]   = useState(false);
+  const [search, setSearch]       = useState('');
+  const [sevFilter, setSevFilter] = useState('');
+  const [cveDetail, setCveDetail] = useState<CVEData | null>(null);
+  const [cveLoading, setCveLoading] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast]         = useState<string | null>(null);
 
-  const loadVulns = useCallback(async (agentList: Agent[]) => {
-    const all: { agent: Agent; vuln: Vulnerability }[] = [];
-    await Promise.allSettled(agentList.map(async ag => {
-      const vr = await agentsAPI.getVulnerabilities(ag.id);
-      (vr.data || []).forEach((v: Vulnerability) => all.push({ agent: ag, vuln: v }));
-    }));
-    setVulns(all);
+  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+  const loadAgents = useCallback(async () => {
+    const r = await agentsAPI.getAll();
+    const list = r.data || [];
+    setAgents(list);
+    if (list.length > 0 && !selectedAgent) setSelectedAgent(list[0].id);
+  }, [selectedAgent]);
+
+  useEffect(() => { loadAgents(); }, []);
+
+  const loadVulns = useCallback(async (agentId: number, spin = false) => {
+    if (spin) setRefreshing(true);
+    setLoading(true);
+    try {
+      const r = await agentsAPI.getVulnerabilities(agentId);
+      setVulns(r.data || []);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
-  const loadAll = useCallback(async () => {
-    const r = await agentsAPI.getAll();
-    const agList: Agent[] = r.data || [];
-    setAgents(agList);
-    await loadVulns(agList);
-    setLoading(false);
-  }, [loadVulns]);
+  useEffect(() => {
+    if (selectedAgent) loadVulns(selectedAgent);
+  }, [selectedAgent]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
-
-  const runScan = async (agentId: number) => {
-    setScanning(agentId);
+  const scan = async () => {
+    if (!selectedAgent) return;
+    setScanning(true);
     try {
-      await agentsAPI.vulnerabilityScan(agentId);
-      setToast('✓ Scan complete — refreshing results…');
-
-      // Backend scan is synchronous (returns "Vulnerability scan completed"),
-      // so re-fetch immediately. Poll a couple more times in case results
-      // take a moment to commit.
-      await loadVulns(agents);
-      setTimeout(() => loadVulns(agents), 2000);
-      setTimeout(() => loadVulns(agents), 5000);
-
-      setTimeout(() => setToast(null), 4000);
-    } catch (err) {
-      setToast('Scan failed — check agent connectivity');
-      setTimeout(() => setToast(null), 4000);
+      await agentsAPI.vulnerabilityScan(selectedAgent);
+      notify('Scan started — refresh in ~10s');
+      setTimeout(() => loadVulns(selectedAgent), 10000);
+    } catch {
+      notify('Scan failed');
     } finally {
-      setScanning(null);
+      setScanning(false);
     }
   };
 
-  const counts = ['critical','high','medium','low'].reduce((a,s) => { a[s] = vulns.filter(v => v.vuln.severity === s).length; return a; }, {} as Record<string,number>);
+  const lookupCVE = async (cveId: string) => {
+    setCveLoading(cveId);
+    try {
+      const r = await cveAPI.lookup(cveId);
+      setCveDetail(r.data);
+    } catch {
+      notify('CVE lookup failed — NVD may be unreachable');
+    } finally {
+      setCveLoading(null);
+    }
+  };
 
-  const filtered = vulns.filter(({ agent, vuln }) => {
-    const mf = filter === 'all' || vuln.severity === filter;
-    const ms = !search || vuln.name?.toLowerCase().includes(search.toLowerCase()) || agent.hostname?.toLowerCase().includes(search.toLowerCase());
-    return mf && ms;
+  const filtered = vulns.filter(v => {
+    const matchSev  = !sevFilter || v.severity === sevFilter;
+    const matchSearch = !search || v.cve_id?.toLowerCase().includes(search.toLowerCase())
+      || v.package_name?.toLowerCase().includes(search.toLowerCase())
+      || v.name?.toLowerCase().includes(search.toLowerCase());
+    return matchSev && matchSearch;
   });
 
+  const bySev = ['critical','high','medium','low'].reduce((acc, s) => {
+    acc[s] = vulns.filter(v => v.severity === s).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const selectedAgentObj = agents.find(a => a.id === selectedAgent);
+
   return (
-    <RootLayout title="Vulnerabilities" subtitle={`${vulns.length} findings · ${agents.length} agents`}
-      onRefresh={loadAll}>
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
-          <CheckCircle2 className="h-4 w-4" style={{ color: 'var(--green)' }} /> {toast}
+    <RootLayout title="Vulnerabilities" subtitle="CVE scan results across all agents"
+      onRefresh={() => selectedAgent && loadVulns(selectedAgent, true)} refreshing={refreshing}
+      actions={
+        <div className="flex items-center gap-2">
+          <a href={exportAPI.vulnsCSV()} download
+            className="g-btn g-btn-ghost text-xs">
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </a>
+          <button onClick={scan} disabled={scanning || !selectedAgent} className="g-btn g-btn-primary text-xs">
+            <Play className="h-3.5 w-3.5" /> {scanning ? 'Scanning…' : 'Run Scan'}
+          </button>
         </div>
-      )}
+      }>
+
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 220 }}>{toast}</div>}
 
       <div className="space-y-4">
-        {/* Scan agents row */}
-        <div className="g-card p-4">
-          <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Scan Agents</p>
-          <div className="flex flex-wrap gap-2">
-            {agents.length === 0 && <p className="text-xs" style={{ color: 'var(--text-3)' }}>No agents registered.</p>}
-            {agents.map(a => (
-              <button key={a.id} onClick={() => runScan(a.id)} disabled={scanning === a.id}
-                className="g-btn g-btn-ghost text-xs"
-                style={scanning === a.id ? { background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' } : undefined}>
-                <Play className={`h-3 w-3 ${scanning === a.id ? 'animate-pulse' : ''}`} />
-                {scanning === a.id ? 'Scanning…' : a.hostname}
-              </button>
-            ))}
+        {/* Agent selector + severity summary */}
+        <div className="flex items-start gap-4 flex-wrap">
+          <div>
+            <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Agent</label>
+            <select value={selectedAgent || ''} onChange={e => setSelectedAgent(Number(e.target.value))}
+              className="g-select" style={{ minWidth: 180 }}>
+              {agents.map(a => (
+                <option key={a.id} value={a.id}>{a.hostname} (#{a.id})</option>
+              ))}
+            </select>
           </div>
-        </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-4 gap-3">
-          {['critical','high','medium','low'].map(s => (
-            <button key={s} onClick={() => setFilter(filter === s ? 'all' : s)}
-              className="stat-glow text-left"
-              style={filter === s ? { borderColor: 'var(--accent-border)', boxShadow: '0 0 12px var(--accent-glow)' } : undefined}>
-              <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{counts[s] || 0}</p>
-              <span className={`inline-block mt-1 ${sevClass(s)}`}>{s}</span>
-            </button>
-          ))}
+          {vulns.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap mt-4">
+              {['critical','high','medium','low'].map(s => (
+                <button key={s} onClick={() => setSevFilter(sevFilter === s ? '' : s)}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all"
+                  style={{
+                    background: sevFilter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                    border: `1px solid ${sevFilter === s ? 'var(--accent-border)' : 'var(--border)'}`,
+                    color: sevFilter === s ? 'var(--accent)' : 'var(--text-2)',
+                  }}>
+                  {s}
+                  <span className="font-bold tabular-nums" style={{
+                    color: s === 'critical' ? 'var(--red)' : s === 'high' ? 'var(--orange)' : s === 'medium' ? 'var(--yellow)' : 'var(--blue)',
+                  }}>
+                    {bySev[s] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search vulnerability, agent…" className="g-input pl-9" />
+            placeholder="Search CVE, package, or name…" className="g-input pl-9" />
         </div>
 
+        {/* CVE detail panel */}
+        {cveDetail && (
+          <div className="g-card p-4 flex items-start gap-4" style={{ border: '1px solid var(--accent-border)' }}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="mono text-xs font-bold" style={{ color: 'var(--accent)' }}>{cveDetail.cve_id}</span>
+                <span className={sevClass(cveDetail.severity)}>{cveDetail.severity}</span>
+                {cveDetail.cvss_score > 0 && (
+                  <span className="text-xs font-bold" style={{ color: 'var(--orange)' }}>CVSS {cveDetail.cvss_score.toFixed(1)}</span>
+                )}
+              </div>
+              <p className="text-xs" style={{ color: 'var(--text-2)' }}>{cveDetail.description}</p>
+              {cveDetail.published_at && (
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                  Published: {new Date(cveDetail.published_at).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a href={`https://nvd.nist.gov/vuln/detail/${cveDetail.cve_id}`} target="_blank" rel="noopener"
+                className="g-btn g-btn-ghost text-[11px]" style={{ padding: '4px 8px' }}>
+                <ExternalLink className="h-3 w-3" /> NVD
+              </a>
+              <button onClick={() => setCveDetail(null)} style={{ color: 'var(--text-3)' }}>×</button>
+            </div>
+          </div>
+        )}
+
+        {/* Table */}
         <div className="g-table">
-          <div className="g-thead grid gap-4 px-4" style={{ gridTemplateColumns: '24px 1fr 80px 100px 1fr 100px' }}>
-            <span /><span>Vulnerability</span><span>Severity</span><span>Agent</span><span>Remediation</span><span>Found</span>
+          <div className="g-thead grid gap-3 px-4"
+            style={{ gridTemplateColumns: '100px 1fr 100px 70px 80px 1fr 80px' }}>
+            <span>CVE ID</span><span>Package</span><span>Name</span>
+            <span>CVSS</span><span>Severity</span><span>Remediation</span><span className="text-right">Lookup</span>
           </div>
 
           {loading ? (
-            <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+            <div className="py-14 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
           ) : filtered.length === 0 ? (
-            <div className="py-16 text-center">
-              <Bug className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
+            <div className="py-14 text-center">
+              <Shield className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
               <p className="text-sm" style={{ color: 'var(--text-2)' }}>
-                {vulns.length === 0 ? 'No vulnerabilities found. Run a scan above.' : 'No matches for this filter.'}
+                {vulns.length === 0 ? 'No vulnerabilities found. Run a scan.' : 'No matches for current filter.'}
               </p>
             </div>
-          ) : filtered.map(({ agent, vuln }) => (
-            <div key={`${agent.id}-${vuln.id}`} className="g-tr grid gap-4 items-start px-4"
-              style={{ gridTemplateColumns: '24px 1fr 80px 100px 1fr 100px' }}>
-              <span className="h-2 w-2 rounded-full mt-1.5"
-                style={{ background: vuln.severity === 'critical' ? 'var(--red)' : vuln.severity === 'high' ? 'var(--orange)' : vuln.severity === 'medium' ? 'var(--yellow)' : 'var(--blue)' }} />
-              <div>
-                <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{vuln.name}</p>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{vuln.description}</p>
+          ) : filtered.map(v => (
+            <div key={v.id} className="g-tr grid gap-3 items-center px-4"
+              style={{ gridTemplateColumns: '100px 1fr 100px 70px 80px 1fr 80px' }}>
+              <span className="mono text-[11px] font-medium" style={{ color: 'var(--accent)' }}>{v.cve_id}</span>
+              <div className="min-w-0">
+                <p className="text-xs truncate" style={{ color: 'var(--text-1)' }}>{v.package_name}</p>
+                <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{v.package_version}</p>
               </div>
-              <span className={`inline-block w-fit mt-0.5 ${sevClass(vuln.severity)}`}>{vuln.severity}</span>
-              <span className="text-xs" style={{ color: 'var(--text-2)' }}>{agent.hostname}</span>
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>{vuln.remediation}</span>
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(vuln.discovered_at)}</span>
+              <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{v.name || '—'}</span>
+              <span className="text-xs font-bold tabular-nums" style={{
+                color: (v.cvss_score || 0) >= 9 ? 'var(--red)' : (v.cvss_score || 0) >= 7 ? 'var(--orange)' : 'var(--yellow)',
+              }}>
+                {(v.cvss_score || 0).toFixed(1)}
+              </span>
+              <span className={sevClass(v.severity)}>{v.severity}</span>
+              <span className="text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{v.remediation || '—'}</span>
+              <div className="flex justify-end">
+                <button onClick={() => lookupCVE(v.cve_id)} disabled={cveLoading === v.cve_id}
+                  className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 8px' }}>
+                  {cveLoading === v.cve_id ? '…' : 'CVE'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
+
+        {filtered.length > 0 && (
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+            Showing {filtered.length} of {vulns.length} vulnerabilities
+            {selectedAgentObj ? ` on ${selectedAgentObj.hostname}` : ''}
+          </p>
+        )}
       </div>
     </RootLayout>
   );

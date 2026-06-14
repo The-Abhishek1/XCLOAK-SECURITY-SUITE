@@ -75,8 +75,8 @@ export const agentsAPI = {
 
 export const alertsAPI = {
   getAll:    () => api.get('/alerts'),
-  // FIX: /api/alerts/agent/:id does not exist on the backend (404).
-  // Fetch all alerts and filter client-side by agent_id instead.
+  getPaginated: (page = 1, perPage = 50, severity = '', agentId = '') =>
+    api.get('/alerts/paginated', { params: { page, per_page: perPage, severity: severity || undefined, agent_id: agentId || undefined } }),
   getByAgent: async (agentId: number) => {
     const res = await api.get('/alerts');
     const all = res.data || [];
@@ -86,6 +86,8 @@ export const alertsAPI = {
 
 export const incidentsAPI = {
   getAll:       ()                              => api.get('/incidents'),
+  getPaginated: (page = 1, perPage = 25, status = '') =>
+    api.get('/incidents/paginated', { params: { page, per_page: perPage, status: status || undefined } }),
   getById:      (id: number)                   => api.get(`/incidents/${id}`),
   getEvents:    (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
   updateStatus: (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
@@ -166,7 +168,57 @@ export const firewallAPI = {
 };
 
 export const auditAPI = {
-  getLogs: () => api.get('/audit/logs'),
+  getLogs:      ()                                     => api.get('/audit/logs'),
+  getPaginated: (page = 1, perPage = 50, action = '') =>
+    api.get('/audit/logs/paginated', { params: { page, per_page: perPage, action: action || undefined } }),
 };
+
+export const usersAPI = {
+  getAll:     ()                             => api.get('/users'),
+  updateRole: (id: number, role: string)    => api.put(`/users/${id}/role`, { role }),
+  toggle:     (id: number, active: boolean) => api.patch(`/users/${id}/toggle`, { is_active: active }),
+  delete:     (id: number)                  => api.delete(`/users/${id}`),
+};
+
+export const complianceAPI = {
+  generate:  (reportType: string)  => api.post('/compliance/reports', { report_type: reportType }),
+  getAll:    ()                    => api.get('/compliance/reports'),
+  getById:   (id: number)          => api.get(`/compliance/reports/${id}`),
+  delete:    (id: number)          => api.delete(`/compliance/reports/${id}`),
+};
+
+export const exportAPI = {
+  alertsCSV:       () => `${api.defaults.baseURL}/export/alerts`,
+  incidentsCSV:    () => `${api.defaults.baseURL}/export/incidents`,
+  vulnsCSV:        () => `${api.defaults.baseURL}/export/vulnerabilities`,
+  auditJSON:       () => `${api.defaults.baseURL}/export/audit`,
+};
+
+export const cveAPI = {
+  lookup: (cveId: string) => api.get(`/cve/${cveId}`),
+};
+
+export const aiAPI = {
+  triageAlert:      (alertId: number)                           => api.post(`/ai/triage/${alertId}`),
+  summarizeIncident:(id: number)                                => api.post(`/ai/incidents/${id}/summarize`),
+  runAnomaly:       (agentId: number)                           => api.post(`/ai/anomaly/${agentId}`),
+  getAnomalies:     (agentId?: number)                          => api.get('/ai/anomalies', { params: agentId ? { agent_id: agentId } : {} }),
+  chat:             (message: string, history: any[])           => api.post('/ai/chat', { message, history }),
+  getChatHistory:   ()                                          => api.get('/ai/chat/history'),
+  clearChatHistory: ()                                          => api.delete('/ai/chat/history'),
+};
+
+export const fimAPI = {
+  getBaseline: (agentId: number) => api.get(`/agents/${agentId}/fim/baseline`),
+  getAlerts:   (agentId: number) => api.get(`/agents/${agentId}/fim/alerts`),
+};
+
+export const mitreAPI = {
+  getMappings: () => api.get('/mitre/mappings'),
+};
+
+// Live log SSE URL — use directly with EventSource
+export const liveLogURL = (agentId: number, token: string) =>
+  `/api/agents/${agentId}/logs/stream?token=${token}`;
 
 export default api;

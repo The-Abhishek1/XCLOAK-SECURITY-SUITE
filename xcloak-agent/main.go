@@ -5,44 +5,79 @@ import (
 	"time"
 
 	"xcloak-agent/agent"
-	"xcloak-agent/config"
+)
+
+const (
+	heartbeatInterval = 30 * time.Second
+	pollInterval      = 15 * time.Second
+	registerMaxRetry  = 10
+	registerRetryWait = 5 * time.Second
 )
 
 func main() {
 
-	// Register (or re-register) with the server.
-	// On restart, the server returns the same agent_id + token via machine_id lookup.
-	result, err := agent.Register()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to register agent: %v", err))
+	// ── Register with retry ───────────────────────────────────
+	// On first startup (or after a server restart) the backend may not be
+	// immediately reachable. Retry up to registerMaxRetry times so the agent
+	// doesn't need manual intervention after a server bounce.
+	var agentID int
+
+	for attempt := 1; attempt <= registerMaxRetry; attempt++ {
+
+		id, err := agent.Register()
+
+		if err == nil {
+			agentID = id
+			break
+		}
+
+		fmt.Printf("Register attempt %d/%d failed: %v\n", attempt, registerMaxRetry, err)
+
+		if attempt == registerMaxRetry {
+			panic("Failed to register agent: " + err.Error())
+		}
+
+		time.Sleep(registerRetryWait)
 	}
 
-	fmt.Printf("Agent ID: %d\n", result.AgentID)
+	fmt.Println("Registered as agent", agentID)
 
-	// Authenticated HTTP client used by all subsequent calls.
-	client := &agent.AuthClient{
-		Token:     result.Token,
-		ServerURL: config.ServerURL,
-	}
-
-	// Heartbeat loop
+	// ── Heartbeat loop ────────────────────────────────────────
 	go func() {
 		for {
-			agent.SendHeartbeat(client)
-			time.Sleep(30 * time.Second)
+			agent.SendHeartbeat(agentID)
+			time.Sleep(heartbeatInterval)
 		}
 	}()
 
-	// Task polling loop
-	for {
-		tasks, err := agent.FetchTasks(client, result.AgentID)
+	// ── Task poll loop ────────────────────────────────────────
+	// Tasks are executed concurrently (each in its own goroutine) so a slow
+	// task (e.g. YARA scan of /usr) doesn't block the poll for new tasks.
+	// Each task has an internal 5-minute timeout (see executor.go).
+	consecutiveErrors := 0
 
-		if err == nil {
-			for _, task := range tasks {
-				agent.ExecuteTask(client, task)
+	for {
+
+		tasks, err := agent.FetchTasks(agentID)
+
+		if err != nil {
+			consecutiveErrors++
+			backoff := time.Duration(consecutiveErrors) * 5 * time.Second
+			if backoff > 2*time.Minute {
+				backoff = 2 * time.Minute
 			}
+			fmt.Printf("Poll error (%d consecutive): %v — waiting %s\n",
+				consecutiveErrors, err, backoff)
+			time.Sleep(backoff)
+			continue
 		}
 
-		time.Sleep(15 * time.Second)
+		consecutiveErrors = 0
+
+		for _, task := range tasks {
+			go agent.ExecuteTask(task)
+		}
+
+		time.Sleep(pollInterval)
 	}
 }

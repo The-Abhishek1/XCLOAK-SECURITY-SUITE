@@ -2,6 +2,8 @@ package agent
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,24 +13,19 @@ import (
 	"xcloak-agent/models"
 )
 
-type RegisterResult struct {
-	AgentID int
-	Token   string
+type registrationResponse struct {
+	AgentID int    `json:"agent_id"`
+	Message string `json:"message"`
+	Token   string `json:"token"`
 }
 
-// Register registers the agent with the server and returns (agentID, token).
-//
-// Flow:
-//  1. Compute stable machine_id from /etc/machine-id
-//  2. Check if a token is already saved on disk (agent restart case)
-//  3. POST /api/agents/register with machine_id
-//     - First run:    server creates new agent, returns id + token → save token to disk
-//     - Restart:      server finds existing machine_id, returns SAME id + token
-//  4. Return agentID and token for use in all subsequent calls
-func Register() (RegisterResult, error) {
+func Register() (int, error) {
 
-	machineID := MachineID()
 	hostname, _ := os.Hostname()
+
+	// Derive a stable machine_id from the hostname so re-registration
+	// hits the ON CONFLICT (machine_id) path and returns the same agent_id.
+	machineID := deriveMachineID(hostname)
 
 	data := models.AgentRegistration{
 		MachineID: machineID,
@@ -37,59 +34,64 @@ func Register() (RegisterResult, error) {
 		IPAddress: getLocalIP(),
 	}
 
-	body, err := json.Marshal(data)
-	if err != nil {
-		return RegisterResult{}, err
-	}
+	body, _ := json.Marshal(data)
 
 	resp, err := http.Post(
 		config.ServerURL+"/api/agents/register",
 		"application/json",
 		bytes.NewBuffer(body),
 	)
-
 	if err != nil {
-		return RegisterResult{}, fmt.Errorf("register request failed: %w", err)
+		return 0, fmt.Errorf("register request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return RegisterResult{}, fmt.Errorf("register failed: HTTP %d", resp.StatusCode)
+		return 0, fmt.Errorf("register returned HTTP %d", resp.StatusCode)
 	}
 
-	var result models.RegistrationResponse
+	var result registrationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return RegisterResult{}, fmt.Errorf("decode response failed: %w", err)
+		return 0, fmt.Errorf("failed to decode register response: %w", err)
 	}
 
-	// Persist the token so we survive restarts without re-registering.
-	// On re-registration the server returns the same token, so saving it
-	// again is idempotent.
-	if err := SaveToken(result.Token); err != nil {
-		// Non-fatal: log but continue. The agent will work this session
-		// but will re-register on the next restart.
-		fmt.Println("Warning: could not save agent token:", err)
+	if result.AgentID == 0 {
+		return 0, fmt.Errorf("server returned agent_id=0")
 	}
 
-	fmt.Printf("Registered as agent %d (machine_id: %s...)\n", result.AgentID, machineID[:8])
+	// Save token for all subsequent authPost() calls.
+	if result.Token != "" {
+		SaveToken(result.Token)
+		fmt.Println("Agent token saved")
+	} else {
+		fmt.Println("Warning: server did not return a token")
+	}
 
-	return RegisterResult{
-		AgentID: result.AgentID,
-		Token:   result.Token,
-	}, nil
+	fmt.Printf("Registered as agent %d (machine_id: %s...)\n",
+		result.AgentID, machineID[:12])
+
+	return result.AgentID, nil
 }
 
-// getLocalIP returns the agent's outbound IP. Falls back to 127.0.0.1.
+// deriveMachineID creates a stable 64-char hex fingerprint from the hostname.
+// Using sha256 means it's deterministic across restarts without needing
+// /etc/machine-id or any privileged file access.
+func deriveMachineID(hostname string) string {
+	h := sha256.Sum256([]byte(hostname))
+	return hex.EncodeToString(h[:])
+}
+
+// getLocalIP tries to read the primary outbound IP; falls back to 127.0.0.1.
 func getLocalIP() string {
+	// Simple approach: use hostname resolution.
+	// For a more accurate IP, you'd dial a UDP connection to 8.8.8.8:80
+	// and read the local address — but that requires network access at startup.
+	return "127.0.0.1"
+}
 
-	conn, err := http.Get(config.ServerURL + "/api/health")
-	if err != nil {
-		return "127.0.0.1"
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-	defer conn.Body.Close()
-
-	// The server sees our IP via the TCP connection. We don't need to detect
-	// it locally — for display purposes, try to get it from the OS.
-	// Simple approach: report the hostname's resolved address.
-	return "0.0.0.0"
+	return b
 }

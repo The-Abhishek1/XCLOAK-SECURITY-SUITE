@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -8,12 +9,13 @@ import (
 	"xcloak-ngfw/services"
 )
 
-const AgentKey = "agent"
+// AgentKey is the gin context key for the authenticated agent.
+const AgentKey = "authenticated_agent"
 
-// RequireAgentAuth validates the agent's bearer token and injects the resolved
-// agent into the context. Attach to all agent-facing endpoints except /register.
-//
-// The agent sends:  Authorization: Bearer <token>
+// RequireAgentAuth validates an agent bearer token by looking it up in the
+// database via services.GetAgentByToken. This matches the backend's token
+// design: agents receive a random hex token on registration which is stored
+// in the agents table and validated here on every request.
 func RequireAgentAuth() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
@@ -21,35 +23,28 @@ func RequireAgentAuth() gin.HandlerFunc {
 		header := c.GetHeader("Authorization")
 
 		if header == "" {
-			c.AbortWithStatusJSON(401, gin.H{"error": "missing Authorization header"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing agent token"})
+			c.Abort()
 			return
 		}
 
-		parts := strings.SplitN(header, " ", 2)
+		tokenString := strings.TrimPrefix(header, "Bearer ")
 
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			c.AbortWithStatusJSON(401, gin.H{"error": "invalid Authorization format"})
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "empty agent token"})
+			c.Abort()
 			return
 		}
 
-		token := strings.TrimSpace(parts[1])
-
-		if token == "" {
-			c.AbortWithStatusJSON(401, gin.H{"error": "empty token"})
+		agent, err := services.GetAgentByToken(tokenString)
+		if err != nil || agent == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid agent token"})
+			c.Abort()
 			return
 		}
 
-		agent, err := services.GetAgentByToken(token)
-
-		if err != nil {
-			// Token not found — reject. Don't leak whether it exists.
-			c.AbortWithStatusJSON(401, gin.H{"error": "invalid agent token"})
-			return
-		}
-
-		// Inject agent into context so handlers can read agent.ID directly
-		// without trusting the agent_id field in the request body.
 		c.Set(AgentKey, agent)
+		c.Set("agent_id", agent.ID)
 		c.Next()
 	}
 }

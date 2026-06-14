@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -11,6 +12,17 @@ import (
 
 var DB *sql.DB
 
+const (
+	maxRetries  = 10
+	retryDelay  = 3 * time.Second
+	maxOpenConn = 25
+	maxIdleConn = 5
+	connLifetime = 5 * time.Minute
+)
+
+// Connect establishes a Postgres connection with retry logic so the backend
+// survives docker-compose startup races (postgres container takes a few
+// seconds to become healthy after the backend container starts).
 func Connect() error {
 
 	godotenv.Load()
@@ -24,13 +36,34 @@ func Connect() error {
 		os.Getenv("DB_NAME"),
 	)
 
-	db, err := sql.Open("postgres", connStr)
+	var db *sql.DB
+	var err error
 
-	if err != nil {
-		return err
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+
+		db, err = sql.Open("postgres", connStr)
+		if err != nil {
+			fmt.Printf("DB open error (attempt %d/%d): %v\n", attempt, maxRetries, err)
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		if err = db.Ping(); err != nil {
+			fmt.Printf("DB ping failed (attempt %d/%d): %v\n", attempt, maxRetries, err)
+			db.Close()
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		// Connected — configure pool.
+		db.SetMaxOpenConns(maxOpenConn)
+		db.SetMaxIdleConns(maxIdleConn)
+		db.SetConnMaxLifetime(connLifetime)
+
+		DB = db
+		fmt.Println("Database connected successfully")
+		return nil
 	}
 
-	DB = db
-
-	return DB.Ping()
+	return fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
 }

@@ -1,58 +1,143 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { agentsAPI, dashboardAPI, auditAPI, authAPI } from '@/lib/api';
-import { Agent, DashboardOverview } from '@/types';
-import { formatDate, timeAgo } from '@/lib/utils';
+import { Pagination } from '@/components/ui/Pagination';
+import { usersAPI, auditAPI } from '@/lib/api';
+import { timeAgo } from '@/lib/utils';
 import {
-  User, Cpu, Server, FileText, Key, Eye, EyeOff,
-  Globe, Database, Activity, ShieldCheck, AlertCircle, Check,
+  Users, UserCog, Shield, Server, ScrollText,
+  Trash2, ToggleLeft, ToggleRight, ChevronDown, Search, Lock,
 } from 'lucide-react';
 
-const TABS = [
-  { id: 'profile', label: 'User Profile', icon: User },
-  { id: 'agents',  label: 'Agent Config', icon: Cpu },
-  { id: 'server',  label: 'Server Info',  icon: Server },
-  { id: 'audit',   label: 'Audit Log',    icon: FileText },
+// Decode JWT payload to get role without a library.
+function getRoleFromToken(): string {
+  try {
+    const token = localStorage.getItem('token') || '';
+    if (!token) return 'viewer';
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.role || 'viewer';
+  } catch {
+    return 'viewer';
+  }
+}
+
+const ALL_TABS = [
+  { id: 'users',   label: 'User Management', icon: Users,      adminOnly: true },
+  { id: 'profile', label: 'My Profile',       icon: UserCog,   adminOnly: false },
+  { id: 'server',  label: 'Server Info',      icon: Server,    adminOnly: false },
+  { id: 'audit',   label: 'Audit Log',        icon: ScrollText, adminOnly: false },
 ] as const;
-type Tab = typeof TABS[number]['id'];
+type Tab = typeof ALL_TABS[number]['id'];
+
+const ROLES = ['admin', 'analyst', 'viewer'];
+
+interface UserRow {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  last_login: string | null;
+  created_at: string | null;
+}
+
+interface AuditPage {
+  data: any[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
 
 export default function SettingsPage() {
+  const [userRole, setUserRole] = useState('viewer');
   const [tab, setTab]       = useState<Tab>('profile');
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [audit, setAudit]   = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [toast, setToast]   = useState<string | null>(null);
 
-  // Profile state
-  const [username, setUsername] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  const [token, setToken] = useState('');
+  // User management
+  const [users, setUsers]   = useState<UserRow[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [roleEditing, setRoleEditing] = useState<number | null>(null);
+  const [userSearch, setUserSearch] = useState('');
 
+  // Audit log
+  const [auditPage, setAuditPage]   = useState<AuditPage | null>(null);
+  const [auditP, setAuditP]         = useState(1);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+  // Detect role on mount and set default tab
   useEffect(() => {
-    setUsername(localStorage.getItem('username') || 'admin');
-    setToken(localStorage.getItem('token') || '');
-
-    const load = async () => {
-      const [ar, ov, al] = await Promise.allSettled([agentsAPI.getAll(), dashboardAPI.getOverview(), auditAPI.getLogs()]);
-      if (ar.status === 'fulfilled') setAgents(ar.value.data || []);
-      if (ov.status === 'fulfilled') setOverview(ov.value.data);
-      if (al.status === 'fulfilled') setAudit(al.value.data || []);
-      setLoading(false);
-    };
-    load();
+    const role = getRoleFromToken();
+    setUserRole(role);
+    // Non-admins can't see User Management — start on Profile
+    setTab(role === 'admin' ? 'users' : 'profile');
   }, []);
 
-  const online  = agents.filter(a => a.status === 'online').length;
-  const offline = agents.length - online;
-  const osBreakdown = agents.reduce((acc, a) => { const os = a.os || 'Unknown'; acc[os] = (acc[os] || 0) + 1; return acc; }, {} as Record<string, number>);
+  const TABS = ALL_TABS.filter(t => !t.adminOnly || userRole === 'admin');
+
+  const loadUsers = useCallback(async () => {
+    setUsersLoading(true);
+    setAccessDenied(false);
+    try {
+      const r = await usersAPI.getAll();
+      setUsers(r.data || []);
+    } catch (err: any) {
+      if (err?.response?.status === 403) {
+        setAccessDenied(true);
+      }
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  const loadAudit = useCallback(async (p = 1, search = '') => {
+    setAuditLoading(true);
+    try { const r = await auditAPI.getPaginated(p, 50, search); setAuditPage(r.data); }
+    finally { setAuditLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'users') loadUsers();
+    if (tab === 'audit') loadAudit(auditP, auditSearch);
+  }, [tab]);
+
+  const updateRole = async (id: number, role: string) => {
+    try { await usersAPI.updateRole(id, role); setUsers(u => u.map(x => x.id === id ? { ...x, role } : x)); notify('Role updated'); }
+    catch { notify('Failed to update role'); }
+    setRoleEditing(null);
+  };
+
+  const toggleUser = async (u: UserRow) => {
+    try { await usersAPI.toggle(u.id, !u.is_active); setUsers(list => list.map(x => x.id === u.id ? { ...x, is_active: !x.is_active } : x)); }
+    catch { notify('Failed to toggle user'); }
+  };
+
+  const deleteUser = async (id: number) => {
+    try { await usersAPI.delete(id); setUsers(u => u.filter(x => x.id !== id)); notify('User deleted'); }
+    catch { notify('Failed to delete user'); }
+  };
+
+  const filteredUsers = users.filter(u =>
+    !userSearch || u.username.toLowerCase().includes(userSearch.toLowerCase())
+      || u.email.toLowerCase().includes(userSearch.toLowerCase())
+  );
+
+  // Get current user info from localStorage
+  const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || 'admin' : 'admin';
 
   return (
-    <RootLayout title="Settings">
-      <div className="space-y-5">
+    <RootLayout title="Settings" subtitle="Platform configuration">
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 220 }}>{toast}</div>}
+
+      <div className="space-y-4">
         {/* Tab bar */}
-        <div className="flex gap-1 p-1 rounded-xl w-fit flex-wrap" style={{ background: 'var(--glass-bg)', backdropFilter: 'var(--blur-sm)', border: '1px solid var(--border)' }}>
+        <div className="flex gap-1 flex-wrap p-1 rounded-xl w-fit"
+          style={{ background: 'var(--glass-bg)', backdropFilter: 'var(--blur-sm)', border: '1px solid var(--border)' }}>
           {TABS.map(t => {
             const Icon = t.icon;
             return (
@@ -60,186 +145,178 @@ export default function SettingsPage() {
                 className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-all"
                 style={{
                   background: tab === t.id ? 'var(--accent-glow)' : 'transparent',
-                  color:      tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-                  border:     tab === t.id ? '1px solid var(--accent-border)' : '1px solid transparent',
+                  color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
+                  border: tab === t.id ? '1px solid var(--accent-border)' : '1px solid transparent',
                 }}>
-                <Icon className="h-3.5 w-3.5" /> {t.label}
+                <Icon className="h-3.5 w-3.5" />{t.label}
               </button>
             );
           })}
         </div>
 
-        {/* ── USER PROFILE ── */}
-        {tab === 'profile' && (
-          <div className="space-y-4 max-w-xl">
-            <div className="g-card p-5">
-              <div className="flex items-center gap-4 mb-5">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-bold"
-                  style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
-                  {username.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-base font-semibold" style={{ color: 'var(--text-1)' }}>{username}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Administrator</p>
-                </div>
+        {/* ── USER MANAGEMENT ── */}
+        {tab === 'users' && (
+          <div className="space-y-3">
+            {accessDenied ? (
+              <div className="g-card py-16 text-center">
+                <Lock className="mx-auto h-10 w-10 mb-3" style={{ color: 'var(--text-3)' }} />
+                <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>Access Denied</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Only administrators can manage users.</p>
               </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: 'var(--text-3)' }}>Username</label>
-                  <input value={username} disabled className="g-input opacity-60" />
-                </div>
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: 'var(--text-3)' }}>Role</label>
-                  <input value="admin" disabled className="g-input opacity-60" />
-                </div>
-                <div>
-                  <label className="block text-xs mb-1.5" style={{ color: 'var(--text-3)' }}>Session Token</label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
-                    <input value={showToken ? token : '•'.repeat(40)} disabled className="g-input pl-9 pr-10 mono opacity-60" style={{ fontSize: 10 }} />
-                    <button onClick={() => setShowToken(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }}>
-                      {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                  <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-3)' }}>JWT bearer token used for API authentication.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="g-card p-4 flex items-start gap-3">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
-              <p className="text-xs" style={{ color: 'var(--text-2)' }}>
-                Account creation and role management require backend support for user listing/editing —
-                currently the API only supports register and login. Once a user management endpoint exists,
-                this page can manage all SOC users.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ── AGENT CONFIG ── */}
-        {tab === 'agents' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatBox icon={Cpu} label="Total Agents" value={agents.length} />
-              <StatBox icon={Activity} label="Online" value={online} good />
-              <StatBox icon={Activity} label="Offline" value={offline} />
-              <StatBox icon={ShieldCheck} label="Coverage" value={agents.length ? `${Math.round((online / agents.length) * 100)}%` : '0%'} />
-            </div>
-
-            <div className="g-card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>OS Distribution</p>
-              <div className="space-y-2">
-                {Object.entries(osBreakdown).map(([os, count]) => (
-                  <div key={os} className="flex items-center gap-3">
-                    <span className="text-xs w-32 truncate" style={{ color: 'var(--text-2)' }}>{os}</span>
-                    <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-0)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${(count / agents.length) * 100}%`, background: 'var(--accent)' }} />
-                    </div>
-                    <span className="text-xs w-8 text-right tabular-nums" style={{ color: 'var(--text-1)' }}>{count}</span>
-                  </div>
-                ))}
-                {agents.length === 0 && <p className="text-xs" style={{ color: 'var(--text-3)' }}>No agents registered.</p>}
-              </div>
+            ) : (
+            <>
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+              <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
+                placeholder="Search users…" className="g-input pl-9" />
             </div>
 
             <div className="g-table">
-              <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 100px 100px' }}>
-                <span>Hostname</span><span>IP Address</span><span>Status</span><span>Last Seen</span>
+              <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 120px 80px 120px 80px' }}>
+                <span>Username</span><span>Email</span><span>Role</span>
+                <span>Status</span><span>Last Login</span><span className="text-right">Actions</span>
               </div>
-              {agents.map(a => (
-                <div key={a.id} className="g-tr grid gap-3 items-center px-4" style={{ gridTemplateColumns: '1fr 1fr 100px 100px' }}>
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{a.hostname}</span>
-                  <span className="mono text-xs" style={{ color: 'var(--text-2)' }}>{a.ip_address}</span>
-                  <span className={a.status === 'online' ? 's-online' : 's-offline'}>{a.status}</span>
-                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.last_seen)}</span>
+
+              {usersLoading ? (
+                <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+              ) : filteredUsers.map(u => (
+                <div key={u.id} className="g-tr grid gap-3 items-center px-4"
+                  style={{ gridTemplateColumns: '1fr 1fr 120px 80px 120px 80px' }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                      {u.username[0].toUpperCase()}
+                    </div>
+                    <span className="text-xs truncate" style={{ color: 'var(--text-1)' }}>{u.username}</span>
+                  </div>
+                  <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{u.email}</span>
+
+                  {/* Role selector */}
+                  {roleEditing === u.id ? (
+                    <select defaultValue={u.role}
+                      onChange={e => updateRole(u.id, e.target.value)}
+                      onBlur={() => setRoleEditing(null)}
+                      autoFocus className="g-select text-xs" style={{ height: 28, padding: '0 6px' }}>
+                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <button onClick={() => setRoleEditing(u.id)}
+                      className="flex items-center gap-1 text-xs rounded-lg px-2 py-1 w-fit transition-colors"
+                      style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                      <Shield className="h-3 w-3" style={{ color: u.role === 'admin' ? 'var(--accent)' : 'var(--text-3)' }} />
+                      {u.role}
+                      <ChevronDown className="h-3 w-3" style={{ color: 'var(--text-3)' }} />
+                    </button>
+                  )}
+
+                  <button onClick={() => toggleUser(u)} className="flex items-center gap-1 text-[10px]"
+                    style={{ color: u.is_active ? 'var(--green)' : 'var(--text-3)' }}>
+                    {u.is_active ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                    {u.is_active ? 'Active' : 'Off'}
+                  </button>
+
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    {u.last_login ? timeAgo(u.last_login) : 'Never'}
+                  </span>
+
+                  <div className="flex justify-end">
+                    {u.username !== currentUsername && (
+                      <button onClick={() => deleteUser(u.id)} className="p-1.5 rounded"
+                        style={{ color: 'var(--text-3)' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
+            </>
+            )}
+          </div>
+        )}
+
+        {/* ── MY PROFILE ── */}
+        {tab === 'profile' && (
+          <div className="g-card p-6 max-w-sm space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-bold"
+                style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '2px solid var(--accent-border)' }}>
+                {currentUsername[0].toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{currentUsername}</p>
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>Administrator</p>
+              </div>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+              Password change and email update will be available in the next release.
+            </p>
           </div>
         )}
 
         {/* ── SERVER INFO ── */}
         {tab === 'server' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatBox icon={Database} label="Processes Tracked" value={overview?.processes ?? 0} />
-              <StatBox icon={Globe} label="Connections" value={overview?.connections ?? 0} />
-              <StatBox icon={Server} label="Services" value={overview?.services ?? 0} />
-              <StatBox icon={ShieldCheck} label="Packages" value={overview?.packages ?? 0} />
-            </div>
-
-            <div className="g-card p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>System Status</p>
-              <div className="space-y-3">
-                {[
-                  ['API Status', 'Healthy', 'green'],
-                  ['Service', 'xcloak-ngfw', null],
-                  ['Total Alerts', String(overview?.alerts ?? 0), null],
-                  ['Critical Alerts', String(overview?.critical_alerts ?? 0), (overview?.critical_alerts ?? 0) > 0 ? 'red' : null],
-                  ['Total Incidents', String(overview?.incidents ?? 0), null],
-                  ['Critical Incidents', String(overview?.critical_incidents ?? 0), (overview?.critical_incidents ?? 0) > 0 ? 'red' : null],
-                  ['Total Users Tracked', String(overview?.users ?? 0), null],
-                ].map(([k, v, color]) => (
-                  <div key={k} className="flex items-center justify-between text-xs" style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
-                    <span style={{ color: 'var(--text-2)' }}>{k}</span>
-                    <span className="flex items-center gap-1.5 font-medium" style={{ color: color === 'green' ? 'var(--green)' : color === 'red' ? 'var(--red)' : 'var(--text-1)' }}>
-                      {color === 'green' && <Check className="h-3 w-3" />}
-                      {v}
-                    </span>
-                  </div>
-                ))}
+          <div className="g-card p-5 max-w-md space-y-3">
+            {[
+              { label: 'Platform',   value: 'XCloak Security Suite' },
+              { label: 'Phase',      value: 'Phase 3 — Infrastructure' },
+              { label: 'Backend',    value: 'Go / Gin / PostgreSQL' },
+              { label: 'Frontend',   value: 'Next.js 14 / TypeScript' },
+              { label: 'Agent',      value: 'Go 1.25 (Linux)' },
+              { label: 'DB Pool',    value: '25 max open / 5 idle conns' },
+              { label: 'Rate Limit', value: '120 req/min (API) · 10/min (Auth)' },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>{label}</span>
+                <span className="text-xs mono" style={{ color: 'var(--text-1)' }}>{value}</span>
               </div>
-            </div>
-
-            <div className="g-card p-4 flex items-start gap-3">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" style={{ color: 'var(--accent)' }} />
-              <p className="text-xs" style={{ color: 'var(--text-2)' }}>
-                Server configuration (database connection, ports, retention policies) is managed via environment
-                variables on the backend and isn't exposed through the API for security reasons.
-              </p>
-            </div>
+            ))}
           </div>
         )}
 
         {/* ── AUDIT LOG ── */}
         {tab === 'audit' && (
-          <div className="g-table">
-            <div className="g-thead grid gap-4 px-4" style={{ gridTemplateColumns: '140px 1fr 120px 120px' }}>
-              <span>Action</span><span>Details</span><span>User</span><span>Time</span>
-            </div>
-            {loading ? (
-              <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
-            ) : audit.length === 0 ? (
-              <div className="py-12 text-center text-sm" style={{ color: 'var(--text-2)' }}>No audit events.</div>
-            ) : audit.map((log: any, i: number) => (
-              <div key={i} className="g-tr grid gap-4 items-center px-4" style={{ gridTemplateColumns: '140px 1fr 120px 120px' }}>
-                <span className="mono text-[11px] rounded px-1.5 py-0.5 inline-block w-fit"
-                  style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-                  {log.action}
-                </span>
-                <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{log.details || '—'}</span>
-                <span className="text-xs" style={{ color: 'var(--text-2)' }}>{log.username || '—'}</span>
-                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(log.created_at)}</span>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+                <input value={auditSearch} onChange={e => { setAuditSearch(e.target.value); setAuditP(1); }}
+                  placeholder="Filter by action…" className="g-input pl-9" />
               </div>
-            ))}
+              <button onClick={() => loadAudit(auditP, auditSearch)} className="g-btn g-btn-ghost text-xs">Search</button>
+            </div>
+
+            <div className="g-table">
+              <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '80px 150px 1fr 120px' }}>
+                <span>ID</span><span>Action</span><span>Details</span><span>Time</span>
+              </div>
+              {auditLoading ? (
+                <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+              ) : (auditPage?.data || []).map((log: any) => (
+                <div key={log.id} className="g-tr grid gap-3 items-center px-4"
+                  style={{ gridTemplateColumns: '80px 150px 1fr 120px' }}>
+                  <span className="mono text-[11px]" style={{ color: 'var(--text-3)' }}>#{log.id}</span>
+                  <span className="mono text-xs" style={{ color: 'var(--accent)' }}>{log.action}</span>
+                  <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{log.details}</span>
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(log.created_at)}</span>
+                </div>
+              ))}
+            </div>
+
+            {auditPage && (
+              <Pagination
+                page={auditPage.page}
+                totalPages={auditPage.total_pages}
+                total={auditPage.total}
+                perPage={auditPage.per_page}
+                onPage={p => { setAuditP(p); loadAudit(p, auditSearch); }}
+              />
+            )}
           </div>
         )}
       </div>
     </RootLayout>
-  );
-}
-
-function StatBox({ icon: Icon, label, value, good }: { icon: any; label: string; value: string | number; good?: boolean }) {
-  return (
-    <div className="stat-glow">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl mb-3"
-        style={{ background: good ? 'var(--green-bg)' : 'var(--accent-glow)', border: `1px solid ${good ? 'var(--green-border)' : 'var(--accent-border)'}` }}>
-        <Icon className="h-4 w-4" style={{ color: good ? 'var(--green)' : 'var(--accent)' }} />
-      </div>
-      <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{value}</p>
-      <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{label}</p>
-    </div>
   );
 }

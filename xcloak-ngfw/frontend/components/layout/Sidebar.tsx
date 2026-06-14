@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Cpu, Bell, AlertTriangle, Play,
   Shield, Bug, Settings, ShieldCheck, LogOut,
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
+  ClipboardCheck, Bot, Radio, ShieldAlert,
 } from 'lucide-react';
 
 const NAV = [
@@ -21,12 +22,19 @@ const NAV = [
     { href: '/threat-intel', label: 'Threat Intel',    icon: Shield },
     { href: '/sigma-rules',  label: 'Sigma Rules',     icon: FileCode },
     { href: '/yara-rules',   label: 'YARA Rules',      icon: Code2 },
+    { href: '/live-logs',    label: 'Live Logs',       icon: Radio },
   ]},
   { group: 'RESPONSE',  items: [
-    { href: '/playbooks',       label: 'Playbooks',       icon: Play },
-    { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
-    { href: '/quarantine',      label: 'Quarantine',      icon: Archive },
-    { href: '/firewall',        label: 'Firewall',        icon: Network },
+    { href: '/playbooks',        label: 'Playbooks',       icon: Play },
+    { href: '/vulnerabilities',  label: 'Vulnerabilities', icon: Bug },
+    { href: '/quarantine',       label: 'Quarantine',      icon: Archive },
+    { href: '/firewall',         label: 'Firewall',        icon: Network },
+  ]},
+  { group: 'COMPLIANCE', items: [
+    { href: '/compliance', label: 'Reports',  icon: ClipboardCheck },
+  ]},
+  { group: 'AI',  items: [
+    { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },
   ]},
   { group: 'SYSTEM',    items: [
     { href: '/settings', label: 'Settings', icon: Settings },

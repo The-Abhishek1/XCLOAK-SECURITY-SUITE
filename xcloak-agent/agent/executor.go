@@ -3,102 +3,129 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"xcloak-agent/models"
 )
 
-func ExecuteTask(client *AuthClient, task models.AgentTask) {
+const taskTimeout = 5 * time.Minute
+
+func ExecuteTask(task models.AgentTask) {
+
+	done := make(chan string, 1)
+
+	go func() {
+		done <- runTask(task)
+	}()
 
 	var output string
+
+	select {
+	case output = <-done:
+	case <-time.After(taskTimeout):
+		output = fmt.Sprintf("task timed out after %s", taskTimeout)
+		fmt.Printf("Task %d (%s) timed out\n", task.ID, task.TaskType)
+	}
+
+	submitResult(task.ID, output)
+}
+
+func runTask(task models.AgentTask) string {
 
 	switch task.TaskType {
 
 	case "collect_processes":
 		CollectProcesses(task.AgentID)
-		output = "process inventory collected"
+		return "process inventory collected"
 
 	case "collect_connections":
 		CollectConnections(task.AgentID)
-		output = "connection inventory collected"
+		return "connection inventory collected"
 
 	case "collect_services":
 		CollectServices(task.AgentID)
-		output = "service inventory collected"
+		return "service inventory collected"
 
 	case "collect_packages":
 		CollectPackages(task.AgentID)
-		output = "package inventory collected"
+		return "package inventory collected"
 
 	case "collect_users":
 		CollectUsers(task.AgentID)
-		output = "user inventory collected"
+		return "user inventory collected"
 
 	case "collect_auth_logs":
 		CollectAuthLogs(task.AgentID)
-		output = "auth logs collected"
+		return "auth logs collected"
 
 	case "kill_process":
 		KillProcess(task)
-		output = "process terminated"
+		return "process terminated"
 
 	case "collect_file":
 		CollectFile(task)
-		output = "file collected"
+		return "file collected"
 
 	case "isolate_host":
-		err := IsolateHost(task)
-		if err != nil {
-			output = err.Error()
-		} else {
-			output = "host isolated"
+		if err := IsolateHost(task); err != nil {
+			return "isolate failed: " + err.Error()
 		}
+		return "host isolated"
 
 	case "quarantine_file":
-		err := QuarantineFile(task)
-		if err != nil {
-			output = err.Error()
-		} else {
-			output = "file quarantined"
+		if err := QuarantineFile(task); err != nil {
+			return "quarantine failed: " + err.Error()
 		}
+		return "file quarantined"
 
 	case "execute_script":
 		result, err := ExecuteScript(task)
 		if err != nil {
-			output = err.Error() + "\n" + result
-		} else {
-			output = result
+			return err.Error() + "\n" + result
 		}
+		return result
 
 	case "collect_file_hashes":
+		// CollectFileHashes is in file_hashes.go → returns []models.FileHash
+		// SendFileHashes is in file_hash_sender.go → takes []models.FileHash
 		hashes := CollectFileHashes(task.AgentID)
-		SendFileHashes(client, hashes)
-		output = "file hashes collected"
+		SendFileHashes(hashes)
+		return "file hashes collected"
 
 	case "scan_yara":
 		var payload models.TaskPayload
 		json.Unmarshal(task.Payload, &payload)
 		if payload.Path == "" {
-			output = "missing path"
-			break
+			return "missing path in payload"
 		}
 		matches := ScanWithYara(task.AgentID, payload.Path)
-		SendYaraMatches(client, matches)
-		output = fmt.Sprintf("YARA matches found: %d", len(matches))
+		SendYaraMatches(matches)
+		return fmt.Sprintf("YARA matches found: %d", len(matches))
+
+	case "fim_scan":
+		RunFIMScan(task.AgentID, task.Payload)
+		return "FIM scan completed"
 
 	default:
-		output = "unknown task"
+		return "unknown task type: " + task.TaskType
 	}
+}
 
-	taskResult := models.TaskResult{
-		TaskID: task.ID,
+func submitResult(taskID int, output string) {
+
+	result := models.TaskResult{
+		TaskID: taskID,
 		Result: output,
 	}
 
-	_, err := client.Post("/api/tasks/result", taskResult)
+	body, _ := json.Marshal(result)
+
+	resp, err := authPost("/api/tasks/result", body)
 	if err != nil {
-		println("Failed sending task result")
+		fmt.Println("Failed sending task result:", err)
 		return
 	}
+	defer resp.Body.Close()
 
-	println("Executed:", task.TaskType)
+	fmt.Printf("Task %d result submitted: %s\n", taskID, output)
 }
