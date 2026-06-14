@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Cpu, Bell, AlertTriangle, Play,
   Shield, Bug, Settings, ShieldCheck, LogOut,
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
-  ClipboardCheck, Bot, Radio, ShieldAlert,
+  ClipboardCheck, Bot, Radio, ShieldAlert, Search, CalendarClock,
 } from 'lucide-react';
 
 const NAV = [
@@ -23,12 +23,14 @@ const NAV = [
     { href: '/sigma-rules',  label: 'Sigma Rules',     icon: FileCode },
     { href: '/yara-rules',   label: 'YARA Rules',      icon: Code2 },
     { href: '/live-logs',    label: 'Live Logs',       icon: Radio },
+    { href: '/hunt',         label: 'Threat Hunt',     icon: Search },
   ]},
   { group: 'RESPONSE',  items: [
     { href: '/playbooks',        label: 'Playbooks',       icon: Play },
     { href: '/vulnerabilities',  label: 'Vulnerabilities', icon: Bug },
     { href: '/quarantine',       label: 'Quarantine',      icon: Archive },
     { href: '/firewall',         label: 'Firewall',        icon: Network },
+    { href: '/scheduled-tasks',  label: 'Scheduled Tasks', icon: CalendarClock },
   ]},
   { group: 'COMPLIANCE', items: [
     { href: '/compliance', label: 'Reports',  icon: ClipboardCheck },

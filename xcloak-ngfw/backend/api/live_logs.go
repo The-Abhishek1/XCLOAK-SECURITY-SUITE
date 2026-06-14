@@ -1,66 +1,127 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 
 	"xcloak-ngfw/database"
+	"xcloak-ngfw/services"
 )
 
-// LiveLogsSSE streams new log entries to the browser via Server-Sent Events.
-// GET /api/agents/:id/logs/stream
-//
-// The client connects and receives log lines as they arrive.
-// Uses long-polling over SSE so it works without WebSocket infra.
-func LiveLogsSSE(c *gin.Context) {
+var wsUpgrader = websocket.Upgrader{
+	CheckOrigin:     func(r *http.Request) bool { return true }, // CORS handled by main.go middleware
+	ReadBufferSize:  1024,
+	WriteBufferSize: 4096,
+}
+
+type wsLogEntry struct {
+	ID      int    `json:"id"`
+	Source  string `json:"source"`
+	Message string `json:"message"`
+	TS      string `json:"ts"`
+}
+
+// LiveLogsWS — GET /api/agents/:id/logs/stream
+// WebSocket endpoint for live log streaming.
+// Sends last 50 historical logs on connect, then streams new entries every 2s.
+// Automatically dispatches a collect_auth_logs task if endpoint_logs is empty.
+func LiveLogsWS(c *gin.Context) {
 
 	agentID := c.Param("id")
-	if _, err := strconv.Atoi(agentID); err != nil {
+	agentIDInt, err := strconv.Atoi(agentID)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id"})
 		return
 	}
 
-	// SSE headers.
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no") // nginx: disable proxy buffering
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		c.JSON(500, gin.H{"error": "streaming unsupported"})
+	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		fmt.Printf("WS upgrade failed: %v\n", err)
 		return
 	}
+	defer conn.Close()
 
-	// Send a heartbeat comment every 15s to keep the connection alive.
-	ticker  := time.NewTicker(15 * time.Second)
-	logPoll := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	defer logPoll.Stop()
+	// Send connect confirmation.
+	conn.WriteJSON(map[string]string{"type": "connected", "agent_id": agentID})
 
-	// Track the last log ID we've sent so we only send new ones.
+	// Check if there are any logs; if not, auto-dispatch collect_auth_logs.
+	var logCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM endpoint_logs WHERE agent_id = $1`, agentID).Scan(&logCount)
+
+	if logCount == 0 {
+		services.CreateTaskForAgent(agentIDInt, "collect_auth_logs")
+		conn.WriteJSON(map[string]string{
+			"type":    "info",
+			"message": "No logs yet — dispatched collect_auth_logs task to agent. Logs will appear shortly.",
+		})
+	}
+
+	// Send last 50 historical logs immediately.
 	var lastID int
-	database.DB.QueryRow(`
-		SELECT COALESCE(MAX(id), 0) FROM endpoint_logs WHERE agent_id = $1
-	`, agentID).Scan(&lastID)
+	histRows, err := database.DB.Query(`
+		SELECT id, log_source, log_message
+		FROM endpoint_logs
+		WHERE agent_id = $1
+		ORDER BY id DESC
+		LIMIT 50
+	`, agentID)
 
-	ctx := c.Request.Context()
+	if err == nil {
+		var hist []wsLogEntry
+		for histRows.Next() {
+			var e wsLogEntry
+			if scanErr := histRows.Scan(&e.ID, &e.Source, &e.Message); scanErr == nil {
+				e.TS = time.Now().Format(time.RFC3339)
+				hist = append(hist, e)
+			}
+		}
+		histRows.Close()
+
+		// Send oldest-first.
+		for i := len(hist) - 1; i >= 0; i-- {
+			conn.WriteJSON(hist[i])
+			if hist[i].ID > lastID {
+				lastID = hist[i].ID
+			}
+		}
+	}
+
+	// Poll for new logs every 2s, heartbeat every 20s.
+	logTicker  := time.NewTicker(2 * time.Second)
+	pingTicker := time.NewTicker(20 * time.Second)
+	defer logTicker.Stop()
+	defer pingTicker.Stop()
+
+	// Read pump — detect client disconnect.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+		}
+	}()
 
 	for {
 		select {
 
-		case <-ctx.Done():
+		case <-done:
 			return
 
-		case <-ticker.C:
-			fmt.Fprintf(c.Writer, ": heartbeat\n\n")
-			flusher.Flush()
+		case <-pingTicker.C:
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 
-		case <-logPoll.C:
+		case <-logTicker.C:
 			rows, err := database.DB.Query(`
 				SELECT id, log_source, log_message
 				FROM endpoint_logs
@@ -74,32 +135,20 @@ func LiveLogsSSE(c *gin.Context) {
 			}
 
 			for rows.Next() {
-				var id int
-				var source, message string
-				if err := rows.Scan(&id, &source, &message); err == nil {
-					// Escape newlines so SSE data field stays on one line.
-					safe := escapeSSE(message)
-					fmt.Fprintf(c.Writer, "data: {\"id\":%d,\"source\":%q,\"message\":%q}\n\n",
-						id, source, safe)
-					lastID = id
+				var e wsLogEntry
+				if scanErr := rows.Scan(&e.ID, &e.Source, &e.Message); scanErr == nil {
+					e.TS = time.Now().Format(time.RFC3339)
+					if err := conn.WriteJSON(e); err != nil {
+						rows.Close()
+						return
+					}
+					lastID = e.ID
 				}
 			}
 			rows.Close()
-			flusher.Flush()
 		}
 	}
 }
 
-func escapeSSE(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			out = append(out, '\\', 'n')
-		} else if s[i] == '\r' {
-			// skip
-		} else {
-			out = append(out, s[i])
-		}
-	}
-	return string(out)
-}
+// suppress unused
+var _ = json.Marshal

@@ -14,11 +14,11 @@ func RequireAuth() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 
-		// Primary: Authorization header (all normal API calls).
+		// 1. Try Authorization header (all normal API calls).
 		tokenString := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
 
-		// Fallback: ?token= query param for SSE/EventSource connections,
-		// since browsers cannot set custom headers on EventSource.
+		// 2. Fall back to ?token= query param for WebSocket / EventSource,
+		//    since browsers cannot set custom headers on WS or EventSource.
 		if tokenString == "" {
 			tokenString = c.Query("token")
 		}

@@ -91,6 +91,7 @@ export const incidentsAPI = {
   getById:      (id: number)                   => api.get(`/incidents/${id}`),
   getEvents:    (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
   updateStatus: (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
+  addNote:      (id: number, note: string)     => api.post(`/incidents/${id}/notes`, { note }),
 };
 
 export const dashboardAPI = {

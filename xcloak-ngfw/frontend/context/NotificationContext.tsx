@@ -73,10 +73,44 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    if (!localStorage.getItem('token')) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
     poll();
     const t = setInterval(poll, 30000);
-    return () => clearInterval(t);
+
+    // Real-time WebSocket notifications from backend.
+    const wsUrl = `ws://localhost:8080/api/notifications/stream?token=${encodeURIComponent(token)}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.type === 'ping' || !data.severity) return;
+
+        // Only surface critical/high alerts as notifications.
+        if (data.severity !== 'critical' && data.severity !== 'high') return;
+        if (seenAlerts.current.has(data.id)) return;
+        seenAlerts.current.add(data.id);
+
+        if (!initialized.current) return;
+
+        setNotifications(prev => [{
+          id: makeId(),
+          type: 'alert' as const,
+          title: `${data.severity.toUpperCase()} Alert`,
+          message: data.rule_name,
+          severity: data.severity,
+          read: false,
+          created_at: data.timestamp,
+        }, ...prev].slice(0, 50));
+      } catch {}
+    };
+
+    return () => {
+      clearInterval(t);
+      ws.close();
+    };
   }, [poll]);
 
   const markRead    = (id: string) => setNotifications(p => p.map(n => n.id === id ? { ...n, read: true } : n));

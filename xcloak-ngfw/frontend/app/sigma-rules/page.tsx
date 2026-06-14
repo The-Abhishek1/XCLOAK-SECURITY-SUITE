@@ -5,7 +5,8 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { sigmaAPI } from '@/lib/api';
 import { SigmaRule } from '@/types';
 import { sevClass } from '@/lib/utils';
-import { FileCode, Plus, Trash2, Edit2, X, TestTube, ToggleLeft, ToggleRight, Search, Info } from 'lucide-react';
+import { FileCode, Plus, Trash2, Edit2, X, TestTube, ToggleLeft, ToggleRight, Search, Info, Upload } from 'lucide-react';
+import { SigmaImportButton } from '@/components/SigmaImportButton';
 
 const SEVERITIES = ['critical','high','medium','low'];
 
@@ -148,9 +149,28 @@ export default function SigmaRulesPage() {
     <RootLayout title="Sigma Rules" subtitle={`${rules.length} rules · ${rules.filter(r => r.enabled).length} active`}
       onRefresh={() => load(true)} refreshing={refreshing}
       actions={
-        <button onClick={() => { resetForm(); setShowAdd(true); }} className="g-btn g-btn-primary text-xs">
-          <Plus className="h-3.5 w-3.5" /> New Rule
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="g-btn g-btn-ghost text-xs cursor-pointer">
+            <Upload className="h-3.5 w-3.5" />
+            Import YAML
+            <input type="file" multiple accept=".yml,.yaml" className="hidden"
+              onChange={async e => {
+                const files = [...e.target.files!];
+                if (!files.length) return;
+                const form = new FormData();
+                files.forEach(f => form.append('rules', f));
+                try {
+                  const axios = (await import('@/lib/api')).default;
+                  await axios.post('/sigma/import', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+                  load();
+                } catch {}
+                e.target.value = '';
+              }} />
+          </label>
+          <button onClick={() => { resetForm(); setShowAdd(true); }} className="g-btn g-btn-primary text-xs">
+            <Plus className="h-3.5 w-3.5" /> New Rule
+          </button>
+        </div>
       }>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 200 }}>{toast}</div>}

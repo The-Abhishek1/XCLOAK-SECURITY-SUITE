@@ -86,8 +86,6 @@ func runTask(task models.AgentTask) string {
 		return result
 
 	case "collect_file_hashes":
-		// CollectFileHashes is in file_hashes.go → returns []models.FileHash
-		// SendFileHashes is in file_hash_sender.go → takes []models.FileHash
 		hashes := CollectFileHashes(task.AgentID)
 		SendFileHashes(hashes)
 		return "file hashes collected"
@@ -105,6 +103,13 @@ func runTask(task models.AgentTask) string {
 	case "fim_scan":
 		RunFIMScan(task.AgentID, task.Payload)
 		return "FIM scan completed"
+
+	// vulnerability_scan: collect packages so the backend can scan them.
+	// The actual CVE matching runs server-side via ScanAgentPackages().
+	// This task type is dispatched from POST /api/agents/:id/vulnerability-scan.
+	case "vulnerability_scan":
+		CollectPackages(task.AgentID)
+		return "packages collected for vulnerability scan"
 
 	default:
 		return "unknown task type: " + task.TaskType

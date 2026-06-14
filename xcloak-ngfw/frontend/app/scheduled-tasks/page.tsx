@@ -1,0 +1,219 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { RootLayout } from '@/components/layout/RootLayout';
+import api from '@/lib/api';
+import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, X } from 'lucide-react';
+import { timeAgo } from '@/lib/utils';
+
+const TASK_TYPES = [
+  'collect_processes', 'collect_connections', 'collect_services',
+  'collect_packages', 'collect_users', 'collect_auth_logs',
+  'collect_file_hashes', 'fim_scan', 'vulnerability_scan',
+];
+
+const CRON_PRESETS = [
+  { label: 'Every 5 min',  value: '*/5 * * * *' },
+  { label: 'Every 15 min', value: '*/15 * * * *' },
+  { label: 'Every hour',   value: '0 * * * *' },
+  { label: 'Every 6h',     value: '0 */6 * * *' },
+  { label: 'Daily',        value: '0 0 * * *' },
+];
+
+interface ScheduledTask {
+  id: number;
+  name: string;
+  task_type: string;
+  agent_ids: number[];
+  cron_expr: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  run_count: number;
+  created_by: string;
+}
+
+export default function ScheduledTasksPage() {
+  const [tasks, setTasks]       = useState<ScheduledTask[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [showNew, setShowNew]   = useState(false);
+  const [form, setForm]         = useState({ name: '', task_type: 'collect_auth_logs', cron_expr: '*/15 * * * *', agent_ids: '' });
+  const [saving, setSaving]     = useState(false);
+  const [toast, setToast]       = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+  const load = useCallback(async (spin = false) => {
+    if (spin) setRefreshing(true);
+    try { const r = await api.get('/scheduler/tasks'); setTasks(r.data || []); }
+    finally { setLoading(false); setRefreshing(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const create = async () => {
+    if (!form.name || !form.cron_expr) return;
+    setSaving(true);
+    try {
+      const agentIds = form.agent_ids
+        ? form.agent_ids.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+        : [];
+      await api.post('/scheduler/tasks', {
+        name: form.name, task_type: form.task_type,
+        cron_expr: form.cron_expr, agent_ids: agentIds,
+      });
+      setShowNew(false);
+      setForm({ name: '', task_type: 'collect_auth_logs', cron_expr: '*/15 * * * *', agent_ids: '' });
+      load();
+      notify('Scheduled task created');
+    } catch { notify('Failed to create task'); }
+    finally { setSaving(false); }
+  };
+
+  const toggle = async (id: number, enabled: boolean) => {
+    await api.patch(`/scheduler/tasks/${id}/toggle`, { enabled: !enabled });
+    setTasks(t => t.map(x => x.id === id ? { ...x, enabled: !enabled } : x));
+  };
+
+  const runNow = async (id: number) => {
+    await api.post(`/scheduler/tasks/${id}/run`, {});
+    notify('Task dispatched to agents');
+    setTimeout(() => load(), 1000);
+  };
+
+  const del = async (id: number) => {
+    await api.delete(`/scheduler/tasks/${id}`);
+    setTasks(t => t.filter(x => x.id !== id));
+    notify('Deleted');
+  };
+
+  return (
+    <RootLayout title="Scheduled Tasks" subtitle="Recurring automated agent data collection"
+      onRefresh={() => load(true)} refreshing={refreshing}
+      actions={
+        <button onClick={() => setShowNew(true)} className="g-btn g-btn-primary text-xs">
+          <Plus className="h-3.5 w-3.5" /> New Schedule
+        </button>
+      }>
+
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
+
+      <div className="space-y-3">
+        {loading ? (
+          <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+        ) : tasks.length === 0 ? (
+          <div className="g-card py-16 text-center">
+            <Clock className="mx-auto h-10 w-10 mb-3" style={{ color: 'var(--text-3)' }} />
+            <p className="text-sm" style={{ color: 'var(--text-2)' }}>No scheduled tasks yet.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Create a schedule to automatically collect data from all agents.</p>
+          </div>
+        ) : tasks.map(task => (
+          <div key={task.id} className="g-card px-5 py-4 flex items-center gap-4">
+            {/* Toggle */}
+            <button onClick={() => toggle(task.id, task.enabled)}>
+              {task.enabled
+                ? <ToggleRight className="h-5 w-5" style={{ color: 'var(--accent)' }} />
+                : <ToggleLeft  className="h-5 w-5" style={{ color: 'var(--text-3)' }} />}
+            </button>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{task.name}</p>
+                <span className="mono text-[10px] rounded px-2 py-0.5"
+                  style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                  {task.task_type}
+                </span>
+                {!task.enabled && (
+                  <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>disabled</span>
+                )}
+              </div>
+              <div className="flex items-center gap-4 mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                <span className="mono">{task.cron_expr}</span>
+                {task.agent_ids?.length > 0
+                  ? <span>Agents: {task.agent_ids.join(', ')}</span>
+                  : <span>All agents</span>}
+                {task.last_run_at && <span>Last: {timeAgo(task.last_run_at)}</span>}
+                {task.next_run_at && <span>Next: {timeAgo(task.next_run_at)}</span>}
+                <span>{task.run_count} runs</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => runNow(task.id)}
+                className="g-btn g-btn-ghost text-xs">
+                <Play className="h-3.5 w-3.5" /> Run now
+              </button>
+              <button onClick={() => del(task.id)} style={{ color: 'var(--text-3)' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* New task modal */}
+      {showNew && (
+        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
+          <div className="g-modal" style={{ maxWidth: 500 }}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>New Scheduled Task</h2>
+              <button onClick={() => setShowNew(false)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Name</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Hourly auth log collection" className="g-input w-full" />
+              </div>
+
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Task Type</label>
+                <select value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}
+                  className="g-select w-full">
+                  {TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Schedule (cron)</label>
+                <div className="flex gap-2 mb-2 flex-wrap">
+                  {CRON_PRESETS.map(p => (
+                    <button key={p.value} onClick={() => setForm(f => ({ ...f, cron_expr: p.value }))}
+                      className="text-[11px] px-2.5 py-1 rounded-lg"
+                      style={{
+                        background: form.cron_expr === p.value ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                        border: `1px solid ${form.cron_expr === p.value ? 'var(--accent-border)' : 'var(--border)'}`,
+                        color: form.cron_expr === p.value ? 'var(--accent)' : 'var(--text-2)',
+                      }}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <input value={form.cron_expr} onChange={e => setForm(f => ({ ...f, cron_expr: e.target.value }))}
+                  placeholder="*/15 * * * *" className="g-input w-full font-mono" />
+              </div>
+
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>
+                  Agent IDs (comma-separated, blank = all agents)
+                </label>
+                <input value={form.agent_ids} onChange={e => setForm(f => ({ ...f, agent_ids: e.target.value }))}
+                  placeholder="126, 73 or leave blank for all" className="g-input w-full font-mono" />
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setShowNew(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={create} disabled={saving || !form.name}
+                className="g-btn g-btn-primary flex-1 justify-center">
+                {saving ? 'Creating…' : 'Create Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </RootLayout>
+  );
+}

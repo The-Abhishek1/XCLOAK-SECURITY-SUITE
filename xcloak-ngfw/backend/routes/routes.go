@@ -553,7 +553,6 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Compliance Reports ────────────────────────────────────────
 	router.POST("/api/compliance/reports",
 		middleware.RequireAuth(),
-		middleware.RequireRole("admin"),
 		api.GenerateReport,
 	)
 	router.GET("/api/compliance/reports",
@@ -648,10 +647,10 @@ func SetupRoutes(router *gin.Engine) {
 		api.GetFIMAlerts,
 	)
 
-	// ── Live log SSE stream ───────────────────────────────────────
+	// ── Live log WebSocket stream ─────────────────────────────────
 	router.GET("/api/agents/:id/logs/stream",
 		middleware.RequireAuth(),
-		api.LiveLogsSSE,
+		api.LiveLogsWS,
 	)
 
 	// ── MITRE mappings ────────────────────────────────────────────
@@ -660,4 +659,71 @@ func SetupRoutes(router *gin.Engine) {
 		api.GetMITREMappings,
 	)
 
+	// ── Threat Hunt ───────────────────────────────────────────────
+	router.POST("/api/hunt/run",
+		middleware.RequireAuth(),
+		api.RunHunt,
+	)
+	router.GET("/api/hunt/queries",
+		middleware.RequireAuth(),
+		api.GetHuntQueries,
+	)
+	router.POST("/api/hunt/queries/:id/run",
+		middleware.RequireAuth(),
+		api.RerunHuntQuery,
+	)
+	router.DELETE("/api/hunt/queries/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DeleteHuntQuery,
+	)
+
+	// ── Scheduler ─────────────────────────────────────────────────
+	router.GET("/api/scheduler/tasks",
+		middleware.RequireAuth(),
+		api.GetScheduledTasks,
+	)
+	router.POST("/api/scheduler/tasks",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.CreateScheduledTask,
+	)
+	router.PATCH("/api/scheduler/tasks/:id/toggle",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.ToggleScheduledTask,
+	)
+	router.POST("/api/scheduler/tasks/:id/run",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.RunScheduledTaskNow,
+	)
+	router.DELETE("/api/scheduler/tasks/:id",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DeleteScheduledTask,
+	)
+
+	// ── Enhanced Metrics ──────────────────────────────────────────
+	router.GET("/api/dashboard/metrics",
+		middleware.RequireAuth(),
+		api.GetDashboardMetrics,
+	)
+
+	// ── Incident management ───────────────────────────────────────
+	router.PUT("/api/incidents/:id/status",
+		middleware.RequireAuth(),
+		api.UpdateIncidentStatus,
+	)
+	router.POST("/api/incidents/:id/notes",
+		middleware.RequireAuth(),
+		api.AddIncidentNote,
+	)
+
+	// ── Sigma YAML import ─────────────────────────────────────────
+	router.POST("/api/sigma/import",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.ImportSigmaYAML,
+	)
 }
