@@ -161,10 +161,13 @@ func ToggleSuppressionRule(id string, enabled bool) error {
 
 // GetSuppressionStats returns alert counts with/without suppression for a quick view.
 func GetSuppressionStats() map[string]int {
-	stats := map[string]int{}
-	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE`).Scan(&stats["active_rules"])
-	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules`).Scan(&stats["total_suppressed"])
-	return stats
+	var activeRules, totalSuppressed int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE`).Scan(&activeRules)
+	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules`).Scan(&totalSuppressed)
+	return map[string]int{
+		"active_rules":      activeRules,
+		"total_suppressed":  totalSuppressed,
+	}
 }
 
 // Silence unused import
