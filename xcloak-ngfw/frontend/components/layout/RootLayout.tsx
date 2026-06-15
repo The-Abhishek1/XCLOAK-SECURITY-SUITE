@@ -21,7 +21,7 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
     <div className="flex min-h-screen" style={{ background: 'var(--bg-0)' }}>
       <div className="bg-mesh" />
       <Sidebar />
-      <div className="flex flex-1 flex-col min-w-0 ml-[56px] lg:ml-[240px]">
+ <div className="flex flex-1 flex-col min-w-0 ml-[56px] lg:ml-[240px]">
         <AppHeader title={title} subtitle={subtitle} onRefresh={onRefresh} refreshing={refreshing} actions={actions} />
         <main className="flex-1 p-4 sm:p-6 relative z-10">{children}</main>
       </div>

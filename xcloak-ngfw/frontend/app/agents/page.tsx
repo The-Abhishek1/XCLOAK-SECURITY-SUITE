@@ -4,9 +4,18 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, tasksAPI } from '@/lib/api';
+import api from '@/lib/api';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus } from 'lucide-react';
+import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart } from 'lucide-react';
+
+interface AgentHealth {
+  agent_id: number;
+  health_score: number;
+  health_status: string;
+  heartbeat_gap_s: number;
+  alert_rate_1h: number;
+}
 
 // Tasks with payload requirements
 const TASK_DEFS = [
@@ -32,18 +41,30 @@ interface TaskItem {
 }
 
 export default function AgentsPage() {
-  const [agents, setAgents]   = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [agents, setAgents]     = useState<Agent[]>([]);
+  const [health, setHealth]     = useState<Map<number, AgentHealth>>(new Map());
+  const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch]   = useState('');
-  const [modal, setModal]     = useState<Agent | null>(null);
-  const [tasks, setTasks]     = useState<TaskItem[]>([{ id: '1', task_type: 'collect_processes', payload_value: '' }]);
+  const [search, setSearch]     = useState('');
+  const [modal, setModal]       = useState<Agent | null>(null);
+  const [tasks, setTasks]       = useState<TaskItem[]>([{ id: '1', task_type: 'collect_processes', payload_value: '' }]);
   const [dispatching, setDispatching] = useState(false);
-  const [toast, setToast]     = useState<string | null>(null);
+  const [toast, setToast]       = useState<string | null>(null);
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
-    try { const r = await agentsAPI.getAll(); setAgents(r.data || []); }
+    try {
+      const [agentRes, healthRes] = await Promise.allSettled([
+        agentsAPI.getAll(),
+        api.get('/agents/health').catch(() => ({ data: [] })),
+      ]);
+      if (agentRes.status === 'fulfilled') setAgents(agentRes.value.data || []);
+      if (healthRes.status === 'fulfilled') {
+        const hMap = new Map<number, AgentHealth>();
+        (healthRes.value.data || []).forEach((h: AgentHealth) => hMap.set(h.agent_id, h));
+        setHealth(hMap);
+      }
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -135,6 +156,29 @@ export default function AgentsPage() {
                         <span style={{ color: 'var(--text-2)' }}>{v}</span>
                       </div>
                     ))}
+                    {/* Health score */}
+                    {health.has(agent.id) && (() => {
+                      const h = health.get(agent.id)!;
+                      const color = h.health_score >= 80 ? 'var(--green)' : h.health_score >= 50 ? 'var(--orange)' : 'var(--red)';
+                      return (
+                        <div className="flex justify-between items-center mt-2 pt-2"
+                          style={{ borderTop: '1px solid var(--border)' }}>
+                          <div className="flex items-center gap-1">
+                            <Heart className="h-3 w-3" style={{ color }} />
+                            <span style={{ color: 'var(--text-3)' }}>Health</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                              <div className="h-full rounded-full transition-all"
+                                style={{ width: `${h.health_score}%`, background: color }} />
+                            </div>
+                            <span className="font-bold tabular-nums text-[11px]" style={{ color }}>
+                              {h.health_score}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="flex items-center px-4 py-2.5 gap-2">

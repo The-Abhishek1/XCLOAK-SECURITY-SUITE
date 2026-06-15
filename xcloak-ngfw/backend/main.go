@@ -28,6 +28,7 @@ func main() {
 
 	// Start background scheduler for recurring agent tasks.
 	go services.StartScheduler()
+	go services.StartHealthScheduler()
 
 	go func() {
 		for {

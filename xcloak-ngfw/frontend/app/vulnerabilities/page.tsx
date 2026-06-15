@@ -159,28 +159,88 @@ export default function VulnerabilitiesPage() {
 
         {/* CVE detail panel */}
         {cveDetail && (
-          <div className="g-card p-4 flex items-start gap-4" style={{ border: '1px solid var(--accent-border)' }}>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="mono text-xs font-bold" style={{ color: 'var(--accent)' }}>{cveDetail.cve_id}</span>
-                <span className={sevClass(cveDetail.severity)}>{cveDetail.severity}</span>
-                {cveDetail.cvss_score > 0 && (
-                  <span className="text-xs font-bold" style={{ color: 'var(--orange)' }}>CVSS {cveDetail.cvss_score.toFixed(1)}</span>
-                )}
+          <div className="fixed inset-0 z-50 flex">
+            <div className="flex-1" onClick={() => setCveDetail(null)} />
+            <div className="w-full max-w-sm h-full overflow-y-auto shadow-2xl"
+              style={{ background: 'var(--bg-1)', borderLeft: '1px solid var(--border)' }}>
+
+              {/* Header */}
+              <div className="sticky top-0 px-5 py-4 flex items-center justify-between"
+                style={{ background: 'var(--bg-1)', borderBottom: '1px solid var(--border)', zIndex: 10 }}>
+                <div>
+                  <p className="mono text-sm font-bold" style={{ color: 'var(--accent)' }}>{cveDetail.cve_id}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={sevClass(cveDetail.severity)}>{cveDetail.severity}</span>
+                  </div>
+                </div>
+                <button onClick={() => setCveDetail(null)} style={{ color: 'var(--text-2)' }}>✕</button>
               </div>
-              <p className="text-xs" style={{ color: 'var(--text-2)' }}>{cveDetail.description}</p>
-              {cveDetail.published_at && (
-                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
-                  Published: {new Date(cveDetail.published_at).toLocaleDateString()}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <a href={`https://nvd.nist.gov/vuln/detail/${cveDetail.cve_id}`} target="_blank" rel="noopener"
-                className="g-btn g-btn-ghost text-[11px]" style={{ padding: '4px 8px' }}>
-                <ExternalLink className="h-3 w-3" /> NVD
-              </a>
-              <button onClick={() => setCveDetail(null)} style={{ color: 'var(--text-3)' }}>×</button>
+
+              <div className="p-5 space-y-5">
+                {/* CVSS Gauge */}
+                {cveDetail.cvss_score > 0 && (() => {
+                  const score = cveDetail.cvss_score;
+                  const pct   = score / 10;
+                  const r     = 48;
+                  const circ  = Math.PI * r;
+                  const dash  = circ * pct;
+                  const color = score >= 9 ? '#f85149' : score >= 7 ? '#fb923c' : score >= 4 ? '#fbbf24' : '#34d399';
+                  return (
+                    <div className="flex items-center gap-5 rounded-xl p-4"
+                      style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                      <svg width="110" height="65" viewBox="0 0 110 65">
+                        <path d="M 7 60 A 48 48 0 0 1 103 60" fill="none" stroke="var(--border)" strokeWidth="9" strokeLinecap="round" />
+                        <path d="M 7 60 A 48 48 0 0 1 103 60" fill="none" stroke={color}
+                          strokeWidth="9" strokeLinecap="round"
+                          strokeDasharray={`${dash} ${circ}`} />
+                        <text x="55" y="55" textAnchor="middle" fontSize="18" fontWeight="700" fill="var(--text-1)">{score.toFixed(1)}</text>
+                      </svg>
+                      <div>
+                        <p className="text-xs font-bold" style={{ color }}>
+                          {score >= 9 ? 'Critical' : score >= 7 ? 'High' : score >= 4 ? 'Medium' : 'Low'}
+                        </p>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>CVSS v3 Score</p>
+                        {cveDetail.published_at && (
+                          <p className="text-[10px] mt-2" style={{ color: 'var(--text-3)' }}>
+                            Published {new Date(cveDetail.published_at).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Description */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>Description</p>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{cveDetail.description}</p>
+                </div>
+
+                {/* Remediation */}
+                {cveDetail.remediation && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>Remediation</p>
+                    <div className="rounded-xl p-3 mono text-[11px]"
+                      style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', color: 'var(--green)' }}>
+                      {cveDetail.remediation}
+                    </div>
+                  </div>
+                )}
+
+                {/* Links */}
+                <div className="flex gap-2">
+                  <a href={`https://nvd.nist.gov/vuln/detail/${cveDetail.cve_id}`}
+                    target="_blank" rel="noopener"
+                    className="g-btn g-btn-primary text-xs flex-1 justify-center">
+                    <ExternalLink className="h-3.5 w-3.5" /> NVD Entry
+                  </a>
+                  <a href={`https://www.cvedetails.com/cve/${cveDetail.cve_id}/`}
+                    target="_blank" rel="noopener"
+                    className="g-btn g-btn-ghost text-xs flex-1 justify-center">
+                    <ExternalLink className="h-3.5 w-3.5" /> CVE Details
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         )}

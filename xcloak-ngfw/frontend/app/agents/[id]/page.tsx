@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { agentsAPI, alertsAPI, tasksAPI } from '@/lib/api';
+import { agentsAPI, alertsAPI, tasksAPI, fimAPI, aiAPI } from '@/lib/api';
 import { Agent, AgentSummary, Vulnerability, TimelineEvent, Alert } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import {
   ArrowLeft, Activity, Network, Database, Package,
   Users, Clock, Bug, FileSearch, Bell, Play, ShieldAlert, Search,
+  ShieldCheck, Radio, Brain,
 } from 'lucide-react';
 
 const TABS = [
@@ -22,6 +23,9 @@ const TABS = [
   { id: 'timeline',       label: 'Timeline',        icon: Clock },
   { id: 'vulnerabilities',label: 'Vulnerabilities', icon: Bug },
   { id: 'filehashes',     label: 'File Hashes',     icon: FileSearch },
+  { id: 'fim',            label: 'FIM',             icon: ShieldCheck },
+  { id: 'logs',           label: 'Auth Logs',       icon: Radio },
+  { id: 'anomaly',        label: 'Anomaly',         icon: Brain },
 ];
 
 export default function AgentDetailPage() {
@@ -46,6 +50,11 @@ export default function AgentDetailPage() {
   const [services, setServices]       = useState<any[] | null>(null);
   const [users, setUsers]             = useState<any[] | null>(null);
   const [packages, setPackages]       = useState<any[] | null>(null);
+  const [fimAlerts, setFimAlerts]     = useState<any[] | null>(null);
+  const [fimBaseline, setFimBaseline] = useState<any[] | null>(null);
+  const [authLogs, setAuthLogs]       = useState<any[] | null>(null);
+  const [anomalies, setAnomalies]     = useState<any[] | null>(null);
+  const [runningAnomaly, setRunningAnomaly] = useState(false);
   const [tabLoading, setTabLoading]   = useState(false);
   const [search, setSearch]           = useState('');
 
@@ -101,11 +110,30 @@ export default function AgentDetailPage() {
         case 'packages':
           if (packages === null) { const r = await agentsAPI.getPackages(agentId); setPackages(r.data || []); }
           break;
+        case 'fim':
+          if (fimAlerts === null) {
+            const [fa, fb] = await Promise.allSettled([fimAPI.getAlerts(agentId), fimAPI.getBaseline(agentId)]);
+            if (fa.status === 'fulfilled') setFimAlerts(fa.value.data || []);
+            if (fb.status === 'fulfilled') setFimBaseline(fb.value.data || []);
+          }
+          break;
+        case 'logs':
+          if (authLogs === null) {
+            const r = await agentsAPI.getAuthLogs(agentId).catch(() => ({ data: [] }));
+            setAuthLogs(r.data || []);
+          }
+          break;
+        case 'anomaly':
+          if (anomalies === null) {
+            const r = await aiAPI.getAnomalies(agentId).catch(() => ({ data: [] }));
+            setAnomalies(r.data || []);
+          }
+          break;
       }
     } finally {
       setTabLoading(false);
     }
-  }, [agentId, processes, connections, services, users, packages]);
+  }, [agentId, processes, connections, services, users, packages, fimAlerts, authLogs, anomalies]);
 
   const selectTab = (tab: string) => {
     setActiveTab(tab);
@@ -358,6 +386,148 @@ export default function AgentDetailPage() {
                 <EmptyState msg="Dispatch 'Collect Hashes' to populate file inventory." />
               </div>
             )}
+
+            {/* ── FIM Tab ─────────────────────────────────────── */}
+            {activeTab === 'fim' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    Baseline: {fimBaseline?.length || 0} files · Violations: {fimAlerts?.length || 0}
+                  </p>
+                  <button onClick={() => dispatch('fim_scan')} disabled={dispatching} className="g-btn g-btn-primary text-xs">
+                    <Play className="h-3 w-3" /> {dispatching ? 'Scanning…' : 'Run FIM Scan'}
+                  </button>
+                </div>
+
+                {tabLoading ? (
+                  <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+                ) : (fimAlerts?.length || 0) === 0 ? (
+                  <EmptyState msg="No FIM violations detected. Run a scan to establish baseline." />
+                ) : (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '80px 1fr 1fr 100px' }}>
+                      <span>Change</span><span>File Path</span><span>Hash (new)</span><span>Time</span>
+                    </div>
+                    {fimAlerts!.map((a: any, i: number) => (
+                      <div key={i} className="g-tr grid gap-3 items-center px-4"
+                        style={{ gridTemplateColumns: '80px 1fr 1fr 100px' }}>
+                        <span className="text-[11px] font-medium capitalize rounded px-2 py-0.5 w-fit"
+                          style={{
+                            background: a.change_type === 'modified' ? 'var(--orange-bg)' : a.change_type === 'deleted' ? 'var(--red-bg)' : 'var(--accent-glow)',
+                            color: a.change_type === 'modified' ? 'var(--orange)' : a.change_type === 'deleted' ? 'var(--red)' : 'var(--accent)',
+                            border: `1px solid ${a.change_type === 'modified' ? 'var(--orange-border)' : a.change_type === 'deleted' ? 'var(--red-border)' : 'var(--accent-border)'}`,
+                          }}>
+                          {a.change_type}
+                        </span>
+                        <span className="text-[11px] mono truncate" style={{ color: 'var(--text-1)' }}>{a.file_path}</span>
+                        <span className="text-[10px] mono truncate" style={{ color: 'var(--text-3)' }}>
+                          {a.new_hash?.slice(0, 16) || '—'}
+                        </span>
+                        <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Auth Logs Tab ────────────────────────────────── */}
+            {activeTab === 'logs' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    {authLogs?.length || 0} log entries
+                  </p>
+                  <button onClick={() => { setAuthLogs(null); dispatch('collect_auth_logs'); }}
+                    disabled={dispatching} className="g-btn g-btn-primary text-xs">
+                    <Play className="h-3 w-3" /> {dispatching ? 'Collecting…' : 'Collect Auth Logs'}
+                  </button>
+                </div>
+
+                {tabLoading ? (
+                  <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+                ) : (authLogs?.length || 0) === 0 ? (
+                  <EmptyState msg="No auth logs. Click 'Collect Auth Logs' to fetch from /var/log/auth.log." />
+                ) : (
+                  <div className="rounded-xl overflow-hidden font-mono text-[11px]"
+                    style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', maxHeight: 480, overflowY: 'auto' }}>
+                    {authLogs!.map((l: any, i: number) => {
+                      const msg = l.log_message || '';
+                      const color = msg.toLowerCase().includes('fail') || msg.toLowerCase().includes('invalid')
+                        ? 'var(--red)' : msg.toLowerCase().includes('accepted') || msg.toLowerCase().includes('opened')
+                        ? 'var(--green)' : 'var(--text-2)';
+                      return (
+                        <div key={i} className="flex gap-3 px-3 py-1 hover:bg-white/5 transition-colors">
+                          <span className="shrink-0 w-14 text-[10px]" style={{ color: 'var(--text-3)' }}>{i + 1}</span>
+                          <span style={{ color }}>{msg}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Anomaly Tab ──────────────────────────────────── */}
+            {activeTab === 'anomaly' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    {anomalies?.length || 0} anomalies detected
+                  </p>
+                  <button
+                    onClick={async () => {
+                      setRunningAnomaly(true);
+                      try {
+                        const r = await aiAPI.runAnomaly(agentId);
+                        setAnomalies(r.data?.findings || []);
+                      } catch { setToast('AI anomaly detection failed'); }
+                      finally { setRunningAnomaly(false); }
+                    }}
+                    disabled={runningAnomaly}
+                    className="g-btn g-btn-primary text-xs">
+                    <Brain className="h-3 w-3" /> {runningAnomaly ? 'Analyzing…' : 'Run AI Detection'}
+                  </button>
+                </div>
+
+                {tabLoading || runningAnomaly ? (
+                  <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>
+                    {runningAnomaly ? 'AI analyzing endpoint data…' : 'Loading…'}
+                  </div>
+                ) : (anomalies?.length || 0) === 0 ? (
+                  <EmptyState msg="No anomalies detected. Run AI Detection to analyze processes, connections, and users." />
+                ) : (
+                  <div className="space-y-2">
+                    {anomalies!.map((a: any, i: number) => (
+                      <div key={i} className="g-card p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-[10px] font-medium capitalize px-2 py-0.5 rounded"
+                                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                                {a.finding_type}
+                              </span>
+                              <span className={sevClass(a.severity)}>{a.severity}</span>
+                            </div>
+                            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-1)' }}>{a.description}</p>
+                            {a.raw_context?.indicator && (
+                              <p className="mono text-[10px] mt-1.5 px-2 py-1 rounded"
+                                style={{ background: 'var(--bg-0)', color: 'var(--accent)' }}>
+                                {a.raw_context.indicator}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-[10px] shrink-0" style={{ color: 'var(--text-3)' }}>
+                            {timeAgo(a.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
       </div>

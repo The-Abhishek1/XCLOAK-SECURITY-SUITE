@@ -7,12 +7,14 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-// CreateAlert persists an alert then:
-//  1. Broadcasts to all connected browser WebSocket clients (real-time bell)
-//  2. Fires SOAR playbook matching
-//  3. Fires incident correlation
-//  4. Recalculates agent risk score
-//  5. AI-triages critical/high alerts (async)
+// CreateAlert persists an alert then fires the full pipeline:
+//  1. Suppression check — drop silently if rule matches
+//  2. Broadcast to browser WebSocket clients (real-time bell)
+//  3. Fire webhook/Slack integrations for critical/high
+//  4. SOAR playbook matching
+//  5. Incident correlation
+//  6. Risk score recalculation
+//  7. AI triage (async, critical/high only)
 func CreateAlert(alert models.Alert) error {
 
 	err := repositories.CreateAlert(alert)
@@ -20,12 +22,18 @@ func CreateAlert(alert models.Alert) error {
 		return err
 	}
 
-	// Broadcast to browser notification WebSocket clients.
-	// Import cycle avoided by calling through the api package interface.
-	// We use a package-level function registered at startup.
+	// Real-time browser notification.
 	if broadcastFn != nil {
 		go broadcastFn(alert)
 	}
+
+	// IOC auto-block if IOC rule matched.
+	if strings.Contains(strings.ToLower(alert.RuleName), "ioc") {
+		go autoBlockIOC(alert)
+	}
+
+	// Webhook / Slack integrations.
+	go FireAlertWebhook(alert)
 
 	go ExecutePlaybooks(alert)
 	go CorrelateAlert(alert)
@@ -40,11 +48,10 @@ func CreateAlert(alert models.Alert) error {
 	return nil
 }
 
-// broadcastFn is set at startup by main.go to avoid import cycles
-// between services and api packages.
+// broadcastFn injected from main.go to avoid import cycles.
 var broadcastFn func(models.Alert)
 
-// RegisterBroadcastFn is called from main.go to inject the WS broadcaster.
+// RegisterBroadcastFn injects the WS notification broadcaster.
 func RegisterBroadcastFn(fn func(models.Alert)) {
 	broadcastFn = fn
 }

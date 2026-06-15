@@ -9,21 +9,26 @@ import {
   Shield, Bug, Settings, ShieldCheck, LogOut,
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, ShieldAlert, Search, CalendarClock,
+  GitMerge, Map, Clock, VolumeX, UserPlus,
 } from 'lucide-react';
 
 const NAV = [
   { group: 'OVERVIEW',  items: [
-    { href: '/dashboard',   label: 'Dashboard',       icon: LayoutDashboard },
-    { href: '/agents',      label: 'Agents',          icon: Cpu },
+    { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+    { href: '/agents',       label: 'Agents',       icon: Cpu },
+    { href: '/network-map',  label: 'Network Map',  icon: Map },
+    { href: '/timeline',     label: 'Timeline',     icon: Clock },
   ]},
   { group: 'DETECTION', items: [
-    { href: '/alerts',       label: 'Alerts',          icon: Bell },
-    { href: '/incidents',    label: 'Incidents',       icon: AlertTriangle },
-    { href: '/threat-intel', label: 'Threat Intel',    icon: Shield },
-    { href: '/sigma-rules',  label: 'Sigma Rules',     icon: FileCode },
-    { href: '/yara-rules',   label: 'YARA Rules',      icon: Code2 },
-    { href: '/live-logs',    label: 'Live Logs',       icon: Radio },
-    { href: '/hunt',         label: 'Threat Hunt',     icon: Search },
+    { href: '/alerts',       label: 'Alerts',       icon: Bell },
+    { href: '/incidents',    label: 'Incidents',    icon: AlertTriangle },
+    { href: '/threat-intel', label: 'Threat Intel', icon: Shield },
+    { href: '/sigma-rules',  label: 'Sigma Rules',  icon: FileCode },
+    { href: '/yara-rules',   label: 'YARA Rules',   icon: Code2 },
+    { href: '/live-logs',    label: 'Live Logs',    icon: Radio },
+    { href: '/hunt',         label: 'Threat Hunt',  icon: Search },
+    { href: '/correlation',  label: 'Correlation',  icon: GitMerge },
+    { href: '/suppression',  label: 'Suppression',  icon: VolumeX },
   ]},
   { group: 'RESPONSE',  items: [
     { href: '/playbooks',        label: 'Playbooks',       icon: Play },
@@ -33,12 +38,12 @@ const NAV = [
     { href: '/scheduled-tasks',  label: 'Scheduled Tasks', icon: CalendarClock },
   ]},
   { group: 'COMPLIANCE', items: [
-    { href: '/compliance', label: 'Reports',  icon: ClipboardCheck },
+    { href: '/compliance', label: 'Reports', icon: ClipboardCheck },
   ]},
   { group: 'AI',  items: [
     { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },
   ]},
-  { group: 'SYSTEM',    items: [
+  { group: 'SYSTEM', items: [
     { href: '/settings', label: 'Settings', icon: Settings },
   ]},
 ];

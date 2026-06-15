@@ -91,7 +91,6 @@ export const incidentsAPI = {
   getById:      (id: number)                   => api.get(`/incidents/${id}`),
   getEvents:    (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
   updateStatus: (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
-  addNote:      (id: number, note: string)     => api.post(`/incidents/${id}/notes`, { note }),
 };
 
 export const dashboardAPI = {
@@ -221,5 +220,15 @@ export const mitreAPI = {
 // Live log SSE URL — use directly with EventSource
 export const liveLogURL = (agentId: number, token: string) =>
   `/api/agents/${agentId}/logs/stream?token=${token}`;
+
+
+export const integrationsAPI = {
+  getAll:          ()                                    => api.get('/integrations'),
+  save:            (name: string, enabled: boolean, config: any) => api.put(`/integrations/${name}`, { enabled, config }),
+  test:            (name: string)                        => api.post(`/integrations/${name}/test`, {}),
+  getDeliveries:   ()                                    => api.get('/integrations/deliveries'),
+  getInstallTokens:()                                    => api.get('/integrations/install-tokens'),
+  createInstallToken:(label: string)                     => api.post('/integrations/install-tokens', { label }),
+};
 
 export default api;
