@@ -1,0 +1,23 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    platform: xcloak
+
+scrape_configs:
+  # XCloak backend — exposed at localhost:8080/metrics
+  - job_name: 'xcloak-backend'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Kafka JMX (optional — uncomment if JMX exporter is configured)
+  # - job_name: 'kafka'
+  #   static_configs:
+  #     - targets: ['kafka:9101']

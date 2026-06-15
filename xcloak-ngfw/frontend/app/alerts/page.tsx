@@ -6,7 +6,8 @@ import { Pagination } from '@/components/ui/Pagination';
 import { alertsAPI, aiAPI } from '@/lib/api';
 import { Alert } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
-import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag } from 'lucide-react';
+import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity } from 'lucide-react';
+import api from '@/lib/api';
 
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
 const PER_PAGE = 50;
@@ -40,6 +41,10 @@ export default function AlertsPage() {
   const [selected, setSelected]   = useState<Alert | null>(null);
   const [triage, setTriage]       = useState<AITriage | null>(null);
   const [triaging, setTriaging]   = useState(false);
+  const [responding, setResponding] = useState(false);
+  const [responseAction, setResponseAction] = useState('kill_process');
+  const [responsePID, setResponsePID] = useState('');
+  const [responseFile, setResponseFile] = useState('');
   const [toast, setToast]         = useState<string | null>(null);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
@@ -314,6 +319,77 @@ export default function AlertsPage() {
                     </button>
                   </div>
                 )}
+
+                {/* ── Manual Response Panel ───────────────── */}
+                <div className="rounded-xl overflow-hidden"
+                  style={{ border: '1px solid var(--border)' }}>
+                  <div className="px-4 py-3 flex items-center gap-2"
+                    style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                    <Zap className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                      Manual Response
+                    </p>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <div>
+                      <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Action</label>
+                      <select value={responseAction} onChange={e => setResponseAction(e.target.value)}
+                        className="g-select w-full text-xs">
+                        <option value="kill_process">Kill Process</option>
+                        <option value="isolate_host">Isolate Host</option>
+                        <option value="quarantine_file">Quarantine File</option>
+                        <option value="collect_processes">Collect Processes</option>
+                        <option value="collect_connections">Collect Connections</option>
+                        <option value="collect_file_hashes">Collect File Hashes</option>
+                        <option value="fim_scan">FIM Scan</option>
+                        <option value="vulnerability_scan">Vulnerability Scan</option>
+                      </select>
+                    </div>
+
+                    {responseAction === 'kill_process' && (
+                      <div>
+                        <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>PID</label>
+                        <input value={responsePID} onChange={e => setResponsePID(e.target.value)}
+                          placeholder="e.g. 1234" className="g-input w-full mono text-xs" />
+                      </div>
+                    )}
+
+                    {responseAction === 'quarantine_file' && (
+                      <div>
+                        <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>File Path</label>
+                        <input value={responseFile} onChange={e => setResponseFile(e.target.value)}
+                          placeholder="/tmp/malware.bin" className="g-input w-full mono text-xs" />
+                      </div>
+                    )}
+
+                    <button
+                      disabled={responding}
+                      onClick={async () => {
+                        setResponding(true);
+                        const payload: Record<string, any> = {};
+                        if (responseAction === 'kill_process' && responsePID)
+                          payload.pid = parseInt(responsePID);
+                        if (responseAction === 'quarantine_file' && responseFile)
+                          payload.file_path = responseFile;
+                        try {
+                          await api.post(`/alerts/${selected.id}/respond`, {
+                            action_type: responseAction,
+                            payload,
+                          });
+                          notify(`Dispatched: ${responseAction}`);
+                        } catch {
+                          notify('Dispatch failed');
+                        } finally {
+                          setResponding(false);
+                        }
+                      }}
+                      className="g-btn g-btn-primary w-full justify-center text-xs">
+                      {responding
+                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Dispatching…</>
+                        : <><Zap className="h-3.5 w-3.5" /> Dispatch to Agent #{selected.agent_id}</>}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

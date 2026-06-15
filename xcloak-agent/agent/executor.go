@@ -111,6 +111,18 @@ func runTask(task models.AgentTask) string {
 		CollectPackages(task.AgentID)
 		return "packages collected for vulnerability scan"
 
+	// apply_firewall_rules: translate XCloak rules into iptables commands.
+	case "apply_firewall_rules":
+		result, err := ApplyFirewallRules(task)
+		if err != nil {
+			return "firewall sync failed: " + err.Error()
+		}
+		return result
+
+	// restore_file: move a quarantined file back to its original path.
+	case "restore_file":
+		return RestoreQuarantinedFile(task)
+
 	default:
 		return "unknown task type: " + task.TaskType
 	}

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { iocsAPI, sigmaAPI, threatFeedsAPI } from '@/lib/api';
+import api from '@/lib/api';
 import { IOC, SigmaRule, ThreatFeed } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import {
@@ -98,14 +99,24 @@ export default function ThreatIntelPage() {
   };
 
   const bulkImport = async () => {
-    const indicators = bulkForm.indicators.split('\n').map(s => s.trim()).filter(Boolean);
-    if (!indicators.length) return;
     setSaving(true);
     try {
-      await iocsAPI.bulkImport({ ...bulkForm, indicators });
-      load(); setShowBulk(false); setBulkForm({ type: 'ip', severity: 'high', description: '', indicators: '' });
-      notify(`${indicators.length} IOCs imported`);
-    } finally { setSaving(false); }
+      const r = await api.post('/iocs/bulk', {
+        indicators:  bulkForm.indicators,
+        severity:    bulkForm.severity,
+        description: bulkForm.description,
+        source:      'manual',
+      });
+      const { imported, dupes, skipped } = r.data;
+      notify(`Imported ${imported} IOCs (${dupes} already existed, ${skipped} skipped)`);
+      load();
+      setShowBulk(false);
+      setBulkForm({ type: 'ip', severity: 'high', description: '', indicators: '' });
+    } catch {
+      notify('Bulk import failed');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Sigma CRUD
@@ -346,20 +357,27 @@ export default function ThreatIntelPage() {
       {showBulk && (
         <Modal title="Bulk Import IOCs" onClose={() => setShowBulk(false)}>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <MSelect label="Type" value={bulkForm.type} onChange={v => setBulkForm(f => ({ ...f, type: v }))} options={IOC_TYPES} />
-              <MSelect label="Severity" value={bulkForm.severity} onChange={v => setBulkForm(f => ({ ...f, severity: v }))} options={SEVERITIES} capitalize />
+            <div className="rounded-xl px-3 py-2 text-[10px]"
+              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--text-2)' }}>
+              ✨ Type is auto-detected — IPv4, IPv6, CIDR, domain, URL, SHA256, MD5, SHA1, email.
+              Supports defanged indicators (hxxp, [.]).
             </div>
-            <MInput label="Description" value={bulkForm.description} onChange={v => setBulkForm(f => ({ ...f, description: v }))} placeholder="Label for this batch" />
+            <MSelect label="Severity" value={bulkForm.severity} onChange={v => setBulkForm(f => ({ ...f, severity: v }))} options={SEVERITIES} capitalize />
+            <MInput label="Description / Source tag" value={bulkForm.description} onChange={v => setBulkForm(f => ({ ...f, description: v }))} placeholder="e.g. Threat campaign APT-X, feed: abuse.ch" />
             <div>
-              <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Indicators (one per line)</label>
+              <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+                Indicators (one per line, or comma/semicolon separated)
+              </label>
               <textarea value={bulkForm.indicators} onChange={e => setBulkForm(f => ({ ...f, indicators: e.target.value }))}
-                rows={6} placeholder={"1.2.3.4\n5.6.7.8\nexample.com"}
+                rows={8} placeholder={"1.2.3.4\nevil.com\nhxxps://malware[.]example/payload\nabc123def456...64hexchars\n8.8.8.8/24"}
                 className="g-input resize-none font-mono text-xs" />
+              <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                {bulkForm.indicators.split(/[\n,;]+/).filter(s => s.trim()).length} indicators
+              </p>
             </div>
           </div>
           <ModalActions onCancel={() => setShowBulk(false)} onConfirm={bulkImport} saving={saving}
-            disabled={!bulkForm.indicators.trim()} label="Import" />
+            disabled={!bulkForm.indicators.trim()} label="Import & Auto-Classify" />
         </Modal>
       )}
 

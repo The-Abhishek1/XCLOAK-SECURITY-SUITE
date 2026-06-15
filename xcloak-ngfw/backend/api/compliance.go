@@ -32,7 +32,17 @@ func GenerateReport(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, report)
+	// Compute framework scores for full reports.
+	var frameworkScores interface{}
+	if body.ReportType == "full" || body.ReportType == "" {
+		scores, _ := services.ComputeAllFrameworkScores(report.ID)
+		frameworkScores = scores
+	}
+
+	c.JSON(200, gin.H{
+		"report":           report,
+		"framework_scores": frameworkScores,
+	})
 }
 
 // GetReports — GET /api/compliance/reports

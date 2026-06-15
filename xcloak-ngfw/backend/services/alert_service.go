@@ -9,18 +9,26 @@ import (
 
 // CreateAlert persists an alert then fires the full pipeline:
 //  1. Suppression check — drop silently if rule matches
-//  2. Broadcast to browser WebSocket clients (real-time bell)
-//  3. Fire webhook/Slack integrations for critical/high
-//  4. SOAR playbook matching
-//  5. Incident correlation
-//  6. Risk score recalculation
-//  7. AI triage (async, critical/high only)
+//  2. Prometheus counter increment
+//  3. Kafka event publish
+//  4. Broadcast to browser WebSocket clients (real-time bell)
+//  5. Fire webhook/Slack integrations for critical/high
+//  6. SOAR playbook matching
+//  7. Incident correlation
+//  8. Risk score recalculation
+//  9. AI triage (async, critical/high only)
 func CreateAlert(alert models.Alert) error {
 
 	err := repositories.CreateAlert(alert)
 	if err != nil {
 		return err
 	}
+
+	// Prometheus — increment severity counter.
+	IncrementAlertCounter(strings.ToLower(alert.Severity))
+
+	// Kafka — publish to xcloak.alerts topic.
+	go PublishAlert(alert)
 
 	// Real-time browser notification.
 	if broadcastFn != nil {

@@ -5,7 +5,8 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { quarantineAPI, agentsAPI } from '@/lib/api';
 import { Agent } from '@/types';
 import { formatDate, timeAgo } from '@/lib/utils';
-import { Archive, Search, Plus, X, ShieldOff } from 'lucide-react';
+import { Archive, Search, Plus, X, ShieldOff, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
+import api from '@/lib/api';
 
 interface QFile {
   id: number;
@@ -29,6 +30,8 @@ export default function QuarantinePage() {
   const [form, setForm]       = useState({ ...empty });
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [confirmId, setConfirmId] = useState<{ id: number; restore: boolean } | null>(null);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -55,7 +58,15 @@ export default function QuarantinePage() {
     } finally { setSaving(false); }
   };
 
-  // Auto-derive file_name and quarantine_path from original_path
+  const releaseFile = async (id: number, restore: boolean) => {
+    setDeleting(id);
+    try {
+      await api.delete(`/quarantine/${id}`, { data: { restore } });
+      setFiles(f => f.filter(x => x.id !== id));
+      notify(restore ? 'File released — restore task dispatched to agent' : 'Quarantine record deleted');
+    } catch { notify('Action failed'); }
+    finally { setDeleting(null); setConfirmId(null); }
+  };
   const updatePath = (path: string) => {
     const name = path.split('/').pop() || '';
     setForm(f => ({
@@ -94,8 +105,8 @@ export default function QuarantinePage() {
         </div>
 
         <div className="g-table">
-          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 100px 1fr 100px' }}>
-            <span>File Name</span><span>Original Path</span><span>Agent</span><span>Reason</span><span>Quarantined</span>
+          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 100px 1fr 100px 80px' }}>
+            <span>File Name</span><span>Original Path</span><span>Agent</span><span>Reason</span><span>Quarantined</span><span>Actions</span>
           </div>
 
           {loading ? (
@@ -109,7 +120,7 @@ export default function QuarantinePage() {
             </div>
           ) : filtered.map(f => (
             <div key={f.id} className="g-tr grid gap-3 items-center px-4"
-              style={{ gridTemplateColumns: '1fr 1fr 100px 1fr 100px' }}>
+              style={{ gridTemplateColumns: '1fr 1fr 100px 1fr 100px 80px' }}>
               <div className="flex items-center gap-2 min-w-0">
                 <ShieldOff className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--red)' }} />
                 <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{f.file_name}</span>
@@ -118,10 +129,70 @@ export default function QuarantinePage() {
               <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{agentName(f.agent_id)}</span>
               <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{f.reason || '—'}</span>
               <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(f.quarantined_at)}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  title="Release & restore to agent"
+                  onClick={() => setConfirmId({ id: f.id, restore: true })}
+                  disabled={deleting === f.id}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg transition-all"
+                  style={{ color: 'var(--text-3)' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--green)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  title="Delete record only"
+                  onClick={() => setConfirmId({ id: f.id, restore: false })}
+                  disabled={deleting === f.id}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg transition-all"
+                  style={{ color: 'var(--text-3)' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Confirm release/delete */}
+      {confirmId && (
+        <div className="g-modal-backdrop" onClick={() => setConfirmId(null)}>
+          <div className="g-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl"
+                  style={{ background: confirmId.restore ? 'rgba(52,211,153,0.1)' : 'var(--red-bg)', border: confirmId.restore ? '1px solid rgba(52,211,153,0.3)' : '1px solid var(--red-border)' }}>
+                  {confirmId.restore
+                    ? <RotateCcw className="h-5 w-5" style={{ color: 'var(--green)' }} />
+                    : <Trash2 className="h-5 w-5" style={{ color: 'var(--red)' }} />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                    {confirmId.restore ? 'Release & Restore File' : 'Delete Quarantine Record'}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    {confirmId.restore
+                      ? 'A restore task will be dispatched to the agent to move the file back to its original path.'
+                      : 'The quarantine record will be removed. The file on the agent is not affected.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmId(null)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+                <button
+                  onClick={() => releaseFile(confirmId.id, confirmId.restore)}
+                  disabled={deleting === confirmId.id}
+                  className="g-btn flex-1 justify-center"
+                  style={{ background: confirmId.restore ? 'rgba(52,211,153,0.15)' : 'var(--red-bg)', color: confirmId.restore ? 'var(--green)' : 'var(--red)', border: confirmId.restore ? '1px solid rgba(52,211,153,0.3)' : '1px solid var(--red-border)' }}>
+                  {deleting === confirmId.id ? 'Processing…' : confirmId.restore ? 'Release & Restore' : 'Delete Record'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add modal */}
       {showAdd && (

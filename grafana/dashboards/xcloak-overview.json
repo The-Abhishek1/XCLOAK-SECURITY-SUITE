@@ -1,0 +1,310 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "XCloak Security Suite — Platform Overview",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Threat Score",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100, "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "orange", "value": 60 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "xcloak_threat_score",
+        "legendFormat": "Threat Score",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 2,
+      "title": "Agents Online",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 4, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "xcloak_agents_online",
+        "legendFormat": "Online",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 3,
+      "title": "Total Agents",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 4, "y": 3 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "blue" } }
+      },
+      "targets": [{
+        "expr": "xcloak_agents_total",
+        "legendFormat": "Total",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 4,
+      "title": "Critical Alerts",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "xcloak_alerts_critical",
+        "legendFormat": "Critical",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 5,
+      "title": "High Alerts",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 8, "y": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "xcloak_alerts_high",
+        "legendFormat": "High",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 6,
+      "title": "Open Incidents",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "xcloak_incidents_open",
+        "legendFormat": "Open",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 7,
+      "title": "Critical CVEs",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 12, "y": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "xcloak_vulnerabilities_critical",
+        "legendFormat": "Critical CVEs",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 8,
+      "title": "Quarantined Files",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 16, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "purple" } }
+      },
+      "targets": [{
+        "expr": "xcloak_quarantined_files",
+        "legendFormat": "Quarantined",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 9,
+      "title": "Active IOCs",
+      "type": "stat",
+      "gridPos": { "h": 3, "w": 4, "x": 16, "y": 3 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "color": { "mode": "fixed", "fixedColor": "blue" } }
+      },
+      "targets": [{
+        "expr": "xcloak_iocs_active",
+        "legendFormat": "IOCs",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+
+    {
+      "id": 10,
+      "title": "Alert Rate — Last Hour (by severity)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "critical" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f85149" } }] },
+          { "matcher": { "id": "byName", "options": "high" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#fb923c" } }] },
+          { "matcher": { "id": "byName", "options": "medium" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#fbbf24" } }] },
+          { "matcher": { "id": "byName", "options": "low" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#38bdf8" } }] }
+        ]
+      },
+      "targets": [
+        { "expr": "rate(xcloak_alerts_created_total{severity=\"critical\"}[5m]) * 60", "legendFormat": "critical", "datasource": { "type": "prometheus" } },
+        { "expr": "rate(xcloak_alerts_created_total{severity=\"high\"}[5m]) * 60",     "legendFormat": "high",     "datasource": { "type": "prometheus" } },
+        { "expr": "rate(xcloak_alerts_created_total{severity=\"medium\"}[5m]) * 60",   "legendFormat": "medium",   "datasource": { "type": "prometheus" } },
+        { "expr": "rate(xcloak_alerts_created_total{severity=\"low\"}[5m]) * 60",      "legendFormat": "low",      "datasource": { "type": "prometheus" } }
+      ]
+    },
+
+    {
+      "id": 11,
+      "title": "Agent Health Breakdown",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 6 },
+      "targets": [
+        { "expr": "xcloak_agents_online",                               "legendFormat": "Online",  "datasource": { "type": "prometheus" } },
+        { "expr": "xcloak_agents_total - xcloak_agents_online",          "legendFormat": "Offline", "datasource": { "type": "prometheus" } }
+      ]
+    },
+
+    {
+      "id": 12,
+      "title": "Detection Rules Active",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "none", "min": 0 }
+      },
+      "targets": [
+        { "expr": "xcloak_sigma_rules_active", "legendFormat": "Sigma Rules", "datasource": { "type": "prometheus" } },
+        { "expr": "xcloak_yara_rules_active",  "legendFormat": "YARA Rules",  "datasource": { "type": "prometheus" } },
+        { "expr": "xcloak_iocs_active",         "legendFormat": "IOC Feeds",   "datasource": { "type": "prometheus" } }
+      ]
+    },
+
+    {
+      "id": 13,
+      "title": "24h Activity",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "expr": "xcloak_fim_violations_24h",   "legendFormat": "FIM Violations",    "datasource": { "type": "prometheus" } },
+        { "expr": "xcloak_yara_matches_24h",     "legendFormat": "YARA Matches",      "datasource": { "type": "prometheus" } },
+        { "expr": "xcloak_soar_executions_24h",  "legendFormat": "SOAR Executions",   "datasource": { "type": "prometheus" } }
+      ]
+    },
+
+    {
+      "id": 14,
+      "title": "Agent Tasks",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        { "expr": "xcloak_agent_tasks_pending",                         "legendFormat": "Pending",    "datasource": { "type": "prometheus" } },
+        { "expr": "rate(xcloak_agent_tasks_dispatched_total[5m]) * 60", "legendFormat": "Dispatched/min", "datasource": { "type": "prometheus" } }
+      ]
+    },
+
+    {
+      "id": 15,
+      "title": "SOAR Playbook Execution Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 21 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "success" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#34d399" } }] },
+          { "matcher": { "id": "byName", "options": "failed"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#f85149" } }] }
+        ]
+      },
+      "targets": [
+        { "expr": "rate(xcloak_playbooks_fired_total{status=\"success\"}[5m]) * 60", "legendFormat": "success", "datasource": { "type": "prometheus" } },
+        { "expr": "rate(xcloak_playbooks_fired_total{status=\"failed\"}[5m]) * 60",  "legendFormat": "failed",  "datasource": { "type": "prometheus" } }
+      ]
+    }
+
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["xcloak", "security", "siem"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "XCloak Security Suite — Overview",
+  "uid": "xcloak-overview-v1",
+  "version": 1
+}

@@ -7,7 +7,9 @@ import { timeAgo, formatDate, sevClass } from '@/lib/utils';
 import {
   FileText, Plus, Trash2, Download, Shield, AlertTriangle,
   Bug, Activity, Users, Eye, ChevronDown, ChevronUp, X,
+  CheckCircle, XCircle, Target, BarChart3,
 } from 'lucide-react';
+import api from '@/lib/api';
 
 const REPORT_TYPES = [
   { id: 'full',          label: 'Full Compliance Report', icon: Shield },
@@ -32,6 +34,29 @@ interface Report {
   created_at: string;
 }
 
+interface ComplianceCheck {
+  id: string;
+  name: string;
+  category: string;
+  passed: boolean;
+  detail: string;
+  severity: string;
+}
+
+interface FrameworkScore {
+  framework: string;
+  score: number;
+  passed: number;
+  failed: number;
+  checks: ComplianceCheck[];
+}
+
+const SCORE_COLOR = (score: number) =>
+  score >= 80 ? 'var(--green)' : score >= 60 ? 'var(--yellow)' : 'var(--red)';
+
+const SCORE_BG = (score: number) =>
+  score >= 80 ? 'rgba(52,211,153,0.12)' : score >= 60 ? 'rgba(251,191,36,0.12)' : 'rgba(248,81,73,0.12)';
+
 export default function CompliancePage() {
   const [reports, setReports]   = useState<Report[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -41,6 +66,9 @@ export default function CompliancePage() {
   const [selType, setSelType]   = useState('full');
   const [toast, setToast]       = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [frameworkScores, setFrameworkScores] = useState<Record<number, FrameworkScore[]>>({});
+  const [loadingScores, setLoadingScores] = useState<number | null>(null);
+  const [expandedFramework, setExpandedFramework] = useState<string | null>(null);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -137,7 +165,17 @@ export default function CompliancePage() {
                 const isOpen  = expanded === r.id;
                 return (
                   <div key={r.id} className="g-card overflow-hidden">
-                    <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={() => setExpanded(isOpen ? null : r.id)}>
+                    <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={async () => {
+                      if (isOpen) { setExpanded(null); return; }
+                      setExpanded(r.id);
+                      if (!frameworkScores[r.id]) {
+                        setLoadingScores(r.id);
+                        try {
+                          const res = await api.get(`/compliance/reports/${r.id}/scores`);
+                          setFrameworkScores(s => ({ ...s, [r.id]: res.data }));
+                        } finally { setLoadingScores(null); }
+                      }
+                    }}>
                       <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0"
                         style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
                         <FileText className="h-4 w-4" style={{ color: 'var(--accent)' }} />
@@ -219,6 +257,77 @@ export default function CompliancePage() {
                                 </div>
                               ))}
                             </div>
+                          </div>
+                        )}
+
+                        {/* ── Framework Scores ─────────────────── */}
+                        {(frameworkScores[r.id] || loadingScores === r.id) && (
+                          <div className="mt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Target className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                              <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                                Compliance Framework Scores
+                              </p>
+                            </div>
+
+                            {loadingScores === r.id ? (
+                              <div className="py-4 text-center text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>
+                                Computing scores…
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {frameworkScores[r.id]?.map(fs => {
+                                  const color = SCORE_COLOR(fs.score);
+                                  const bg    = SCORE_BG(fs.score);
+                                  const fwOpen = expandedFramework === `${r.id}-${fs.framework}`;
+                                  return (
+                                    <div key={fs.framework} className="rounded-xl overflow-hidden"
+                                      style={{ border: '1px solid var(--border)' }}>
+                                      <div className="flex items-center gap-4 px-4 py-3 cursor-pointer"
+                                        style={{ background: bg }}
+                                        onClick={() => setExpandedFramework(fwOpen ? null : `${r.id}-${fs.framework}`)}>
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-3">
+                                            <p className="text-xs font-bold" style={{ color: 'var(--text-1)' }}>{fs.framework}</p>
+                                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)', maxWidth: 160 }}>
+                                              <div className="h-full rounded-full transition-all"
+                                                style={{ width: `${fs.score}%`, background: color }} />
+                                            </div>
+                                          </div>
+                                          <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                                            {fs.passed} passed · {fs.failed} failed
+                                          </p>
+                                        </div>
+                                        <p className="text-2xl font-bold tabular-nums" style={{ color }}>{fs.score}%</p>
+                                        {fwOpen
+                                          ? <ChevronUp className="h-4 w-4 shrink-0" style={{ color: 'var(--text-3)' }} />
+                                          : <ChevronDown className="h-4 w-4 shrink-0" style={{ color: 'var(--text-3)' }} />}
+                                      </div>
+
+                                      {fwOpen && (
+                                        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                                          {fs.checks.map(check => (
+                                            <div key={check.id} className="flex items-center gap-3 px-4 py-2.5">
+                                              {check.passed
+                                                ? <CheckCircle className="h-4 w-4 shrink-0" style={{ color: 'var(--green)' }} />
+                                                : <XCircle    className="h-4 w-4 shrink-0" style={{ color: 'var(--red)' }} />}
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{check.name}</p>
+                                                <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{check.detail}</p>
+                                              </div>
+                                              <span className="text-[10px] px-2 py-0.5 rounded shrink-0"
+                                                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                                                {check.category}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

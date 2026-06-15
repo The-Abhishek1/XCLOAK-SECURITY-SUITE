@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { yaraAPI } from '@/lib/api';
 import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
-import { Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2 } from 'lucide-react';
+import { Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2, Upload, CheckCircle } from 'lucide-react';
 
 const emptyRule = {
   name: '',
@@ -96,9 +96,29 @@ export default function YaraRulesPage() {
       onRefresh={() => load(true)} refreshing={refreshing}
       actions={
         tab === 'rules' ? (
-          <button onClick={() => { setForm({ ...emptyRule }); setShowAdd(true); }} className="g-btn g-btn-primary text-xs">
-            <Plus className="h-3.5 w-3.5" /> New Rule
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="g-btn g-btn-ghost text-xs cursor-pointer">
+              <Upload className="h-3.5 w-3.5" /> Import .yar
+              <input type="file" multiple accept=".yar,.yara" className="hidden"
+                onChange={async e => {
+                  const files = [...e.target.files!];
+                  if (!files.length) return;
+                  const form = new FormData();
+                  files.forEach(f => form.append('rules', f));
+                  try {
+                    const r = await (await import('@/lib/api')).default.post('/yara/import', form, {
+                      headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    notify(r.data?.message || 'Imported');
+                    load();
+                  } catch { notify('Import failed'); }
+                  e.target.value = '';
+                }} />
+            </label>
+            <button onClick={() => { setForm({ ...emptyRule }); setShowAdd(true); }} className="g-btn g-btn-primary text-xs">
+              <Plus className="h-3.5 w-3.5" /> New Rule
+            </button>
+          </div>
         ) : undefined
       }>
 

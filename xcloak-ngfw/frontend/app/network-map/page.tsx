@@ -21,6 +21,9 @@ interface GraphNode {
   label: string;
   agentId?: number;
   status?: string;
+  country?: string;      // e.g. "United States"
+  countryCode?: string;  // e.g. "US" — used for flag emoji
+  isMalicious?: boolean; // true if IOC match from connections
   x?: number;
   y?: number;
   vx?: number;
@@ -61,6 +64,7 @@ export default function NetworkMapPage() {
   const [selected, setSelected]       = useState<GraphNode | null>(null);
   const [nodeLinks, setNodeLinks]     = useState<GraphLink[]>([]);
   const [refreshing, setRefreshing]   = useState(false);
+  const geoCache = useRef<Record<string, { country: string; countryCode: string }>>({});
 
   const buildGraph = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
@@ -120,9 +124,13 @@ export default function NetworkMapPage() {
             if (!showExternal) return;
             targetId = `ext-${remoteIP}`;
             if (!nodes.has(targetId)) {
+              // Use cached GeoIP if available, otherwise create with IP label
+              const geo = geoCache.current[remoteIP];
               nodes.set(targetId, {
                 id: targetId, type: 'external',
                 label: remoteIP,
+                country:     geo?.country     || '',
+                countryCode: geo?.countryCode || '',
                 x: Math.random() * 800 + 50,
                 y: Math.random() * 600 + 50,
                 vx: 0, vy: 0,
@@ -156,6 +164,41 @@ export default function NetworkMapPage() {
   useEffect(() => {
     buildGraph();
   }, [showExternal, showListening]);
+
+  // Background GeoIP enrichment for external nodes
+  useEffect(() => {
+    if (loading) return;
+    const externalNodes = nodesRef.current.filter(n => n.type === 'external' && !n.country);
+    if (externalNodes.length === 0) return;
+
+    // Stagger requests to avoid flooding the GeoIP API
+    externalNodes.slice(0, 20).forEach((node, i) => {
+      const ip = node.label;
+      if (geoCache.current[ip]) return;
+      setTimeout(async () => {
+        try {
+          const token = localStorage.getItem('token') || '';
+          const r = await fetch(`/api/geoip/${ip}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!r.ok) return;
+          const data = await r.json();
+          if (data.country_code) {
+            geoCache.current[ip] = {
+              country:     data.country     || '',
+              countryCode: data.country_code || '',
+            };
+            // Update node in ref
+            const n = nodesRef.current.find(x => x.id === `ext-${ip}`);
+            if (n) {
+              n.country     = data.country;
+              n.countryCode = data.country_code;
+            }
+          }
+        } catch { /* ignore */ }
+      }, i * 200); // 200ms between each request
+    });
+  }, [loading]);
 
   // Force simulation
   useEffect(() => {
@@ -279,6 +322,7 @@ export default function NetworkMapPage() {
           ctx.lineWidth = 1;
           ctx.stroke();
         } else {
+          // External node — color by threat status
           ctx.fillStyle = '#fbbf2422';
           ctx.fill();
           ctx.strokeStyle = '#fbbf24';
@@ -288,6 +332,15 @@ export default function NetworkMapPage() {
           ctx.font = '9px monospace';
           ctx.textAlign = 'center';
           ctx.fillText(n.label.slice(0, 15), x, y + r + 12);
+          // Country flag + code below IP
+          if (n.countryCode) {
+            // Convert country code to emoji flag
+            const flag = n.countryCode.toUpperCase().replace(/./g,
+              (c: string) => String.fromCodePoint(127397 + c.charCodeAt(0))
+            );
+            ctx.font = '11px sans-serif';
+            ctx.fillText(flag, x, y + r + 23);
+          }
         }
       });
 
@@ -460,6 +513,21 @@ export default function NetworkMapPage() {
                       <span style={{ color: 'var(--text-3)' }}>Status</span>
                       <span style={{ color: selected.status === 'online' ? 'var(--green)' : 'var(--red)' }}>
                         {selected.status}
+                      </span>
+                    </div>
+                  )}
+                  {selected.type === 'external' && selected.country && (
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--text-3)' }}>Country</span>
+                      <span style={{ color: 'var(--text-1)' }}>
+                        {selected.countryCode && (
+                          <span className="mr-1">
+                            {selected.countryCode.toUpperCase().replace(/./g,
+                              (c: string) => String.fromCodePoint(127397 + c.charCodeAt(0))
+                            )}
+                          </span>
+                        )}
+                        {selected.country}
                       </span>
                     </div>
                   )}

@@ -5,12 +5,13 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, alertsAPI, tasksAPI, fimAPI, aiAPI } from '@/lib/api';
+import api from '@/lib/api';
 import { Agent, AgentSummary, Vulnerability, TimelineEvent, Alert } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import {
   ArrowLeft, Activity, Network, Database, Package,
   Users, Clock, Bug, FileSearch, Bell, Play, ShieldAlert, Search,
-  ShieldCheck, Radio, Brain,
+  ShieldCheck, Radio, Brain, ListChecks,
 } from 'lucide-react';
 
 const TABS = [
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'fim',            label: 'FIM',             icon: ShieldCheck },
   { id: 'logs',           label: 'Auth Logs',       icon: Radio },
   { id: 'anomaly',        label: 'Anomaly',         icon: Brain },
+  { id: 'tasks',          label: 'Task History',    icon: ListChecks },
 ];
 
 export default function AgentDetailPage() {
@@ -55,6 +57,7 @@ export default function AgentDetailPage() {
   const [authLogs, setAuthLogs]       = useState<any[] | null>(null);
   const [anomalies, setAnomalies]     = useState<any[] | null>(null);
   const [runningAnomaly, setRunningAnomaly] = useState(false);
+  const [taskHistory, setTaskHistory] = useState<any[] | null>(null);
   const [tabLoading, setTabLoading]   = useState(false);
   const [search, setSearch]           = useState('');
 
@@ -129,11 +132,17 @@ export default function AgentDetailPage() {
             setAnomalies(r.data || []);
           }
           break;
+        case 'tasks':
+          if (taskHistory === null) {
+            const r = await api.get(`/agents/${agentId}/tasks`).catch(() => ({ data: [] }));
+            setTaskHistory(r.data || []);
+          }
+          break;
       }
     } finally {
       setTabLoading(false);
     }
-  }, [agentId, processes, connections, services, users, packages, fimAlerts, authLogs, anomalies]);
+  }, [agentId, processes, connections, services, users, packages, fimAlerts, authLogs, anomalies, taskHistory]);
 
   const selectTab = (tab: string) => {
     setActiveTab(tab);
@@ -523,6 +532,67 @@ export default function AgentDetailPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Task History Tab ─────────────────────────── */}
+            {activeTab === 'tasks' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    {taskHistory?.length || 0} tasks dispatched
+                  </p>
+                  <button onClick={() => { setTaskHistory(null); loadTabData('tasks'); }}
+                    className="g-btn g-btn-ghost text-xs">
+                    Refresh
+                  </button>
+                </div>
+
+                {tabLoading ? (
+                  <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+                ) : (taskHistory?.length || 0) === 0 ? (
+                  <EmptyState msg="No tasks dispatched to this agent yet." />
+                ) : (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <div className="g-thead grid gap-3 px-4"
+                      style={{ gridTemplateColumns: '140px 80px 1fr 90px 80px' }}>
+                      <span>Task Type</span>
+                      <span>Status</span>
+                      <span>Result</span>
+                      <span>Completed</span>
+                      <span>ID</span>
+                    </div>
+                    {taskHistory!.map((t: any) => {
+                      const isSuccess = t.status === 'completed' && !t.result?.toLowerCase().includes('fail') && !t.result?.toLowerCase().includes('error') && !t.result?.toLowerCase().includes('unknown');
+                      const statusColor = t.status === 'completed'
+                        ? isSuccess ? 'var(--green)' : 'var(--orange)'
+                        : t.status === 'running' ? 'var(--accent)'
+                        : 'var(--text-3)';
+                      return (
+                        <div key={t.id} className="g-tr grid gap-3 items-start px-4 py-2.5"
+                          style={{ gridTemplateColumns: '140px 80px 1fr 90px 80px' }}>
+                          <span className="mono text-[11px]" style={{ color: 'var(--accent)' }}>
+                            {t.task_type}
+                          </span>
+                          <span className="text-[11px] font-medium capitalize"
+                            style={{ color: statusColor }}>
+                            {t.status}
+                          </span>
+                          <span className="text-[11px] truncate" style={{ color: 'var(--text-2)' }}
+                            title={t.result || '—'}>
+                            {t.result || '—'}
+                          </span>
+                          <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                            {t.completed_at ? timeAgo(t.completed_at) : '—'}
+                          </span>
+                          <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                            #{t.id}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

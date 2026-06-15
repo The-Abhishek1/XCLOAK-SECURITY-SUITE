@@ -21,6 +21,10 @@ func main() {
 		panic(err)
 	}
 
+	// ── Kafka event bus ──────────────────────────────────────
+	services.InitKafka()
+	defer services.CloseKafka()
+
 	// Wire WebSocket alert broadcaster (avoids import cycle: services ↔ api).
 	services.RegisterBroadcastFn(func(alert models.Alert) {
 		api.BroadcastAlert(alert)
@@ -34,6 +38,16 @@ func main() {
 		for {
 			services.MarkOfflineAgents()
 			time.Sleep(30 * time.Second)
+		}
+	}()
+
+	// ── Prometheus metrics refresh (every 30s) ────────────────
+	go func() {
+		// Initial scrape so metrics are populated before first Prometheus poll
+		services.RefreshMetrics()
+		for {
+			time.Sleep(30 * time.Second)
+			services.RefreshMetrics()
 		}
 	}()
 
@@ -66,6 +80,9 @@ func main() {
 		middleware.RequireAuth(),
 		api.NotificationsWS,
 	)
+
+	// Prometheus metrics scrape endpoint — no auth, restrict via network.
+	router.GET("/metrics", api.MetricsHandler())
 
 	log.Println("XCloak API Running")
 	router.Run(":8080")

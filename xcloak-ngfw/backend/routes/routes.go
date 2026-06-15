@@ -186,44 +186,137 @@ func SetupRoutes(router *gin.Engine) {
 	// ── WebSocket notification stream (registered in main.go) ────
 	// router.GET("/api/notifications/stream", ...) — kept in main.go
 
-	// ── Threat Hunt ───────────────────────────────────────────────
+	// ── Phase 13: Global Search + YARA Import ─────────────────
+	router.GET("/api/search", middleware.RequireAuth(), api.GlobalSearch)
+	router.POST("/api/yara/import",
+		middleware.RequireAuth(), middleware.RequireRole("admin"),
+		api.ImportYARAFiles,
+	)
+
+	// ── Phase 14: Quarantine Release ──────────────────────────
+	router.DELETE("/api/quarantine/:id",
+		middleware.RequireAuth(), middleware.RequireRole("admin"),
+		api.ReleaseQuarantinedFile,
+	)
+	router.GET("/api/quarantine/stats", middleware.RequireAuth(), api.GetQuarantineStats)
+
+	// ── Phase 15: Agent Task History + Compliance Scores ──────
+	router.GET("/api/agents/:id/tasks", middleware.RequireAuth(), api.GetAgentTaskHistory)
+	router.GET("/api/compliance/reports/:id/scores",
+		middleware.RequireAuth(), api.GetComplianceFrameworkScores,
+	)
+
+	// ── Phase 16: Risk Breakdown + Audit Search ────────────────
+	router.GET("/api/agents/:id/risk/breakdown", middleware.RequireAuth(), api.GetAgentRiskBreakdown)
+
+	// ── Hunt ──────────────────────────────────────────────────
 	router.POST("/api/hunt/run", middleware.RequireAuth(), api.RunHunt)
 	router.GET("/api/hunt/queries", middleware.RequireAuth(), api.GetHuntQueries)
 	router.POST("/api/hunt/queries/:id/run", middleware.RequireAuth(), api.RerunHuntQuery)
-	router.DELETE("/api/hunt/queries/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteHuntQuery)
+	router.DELETE("/api/hunt/queries/:id",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteHuntQuery,
+	)
 
-	// ── Scheduled Tasks ───────────────────────────────────────────
+	// ── Scheduled Tasks ───────────────────────────────────────
 	router.GET("/api/scheduler/tasks", middleware.RequireAuth(), api.GetScheduledTasks)
-	router.POST("/api/scheduler/tasks", middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateScheduledTask)
-	router.PATCH("/api/scheduler/tasks/:id/toggle", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleScheduledTask)
-	router.POST("/api/scheduler/tasks/:id/run", middleware.RequireAuth(), middleware.RequireRole("admin"), api.RunScheduledTaskNow)
-	router.DELETE("/api/scheduler/tasks/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteScheduledTask)
+	router.POST("/api/scheduler/tasks",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateScheduledTask,
+	)
+	router.PATCH("/api/scheduler/tasks/:id/toggle",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleScheduledTask,
+	)
+	router.POST("/api/scheduler/tasks/:id/run",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.RunScheduledTaskNow,
+	)
+	router.DELETE("/api/scheduler/tasks/:id",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteScheduledTask,
+	)
 
-	// ── Dashboard Metrics ─────────────────────────────────────────
+	// ── Dashboard Metrics ─────────────────────────────────────
 	router.GET("/api/dashboard/metrics", middleware.RequireAuth(), api.GetDashboardMetrics)
 
-	// ── Correlation Rules ─────────────────────────────────────────
+	// ── Correlation Rules ─────────────────────────────────────
 	router.GET("/api/correlation/rules", middleware.RequireAuth(), api.GetCorrelationRules)
-	router.POST("/api/correlation/rules", middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateCorrelationRule)
-	router.PATCH("/api/correlation/rules/:id/toggle", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleCorrelationRule)
-	router.DELETE("/api/correlation/rules/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteCorrelationRule)
+	router.POST("/api/correlation/rules",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateCorrelationRule,
+	)
+	router.PATCH("/api/correlation/rules/:id/toggle",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleCorrelationRule,
+	)
+	router.DELETE("/api/correlation/rules/:id",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteCorrelationRule,
+	)
 
-	// ── Agent Auth Logs + Per-agent Health ────────────────────────
+	// ── Agent Auth Logs + GeoIP + Health (static before :id) ──
 	router.GET("/api/agents/:id/auth-logs", middleware.RequireAuth(), api.GetAgentAuthLogs)
-	router.GET("/api/agents/:id/health", middleware.RequireAuth(), api.GetAgentHealth)
 	router.GET("/api/agents/:id/geo-stats", middleware.RequireAuth(), api.GetAgentGeoStats)
 	router.POST("/api/agents/:id/enrich-connections", middleware.RequireAuth(), api.EnrichAgentConnections)
 
-	// ── GeoIP + IOC Blocks ────────────────────────────────────────
+	// ── GeoIP + IOC Blocks ────────────────────────────────────
 	router.GET("/api/geoip/:ip", middleware.RequireAuth(), api.GetGeoIP)
 	router.GET("/api/ioc-blocks", middleware.RequireAuth(), api.GetIOCBlocks)
 
-	// ── Sigma YAML Import ─────────────────────────────────────────
-	router.POST("/api/sigma/import", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ImportSigmaYAML)
+	// ── Sigma Import ──────────────────────────────────────────
+	router.POST("/api/sigma/import",
+		middleware.RequireAuth(), middleware.RequireRole("admin"), api.ImportSigmaYAML,
+	)
 
-	// ── Incident Management ───────────────────────────────────────
-	// router.PUT("/api/incidents/:id/status" — already registered above
-	router.POST("/api/incidents/:id/notes", middleware.RequireAuth(), api.AddIncidentNote)
+	// ── Alert manual response ─────────────────────────────────────
+	router.POST("/api/alerts/:id/respond",
+		middleware.RequireAuth(),
+		api.DispatchAlertResponse,
+	)
+	router.GET("/api/alerts/:id",
+		middleware.RequireAuth(),
+		api.GetAlertWithTriage,
+	)
 
-	// ── Live Logs WebSocket — already registered above at /api/agents/:id/logs/stream
+	// ── IOC bulk import ───────────────────────────────────────────
+	router.POST("/api/iocs/bulk",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.BulkImportIOCs,
+	)
+
+	// ── Incident deep-dive report ─────────────────────────────────
+	router.GET("/api/incidents/:id/deepdive",
+		middleware.RequireAuth(),
+		api.GetIncidentDeepDive,
+	)
+
+	// ── Firewall sync ─────────────────────────────────────────────
+	router.POST("/api/firewall/sync",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.SyncFirewallRules,
+	)
+	router.GET("/api/firewall/sync/log",
+		middleware.RequireAuth(),
+		api.GetFirewallSyncLog,
+	)
+
+	// ── Script runner ─────────────────────────────────────────────
+	router.POST("/api/scripts/run",
+		middleware.RequireAuth(),
+		middleware.RequireRole("admin"),
+		api.DispatchScript,
+	)
+	router.GET("/api/scripts/result/:task_id",
+		middleware.RequireAuth(),
+		api.GetScriptResult,
+	)
+	router.GET("/api/scripts/templates",
+		middleware.RequireAuth(),
+		api.GetScriptTemplates,
+	)
+	router.GET("/api/scripts/history",
+		middleware.RequireAuth(),
+		api.GetScriptHistory,
+	)
+
+	// ── Agent task history ────────────────────────────────────────
+	router.GET("/api/agents/:id/tasks",
+		middleware.RequireAuth(),
+		api.GetAgentTaskHistory,
+	)
 }

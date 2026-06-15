@@ -6,8 +6,9 @@ import { dashboardAPI, alertsAPI, incidentsAPI, agentsAPI, playbooksAPI } from '
 import api from '@/lib/api';
 import { DashboardOverview, Alert, Incident, Agent, PlaybookExecution } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
+import { useNotifications } from '@/context/NotificationContext';
 import {
-  Cpu, Bell, AlertTriangle, Activity, Zap,
+  Cpu, Bell, AlertTriangle, Activity, Zap, Radio,
   TrendingUp, ShieldCheck, ShieldAlert, CircleDot,
   Clock, Target, Gauge, Trophy,
 } from 'lucide-react';
@@ -85,6 +86,7 @@ function ThreatGauge({ score }: { score: number }) {
 }
 
 export default function DashboardPage() {
+  const { liveAlerts } = useNotifications();
   const [overview, setOverview]     = useState<DashboardOverview | null>(null);
   const [metrics, setMetrics]       = useState<DashboardMetrics | null>(null);
   const [alerts, setAlerts]         = useState<Alert[]>([]);
@@ -323,7 +325,67 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Row 5: SOAR feed + Recent alerts ───────────────── */}
+        {/* ── Row 5: Live Alert Ticker ───────────────────────── */}
+        <div className="g-card">
+          <div className="flex items-center justify-between px-4 pt-4 pb-3"
+            style={{ borderBottom: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-2">
+              <Radio className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+              <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Live Alert Feed</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: 'var(--green)' }} />
+              <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                {liveAlerts.length > 0 ? `${liveAlerts.length} received` : 'Listening…'}
+              </span>
+            </div>
+          </div>
+          <div className="overflow-hidden" style={{ maxHeight: 220 }}>
+            {liveAlerts.length === 0 ? (
+              <div className="py-10 text-center">
+                <Radio className="mx-auto h-7 w-7 mb-2" style={{ color: 'var(--text-3)' }} />
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                  Waiting for alerts via WebSocket…
+                </p>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                  New critical/high alerts appear here in real-time
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y overflow-y-auto" style={{ borderColor: 'var(--border)', maxHeight: 220 }}>
+                {liveAlerts.map((a, i) => (
+                  <div key={`${a.id}-${i}`} className="flex items-center gap-3 px-4 py-2 transition-all"
+                    style={{ animationDuration: '0.3s' }}>
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{
+                      background: a.severity === 'critical' ? 'var(--red)'
+                        : a.severity === 'high' ? 'var(--orange)'
+                        : a.severity === 'medium' ? 'var(--yellow)'
+                        : 'var(--blue)',
+                      boxShadow: a.severity === 'critical' ? '0 0 6px var(--red)' : undefined,
+                    }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs truncate" style={{ color: 'var(--text-1)' }}>{a.rule_name}</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        Agent #{a.agent_id}
+                        {a.message && ` · ${a.message.slice(0, 40)}${a.message.length > 40 ? '…' : ''}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${sevClass(a.severity)}`}>
+                        {a.severity}
+                      </span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        {timeAgo(a.timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Row 6: SOAR feed + Recent alerts ───────────────── */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="g-card">
             <div className="flex items-center justify-between px-4 pt-4 pb-3"

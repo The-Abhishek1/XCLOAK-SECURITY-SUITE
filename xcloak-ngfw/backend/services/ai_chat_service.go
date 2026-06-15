@@ -167,7 +167,50 @@ func buildPlatformContext() string {
 	iocs, _ := repositories.GetIOCs()
 	lines = append(lines, fmt.Sprintf("IOCs in database: %d", len(iocs)))
 
-	// Timestamp
+	// FIM violations
+	var fimViolations int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM fim_alerts WHERE created_at > now() - INTERVAL '24 hours'`).Scan(&fimViolations)
+	if fimViolations > 0 {
+		lines = append(lines, fmt.Sprintf("FIM violations (last 24h): %d", fimViolations))
+	}
+
+	// YARA matches
+	var yaraMatches int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE matched_at > now() - INTERVAL '24 hours'`).Scan(&yaraMatches)
+	if yaraMatches > 0 {
+		lines = append(lines, fmt.Sprintf("YARA matches (last 24h): %d", yaraMatches))
+	}
+
+	// Playbook executions
+	var playbookFired, playbookFailed int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE status='success' AND created_at > now() - INTERVAL '24 hours'`).Scan(&playbookFired)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE status='failed' AND created_at > now() - INTERVAL '24 hours'`).Scan(&playbookFailed)
+	if playbookFired+playbookFailed > 0 {
+		lines = append(lines, fmt.Sprintf("SOAR actions (last 24h): %d succeeded, %d failed", playbookFired, playbookFailed))
+	}
+
+	// Suppression stats
+	var suppressedCount int
+	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules WHERE enabled=TRUE`).Scan(&suppressedCount)
+	if suppressedCount > 0 {
+		lines = append(lines, fmt.Sprintf("Alerts suppressed by rules: %d", suppressedCount))
+	}
+
+	// Quarantined files
+	var quarantineCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM quarantine_files`).Scan(&quarantineCount)
+	if quarantineCount > 0 {
+		lines = append(lines, fmt.Sprintf("Files in quarantine: %d", quarantineCount))
+	}
+
+	// Agent health
+	var unhealthyAgents int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM agent_health WHERE health_status != 'healthy'`).Scan(&unhealthyAgents)
+	if unhealthyAgents > 0 {
+		lines = append(lines, fmt.Sprintf("Unhealthy agents: %d", unhealthyAgents))
+	}
+
+	// Report time
 	lines = append(lines, "Report time: "+time.Now().Format("2006-01-02 15:04 UTC"))
 
 	return strings.Join(lines, "\n")

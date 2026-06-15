@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock } from 'lucide-react';
+import { GlobalSearch } from '@/components/GlobalSearch';
 import { timeAgo } from '@/lib/utils';
 
 interface RootLayoutProps {
@@ -94,6 +95,10 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<Roo
 
       <div className="flex items-center gap-2 shrink-0">
         {actions}
+
+        <div className="hidden md:block">
+          <GlobalSearch />
+        </div>
 
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
           style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>

@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { incidentsAPI, aiAPI } from '@/lib/api';
+import api from '@/lib/api';
 import { Incident } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import {
   AlertTriangle, X, Clock, Bot, Loader2,
-  MessageSquare, Send, ChevronRight,
+  MessageSquare, Send, ChevronRight, FileSearch, CheckCircle,
+  Shield, Activity,
 } from 'lucide-react';
 
 const STATUSES = ['open','investigating','resolved','closed'] as const;
@@ -31,6 +33,9 @@ export default function IncidentsPage() {
   const [toast, setToast]           = useState<string | null>(null);
   const [aiSummary, setAiSummary]   = useState<AISummary | null>(null);
   const [aiLoading, setAiLoading]   = useState(false);
+  const [deepDive, setDeepDive]     = useState<any | null>(null);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [showDeepDive, setShowDeepDive] = useState(false);
   const [note, setNote]             = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
@@ -239,10 +244,28 @@ export default function IncidentsPage() {
                       AI Summary
                     </p>
                   </div>
-                  <button onClick={runAISummary} disabled={aiLoading}
-                    className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 10px' }}>
-                    {aiLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Analyzing…</> : 'Summarize'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={runAISummary} disabled={aiLoading}
+                      className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 10px' }}>
+                      {aiLoading ? <><Loader2 className="h-3 w-3 animate-spin" /> Analyzing…</> : 'Summarize'}
+                    </button>
+                    <button
+                      disabled={deepLoading}
+                      onClick={async () => {
+                        setDeepLoading(true);
+                        try {
+                          const r = await api.get(`/incidents/${selected.id}/deepdive`);
+                          setDeepDive(r.data);
+                          setShowDeepDive(true);
+                        } catch { notify('Deep-dive failed'); }
+                        finally { setDeepLoading(false); }
+                      }}
+                      className="g-btn g-btn-primary text-[11px]" style={{ padding: '3px 10px' }}>
+                      {deepLoading
+                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading…</>
+                        : <><FileSearch className="h-3 w-3" /> Deep-Dive</>}
+                    </button>
+                  </div>
                 </div>
 
                 {aiLoading && (
@@ -338,6 +361,164 @@ export default function IncidentsPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Deep-Dive Report Modal ─────────────────────────── */}
+      {showDeepDive && deepDive && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 px-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={e => e.target === e.currentTarget && setShowDeepDive(false)}>
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl"
+            style={{ background: 'var(--bg-1)', border: '1px solid var(--border)' }}>
+
+            {/* Header */}
+            <div className="sticky top-0 flex items-center justify-between px-5 py-4"
+              style={{ background: 'var(--bg-1)', borderBottom: '1px solid var(--border)', zIndex: 10 }}>
+              <div className="flex items-center gap-2">
+                <FileSearch className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Incident Deep-Dive Report
+                </p>
+              </div>
+              <button onClick={() => setShowDeepDive(false)} style={{ color: 'var(--text-2)' }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* Title + severity */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={sevClass(deepDive.severity)}>{deepDive.severity}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    Generated {new Date(deepDive.generated_at).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-base font-bold" style={{ color: 'var(--text-1)' }}>{deepDive.title}</p>
+              </div>
+
+              {/* Affected asset */}
+              <div className="g-card p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>
+                  Affected Asset
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    ['Host', deepDive.affected_asset?.hostname || '—'],
+                    ['IP', deepDive.affected_asset?.ip_address || '—'],
+                    ['OS', deepDive.affected_asset?.os || '—'],
+                    ['Status', deepDive.affected_asset?.status || '—'],
+                    ['Risk Level', deepDive.affected_asset?.risk_level || '—'],
+                    ['Agent ID', `#${deepDive.affected_asset?.agent_id}`],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-2">
+                      <span style={{ color: 'var(--text-3)' }}>{k}</span>
+                      <span className="font-medium" style={{ color: 'var(--text-1)' }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Summary */}
+              {deepDive.ai_summary && (
+                <div className="rounded-xl p-4"
+                  style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bot className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+                      AI Analysis
+                    </p>
+                  </div>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{deepDive.ai_summary}</p>
+                </div>
+              )}
+
+              {/* Recommendations */}
+              {deepDive.recommendations?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+                    Recommendations
+                  </p>
+                  <div className="space-y-1.5">
+                    {deepDive.recommendations.map((r: string, i: number) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <CheckCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" style={{ color: 'var(--green)' }} />
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>{r}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MITRE Coverage */}
+              {deepDive.mitre_coverage?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+                    MITRE ATT&CK Coverage
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {deepDive.mitre_coverage.map((t: string) => (
+                      <span key={t} className="mono text-[10px] px-2 py-0.5 rounded"
+                        style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Indicators */}
+              {deepDive.indicators?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+                    Observed Indicators
+                  </p>
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    {deepDive.indicators.map((ind: any, i: number) => (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2"
+                        style={{ borderBottom: i < deepDive.indicators.length - 1 ? '1px solid var(--border)' : undefined }}>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                          style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                          {ind.type}
+                        </span>
+                        <span className="mono text-[11px] flex-1 truncate" style={{ color: 'var(--text-1)' }}>
+                          {ind.value}
+                        </span>
+                        <span className="text-[10px] shrink-0" style={{ color: 'var(--text-3)' }}>
+                          {ind.context}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Timeline */}
+              {deepDive.timeline?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+                    Timeline ({deepDive.timeline.length} events)
+                  </p>
+                  <div className="space-y-1.5">
+                    {deepDive.timeline.slice(0, 15).map((ev: any, i: number) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <span className="h-1.5 w-1.5 rounded-full mt-1.5 shrink-0"
+                          style={{ background: ev.severity === 'critical' ? 'var(--red)' : ev.severity === 'high' ? 'var(--orange)' : 'var(--text-3)' }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{ev.title}</p>
+                          {ev.detail && <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{ev.detail}</p>}
+                        </div>
+                        <span className="text-[10px] shrink-0" style={{ color: 'var(--text-3)' }}>
+                          {timeAgo(ev.timestamp)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
