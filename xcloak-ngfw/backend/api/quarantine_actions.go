@@ -25,7 +25,7 @@ func ReleaseQuarantinedFile(c *gin.Context) {
 	var originalPath, quarantinePath string
 	err = database.DB.QueryRow(`
 		SELECT agent_id, original_path, quarantine_path
-		FROM quarantine_files WHERE id=$1
+		FROM quarantined_files WHERE id=$1
 	`, id).Scan(&agentID, &originalPath, &quarantinePath)
 
 	if err != nil {
@@ -51,7 +51,7 @@ func ReleaseQuarantinedFile(c *gin.Context) {
 		})
 	}
 
-	_, err = database.DB.Exec(`DELETE FROM quarantine_files WHERE id=$1`, id)
+	_, err = database.DB.Exec(`DELETE FROM quarantined_files WHERE id=$1`, id)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -78,7 +78,7 @@ func ReleaseQuarantinedFile(c *gin.Context) {
 func GetQuarantineStats(c *gin.Context) {
 	var total, affectedAgents int
 	database.DB.QueryRow(
-		`SELECT COUNT(*), COUNT(DISTINCT agent_id) FROM quarantine_files`,
+		`SELECT COUNT(*), COUNT(DISTINCT agent_id) FROM quarantined_files`,
 	).Scan(&total, &affectedAgents)
 	c.JSON(200, gin.H{"total_files": total, "affected_agents": affectedAgents})
 }

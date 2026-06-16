@@ -102,19 +102,6 @@ func GetScriptResult(c *gin.Context) {
 	})
 }
 
-// GetAgentTaskHistory — GET /api/agents/:id/tasks
-func GetAgentTaskHistory(c *gin.Context) {
-	tasks, err := repositories.GetAgentTaskHistory(c.Param("id"))
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	if tasks == nil {
-		tasks = []models.AgentTask{}
-	}
-	c.JSON(200, tasks)
-}
-
 // GetScriptTemplates — GET /api/scripts/templates
 func GetScriptTemplates(c *gin.Context) {
 	templates := []map[string]any{

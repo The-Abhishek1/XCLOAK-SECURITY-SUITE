@@ -20,6 +20,7 @@ func llmProvider() string {
 }
 
 // CallLLM sends a prompt to the configured LLM and returns the text response.
+// Never panics — all errors are returned as error values.
 func CallLLM(prompt string) (string, error) {
 	switch llmProvider() {
 	case "ollama":
@@ -53,7 +54,6 @@ type anthropicResponse struct {
 }
 
 func callAnthropic(prompt string) (string, error) {
-
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("ANTHROPIC_API_KEY not set — set it in .env or switch LLM_PROVIDER=ollama")
@@ -74,7 +74,7 @@ func callAnthropic(prompt string) (string, error) {
 
 	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(body))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to build Anthropic request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -115,9 +115,9 @@ func callAnthropic(prompt string) (string, error) {
 // ── Ollama (local) ────────────────────────────────────────────
 
 type ollamaRequest struct {
-	Model   string  `json:"model"`
-	Prompt  string  `json:"prompt"`
-	Stream  bool    `json:"stream"`
+	Model   string         `json:"model"`
+	Prompt  string         `json:"prompt"`
+	Stream  bool           `json:"stream"`
 	Options *ollamaOptions `json:"options,omitempty"`
 }
 
@@ -132,12 +132,9 @@ type ollamaResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// maxOllamaPromptChars is the max prompt length for small local models.
-// qwen2.5:3b has a 32k token context but we keep well under to avoid OOM.
 const maxOllamaPromptChars = 3000
 
 func callOllama(prompt string) (string, error) {
-
 	baseURL := os.Getenv("OLLAMA_URL")
 	if baseURL == "" {
 		baseURL = "http://localhost:11434"
@@ -148,9 +145,8 @@ func callOllama(prompt string) (string, error) {
 		model = "qwen2.5:3b"
 	}
 
-	// Truncate prompt for small models to avoid context overflow.
 	if len(prompt) > maxOllamaPromptChars {
-		prompt = prompt[:maxOllamaPromptChars] + "\n\n[context truncated for length — answer based on what's above]"
+		prompt = prompt[:maxOllamaPromptChars] + "\n\n[context truncated — answer based on what's above]"
 	}
 
 	payload := ollamaRequest{
@@ -165,15 +161,17 @@ func callOllama(prompt string) (string, error) {
 
 	body, _ := json.Marshal(payload)
 
-	client := &http.Client{Timeout: 120 * time.Second} // local models can be slow
-	resp, err := client.Do(func() *http.Request {
-		r, _ := http.NewRequest("POST", baseURL+"/api/generate", bytes.NewBuffer(body))
-		r.Header.Set("Content-Type", "application/json")
-		return r
-	}())
-
+	// Build request safely — check error before passing to client.Do
+	req, err := http.NewRequest("POST", baseURL+"/api/generate", bytes.NewBuffer(body))
 	if err != nil {
-		return "", fmt.Errorf("Ollama unreachable at %s — is ollama running? (%w)", baseURL, err)
+		return "", fmt.Errorf("failed to build Ollama request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Ollama unreachable at %s — run: ollama serve (%w)", baseURL, err)
 	}
 	defer resp.Body.Close()
 

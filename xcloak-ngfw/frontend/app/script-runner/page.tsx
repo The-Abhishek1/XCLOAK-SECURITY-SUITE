@@ -89,14 +89,16 @@ export default function ScriptRunnerPage() {
     const poll = async () => {
       try {
         const r = await api.get(`/scripts/result/${result.taskId}`);
-        const { status, result: output } = r.data;
+        const { status, result: rawOutput } = r.data;
+        // result is *string in Go — null when empty, string otherwise
+        const output = rawOutput ?? '';
 
         setResults(prev => prev.map(res =>
           res.taskId === result.taskId
             ? {
                 ...res,
                 status: status === 'completed' ? 'completed' : status === 'failed' ? 'error' : 'running',
-                output: output || '',
+                output: String(output),
                 completedAt: status === 'completed' ? Date.now() : undefined,
               }
             : res
@@ -297,7 +299,7 @@ export default function ScriptRunnerPage() {
 
                       {isExpanded && (
                         <div className="relative">
-                          {!res.output && res.status !== 'error' ? (
+                          {(res.status === 'pending' || res.status === 'running') && !res.output ? (
                             <div className="flex items-center gap-2 px-4 py-6 text-xs"
                               style={{ color: 'var(--text-3)' }}>
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -306,7 +308,7 @@ export default function ScriptRunnerPage() {
                           ) : (
                             <pre className="p-4 text-xs leading-relaxed overflow-auto max-h-80 font-mono"
                               style={{ color: 'var(--text-1)', background: 'var(--bg-0)' }}>
-                              {res.output || '(empty output)'}
+                              {res.output || '(empty output — script ran but produced no stdout)'}
                             </pre>
                           )}
                         </div>

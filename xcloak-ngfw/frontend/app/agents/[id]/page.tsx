@@ -55,9 +55,10 @@ export default function AgentDetailPage() {
   const [fimAlerts, setFimAlerts]     = useState<any[] | null>(null);
   const [fimBaseline, setFimBaseline] = useState<any[] | null>(null);
   const [authLogs, setAuthLogs]       = useState<any[] | null>(null);
-  const [anomalies, setAnomalies]     = useState<any[] | null>(null);
+  const [anomalies, setAnomalies]       = useState<any[] | null>(null);
   const [runningAnomaly, setRunningAnomaly] = useState(false);
-  const [taskHistory, setTaskHistory] = useState<any[] | null>(null);
+  const [taskHistory, setTaskHistory]   = useState<any[] | null>(null);
+  const [fileHashes, setFileHashes]      = useState<any[] | null>(null);
   const [tabLoading, setTabLoading]   = useState(false);
   const [search, setSearch]           = useState('');
 
@@ -126,10 +127,11 @@ export default function AgentDetailPage() {
             setAuthLogs(r.data || []);
           }
           break;
-        case 'anomaly':
-          if (anomalies === null) {
-            const r = await aiAPI.getAnomalies(agentId).catch(() => ({ data: [] }));
-            setAnomalies(r.data || []);
+        case 'filehashes':
+          if (fileHashes === null) {
+            api.get('/agents/' + agentId + '/filehashes').then(r => {
+              setFileHashes(Array.isArray(r.data) ? r.data : []);
+            }).catch(() => setFileHashes([]));
           }
           break;
         case 'tasks':
@@ -138,11 +140,17 @@ export default function AgentDetailPage() {
             setTaskHistory(r.data || []);
           }
           break;
+        case 'anomaly':
+          if (anomalies === null) {
+            const r = await aiAPI.getAnomalies(agentId).catch(() => ({ data: [] }));
+            setAnomalies(r.data || []);
+          }
+          break;
       }
     } finally {
       setTabLoading(false);
     }
-  }, [agentId, processes, connections, services, users, packages, fimAlerts, authLogs, anomalies, taskHistory]);
+  }, [agentId, processes, connections, services, users, packages, fimAlerts, authLogs, anomalies]);
 
   const selectTab = (tab: string) => {
     setActiveTab(tab);
@@ -151,6 +159,12 @@ export default function AgentDetailPage() {
 
   const dispatch = async (taskType: string, refreshTab?: string) => {
     setDispatching(true);
+    // Reset tab data so it reloads after task completes
+    if (taskType === 'fim_scan') { setFimAlerts(null); setFimBaseline(null); }
+    if (taskType === 'collect_auth_logs') setAuthLogs(null);
+    if (taskType === 'collect_file_hashes') setFileHashes(null);
+    if (taskType === 'collect_processes') setProcesses(null);
+    if (taskType === 'collect_connections') setConnections(null);
     try {
       await tasksAPI.create({ agent_id: agentId, task_type: taskType, payload: {} });
       setToast('✓ Task dispatched — refresh in ~15s');
@@ -165,6 +179,9 @@ export default function AgentDetailPage() {
             case 'services':    setServices(null);    if (activeTab === 'services')    loadTabData('services'); break;
             case 'users':       setUsers(null);       if (activeTab === 'users')       loadTabData('users'); break;
             case 'packages':    setPackages(null);    if (activeTab === 'packages')    loadTabData('packages'); break;
+            case 'fim':         setFimAlerts(null); setFimBaseline(null); if (activeTab === 'fim') loadTabData('fim'); break;
+            case 'logs':        setAuthLogs(null);  if (activeTab === 'logs')  loadTabData('logs');  break;
+            case 'filehashes':  setFileHashes(null); if (activeTab === 'filehashes') loadTabData('filehashes'); break;
           }
           load(); // refresh summary counts too
         }, 8000);
@@ -203,7 +220,13 @@ export default function AgentDetailPage() {
   );
 
   return (
-    <RootLayout title={agent.hostname} subtitle={`${agent.os} · ${agent.ip_address}`} onRefresh={load}>
+    <RootLayout title={agent.hostname} subtitle={`${agent.os} · ${agent.ip_address}`} onRefresh={load}
+      actions={
+        <Link href="/agents"
+          className="g-btn g-btn-ghost text-xs flex items-center gap-1.5">
+          <ArrowLeft className="h-3.5 w-3.5" /> All Agents
+        </Link>
+      }>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
 
@@ -254,7 +277,7 @@ export default function AgentDetailPage() {
             })}
           </div>
 
-          <div className="p-5">
+          <div className="p-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
             {/* Alerts */}
             {activeTab === 'alerts' && (
               <div className="space-y-2">
@@ -300,8 +323,17 @@ export default function AgentDetailPage() {
                     <Play className="h-3 w-3" /> {dispatching ? 'Scanning…' : 'Run Scan'}
                   </button>
                 </div>
-                {vulns.length === 0 ? <EmptyState msg="No vulnerabilities found. Run a scan." /> :
-                  vulns.map(v => (
+                {(() => {
+                  const seen = new Set<string>();
+                  const unique = vulns.filter(v => {
+                    const key = v.cve_id || `${v.package_name}-${v.package_version}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                  });
+                  return unique.length === 0
+                    ? <EmptyState msg="No vulnerabilities found. Run a scan." />
+                    : unique.map(v => (
                     <div key={v.id} className="rounded-lg p-4 space-y-1.5" style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{v.name}</p>
@@ -310,7 +342,8 @@ export default function AgentDetailPage() {
                       <p className="text-xs" style={{ color: 'var(--text-2)' }}>{v.description}</p>
                       <p className="text-xs" style={{ color: 'var(--accent)' }}>Fix: {v.remediation}</p>
                     </div>
-                  ))
+                  ));
+                })()
                 }
               </div>
             )}
@@ -387,12 +420,44 @@ export default function AgentDetailPage() {
             {/* File hashes */}
             {activeTab === 'filehashes' && (
               <div className="space-y-3">
-                <div className="flex justify-end">
-                  <button onClick={() => dispatch('collect_file_hashes')} disabled={dispatching} className="g-btn g-btn-primary text-xs">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    {fileHashes?.length || 0} files indexed
+                  </p>
+                  <button onClick={() => dispatch('collect_file_hashes', 'filehashes')}
+                    disabled={dispatching} className="g-btn g-btn-primary text-xs">
                     <Play className="h-3 w-3" /> {dispatching ? 'Collecting…' : 'Collect Hashes'}
                   </button>
                 </div>
-                <EmptyState msg="Dispatch 'Collect Hashes' to populate file inventory." />
+                {tabLoading ? (
+                  <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+                ) : (fileHashes?.length || 0) === 0 ? (
+                  <EmptyState msg="No file hashes collected. Click 'Collect Hashes' to index files." />
+                ) : (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 140px 80px' }}>
+                      <span>File Path</span><span>SHA256</span><span>MD5</span><span>Size</span>
+                    </div>
+                    {fileHashes!.map((h: any, i: number) => (
+                      <div key={i} className="g-tr grid gap-3 items-center px-4"
+                        style={{ gridTemplateColumns: '1fr 1fr 140px 80px' }}>
+                        <div className="min-w-0">
+                          <p className="mono text-[11px] truncate" style={{ color: 'var(--text-1)' }}
+                            title={h.file_path}>{h.file_path}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{h.file_name}</p>
+                        </div>
+                        <span className="mono text-[10px] truncate" style={{ color: 'var(--text-3)' }}
+                          title={h.sha256_hash}>{h.sha256_hash?.slice(0, 20) || '—'}…</span>
+                        <span className="mono text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
+                          {h.md5_hash?.slice(0, 16) || '—'}…
+                        </span>
+                        <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                          {h.file_size ? (h.file_size / 1024).toFixed(1) + ' KB' : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -403,7 +468,7 @@ export default function AgentDetailPage() {
                   <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                     Baseline: {fimBaseline?.length || 0} files · Violations: {fimAlerts?.length || 0}
                   </p>
-                  <button onClick={() => dispatch('fim_scan')} disabled={dispatching} className="g-btn g-btn-primary text-xs">
+                  <button onClick={() => dispatch('fim_scan', 'fim')} disabled={dispatching} className="g-btn g-btn-primary text-xs">
                     <Play className="h-3 w-3" /> {dispatching ? 'Scanning…' : 'Run FIM Scan'}
                   </button>
                 </div>
@@ -411,7 +476,13 @@ export default function AgentDetailPage() {
                 {tabLoading ? (
                   <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
                 ) : (fimAlerts?.length || 0) === 0 ? (
-                  <EmptyState msg="No FIM violations detected. Run a scan to establish baseline." />
+                  <div className="py-10 text-center space-y-3">
+                    <p className="text-sm" style={{ color: 'var(--text-2)' }}>No FIM violations detected.</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                      Click "Run FIM Scan" — the agent will hash watched paths and report any changes (~15s).
+                      Baseline: {fimBaseline?.length || 0} files tracked.
+                    </p>
+                  </div>
                 ) : (
                   <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
                     <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '80px 1fr 1fr 100px' }}>
@@ -447,7 +518,7 @@ export default function AgentDetailPage() {
                   <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                     {authLogs?.length || 0} log entries
                   </p>
-                  <button onClick={() => { setAuthLogs(null); dispatch('collect_auth_logs'); }}
+                  <button onClick={() => dispatch('collect_auth_logs', 'logs')}
                     disabled={dispatching} className="g-btn g-btn-primary text-xs">
                     <Play className="h-3 w-3" /> {dispatching ? 'Collecting…' : 'Collect Auth Logs'}
                   </button>
@@ -456,7 +527,12 @@ export default function AgentDetailPage() {
                 {tabLoading ? (
                   <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
                 ) : (authLogs?.length || 0) === 0 ? (
-                  <EmptyState msg="No auth logs. Click 'Collect Auth Logs' to fetch from /var/log/auth.log." />
+                  <div className="py-10 text-center space-y-3">
+                    <p className="text-sm" style={{ color: 'var(--text-2)' }}>No auth logs collected yet.</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                      Click "Collect Auth Logs" — the agent will read /var/log/auth.log and send entries here (~15s).
+                    </p>
+                  </div>
                 ) : (
                   <div className="rounded-xl overflow-hidden font-mono text-[11px]"
                     style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', maxHeight: 480, overflowY: 'auto' }}>
@@ -487,10 +563,19 @@ export default function AgentDetailPage() {
                   <button
                     onClick={async () => {
                       setRunningAnomaly(true);
+                      // Check if we have data to analyze
+                      if ((processes?.length || 0) === 0 && (connections?.length || 0) === 0) {
+                        setToast('Collect processes and connections first for better analysis');
+                      }
                       try {
                         const r = await aiAPI.runAnomaly(agentId);
                         setAnomalies(r.data?.findings || []);
-                      } catch { setToast('AI anomaly detection failed'); }
+                      } catch (e: any) {
+                        const msg = e?.response?.data?.error || 'AI anomaly detection failed';
+                        setToast(msg.includes('LLM') || msg.includes('unavailable')
+                          ? 'Ollama not responding — ensure it is running: ollama serve'
+                          : msg);
+                      }
                       finally { setRunningAnomaly(false); }
                     }}
                     disabled={runningAnomaly}
@@ -549,7 +634,6 @@ export default function AgentDetailPage() {
                     Refresh
                   </button>
                 </div>
-
                 {tabLoading ? (
                   <div className="py-8 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
                 ) : (taskHistory?.length || 0) === 0 ? (
@@ -557,27 +641,23 @@ export default function AgentDetailPage() {
                 ) : (
                   <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
                     <div className="g-thead grid gap-3 px-4"
-                      style={{ gridTemplateColumns: '140px 80px 1fr 90px 80px' }}>
-                      <span>Task Type</span>
-                      <span>Status</span>
-                      <span>Result</span>
-                      <span>Completed</span>
-                      <span>ID</span>
+                      style={{ gridTemplateColumns: '140px 80px 1fr 90px 60px' }}>
+                      <span>Task Type</span><span>Status</span><span>Result</span>
+                      <span>Completed</span><span>ID</span>
                     </div>
                     {taskHistory!.map((t: any) => {
-                      const isSuccess = t.status === 'completed' && !t.result?.toLowerCase().includes('fail') && !t.result?.toLowerCase().includes('error') && !t.result?.toLowerCase().includes('unknown');
-                      const statusColor = t.status === 'completed'
-                        ? isSuccess ? 'var(--green)' : 'var(--orange)'
-                        : t.status === 'running' ? 'var(--accent)'
-                        : 'var(--text-3)';
+                      const ok = t.status === 'completed'
+                        && !t.result?.toLowerCase().includes('fail')
+                        && !t.result?.toLowerCase().includes('error');
+                      const color = t.status === 'completed' ? (ok ? 'var(--green)' : 'var(--orange)')
+                        : t.status === 'running' ? 'var(--accent)' : 'var(--text-3)';
                       return (
                         <div key={t.id} className="g-tr grid gap-3 items-start px-4 py-2.5"
-                          style={{ gridTemplateColumns: '140px 80px 1fr 90px 80px' }}>
+                          style={{ gridTemplateColumns: '140px 80px 1fr 90px 60px' }}>
                           <span className="mono text-[11px]" style={{ color: 'var(--accent)' }}>
                             {t.task_type}
                           </span>
-                          <span className="text-[11px] font-medium capitalize"
-                            style={{ color: statusColor }}>
+                          <span className="text-[11px] font-medium capitalize" style={{ color }}>
                             {t.status}
                           </span>
                           <span className="text-[11px] truncate" style={{ color: 'var(--text-2)' }}

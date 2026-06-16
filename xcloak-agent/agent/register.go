@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,9 +9,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"xcloak-agent/config"
-	"xcloak-agent/models"
+	"golang.org/x/term"
 )
 
 type registrationResponse struct {
@@ -22,16 +24,34 @@ type registrationResponse struct {
 func Register() (int, error) {
 
 	hostname, _ := os.Hostname()
-
-	// Derive a stable machine_id from the hostname so re-registration
-	// hits the ON CONFLICT (machine_id) path and returns the same agent_id.
 	machineID := deriveMachineID(hostname)
 
-	data := models.AgentRegistration{
-		MachineID: machineID,
-		Hostname:  hostname,
-		OS:        "Linux",
-		IPAddress: getLocalIP(),
+	// ── Get install token ─────────────────────────────────────
+	// Priority: env var → interactive prompt
+	installToken := config.InstallToken()
+	if installToken == "" {
+		installToken = promptInstallToken()
+	}
+	if installToken == "" {
+		return 0, fmt.Errorf(
+			"install token required\n" +
+				"  Generate one: XCloak UI → Agents → Add Agent → Generate Token",
+		)
+	}
+
+	// ── Send registration request ─────────────────────────────
+	data := struct {
+		MachineID    string `json:"machine_id"`
+		Hostname     string `json:"hostname"`
+		OS           string `json:"os"`
+		IPAddress    string `json:"ip_address"`
+		InstallToken string `json:"install_token"`
+	}{
+		MachineID:    machineID,
+		Hostname:     hostname,
+		OS:           detectOS(),
+		IPAddress:    getLocalIP(),
+		InstallToken: installToken,
 	}
 
 	body, _ := json.Marshal(data)
@@ -46,6 +66,12 @@ func Register() (int, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 401 {
+		return 0, fmt.Errorf(
+			"registration rejected (401) — token may be invalid, expired, or already used\n" +
+				"  Generate a new one: XCloak UI → Agents → Add Agent",
+		)
+	}
 	if resp.StatusCode != 200 {
 		return 0, fmt.Errorf("register returned HTTP %d", resp.StatusCode)
 	}
@@ -54,38 +80,74 @@ func Register() (int, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return 0, fmt.Errorf("failed to decode register response: %w", err)
 	}
-
 	if result.AgentID == 0 {
 		return 0, fmt.Errorf("server returned agent_id=0")
 	}
 
-	// Save token for all subsequent authPost() calls.
 	if result.Token != "" {
 		SaveToken(result.Token)
-		fmt.Println("Agent token saved")
-	} else {
-		fmt.Println("Warning: server did not return a token")
+		fmt.Println("✓ Agent token saved")
 	}
 
-	fmt.Printf("Registered as agent %d (machine_id: %s...)\n",
-		result.AgentID, machineID[:12])
-
+	fmt.Printf("✓ Registered as agent #%d (hostname: %s)\n", result.AgentID, hostname)
 	return result.AgentID, nil
 }
 
-// deriveMachineID creates a stable 64-char hex fingerprint from the hostname.
-// Using sha256 means it's deterministic across restarts without needing
-// /etc/machine-id or any privileged file access.
+// promptInstallToken prints a friendly prompt and reads the token from stdin.
+// Returns empty string if stdin is not an interactive terminal.
+func promptInstallToken() string {
+	// Check if stdin is a real terminal — not a pipe or non-interactive shell
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Println("[agent] stdin is not a terminal — cannot prompt for install token.")
+		fmt.Println("[agent] Set XCLOAK_INSTALL_TOKEN env var or run interactively.")
+		return ""
+	}
+
+	fmt.Println()
+	fmt.Println("┌─────────────────────────────────────────────────────┐")
+	fmt.Println("│         XCloak Agent — First Time Setup             │")
+	fmt.Println("├─────────────────────────────────────────────────────┤")
+	fmt.Println("│  An install token is required to register this      │")
+	fmt.Println("│  agent with the XCloak server.                      │")
+	fmt.Println("│                                                      │")
+	fmt.Println("│  Generate one in the XCloak UI:                     │")
+	fmt.Println("│  Agents page → Add Agent → Generate Token           │")
+	fmt.Println("└─────────────────────────────────────────────────────┘")
+	fmt.Println()
+	fmt.Print("Paste install token: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	token, _ := reader.ReadString('\n')
+	token = strings.TrimSpace(token)
+
+	if token == "" {
+		fmt.Println("No token entered.")
+		return ""
+	}
+
+	fmt.Println("✓ Token received, connecting to server...")
+	return token
+}
+
 func deriveMachineID(hostname string) string {
 	h := sha256.Sum256([]byte(hostname))
 	return hex.EncodeToString(h[:])
 }
 
-// getLocalIP tries to read the primary outbound IP; falls back to 127.0.0.1.
+func detectOS() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "Linux"
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			return strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), `"`)
+		}
+	}
+	return "Linux"
+}
+
 func getLocalIP() string {
-	// Simple approach: use hostname resolution.
-	// For a more accurate IP, you'd dial a UDP connection to 8.8.8.8:80
-	// and read the local address — but that requires network access at startup.
 	return "127.0.0.1"
 }
 

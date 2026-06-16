@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"xcloak-ngfw/auth"
+	"xcloak-ngfw/services"
 )
 
 func RequireAuth() gin.HandlerFunc {
@@ -29,6 +30,13 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
+		// 3. Check blacklist (revoked on logout).
+		if services.IsRevoked(tokenString) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked — please log in again"})
+			c.Abort()
+			return
+		}
+
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return auth.JwtSecret, nil
 		})
@@ -41,9 +49,17 @@ func RequireAuth() gin.HandlerFunc {
 
 		claims := token.Claims.(jwt.MapClaims)
 
-		c.Set("user_id",  claims["user_id"])
-		c.Set("username", claims["username"])
-		c.Set("role",     claims["role"])
+		// Reject refresh tokens used as access tokens.
+		if claims["type"] == "refresh" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh tokens cannot be used for API access"})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id",      claims["user_id"])
+		c.Set("username",     claims["username"])
+		c.Set("role",         claims["role"])
+		c.Set("token_string", tokenString) // stored for logout
 
 		c.Next()
 	}

@@ -72,6 +72,7 @@ export const agentsAPI = {
   getUsers:       (id: number) => api.get(`/agents/${id}/users`).catch(() => ({ data: [] })),
   getPackages:    (id: number) => api.get(`/agents/${id}/packages`).catch(() => ({ data: [] })),
   getAuthLogs:    (id: number) => api.get(`/agents/${id}/auth-logs`).catch(() => ({ data: [] })),
+  getFileHashes:  (id: number) => api.get(`/agents/${id}/filehashes`).catch(() => ({ data: [] })),
 };
 
 export const alertsAPI = {
@@ -141,7 +142,7 @@ export const tasksAPI = {
 
 export const quarantineAPI = {
   getAll:     ()          => api.get('/quarantine').catch(() => ({ data: [] })),
-  quarantine: (data: any) => api.post('/agents/quarantine', data),
+  quarantine: (data: any) => api.post('/quarantine', data),
 };
 
 export const threatFeedsAPI = {
@@ -232,23 +233,11 @@ export const integrationsAPI = {
   createInstallToken:(label: string)                     => api.post('/integrations/install-tokens', { label }),
 };
 
-
 export const correlationAPI = {
-  getAll:   ()                              => api.get('/correlation/rules'),
-  create:   (rule: any)                     => api.post('/correlation/rules', rule),
-  toggle:   (id: number, enabled: boolean)  => api.patch(`/correlation/rules/${id}/toggle`, { enabled }),
-  delete:   (id: number)                    => api.delete(`/correlation/rules/${id}`),
-};
-
-
-export const searchAPI = {
-  query: (q: string, types?: string) =>
-    api.get('/search', { params: { q, types } }),
-};
-
-export const yaraImportAPI = {
-  importFiles: (form: FormData) =>
-    api.post('/yara/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  getAll:  ()                               => api.get('/correlation/rules'),
+  create:  (rule: any)                      => api.post('/correlation/rules', rule),
+  toggle:  (id: number, enabled: boolean)   => api.patch(`/correlation/rules/${id}/toggle`, { enabled }),
+  delete:  (id: number)                     => api.delete(`/correlation/rules/${id}`),
 };
 
 export default api;

@@ -1,0 +1,6 @@
+.env
+# Build artifacts
+**/tmp/main
+**/tmp/build-errors.log
+tmp/
+*.env

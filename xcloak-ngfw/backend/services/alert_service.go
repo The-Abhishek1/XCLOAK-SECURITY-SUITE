@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"strings"
 
 	"xcloak-ngfw/models"
@@ -28,7 +29,10 @@ func CreateAlert(alert models.Alert) error {
 	IncrementAlertCounter(strings.ToLower(alert.Severity))
 
 	// Kafka — publish to xcloak.alerts topic.
-	go PublishAlert(alert)
+	go func() {
+		defer func() { recover() }()
+		PublishAlert(alert)
+	}()
 
 	// Real-time browser notification.
 	if broadcastFn != nil {
@@ -37,18 +41,50 @@ func CreateAlert(alert models.Alert) error {
 
 	// IOC auto-block if IOC rule matched.
 	if strings.Contains(strings.ToLower(alert.RuleName), "ioc") {
-		go autoBlockIOC(alert)
+		go func() {
+		defer func() { recover() }()
+		autoBlockIOC(alert)
+	}()
 	}
 
 	// Webhook / Slack integrations.
-	go FireAlertWebhook(alert)
+	go func() {
+		defer func() { recover() }()
+		FireAlertWebhook(alert)
+	}()
 
-	go ExecutePlaybooks(alert)
-	go CorrelateAlert(alert)
+	go func() {
+		defer func() { recover() }()
+		ExecutePlaybooks(alert)
+	}()
+	go func() {
+		defer func() { recover() }()
+		CorrelateAlert(alert)
+	}()
 
 	sev := strings.ToLower(alert.Severity)
 	if sev == "critical" || sev == "high" {
-		go TriageAlert(alert)
+		go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("[TriageAlert] recovered panic: %v\n", r)
+			}
+		}()
+		TriageAlert(alert)
+	}()
+
+	// Email notifications for critical/high
+	if sev == "critical" || sev == "high" {
+		go func() {
+			defer func() { recover() }()
+			recipients := GetEmailRecipients(alert.Severity)
+			if len(recipients) > 0 {
+				if err := SendAlertEmail(alert, recipients); err != nil {
+					fmt.Printf("[Email] Failed to send alert email: %v\n", err)
+				}
+			}
+		}()
+	}
 	}
 
 	CalculateRiskScore(alert.AgentID)

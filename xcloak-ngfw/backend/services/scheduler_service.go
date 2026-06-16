@@ -23,6 +23,7 @@ func StartScheduler() {
 
 		for range ticker.C {
 			runDueScheduledTasks()
+			ExpireStaleTasks() // expire stale pending tasks
 		}
 	}()
 }

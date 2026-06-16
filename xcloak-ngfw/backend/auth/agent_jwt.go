@@ -7,17 +7,14 @@ import (
 )
 
 // GenerateAgentJWT issues a long-lived token for an agent (90 days).
-// The token carries role="agent" and the agent's numeric ID so the
-// RequireAgentAuth middleware can identify which agent is calling.
+// Uses the same JWT_SECRET as user tokens but with role="agent".
 func GenerateAgentJWT(agentID int) (string, error) {
-
 	claims := jwt.MapClaims{
 		"agent_id": agentID,
 		"role":     "agent",
+		"iat":      time.Now().Unix(),
 		"exp":      time.Now().Add(90 * 24 * time.Hour).Unix(),
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
 	return token.SignedString(JwtSecret)
 }

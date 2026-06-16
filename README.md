@@ -1,388 +1,223 @@
-<div align="center">
+# XCloak Security Suite
 
-```
-        ██╗  ██╗ ██████╗██╗      ██████╗  █████╗ ██╗  ██╗
-        ╚██╗██╔╝██╔════╝██║     ██╔═══██╗██╔══██╗██║ ██╔╝
-        ╚███╔╝ ██║     ██║     ██║   ██║███████║█████╔╝ 
-        ██╔██╗ ██║     ██║     ██║   ██║██╔══██║██╔═██╗ 
-        ██╔╝ ██╗╚██████╗███████╗╚██████╔╝██║  ██║██║  ██╗
-        ╚═╝  ╚═╝ ╚═════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
-```
+An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR capabilities. Built with Go, PostgreSQL, and Next.js.
 
-**XCloak Security Suite**
-
-*Next-Generation Open Security Platform*
-
-[![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=flat-square&logo=go)](https://golang.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://postgresql.org)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![MITRE ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK-red?style=flat-square)](https://attack.mitre.org)
-[![Status](https://img.shields.io/badge/Status-Active%20Development-yellow?style=flat-square)]()
-
-</div>
-
----
-
-## Overview
-
-**XCloak Security Suite** is a self-hosted, open-architecture security operations platform combining NGFW, SIEM, EDR, and XDR capabilities into a single unified system. Built for security engineers who want full control — no black boxes, no vendor lock-in, no per-seat pricing that scales against you.
-
-> Built from scratch. Every line intentional.
-
----
+![XCloak Dashboard](docs/dashboard.png)
 
 ## Architecture
 
 ```
-                          Internet
-                              │
-                    ┌─────────▼─────────┐
-                    │   XCloak NGFW     │  ← Firewall Rule Engine
-                    └─────────┬─────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │   XCloak IDS/IPS  │  ← Sigma-Lite Detection
-                    └─────────┬─────────┘
-                              │
-                       Internal Network
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-         Agent A         Agent B         Agent C
-              │               │               │
-              └───────────────┼───────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │   XCloak Server   │
-                    │ ─────────────────│
-                    │  SIEM  │  EDR    │
-                    │  XDR   │  SOAR   │
-                    │  IOC   │  MITRE  │
-                    └─────────┬─────────┘
-                              │
-                         Grafana / UI
+┌─────────────────────────────────────────────────────────────────┐
+│                        XCloak Platform                          │
+├──────────────┬──────────────┬──────────────┬────────────────────┤
+│   Frontend   │   Backend    │    Agent     │  Observability     │
+│  Next.js 14  │  Go / Gin    │  Go Binary   │  Prometheus        │
+│  TypeScript  │  PostgreSQL  │  Linux/Win   │  Grafana           │
+│  Port 3000   │  Port 8080   │  Endpoint    │  Kafka             │
+└──────────────┴──────────────┴──────────────┴────────────────────┘
 ```
 
----
+## Features
 
-## Feature Modules
+### Detection
+- **Sigma Rules** — custom detection engine with field-level matching
+- **YARA Rules** — malware signature scanning on endpoints
+- **IOC Engine** — IP, domain, hash, URL, email indicator matching
+- **Brute Force Detection** — automated SSH/auth log analysis
+- **FIM** — file integrity monitoring with SHA256/MD5 hashing
+- **Vulnerability Scanning** — CVE matching against installed packages
 
-### 🔐 Authentication & Access Control
-- JWT-based authentication with configurable expiry
-- Role-Based Access Control (RBAC) — `admin` / `user` roles
-- Full audit trail — every action logged with actor, timestamp, and details
-- Request ID middleware for distributed tracing
+### Response (SOAR)
+- **Playbooks** — automated response chains triggered by alert conditions
+- **Agent Tasks** — remote execution: kill process, isolate host, quarantine file, FIM scan, script execution
+- **Firewall Sync** — push iptables rules to agents from a central UI
+- **Script Runner** — run bash/python scripts on agents with real-time output
 
-### 🧱 NGFW — Next-Generation Firewall
-- Full CRUD for firewall rules (source IP, dest IP, protocol, port, action)
-- Enable/disable rules without deletion
-- Firewall Sync Engine for rule propagation
-- PostgreSQL-backed rule persistence
+### Investigation
+- **Threat Hunt** — ad-hoc query across endpoint telemetry
+- **Incident Management** — correlation, timeline, AI deep-dive reports
+- **Network Map** — interactive force graph of agent connections with GeoIP
+- **AI Triage** — Ollama/Claude-powered alert and incident analysis
 
-### 🖥️ Agent Management & EDR
-- Lightweight agent registration (hostname, OS, IP)
-- Heartbeat-based online/offline detection
-- Endpoint inventory collection:
-  - Running processes
-  - Active network connections
-  - Installed services
-  - Package inventory
-  - Local users
-- Remote response actions:
-  - `kill_process` — terminate by PID
-  - `collect_file` — pull file from endpoint
-  - `quarantine_file` — isolate malicious files
-  - `execute_script` — run arbitrary commands
-  - `isolate_host` — full network isolation
+### Compliance
+- **SOC 2, NIST CSF, PCI-DSS, ISO 27001** — automated framework scoring
+- **Audit Trail** — immutable log of all platform actions
+- **Compliance Reports** — PDF-ready framework scoring reports
 
-### 🔎 Detection Engine (Sigma-Lite)
-- Dynamic rule evaluation engine (graduated from `strings.Contains` to a full Sigma-lite implementation)
-- MITRE ATT&CK mapping on every rule (Tactic → Technique ID → Name)
-- Rule CRUD with enable/disable toggle
-- Rule test API — validate rules against sample log messages
-- PostgreSQL-backed rule storage
+### Observability
+- **Prometheus** — 16 custom metrics (threat score, alert rates, task queues)
+- **Grafana** — pre-built dashboard with alert rate, agent health, SOAR execution
+- **Kafka** — event bus for alerts, incidents, tasks, FIM, YARA across 6 topics
 
-### 🚨 Alert Management
-- Automated alert creation from rule matches
-- Alert deduplication — no duplicate noise
-- MITRE context embedded in every alert
-- Severity classification: `low` / `medium` / `high` / `critical`
+## Quick Start
 
-### 🔗 Incident Engine (XDR)
-- Cross-alert correlation into incidents
-- Incident deduplication via fingerprinting
-- Full incident timeline with event linkage
-- Severity escalation logic
+### Prerequisites
+- Go 1.21+
+- Node.js 18+
+- PostgreSQL 16
+- Docker (for Kafka/Prometheus/Grafana)
 
-### 🧩 IOC Engine
-- Indicator of Compromise database (IP-based, extensible)
-- Real-time IOC matching against endpoint telemetry
-- Enable/disable IOCs without deletion
-- Full CRUD API
+### 1. Backend
 
-### 📊 Dashboard & Observability
-- Unified overview: agents, alerts, incidents, inventory counts
-- Per-agent summary view
-- Grafana integration for metrics visualization
+```bash
+cd xcloak-ngfw/backend
 
----
+# Copy and configure environment
+cp .env.example .env
+# Edit .env — set DB credentials, JWT_SECRET, SMTP settings
 
-## Current Maturity
+# Generate a secure JWT secret
+openssl rand -hex 32  # paste as JWT_SECRET in .env
 
-| Module | Status | Completeness |
-|--------|--------|--------------|
-| NGFW | ✅ Functional | 70% |
-| SIEM | ✅ Functional | 75% |
-| EDR | ✅ Functional | 80% |
-| XDR | 🔄 In Progress | 55% |
-| SOAR | 🔄 Early Stage | 15% |
+# Run migrations
+psql -U xcloak -d ngfw < database/schema.sql
 
----
+# Start with hot reload
+air
+```
+
+### 2. Frontend
+
+```bash
+cd xcloak-ngfw/frontend
+npm install
+npm run dev
+```
+
+### 3. Observability Stack
+
+```bash
+cd XCLOAK-SECURITY-SUITE
+docker compose up -d
+```
+
+Services:
+- Grafana: http://localhost:3001 (admin/xcloak)
+- Prometheus: http://localhost:9090
+- Kafka UI: http://localhost:8090
+
+### 4. Agent
+
+```bash
+cd xcloak-agent
+go build -o xcloak-agent ./main.go
+
+# First run — will prompt for install token
+# Generate one: XCloak UI → Agents → Add Agent
+./xcloak-agent
+```
+
+After first registration, the agent token is saved to `~/.config/xcloak-agent/token` and reused on every subsequent start.
+
+## Environment Variables
+
+### Backend (`xcloak-ngfw/backend/.env`)
+
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=xcloak
+DB_PASSWORD=your_password
+DB_NAME=ngfw
+
+# Security — REQUIRED
+JWT_SECRET=<openssl rand -hex 32>
+
+# AI (choose one)
+LLM_PROVIDER=ollama          # or: anthropic
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:3b
+ANTHROPIC_API_KEY=           # if using Claude
+
+# Kafka
+KAFKA_ENABLED=true
+KAFKA_BROKER=localhost:9092
+
+# Email alerts (optional)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@gmail.com
+SMTP_PASS=your_app_password
+SMTP_FROM=xcloak@yourdomain.com
+```
+
+### Agent (`xcloak-agent/.env`)
+
+```env
+# Only needed for first-time registration
+XCLOAK_INSTALL_TOKEN=<generate from UI>
+```
+
+## Security
+
+- JWT authentication with configurable expiry (8h access / 7d refresh)
+- Token blacklist on logout
+- Agent registration requires one-time install tokens (single-use, 24h expiry)
+- TOTP 2FA support (RFC 4226 — works with Google Authenticator, Authy)
+- Stale task expiry (destructive tasks expire after 15min, others after 1h)
+- Role-based access control (admin / analyst)
+
+## API
+
+Base URL: `http://localhost:8080`
+
+Authentication: `Authorization: Bearer <token>`
+
+Key endpoints:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/login` | Login (returns JWT or 2FA prompt) |
+| GET | `/api/alerts/paginated` | Paginated alerts with status filter |
+| POST | `/api/alerts/:id/acknowledge` | Acknowledge alert |
+| GET | `/api/incidents/paginated` | Paginated incidents |
+| GET | `/api/agents` | List all agents |
+| POST | `/api/scripts/run` | Execute script on agents |
+| POST | `/api/firewall/sync` | Push firewall rules to agents |
+| GET | `/api/kafka/status` | Kafka connection status |
+| GET | `/metrics` | Prometheus metrics endpoint |
+
+## Kafka Topics
+
+| Topic | Events |
+|-------|--------|
+| `xcloak.alerts` | Alert created |
+| `xcloak.incidents` | Incident opened |
+| `xcloak.agent_tasks` | Task dispatched / completed |
+| `xcloak.audit` | Admin actions |
+| `xcloak.fim_alerts` | File integrity violations |
+| `xcloak.yara_matches` | YARA signature matches |
+
+## Agent Capabilities
+
+| Task Type | Description |
+|-----------|-------------|
+| `collect_processes` | Snapshot running processes |
+| `collect_connections` | Active network connections |
+| `collect_packages` | Installed packages (for CVE scanning) |
+| `collect_auth_logs` | Read /var/log/auth.log |
+| `collect_file_hashes` | SHA256/MD5 file inventory |
+| `fim_scan` | File integrity check against baseline |
+| `vulnerability_scan` | Collect packages for server-side CVE matching |
+| `kill_process` | Kill a process by PID |
+| `isolate_host` | Block all traffic except XCloak server |
+| `quarantine_file` | Move file to quarantine directory |
+| `execute_script` | Run bash/sh/python3 script, return output |
+| `apply_firewall_rules` | Apply iptables rules from XCloak |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go (Golang) |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS |
+| Backend | Go 1.21, Gin, JWT |
 | Database | PostgreSQL 16 |
-| Auth | JWT (HS256) |
-| Detection | Sigma-Lite (custom engine) |
-| Threat Intel | MITRE ATT&CK Framework |
-| Observability | Grafana |
-| Agent Protocol | HTTP REST (polling) |
-
----
-
-## API Reference
-
-### Auth
-
-```bash
-# Register
-POST /api/auth/register
-{ "username": "admin", "email": "admin@xcloak.local", "password": "Password@123", "role": "admin" }
-
-# Login
-POST /api/auth/login
-{ "username": "admin", "password": "Password@123" }
-# → returns JWT token
-```
-
-### Firewall Rules
-
-```bash
-POST   /api/firewall/rules         # Create rule
-GET    /api/firewall/rules         # List all rules
-GET    /api/firewall/rules/:id     # Get rule by ID
-PUT    /api/firewall/rules/:id     # Update rule
-DELETE /api/firewall/rules/:id     # Delete rule
-```
-
-### Agents
-
-```bash
-POST /api/agents/register          # Register new agent
-POST /api/agents/heartbeat         # Agent keepalive
-GET  /api/agents                   # List all agents
-GET  /api/agents/:id               # Get agent details
-GET  /api/agents/:id/summary       # Get agent inventory summary
-```
-
-### Tasks & Response
-
-```bash
-POST /api/tasks                    # Dispatch task to agent
-GET  /api/tasks/agent/:id          # Agent polls for pending tasks
-POST /api/tasks/result             # Agent submits task result
-```
-
-**Supported task types:**
-
-| Task Type | Description |
-|-----------|-------------|
-| `collect_processes` | Enumerate running processes |
-| `collect_connections` | Enumerate network connections |
-| `collect_services` | Enumerate running services |
-| `collect_packages` | Enumerate installed packages |
-| `collect_users` | Enumerate local users |
-| `kill_process` | Kill process by PID |
-| `execute_script` | Run shell script |
-| `collect_file` | Retrieve file from endpoint |
-| `quarantine_file` | Quarantine malicious file |
-| `isolate_host` | Network-isolate the endpoint |
-
-### Detection (Sigma Rules)
-
-```bash
-POST   /api/sigma/rules            # Create detection rule
-GET    /api/sigma/rules            # List all rules
-GET    /api/sigma/rules/:id        # Get rule by ID
-PUT    /api/sigma/rules/:id        # Update rule
-DELETE /api/sigma/rules/:id        # Delete rule
-PATCH  /api/sigma/rules/:id/enable # Enable rule
-PATCH /api/sigma/rules/:id/disable # Disable rule
-POST   /api/sigma/rules/test       # Test rule against log sample
-```
-
-### Alerts & Incidents
-
-```bash
-GET /api/alerts                    # List all alerts
-GET /api/incidents                 # List all incidents
-GET /api/incidents/:id/events      # Get incident timeline
-```
-
-### IOC Engine
-
-```bash
-POST   /api/iocs                   # Create IOC
-GET    /api/iocs                   # List all IOCs
-GET    /api/iocs/:id               # Get IOC by ID
-PUT    /api/iocs/:id               # Update IOC
-DELETE /api/iocs/:id               # Delete IOC
-PATCH  /api/iocs/:id/enable        # Enable IOC
-PATCH  /api/iocs/:id/disable       # Disable IOC
-```
-
-### Audit & Dashboard
-
-```bash
-GET /api/audit/logs                # Full audit log
-GET /api/dashboard/overview        # Platform-wide stats
-GET /api/health                    # Health check
-```
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Go 1.22+
-- PostgreSQL 16+
-- Git
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/The-Abhishek1/Xcloak-Security-Suite
-cd Xcloak-Security-Suite
-
-# Configure environment
-cd xcloak-ngfw/backend
-# Run air
-air
-
-# Start the Agent
-cd xcloak-agent
-air
-```
-
-### Verify Installation
-
-```bash
-curl http://localhost:8080/api/health
-# → {"service":"xcloak-ngfw","status":"healthy"}
-```
-
-### Deploy an Agent
-
-```bash
-# Register your first endpoint
-curl -X POST http://localhost:8080/api/agents/register \
-  -H "Content-Type: application/json" \
-  -d '{"hostname":"DESKTOP-01","os":"Ubuntu 24.04","ip_address":"192.168.1.100"}'
-
-# Start sending heartbeats from the agent binary
-./xcloak-agent --server http://localhost:8080 --agent-id 1
-```
-
----
-
-## Detection Rule Example
-
-```json
-{
-  "title": "Privilege Escalation via Sudo",
-  "severity": "high",
-  "mitre_tactic": "Privilege Escalation",
-  "mitre_technique": "T1548",
-  "mitre_name": "Abuse Elevation Control Mechanism",
-  "keywords": ["sudo", "pam_unix", "session opened for user root"],
-  "enabled": true
-}
-```
-
-This rule fires on any log containing all keywords, creates an alert with MITRE context, and correlates into an incident if the threshold is crossed.
-
----
-
-## Roadmap
-
-- [ ] **SOAR Playbooks** — automated response chains triggered by alert conditions
-- [ ] **Multi-tenancy** — organisation-scoped data isolation
-- [ ] **IOC expansion** — domain, hash, URL indicator types
-- [ ] **Threat Intel feeds** — STIX/TAXII ingestion, OTX integration
-- [ ] **Web Dashboard** — React-based SOC analyst interface
-- [ ] **Agent v2** — push-based websocket transport, replacing HTTP polling
-- [ ] **Network tap mode** — passive traffic analysis for NGFW
-- [ ] **Report generation** — PDF incident reports for compliance
-- [ ] **Kubernetes deployment** — Helm chart for cloud-native deployments
-
----
-
-## Project Structure
-
-```
-xcloak-security-suite/
-|
-├── xcloak-agent/
-|   |
-│   ├── agent/                # Agent
-│   ├── config/               # Config Files
-│   └── models/               # Model Files
-├── xcloak-ngfw/
-|     |
-|     ├── backend
-|     |   |   
-|     │   ├── api/            # API Endpoint Files
-|     │   ├── auth/           # Auth Files
-|     │   ├── database/       # Database Config Files
-|     │   ├── firewall/       # Firewall Files
-|     │   ├── middleware/     # Middleware files
-|     │   ├── models/         # Model Files
-|     │   ├── repositories/   # Repo Files
-|     │   ├── routes/         # Route File
-|     │   ├── rules/          # Sigma Rule Files
-|     │   ├── services/       # Services Files
-|     │   └── main.go         # Entry point  
-|     |
-|     └── frontend            # Frontend Files
-│            
-└── README.md
-```
-
----
-
-## Contributing
-
-Pull requests are welcome. For significant changes, open an issue first to discuss the direction.
-
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/soar-playbooks`)
-3. Commit your changes (`git commit -m 'Add SOAR playbook engine'`)
-4. Push and open a PR
-
----
-
-## Author
-
-**Abhishek** ([@0xIdiot](https://github.com/The-Abhishek1))  
-MCA Cybersecurity Engineering · S-VYASA University, Bangalore  
-TryHackMe Top 1% · PortSwigger Practitioner
-
----
+| Agent | Go (single binary, no dependencies) |
+| Message Bus | Apache Kafka |
+| Metrics | Prometheus + Grafana |
+| AI | Ollama (local) / Anthropic Claude |
+| Auth | JWT + TOTP 2FA |
 
 ## License
 
@@ -390,8 +225,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-<div align="center">
-
-*Built with intent. Designed for defenders.*
-
-</div>
+Built by [0xIdiot](https://github.com/0xIdiot)

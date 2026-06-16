@@ -7,7 +7,7 @@ import { agentsAPI, tasksAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart } from 'lucide-react';
+import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart, Key, Copy, Check, Terminal, ShieldCheck, ArrowRight, RefreshCw } from 'lucide-react';
 
 interface AgentHealth {
   agent_id: number;
@@ -46,7 +46,13 @@ export default function AgentsPage() {
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch]     = useState('');
-  const [modal, setModal]       = useState<Agent | null>(null);
+  const [modal, setModal]         = useState<Agent | null>(null);
+  const [showOnboard, setShowOnboard] = useState(false);
+  const [genToken, setGenToken]       = useState('');
+  const [tokenLabel, setTokenLabel]   = useState('');
+  const [genLoading, setGenLoading]   = useState(false);
+  const [copied, setCopied]           = useState(false);
+  const [onboardStep, setOnboardStep] = useState(1);
   const [tasks, setTasks]       = useState<TaskItem[]>([{ id: '1', task_type: 'collect_processes', payload_value: '' }]);
   const [dispatching, setDispatching] = useState(false);
   const [toast, setToast]       = useState<string | null>(null);
@@ -111,6 +117,12 @@ export default function AgentsPage() {
 
   return (
     <RootLayout title="Agents" subtitle={`${online}/${agents.length} online`}
+      actions={
+        <a href="/agents/onwards"
+          className="g-btn g-btn-primary text-xs flex items-center gap-1.5">
+          <Plus className="h-3.5 w-3.5" /> Add Agent
+        </a>
+      }
       onRefresh={() => load(true)} refreshing={refreshing}>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 240 }}>{toast}</div>}
@@ -256,6 +268,203 @@ export default function AgentsPage() {
               <button onClick={dispatchAll} disabled={dispatching} className="g-btn g-btn-primary flex-1 justify-center">
                 {dispatching ? 'Dispatching…' : `Dispatch ${tasks.length} Task${tasks.length !== 1 ? 's' : ''}`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Agent Onboarding Modal ────────────────────── */}
+      {showOnboard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={e => e.target === e.currentTarget && setShowOnboard(false)}>
+          <div className="w-full max-w-lg rounded-2xl overflow-hidden"
+            style={{ background: 'var(--bg-1)', border: '1px solid var(--border)' }}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4"
+              style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Add New Agent
+                </p>
+              </div>
+              <button onClick={() => setShowOnboard(false)} style={{ color: 'var(--text-2)' }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Step indicators */}
+            <div className="flex items-center gap-0 px-6 pt-4">
+              {[1, 2, 3].map((s, i) => (
+                <div key={s} className="flex items-center flex-1 last:flex-none">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{
+                        background: onboardStep >= s ? 'var(--accent)' : 'var(--glass-bg)',
+                        color: onboardStep >= s ? 'white' : 'var(--text-3)',
+                        border: `1px solid ${onboardStep >= s ? 'var(--accent)' : 'var(--border)'}`,
+                      }}>
+                      {onboardStep > s ? <Check className="h-3.5 w-3.5" /> : s}
+                    </div>
+                    <span className="text-xs hidden sm:block" style={{ color: onboardStep >= s ? 'var(--text-1)' : 'var(--text-3)' }}>
+                      {s === 1 ? 'Generate Token' : s === 2 ? 'Install Agent' : 'Verify'}
+                    </span>
+                  </div>
+                  {i < 2 && <div className="flex-1 h-px mx-2" style={{ background: onboardStep > s ? 'var(--accent)' : 'var(--border)' }} />}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 space-y-4">
+
+              {/* Step 1: Generate token */}
+              {onboardStep === 1 && (
+                <div className="space-y-4">
+                  <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+                    First, generate a one-time install token. The agent uses this to securely register itself — it expires in 24 hours and can only be used once.
+                  </p>
+                  <div className="flex gap-2">
+                    <input value={tokenLabel} onChange={e => setTokenLabel(e.target.value)}
+                      placeholder="Label (e.g. prod-server-01)"
+                      className="g-input flex-1 text-sm" />
+                    <button
+                      disabled={genLoading}
+                      onClick={async () => {
+                        setGenLoading(true);
+                        try {
+                          const r = await api.post('/integrations/install-tokens', { label: tokenLabel || 'agent' });
+                          setGenToken(r.data.token);
+                        } catch { setToast('Failed to generate token'); setTimeout(() => setToast(null), 3000); }
+                        finally { setGenLoading(false); }
+                      }}
+                      className="g-btn g-btn-primary whitespace-nowrap">
+                      {genLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <><Key className="h-4 w-4" /> Generate</>}
+                    </button>
+                  </div>
+
+                  {genToken && (
+                    <div>
+                      <div className="rounded-xl p-4 space-y-2"
+                        style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+                          Install Token — copy now, shown only once
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 text-xs font-mono break-all" style={{ color: 'var(--text-1)' }}>
+                            {genToken}
+                          </code>
+                          <button onClick={() => {
+                            navigator.clipboard.writeText(genToken);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }} style={{ color: 'var(--accent)' }}>
+                            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <button onClick={() => setOnboardStep(2)}
+                        className="g-btn g-btn-primary w-full justify-center mt-3">
+                        I've copied the token <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 2: Install agent */}
+              {onboardStep === 2 && (
+                <div className="space-y-4">
+                  <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+                    Build and run the agent. On first start it will show a prompt asking for the install token — paste the one you just generated.
+                  </p>
+                  <div className="rounded-xl p-3 flex items-start gap-2"
+                    style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                    <Key className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+                    <div>
+                      <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Your token:</p>
+                      <code className="text-[11px] font-mono break-all" style={{ color: 'var(--text-1)' }}>
+                        {genToken || '(generate in step 1)'}
+                      </code>
+                    </div>
+                  </div>
+
+                  {[
+                    {
+                      label: '1. Download and build the agent',
+                      code: `git clone <your-repo>/xcloak-agent\ncd xcloak-agent\ngo build -o xcloak-agent ./main.go`,
+                    },
+                    {
+                      label: '2. Run the agent — it will prompt for the install token',
+                      code: `./xcloak-agent`,
+                    },
+                  ].map(({ label, code }) => (
+                    <div key={label}>
+                      <p className="text-xs mb-1.5 font-medium" style={{ color: 'var(--text-2)' }}>{label}</p>
+                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                        <div className="flex items-center justify-between px-3 py-1.5"
+                          style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                          <Terminal className="h-3 w-3" style={{ color: 'var(--text-3)' }} />
+                          <button onClick={() => { navigator.clipboard.writeText(code); setToast('Copied!'); setTimeout(() => setToast(null), 2000); }}
+                            className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <pre className="px-3 py-2 text-xs font-mono overflow-x-auto"
+                          style={{ color: 'var(--text-1)', background: 'var(--bg-0)' }}>
+                          {code}
+                        </pre>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex gap-3">
+                    <button onClick={() => setOnboardStep(1)} className="g-btn g-btn-ghost flex-1 justify-center">Back</button>
+                    <button onClick={() => setOnboardStep(3)} className="g-btn g-btn-primary flex-1 justify-center">
+                      I've run the agent <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Verify */}
+              {onboardStep === 3 && (
+                <div className="space-y-4">
+                  <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+                    The agent should appear below within 15 seconds of starting. Click Refresh to check.
+                  </p>
+
+                  <div className="rounded-xl p-4 space-y-2"
+                    style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>What to expect:</p>
+                    {[
+                      'Agent starts and sends install token to server',
+                      'Server validates token, marks it used, creates agent record',
+                      'Agent receives its permanent token and begins heartbeating',
+                      'Agent appears here with status Online',
+                    ].map((step, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <Check className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: 'var(--green)' }} />
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button onClick={() => setOnboardStep(2)} className="g-btn g-btn-ghost flex-1 justify-center">Back</button>
+                    <button
+                      onClick={async () => {
+                        await load(true);
+                        setShowOnboard(false);
+                        setToast('Refreshed — check for your new agent below'); setTimeout(() => setToast(null), 3000);
+                      }}
+                      className="g-btn g-btn-primary flex-1 justify-center">
+                      <RefreshCw className="h-4 w-4" /> Refresh & Check
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

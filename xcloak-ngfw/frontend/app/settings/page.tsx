@@ -10,6 +10,7 @@ import {
   Users, UserCog, Shield, Server, ScrollText,
   Trash2, ToggleLeft, ToggleRight, ChevronDown, Search,
   Webhook, CheckCircle, XCircle, Send, Plus, Key, Copy, Eye, EyeOff,
+  Mail, Lock, QrCode, Smartphone,
 } from 'lucide-react';
 
 const TABS = [
@@ -17,6 +18,8 @@ const TABS = [
   { id: 'integrations', label: 'Integrations',    icon: Webhook },
   { id: 'profile',      label: 'My Profile',       icon: UserCog },
   { id: 'server',       label: 'Server Info',      icon: Server },
+  { id: 'email',        label: 'Email Alerts',   icon: Mail   },
+  { id: '2fa',          label: '2FA Security',   icon: Lock   },
   { id: 'audit',        label: 'Audit Log',        icon: ScrollText },
 ] as const;
 type Tab = typeof TABS[number]['id'];
@@ -52,6 +55,12 @@ export default function SettingsPage() {
   const [intForms, setIntForms]         = useState<Record<string, any>>({});
   const [deliveries, setDeliveries]     = useState<any[]>([]);
   const [installTokens, setInstallTokens] = useState<any[]>([]);
+  const [emailRules, setEmailRules]   = useState<any[]>([]);
+  const [newEmail, setNewEmail]       = useState({ name: '', severity: 'critical', recipient: '' });
+  const [totpQR, setTotpQR]           = useState('');
+  const [totpSecret, setTotpSecret]   = useState('');
+  const [totpCode, setTotpCode]       = useState('');
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [genToken, setGenToken]         = useState<string | null>(null);
   const [tokenLabel, setTokenLabel]     = useState('');
   const [showSecrets, setShowSecrets]   = useState<Record<string, boolean>>({});
@@ -91,7 +100,9 @@ export default function SettingsPage() {
         api.get('/integrations'),
         api.get('/integrations/deliveries'),
         api.get('/integrations/install-tokens'),
-      ]).then(([intRes, delRes, tokRes]) => {
+        api.get('/notifications/email').catch(() => ({ data: [] })),
+        api.get('/auth/2fa/status').catch(() => ({ data: { enabled: false } })),
+      ]).then(([intRes, delRes, tokRes, emailRes, tfaRes]) => {
         if (intRes.status === 'fulfilled') {
           const list = intRes.value.data || [];
           setIntegrations(list);
@@ -101,6 +112,8 @@ export default function SettingsPage() {
         }
         if (delRes.status === 'fulfilled') setDeliveries(delRes.value.data || []);
         if (tokRes.status === 'fulfilled') setInstallTokens(tokRes.value.data || []);
+        setEmailRules((emailRes as any).data || []);
+        setTwoFAEnabled((tfaRes as any).data?.enabled || false);
       }).finally(() => setIntLoading(false));
     }
   }, [tab]);
@@ -567,6 +580,227 @@ export default function SettingsPage() {
                 onPage={p => { setAuditP(p); loadAudit(p, auditSearch); }}
               />
             )}
+          </div>
+        )}
+
+        {/* ── Email Alerts Tab ──────────────────────────────── */}
+        {tab === 'email' && (
+          <div className="space-y-4 max-w-2xl">
+            <div className="g-card">
+              <div className="px-5 pt-4 pb-3 flex items-center justify-between"
+                style={{ borderBottom: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Email Alert Rules</p>
+                </div>
+              </div>
+
+              {/* SMTP config reminder */}
+              <div className="mx-5 mt-4 p-3 rounded-xl text-xs"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>SMTP Configuration (backend .env)</p>
+                <pre className="font-mono text-[10px]" style={{ color: 'var(--text-3)' }}>{
+`SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@email.com
+SMTP_PASS=your_app_password
+SMTP_FROM=xcloak@yourdomain.com`
+                }</pre>
+              </div>
+
+              {/* Add rule form */}
+              <div className="p-5 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Rule name</label>
+                    <input value={newEmail.name} onChange={e => setNewEmail(f => ({ ...f, name: e.target.value }))}
+                      placeholder="On-call alerts" className="g-input w-full text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Severity</label>
+                    <select value={newEmail.severity} onChange={e => setNewEmail(f => ({ ...f, severity: e.target.value }))}
+                      className="g-select w-full text-xs">
+                      <option value="critical">Critical only</option>
+                      <option value="high">High &amp; Critical</option>
+                      <option value="any">All severities</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Recipient email</label>
+                    <input value={newEmail.recipient} onChange={e => setNewEmail(f => ({ ...f, recipient: e.target.value }))}
+                      placeholder="oncall@company.com" type="email" className="g-input w-full text-xs" />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!newEmail.recipient) return;
+                    await api.post('/notifications/email', newEmail);
+                    const r = await api.get('/notifications/email');
+                    setEmailRules(r.data || []);
+                    setNewEmail({ name: '', severity: 'critical', recipient: '' });
+                    notify('Email rule created');
+                  }}
+                  className="g-btn g-btn-primary text-xs">
+                  <Plus className="h-3.5 w-3.5" /> Add Rule
+                </button>
+              </div>
+
+              {/* Rules list */}
+              <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                {emailRules.length === 0 ? (
+                  <p className="px-5 py-4 text-xs" style={{ color: 'var(--text-3)' }}>
+                    No email rules yet. Add one above to start receiving alerts by email.
+                  </p>
+                ) : emailRules.map((r: any) => (
+                  <div key={r.id} className="flex items-center gap-3 px-5 py-3">
+                    <Mail className="h-3.5 w-3.5 shrink-0" style={{ color: r.enabled ? 'var(--green)' : 'var(--text-3)' }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{r.name || r.recipient}</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        {r.recipient} · {r.severity} alerts
+                      </p>
+                    </div>
+                    <button onClick={async () => {
+                      await api.patch(`/notifications/email/${r.id}/toggle`, { enabled: !r.enabled });
+                      const res = await api.get('/notifications/email');
+                      setEmailRules(res.data || []);
+                    }} className="text-xs" style={{ color: r.enabled ? 'var(--green)' : 'var(--text-3)' }}>
+                      {r.enabled ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+                    </button>
+                    <button onClick={async () => {
+                      await api.delete(`/notifications/email/${r.id}`);
+                      setEmailRules(emailRules.filter((x: any) => x.id !== r.id));
+                    }} style={{ color: 'var(--text-3)' }}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 2FA Tab ───────────────────────────────────────── */}
+        {tab === '2fa' && (
+          <div className="space-y-4 max-w-md">
+            <div className="g-card p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Lock className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Two-Factor Authentication
+                </p>
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium ${twoFAEnabled ? 's-online' : 's-offline'}`}>
+                  {twoFAEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+
+              {!twoFAEnabled && !totpQR && (
+                <div className="space-y-3">
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    Add an extra layer of security. After enabling, you'll need your authenticator app (Google Authenticator, Authy, etc.) every time you log in.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const r = await api.post('/auth/2fa/setup');
+                        setTotpSecret(r.data.secret);
+                        setTotpQR(r.data.qr_url);
+                      } catch { notify('Failed to setup 2FA'); }
+                    }}
+                    className="g-btn g-btn-primary w-full justify-center">
+                    <Smartphone className="h-4 w-4" /> Set Up 2FA
+                  </button>
+                </div>
+              )}
+
+              {totpQR && !twoFAEnabled && (
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                    1. Scan this QR code with your authenticator app
+                  </p>
+                  {/* Render QR as link — in production use a QR library */}
+                  <div className="rounded-xl p-4 text-center"
+                    style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                    <QrCode className="h-8 w-8 mx-auto mb-2" style={{ color: 'var(--accent)' }} />
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text-3)' }}>
+                      Or enter this secret manually:
+                    </p>
+                    <code className="text-xs font-mono break-all" style={{ color: 'var(--text-1)' }}>
+                      {totpSecret}
+                    </code>
+                    <div className="mt-3">
+                      <a href={totpQR} target="_blank" rel="noreferrer"
+                        className="text-[10px]" style={{ color: 'var(--accent)' }}>
+                        Open in authenticator app →
+                      </a>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-1)' }}>
+                      2. Enter the 6-digit code from your app to verify
+                    </p>
+                    <div className="flex gap-2">
+                      <input value={totpCode} onChange={e => setTotpCode(e.target.value)}
+                        placeholder="000000" maxLength={6}
+                        className="g-input flex-1 mono text-center text-lg tracking-widest" />
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.post('/auth/2fa/verify', { code: totpCode });
+                            setTwoFAEnabled(true);
+                            setTotpQR('');
+                            setTotpCode('');
+                            notify('2FA enabled successfully!');
+                          } catch { notify('Invalid code — try again'); }
+                        }}
+                        disabled={totpCode.length !== 6}
+                        className="g-btn g-btn-primary">
+                        Verify
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {twoFAEnabled && (
+                <div className="space-y-3">
+                  <div className="rounded-xl p-3 flex items-center gap-3"
+                    style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid var(--green)' }}>
+                    <CheckCircle className="h-5 w-5 shrink-0" style={{ color: 'var(--green)' }} />
+                    <div>
+                      <p className="text-xs font-semibold" style={{ color: 'var(--green)' }}>2FA is active</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        Your account requires an authenticator code on every login.
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>
+                      To disable, enter your current authenticator code:
+                    </p>
+                    <div className="flex gap-2">
+                      <input value={totpCode} onChange={e => setTotpCode(e.target.value)}
+                        placeholder="000000" maxLength={6}
+                        className="g-input flex-1 mono text-center text-lg tracking-widest" />
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.delete('/auth/2fa', { data: { code: totpCode } });
+                            setTwoFAEnabled(false);
+                            setTotpCode('');
+                            notify('2FA disabled');
+                          } catch { notify('Invalid code'); }
+                        }}
+                        disabled={totpCode.length !== 6}
+                        className="g-btn g-btn-ghost text-xs" style={{ color: 'var(--red)' }}>
+                        Disable 2FA
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

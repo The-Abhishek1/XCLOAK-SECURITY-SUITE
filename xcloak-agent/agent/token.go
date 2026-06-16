@@ -1,25 +1,52 @@
 package agent
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-const tokenFile = "/tmp/xcloak-agent.token"
-
-// SaveToken persists the bearer token to a temp file so it survives
-// between poll iterations (the agent is a long-running process, so an
-// in-memory variable would also work, but a file lets us inspect it
-// for debugging and survives a goroutine restart).
-func SaveToken(token string) {
-	os.WriteFile(tokenFile, []byte(strings.TrimSpace(token)), 0600)
+// tokenPath returns a persistent path for the agent token.
+// Uses ~/.config/xcloak-agent/token — survives reboots.
+func tokenPath() string {
+	// Prefer XDG config dir
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			// Fallback to /etc if no home dir (running as root service)
+			return "/etc/xcloak-agent/token"
+		}
+		configDir = filepath.Join(home, ".config")
+	}
+	return filepath.Join(configDir, "xcloak-agent", "token")
 }
 
-// LoadToken reads the saved token. Returns empty string if not found.
+func SaveToken(token string) {
+	path := tokenPath()
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		fmt.Printf("[agent] Warning: could not create token dir: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(strings.TrimSpace(token)), 0600); err != nil {
+		fmt.Printf("[agent] Warning: could not save token: %v\n", err)
+		return
+	}
+	fmt.Printf("[agent] Token saved to %s\n", path)
+}
+
 func LoadToken() string {
-	data, err := os.ReadFile(tokenFile)
+	data, err := os.ReadFile(tokenPath())
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+func ClearToken() {
+	path := tokenPath()
+	os.Remove(path)
+	fmt.Printf("[agent] Cleared saved token at %s\n", path)
 }

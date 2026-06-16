@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"xcloak-agent/agent"
@@ -16,12 +17,24 @@ const (
 
 func main() {
 
-	// ── Register with retry ───────────────────────────────────
-	// On first startup (or after a server restart) the backend may not be
-	// immediately reachable. Retry up to registerMaxRetry times so the agent
-	// doesn't need manual intervention after a server bounce.
 	var agentID int
 
+	// ── Check if already registered ───────────────────────────
+	// If a token is saved on disk, we're already registered.
+	// Try to resume using the saved token before attempting re-registration.
+	if existingToken := agent.LoadToken(); existingToken != "" {
+		id, err := agent.ResumeSession()
+		if err == nil {
+			agentID = id
+			fmt.Printf("✓ Resumed as agent #%d (token found on disk)\n", agentID)
+			goto startLoops
+		}
+		fmt.Printf("[WARN] Saved token invalid (%v) — re-registering...\n", err)
+		// Clear bad token so we re-register fresh
+		agent.ClearToken()
+	}
+
+	// ── First-time registration with retry ────────────────────
 	for attempt := 1; attempt <= registerMaxRetry; attempt++ {
 
 		id, err := agent.Register()
@@ -34,15 +47,19 @@ func main() {
 		fmt.Printf("Register attempt %d/%d failed: %v\n", attempt, registerMaxRetry, err)
 
 		if attempt == registerMaxRetry {
-			panic("Failed to register agent: " + err.Error())
+			fmt.Println("\nAll registration attempts failed. Exiting.")
+			fmt.Println("Fix: Generate a new install token at XCloak UI → Agents → Add Agent")
+			os.Exit(1)
 		}
 
+		// If it's a token error don't keep retrying immediately — pause longer
 		time.Sleep(registerRetryWait)
 	}
 
-	fmt.Println("Registered as agent", agentID)
+startLoops:
+	fmt.Printf("✓ Agent #%d running\n", agentID)
 
-	// ── Heartbeat loop ────────────────────────────────────────
+	// ── Heartbeat loop ─────────────────────────────────────────
 	go func() {
 		for {
 			agent.SendHeartbeat(agentID)
@@ -50,14 +67,10 @@ func main() {
 		}
 	}()
 
-	// ── Task poll loop ────────────────────────────────────────
-	// Tasks are executed concurrently (each in its own goroutine) so a slow
-	// task (e.g. YARA scan of /usr) doesn't block the poll for new tasks.
-	// Each task has an internal 5-minute timeout (see executor.go).
+	// ── Task poll loop ─────────────────────────────────────────
 	consecutiveErrors := 0
 
 	for {
-
 		tasks, err := agent.FetchTasks(agentID)
 
 		if err != nil {
