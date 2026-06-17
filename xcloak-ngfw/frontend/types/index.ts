@@ -33,6 +33,8 @@ export interface Alert {
   mitre_tactic?: string;
   mitre_technique?: string;
   mitre_name?: string;
+  ai_summary?: string;
+  ai_action?: string;
   created_at: string;
 }
 
@@ -137,16 +139,23 @@ export interface PlaybookExecution {
 export interface Vulnerability {
   id: number;
   agent_id: number;
+  package_name: string;
+  package_version: string;
+  cve_id: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
+  cvss_score: number;
   name: string;
   description: string;
   remediation: string;
+  detected_at: string;
   discovered_at: string;
 }
 
 export interface TimelineEvent {
+  id?: number;
   event_type: string;
   message: string;
+  severity?: 'critical' | 'high' | 'medium' | 'low' | string;
   created_at: string;
 }
 
@@ -170,6 +179,7 @@ export interface ThreatFeed {
   name: string;
   source: string;
   enabled: boolean;
+  last_sync?: string | null;
   created_at?: string;
 }
 

@@ -51,6 +51,7 @@ export default function ThreatIntelPage() {
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
   const syncFeed = async (feed: ThreatFeed) => {
+    if (feed.id == null) return;
     setSyncingId(feed.id);
     try {
       const res = await threatFeedsAPI.sync(feed.id);
@@ -443,7 +444,7 @@ function ModalActions({ onCancel, onConfirm, saving, disabled, label }: any) {
   );
 }
 
-function MInput({ label, value, onChange, placeholder, mono }: any) {
+function MInput({ label, value, onChange, placeholder, mono }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean }) {
   return (
     <div>
       <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>{label}</label>
@@ -453,7 +454,7 @@ function MInput({ label, value, onChange, placeholder, mono }: any) {
   );
 }
 
-function MSelect({ label, value, onChange, options, capitalize }: any) {
+function MSelect({ label, value, onChange, options, capitalize }: { label: string; value: string; onChange: (v: string) => void; options: string[]; capitalize?: boolean }) {
   return (
     <div>
       <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>{label}</label>

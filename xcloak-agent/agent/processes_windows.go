@@ -41,9 +41,9 @@ func CollectProcesses(agentID int) {
 		fmt.Sscanf(pidStr, "%d", &pid)
 
 		processes = append(processes, models.Process{
-			AgentID:     agentID,
-			PID:         pid,
-			ProcessName: name,
+			AgentID: agentID,
+			PID:     pid,
+			Name:    name,
 		})
 	}
 

@@ -40,9 +40,9 @@ func CollectServices(agentID int) {
 
 			if currentName != "" {
 				services = append(services, models.Service{
-					AgentID:     agentID,
-					ServiceName: currentName,
-					Status:      strings.ToLower(currentState),
+					AgentID:      agentID,
+					ServiceName:  currentName,
+					ServiceState: strings.ToLower(currentState),
 				})
 				currentName  = ""
 				currentState = ""

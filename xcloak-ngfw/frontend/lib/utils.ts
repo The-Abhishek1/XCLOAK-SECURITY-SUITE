@@ -46,3 +46,18 @@ export const getSeverityColor  = sevClass;
 export const getStatusColor    = (s: string) => s === 'online' ? 'sev-low' : 'sev-info';
 export const getStatusClass    = getStatusColor;
 export const severityDot       = sevDot;
+
+// Risk score helpers (risk is a 0–100 number).
+export function getRiskLevel(risk: number): string {
+  if (risk >= 80) return 'Critical';
+  if (risk >= 60) return 'High';
+  if (risk >= 40) return 'Medium';
+  return 'Low';
+}
+
+export function getRiskColor(risk: number): string {
+  if (risk >= 80) return 'text-red-600';
+  if (risk >= 60) return 'text-orange-600';
+  if (risk >= 40) return 'text-yellow-600';
+  return 'text-green-600';
+}

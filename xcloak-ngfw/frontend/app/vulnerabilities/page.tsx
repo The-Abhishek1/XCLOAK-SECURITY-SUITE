@@ -15,6 +15,7 @@ interface CVEData {
   cvss_score: number;
   severity: string;
   description: string;
+  remediation?: string;
   published_at: string | null;
 }
 

@@ -136,7 +136,7 @@ func LoginWith2FA(c *gin.Context) {
 		return
 	}
 
-	token, err := services.LoginUser(req.Username, req.Password)
+	token, _, err := services.LoginUser(req.Username, req.Password)
 	if err != nil {
 		c.JSON(401, gin.H{"error": "invalid credentials"})
 		return
