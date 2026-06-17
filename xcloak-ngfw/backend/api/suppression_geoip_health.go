@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ func CreateSuppressionRule(c *gin.Context) {
 		return
 	}
 	username, _ := c.Get("username")
-	r.CreatedBy = username.(string)
+	r.CreatedBy = fmt.Sprintf("%v", username)
 	if r.WindowMinutes == 0 {
 		r.WindowMinutes = 60
 	}

@@ -112,7 +112,8 @@ func matchesSuppression(alert models.Alert, ruleName string, agentID int, severi
 func GetSuppressionRules() ([]SuppressionRule, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, name, description, rule_name, agent_id, severity, mitre_technique,
-		       window_minutes, expires_at, enabled, match_count, created_by, created_at
+		       window_minutes, expires_at AT TIME ZONE 'UTC', enabled, match_count, created_by,
+		       created_at AT TIME ZONE 'UTC'
 		FROM suppression_rules ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -138,7 +139,7 @@ func CreateSuppressionRule(r SuppressionRule) (*SuppressionRule, error) {
 		(name, description, rule_name, agent_id, severity, mitre_technique,
 		 window_minutes, expires_at, enabled, created_by)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9)
-		RETURNING id, created_at
+		RETURNING id, created_at AT TIME ZONE 'UTC'
 	`, r.Name, r.Description, r.RuleName, r.AgentID, r.Severity,
 		r.MitreTechnique, r.WindowMinutes, r.ExpiresAt, r.CreatedBy).
 		Scan(&r.ID, &r.CreatedAt)
@@ -161,13 +162,13 @@ func ToggleSuppressionRule(id string, enabled bool) error {
 
 // GetSuppressionStats returns alert counts with/without suppression for a quick view.
 func GetSuppressionStats() map[string]int {
+	stats := map[string]int{}
 	var activeRules, totalSuppressed int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE`).Scan(&activeRules)
 	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules`).Scan(&totalSuppressed)
-	return map[string]int{
-		"active_rules":      activeRules,
-		"total_suppressed":  totalSuppressed,
-	}
+	stats["active_rules"] = activeRules
+	stats["total_suppressed"] = totalSuppressed
+	return stats
 }
 
 // Silence unused import

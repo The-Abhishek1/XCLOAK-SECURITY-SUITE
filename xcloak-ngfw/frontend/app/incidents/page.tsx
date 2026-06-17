@@ -34,6 +34,9 @@ export default function IncidentsPage() {
   const [aiLoading, setAiLoading]   = useState(false);
   const [note, setNote]             = useState('');
   const [addingNote, setAddingNote] = useState(false);
+  const [page, setPage]             = useState(1);
+  const [total, setTotal]           = useState(0);
+  const PER_PAGE = 25;
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
@@ -350,14 +353,14 @@ export default function IncidentsPage() {
             Showing {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} of {total}
           </p>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setPage(p => p - 1); load(true, page - 1); }}
+            <button onClick={() => { const p = page - 1; setPage(p); load(true); }}
               disabled={page === 1} className="g-btn g-btn-ghost text-xs px-3">
               ← Prev
             </button>
             <span className="text-xs" style={{ color: 'var(--text-2)' }}>
               Page {page} of {Math.ceil(total / PER_PAGE)}
             </span>
-            <button onClick={() => { setPage(p => p + 1); load(true, page + 1); }}
+            <button onClick={() => { const p = page + 1; setPage(p); load(true); }}
               disabled={page >= Math.ceil(total / PER_PAGE)} className="g-btn g-btn-ghost text-xs px-3">
               Next →
             </button>
