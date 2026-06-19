@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,24 @@ import (
 	"xcloak-ngfw/routes"
 	"xcloak-ngfw/services"
 )
+
+// allowedOrigins is populated from the CORS_ALLOWED_ORIGINS env var
+// (comma-separated). Falls back to the Next.js dev server origin so local
+// dev keeps working without extra setup.
+var allowedOrigins = map[string]bool{}
+
+func loadAllowedOrigins() {
+	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if raw == "" {
+		raw = "http://localhost:3000"
+	}
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowedOrigins[o] = true
+		}
+	}
+}
 
 func main() {
 
@@ -51,16 +71,19 @@ func main() {
 		}
 	}()
 
+	loadAllowedOrigins()
+
 	router := gin.Default()
 
-	// CORS — allow WS from Next.js dev server.
+	// CORS — explicit allowlist only; credentials are never sent to an
+	// origin that isn't on the list (reflecting Origin + credentials:true
+	// defeats CORS as a CSRF defense).
 	router.Use(func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		if origin == "" {
-			origin = "*"
+		if allowedOrigins[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
 		}
-		c.Header("Access-Control-Allow-Origin", origin)
-		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 		if c.Request.Method == "OPTIONS" {
@@ -81,8 +104,8 @@ func main() {
 		api.NotificationsWS,
 	)
 
-	// Prometheus metrics scrape endpoint — no auth, restrict via network.
-	router.GET("/metrics", api.MetricsHandler())
+	// Prometheus metrics scrape endpoint — static bearer token (METRICS_TOKEN).
+	router.GET("/metrics", middleware.RequireMetricsAuth(), api.MetricsHandler())
 
 	log.Println("XCloak API Running")
 	router.Run(":8080")

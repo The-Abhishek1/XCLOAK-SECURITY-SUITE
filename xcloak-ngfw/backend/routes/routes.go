@@ -111,7 +111,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/iocs/import", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ImportIOCs)
 
 	// ── File hashes ───────────────────────────────────────────────
-	router.POST("/api/filehashes", api.SaveFileHashes)
+	router.POST("/api/filehashes", middleware.RequireAgentAuth(), api.SaveFileHashes)
 
 	// ── Threat feeds ──────────────────────────────────────────────
 	router.POST("/api/threat-feeds", middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateThreatFeed)
@@ -119,7 +119,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/threat-feeds/:id/sync", middleware.RequireAuth(), middleware.RequireRole("admin"), api.SyncThreatFeed)
 
 	// ── YARA ──────────────────────────────────────────────────────
-	router.POST("/api/yara/matches", api.ReceiveYaraMatches)
+	router.POST("/api/yara/matches", middleware.RequireAgentAuth(), api.ReceiveYaraMatches)
 	router.GET("/api/yara/matches", middleware.RequireAuth(), api.GetYaraMatches)
 	router.POST("/api/yara/rules", middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateYaraRule)
 	router.GET("/api/yara/rules", middleware.RequireAuth(), api.GetYaraRules)

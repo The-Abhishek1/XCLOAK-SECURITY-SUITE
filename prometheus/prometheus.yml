@@ -9,6 +9,8 @@ scrape_configs:
       - targets: ['192.168.7.4:8080']
     metrics_path: /metrics
     scrape_interval: 15s
+    authorization:
+      credentials_file: /etc/prometheus/metrics_token
 
   - job_name: 'prometheus'
     static_configs:

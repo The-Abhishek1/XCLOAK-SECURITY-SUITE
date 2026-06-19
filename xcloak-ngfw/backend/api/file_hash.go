@@ -9,7 +9,7 @@ import (
 
 // SaveFileHashes receives a batch of file hashes from an agent,
 // stores them, and runs IOC matching synchronously.
-// Route: POST /api/filehashes  (no auth — called by agent)
+// Route: POST /api/filehashes  (requires agent auth)
 func SaveFileHashes(c *gin.Context) {
 
 	var hashes []models.FileHash

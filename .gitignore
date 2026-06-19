@@ -1,4 +1,5 @@
 .env
+prometheus/metrics_token
 # Build artifacts
 **/tmp/main
 **/tmp/build-errors.log
