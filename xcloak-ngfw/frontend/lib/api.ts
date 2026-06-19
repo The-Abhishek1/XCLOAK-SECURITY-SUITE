@@ -139,6 +139,9 @@ export const tasksAPI = {
   create:        (data: { agent_id: number; task_type: string; payload: any }) => api.post('/tasks', data),
   getAgentTasks: (agentId: number)  => api.get(`/tasks/agent/${agentId}`),
   submitResult:  (data: any)        => api.post('/tasks/result', data),
+  getPendingApproval: ()                       => api.get('/tasks/pending-approval').catch(() => ({ data: [] })),
+  approve:            (id: number)             => api.post(`/tasks/${id}/approve`),
+  reject:             (id: number, reason: string) => api.post(`/tasks/${id}/reject`, { reason }),
 };
 
 export const quarantineAPI = {

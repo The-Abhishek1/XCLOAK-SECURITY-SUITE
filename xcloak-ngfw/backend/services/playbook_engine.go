@@ -102,16 +102,28 @@ func matchesTrigger(triggerType string, alert models.Alert) bool {
 // dispatchAction creates an agent task for the action type, merging the
 // action's stored payload with the alert context (so actions like
 // quarantine_file can pick up the matched file path automatically).
+//
+// Destructive action types (see isDestructiveTask) are held as
+// pending_approval instead of being dispatched immediately — ExecutePlaybooks
+// runs with zero human review, so a misconfigured or overly broad trigger
+// could otherwise isolate/kill/quarantine across the whole fleet before
+// anyone notices. Manual dispatch (DispatchAlertResponse, DispatchScript)
+// already has a human clicking the button and isn't affected by this gate.
 func dispatchAction(action models.PlaybookAction, alert models.Alert) error {
 
 	// Merge alert context into action payload so the agent has full info.
 	payload := mergePayload(action.Payload, alert)
 
-	return CreateTask(models.AgentTask{
+	task := models.AgentTask{
 		AgentID:  alert.AgentID,
 		TaskType: action.ActionType,
 		Payload:  payload,
-	})
+	}
+
+	if isDestructiveTask(action.ActionType) {
+		return repositories.CreateTaskPendingApproval(task)
+	}
+	return CreateTask(task)
 }
 
 // mergePayload takes an action's stored JSON payload and enriches it with

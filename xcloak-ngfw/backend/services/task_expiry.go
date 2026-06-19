@@ -25,13 +25,42 @@ var destructiveTasks = []string{
 	"execute_script",
 }
 
+// isDestructiveTask reports whether a task type is in destructiveTasks —
+// used by the playbook engine to decide which autonomous SOAR actions need
+// human approval before dispatch.
+func isDestructiveTask(taskType string) bool {
+	for _, t := range destructiveTasks {
+		if t == taskType {
+			return true
+		}
+	}
+	return false
+}
+
 // ExpireStaleTasks marks old pending tasks as 'expired' so agents don't
 // execute them when they come back online after a long outage.
 // Call from the scheduler every 5 minutes.
 func ExpireStaleTasks() {
+	// Expire unapproved destructive actions after the same destructive TTL —
+	// an unreviewed isolate_host/kill_process request from a since-resolved
+	// or false-positive alert shouldn't sit in the approval queue forever.
+	res, err := database.DB.Exec(fmt.Sprintf(`
+		UPDATE agent_tasks
+		SET status = 'expired',
+		    result = 'Task expired: not approved within %d minutes'
+		WHERE status = 'pending_approval'
+		  AND created_at < NOW() - INTERVAL '%d minutes'
+	`, int(destructiveTaskTTL.Minutes()), int(destructiveTaskTTL.Minutes())))
+
+	if err == nil {
+		if n, _ := res.RowsAffected(); n > 0 {
+			fmt.Printf("[TaskExpiry] Expired %d unapproved destructive task(s)\n", n)
+		}
+	}
+
 	// Expire destructive tasks after 15 minutes.
 	destructiveList := "'" + joinStrings(destructiveTasks, "','") + "'"
-	res, err := database.DB.Exec(fmt.Sprintf(`
+	res, err = database.DB.Exec(fmt.Sprintf(`
 		UPDATE agent_tasks
 		SET status = 'expired',
 		    result = 'Task expired: agent was offline too long for this destructive action'

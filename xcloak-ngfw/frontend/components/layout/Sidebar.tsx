@@ -33,6 +33,7 @@ const NAV = [
   ]},
   { group: 'RESPONSE', items: [
     { href: '/playbooks',       label: 'Playbooks',       icon: Play },
+    { href: '/soar-approvals',  label: 'Approval Queue',  icon: ShieldCheck },
     { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
     { href: '/quarantine',      label: 'Quarantine',      icon: Archive },
     { href: '/firewall',        label: 'Firewall',        icon: Network },

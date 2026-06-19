@@ -76,6 +76,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/tasks", middleware.RequireAuth(), api.CreateTask)
 	router.GET("/api/tasks/agent/:id", middleware.RequireAgentAuth(), api.GetAgentTasks)
 	router.POST("/api/tasks/result", middleware.RequireAgentAuth(), api.SubmitTaskResult)
+	router.GET("/api/tasks/pending-approval", middleware.RequireAuth(), api.GetPendingApprovalTasks)
+	router.POST("/api/tasks/:id/approve", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ApproveTask)
+	router.POST("/api/tasks/:id/reject", middleware.RequireAuth(), middleware.RequireRole("admin"), api.RejectTask)
 
 	// ── Alerts ───────────────────────────────────────────────────
 	router.GET("/api/alerts", middleware.RequireAuth(), api.GetAlerts)
