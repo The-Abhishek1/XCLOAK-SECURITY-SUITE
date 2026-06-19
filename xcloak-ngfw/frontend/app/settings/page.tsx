@@ -33,7 +33,7 @@ interface UserRow {
 }
 interface AuditPage {
   data: any[]; total: number; page: number;
-  per_page: number; total_pages: number;
+  per_page: number; pages: number;
 }
 
 export default function SettingsPage() {
@@ -805,9 +805,9 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
               </div>
               {auditLoading ? (
                 <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
-              ) : !auditPage || !auditPage.data || auditPage.data.length === 0 ? (
+              ) : !auditPage || !auditPage.logs || auditPage.logs.length === 0 ? (
                 <div className="py-12 text-center text-sm" style={{ color: 'var(--text-3)' }}>No audit logs yet.</div>
-              ) : auditPage.data.map((log: any) => (
+              ) : auditPage.logs.map((log: any) => (
                 <div key={log.id} className="g-tr grid gap-3 items-center px-4"
                   style={{ gridTemplateColumns: '60px 150px 100px 1fr 120px' }}>
                   <span className="mono text-[11px]" style={{ color: 'var(--text-3)' }}>#{log.id}</span>
@@ -819,10 +819,10 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
               ))}
             </div>
 
-            {auditPage && auditPage.total_pages > 1 && (
+            {auditPage && auditPage.pages > 1 && (
               <Pagination
                 page={auditPage.page}
-                totalPages={auditPage.total_pages}
+                totalPages={auditPage.pages}
                 total={auditPage.total}
                 perPage={auditPage.per_page}
                 onPage={p => { setAuditP(p); loadAudit(p, auditSearch); }}

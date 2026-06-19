@@ -9,10 +9,11 @@ import (
 
 // GenerateTempToken issues a 5-minute token used during 2FA login flow.
 // It can't be used for API access (type="temp").
-func GenerateTempToken(userID int, username string) (string, error) {
+func GenerateTempToken(userID int, username, role string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id":  userID,
 		"username": username,
+		"role":     role,
 		"type":     "temp",
 		"exp":      time.Now().Add(5 * time.Minute).Unix(),
 	}

@@ -17,6 +17,7 @@ import {
 const TABS = [
   { id: 'alerts',         label: 'Alerts',         icon: Bell },
   { id: 'processes',      label: 'Processes',       icon: Activity },
+  { id: 'auditd',          label: 'Cmd History',      icon: Activity },
   { id: 'connections',    label: 'Connections',     icon: Network },
   { id: 'services',       label: 'Services',        icon: Database },
   { id: 'packages',       label: 'Packages',        icon: Package },
@@ -48,6 +49,7 @@ export default function AgentDetailPage() {
 
   // Tab data — loaded lazily on tab click
   const [processes, setProcesses]     = useState<any[] | null>(null);
+  const [auditEvents, setAuditEvents]  = useState<any[] | null>(null);
   const [connections, setConnections] = useState<any[] | null>(null);
   const [services, setServices]       = useState<any[] | null>(null);
   const [users, setUsers]             = useState<any[] | null>(null);
@@ -101,6 +103,9 @@ export default function AgentDetailPage() {
       switch (tab) {
         case 'processes':
           if (processes === null) { const r = await agentsAPI.getProcesses(agentId); setProcesses(r.data || []); }
+          break;
+        case 'auditd':
+          if (auditEvents === null) { const r = await fetch(`/api/agents/${agentId}/audit-events?limit=500`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }); setAuditEvents(await r.json() || []); }
           break;
         case 'connections':
           if (connections === null) { const r = await agentsAPI.getConnections(agentId); setConnections(r.data || []); }
@@ -175,6 +180,7 @@ export default function AgentDetailPage() {
         setTimeout(async () => {
           switch (refreshTab) {
             case 'processes':   setProcesses(null);   if (activeTab === 'processes')   loadTabData('processes'); break;
+            case 'auditd':      setAuditEvents(null);  if (activeTab === 'auditd')      loadTabData('auditd'); break;
             case 'connections': setConnections(null); if (activeTab === 'connections') loadTabData('connections'); break;
             case 'services':    setServices(null);    if (activeTab === 'services')    loadTabData('services'); break;
             case 'users':       setUsers(null);       if (activeTab === 'users')       loadTabData('users'); break;
@@ -353,13 +359,62 @@ export default function AgentDetailPage() {
               <DataTable
                 data={processes} loading={tabLoading} search={search} setSearch={setSearch}
                 onCollect={() => dispatch('collect_processes', 'processes')} dispatching={dispatching}
-                collectLabel="Collect Processes" searchKeys={['process_name', 'pid']}
+                collectLabel="Collect Processes" searchKeys={['process_name', 'cmdline', 'username', 'exe_path']}
                 columns={[
-                  { key: 'pid', label: 'PID', width: '80px', mono: true },
-                  { key: 'process_name', label: 'Name' },
-                  { key: 'collected_at', label: 'Collected', width: '120px', fmt: formatDate },
+                  { key: 'pid',          label: 'PID',      width: '60px',  mono: true },
+                  { key: 'ppid',         label: 'PPID',     width: '60px',  mono: true },
+                  { key: 'username',     label: 'User',     width: '90px'  },
+                  { key: 'process_name', label: 'Name',     width: '140px' },
+                  { key: 'cmdline',      label: 'Cmdline',  mono: true     },
+                  { key: 'cpu_percent',  label: 'CPU%',     width: '60px', mono: true },
+                  { key: 'mem_percent',  label: 'MEM%',     width: '60px', mono: true },
+                  { key: 'exe_path',     label: 'Path',     width: '200px', mono: true },
                 ]}
               />
+            )}
+
+            {/* Auditd / command history tab */}
+            {activeTab === 'auditd' && (
+              <div className="space-y-2">
+                {(auditEvents ?? []).length === 0 && !tabLoading && (
+                  <div className="text-center py-12 text-sm" style={{ color: 'var(--text-3)' }}>
+                    No command history yet. Requires auditd installed on the endpoint.<br/>
+                    <code className="text-xs mt-2 block" style={{ color: 'var(--text-2)' }}>
+                      sudo apt install auditd &amp;&amp; sudo systemctl enable --now auditd
+                    </code>
+                  </div>
+                )}
+                {(auditEvents ?? []).map((ev: any, i: number) => (
+                  <div key={i} className="rounded-lg px-4 py-2.5 font-mono text-xs"
+                    style={{
+                      background: ev.threat_tag ? '#f8514910' : 'var(--bg-1)',
+                      border: `1px solid ${ev.threat_tag ? '#f8514940' : 'var(--border)'}`,
+                    }}>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span style={{ color: 'var(--text-3)', minWidth: 140 }}>
+                        {new Date(ev.created_at).toLocaleTimeString()}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px]"
+                        style={{ background: 'var(--bg-2)', color: 'var(--text-2)' }}>
+                        uid={ev.uid}{ev.euid !== ev.uid ? `→${ev.euid}` : ''}
+                      </span>
+                      {ev.username && (
+                        <span style={{ color: 'var(--accent)' }}>{ev.username}</span>
+                      )}
+                      <span style={{ color: 'var(--text-3)' }}>pid={ev.pid}</span>
+                      {ev.threat_tag && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold"
+                          style={{ background: '#f8514920', color: '#f85149' }}>
+                          ⚠ {ev.threat_tag}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 truncate" style={{ color: ev.threat_tag ? '#f87171' : 'var(--text-1)', maxWidth: '100%' }}>
+                      {ev.cmdline || ev.exe || ev.comm}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* Connections table */}

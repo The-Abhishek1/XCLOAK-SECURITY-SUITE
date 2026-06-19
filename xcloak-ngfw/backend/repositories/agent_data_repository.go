@@ -5,15 +5,24 @@ import (
 	"xcloak-ngfw/models"
 )
 
-// GetProcessesByAgent returns the most recent 200 processes for an agent.
+// GetProcessesByAgent returns the most recent 200 processes for an agent,
+// including cmdline, exe_path, username, cpu and mem percentages.
 func GetProcessesByAgent(agentID string) ([]models.Process, error) {
 
 	rows, err := database.DB.Query(`
-		SELECT id, agent_id, pid, process_name, collected_at
+		SELECT id, agent_id, pid,
+		       COALESCE(ppid, 0),
+		       process_name,
+		       COALESCE(cmdline, ''),
+		       COALESCE(username, ''),
+		       COALESCE(cpu_percent, ''),
+		       COALESCE(mem_percent, ''),
+		       COALESCE(exe_path, ''),
+		       collected_at
 		FROM endpoint_processes
 		WHERE agent_id = $1
 		ORDER BY id DESC
-		LIMIT 200
+		LIMIT 500
 	`, agentID)
 
 	if err != nil {
@@ -24,7 +33,11 @@ func GetProcessesByAgent(agentID string) ([]models.Process, error) {
 	var out []models.Process
 	for rows.Next() {
 		var p models.Process
-		if err := rows.Scan(&p.ID, &p.AgentID, &p.PID, &p.ProcessName, &p.CollectedAt); err == nil {
+		if err := rows.Scan(
+			&p.ID, &p.AgentID, &p.PID, &p.PPID, &p.ProcessName,
+			&p.Cmdline, &p.Username, &p.CPUPercent, &p.MemPercent,
+			&p.ExePath, &p.CollectedAt,
+		); err == nil {
 			out = append(out, p)
 		}
 	}

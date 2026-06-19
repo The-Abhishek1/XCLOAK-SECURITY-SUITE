@@ -37,7 +37,7 @@ func Login(c *gin.Context) {
 			`SELECT id, role FROM users WHERE username=$1`, req.Username,
 		).Scan(&userID, &role)
 
-		tempToken, _ := auth.GenerateTempToken(userID, req.Username)
+		tempToken, _ := auth.GenerateTempToken(userID, req.Username, role)
 		c.JSON(200, gin.H{
 			"needs_2fa":  true,
 			"temp_token": tempToken,

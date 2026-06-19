@@ -145,9 +145,10 @@ func LoginWith2FA(c *gin.Context) {
 	// Check if user has 2FA enabled
 	var userID int
 	var totpEnabled bool
+	var role string
 	database.DB.QueryRow(
-		`SELECT id, COALESCE(totp_enabled,FALSE) FROM users WHERE username=$1`, req.Username,
-	).Scan(&userID, &totpEnabled)
+		`SELECT id, COALESCE(totp_enabled,FALSE), role FROM users WHERE username=$1`, req.Username,
+	).Scan(&userID, &totpEnabled, &role)
 
 	if !totpEnabled {
 		// Normal login — return token immediately
@@ -157,7 +158,7 @@ func LoginWith2FA(c *gin.Context) {
 
 	// 2FA required — return a short-lived temp token
 	// Client must call /api/auth/login/2fa to exchange for real token
-	tempToken, _ := auth.GenerateTempToken(userID, req.Username)
+	tempToken, _ := auth.GenerateTempToken(userID, req.Username, role)
 	c.JSON(200, gin.H{
 		"needs_2fa":  true,
 		"temp_token": tempToken,
@@ -178,25 +179,26 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	// Validate temp token
-	userID, username, role, err := auth.ValidateTempToken(body.TempToken)
+	userID, username, _, err := auth.ValidateTempToken(body.TempToken)
 	if err != nil {
 		c.JSON(401, gin.H{"error": "invalid or expired temp token"})
 		return
 	}
 
-	// Get TOTP secret
+	// Get TOTP secret and the authoritative role from the DB.
 	var secret string
+	var dbRole string
 	database.DB.QueryRow(
-		`SELECT COALESCE(totp_secret,'') FROM users WHERE id=$1`, userID,
-	).Scan(&secret)
+		`SELECT COALESCE(totp_secret,''), role FROM users WHERE id=$1`, userID,
+	).Scan(&secret, &dbRole)
 
 	if !services.ValidateTOTP(secret, body.Code) {
 		c.JSON(401, gin.H{"error": "invalid authenticator code"})
 		return
 	}
 
-	// Issue real JWT
-	token, err := auth.GenerateJWT(userID, username, role)
+	// Issue real JWT with the role read from the database.
+	token, err := auth.GenerateJWT(userID, username, dbRole)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to generate token"})
 		return

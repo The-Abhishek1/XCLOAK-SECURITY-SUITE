@@ -36,7 +36,8 @@ func GetUserByUsername(
 	username,
 	email,
 	password_hash,
-	role
+	role,
+	is_active
 	FROM users
 	WHERE username = $1
 	`
@@ -50,6 +51,7 @@ func GetUserByUsername(
 		&user.Email,
 		&user.PasswordHash,
 		&user.Role,
+		&user.IsActive,
 	)
 
 	if err != nil {

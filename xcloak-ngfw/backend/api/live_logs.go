@@ -21,10 +21,11 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 type wsLogEntry struct {
-	ID      int    `json:"id"`
-	Source  string `json:"source"`
-	Message string `json:"message"`
-	TS      string `json:"ts"`
+	ID           int    `json:"id"`
+	Source       string `json:"source"`
+	Message      string `json:"message"`
+	TS           string `json:"ts"`
+	ParsedFields string `json:"parsed_fields,omitempty"`
 }
 
 // LiveLogsWS — GET /api/agents/:id/logs/stream
@@ -65,7 +66,7 @@ func LiveLogsWS(c *gin.Context) {
 	// Send last 50 historical logs immediately.
 	var lastID int
 	histRows, err := database.DB.Query(`
-		SELECT id, log_source, log_message
+		SELECT id, log_source, log_message, COALESCE(parsed_fields::text, '{}')
 		FROM endpoint_logs
 		WHERE agent_id = $1
 		ORDER BY id DESC
@@ -76,7 +77,7 @@ func LiveLogsWS(c *gin.Context) {
 		var hist []wsLogEntry
 		for histRows.Next() {
 			var e wsLogEntry
-			if scanErr := histRows.Scan(&e.ID, &e.Source, &e.Message); scanErr == nil {
+			if scanErr := histRows.Scan(&e.ID, &e.Source, &e.Message, &e.ParsedFields); scanErr == nil {
 				e.TS = time.Now().Format(time.RFC3339)
 				hist = append(hist, e)
 			}
@@ -123,7 +124,7 @@ func LiveLogsWS(c *gin.Context) {
 
 		case <-logTicker.C:
 			rows, err := database.DB.Query(`
-				SELECT id, log_source, log_message
+				SELECT id, log_source, log_message, COALESCE(parsed_fields::text, '{}')
 				FROM endpoint_logs
 				WHERE agent_id = $1 AND id > $2
 				ORDER BY id ASC
@@ -136,7 +137,7 @@ func LiveLogsWS(c *gin.Context) {
 
 			for rows.Next() {
 				var e wsLogEntry
-				if scanErr := rows.Scan(&e.ID, &e.Source, &e.Message); scanErr == nil {
+				if scanErr := rows.Scan(&e.ID, &e.Source, &e.Message, &e.ParsedFields); scanErr == nil {
 					e.TS = time.Now().Format(time.RFC3339)
 					if err := conn.WriteJSON(e); err != nil {
 						rows.Close()

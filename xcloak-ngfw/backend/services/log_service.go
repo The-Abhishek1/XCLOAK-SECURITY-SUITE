@@ -5,23 +5,24 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-func SaveLogs(
-	logs []models.Log,
-) error {
+// SaveLogs normalizes each log line, stores the parsed fields, then runs
+// detection. The normalization step runs synchronously on the ingest path
+// so parsed_fields is populated immediately — no async pipeline needed.
+func SaveLogs(logs []models.Log) error {
 
-	err := repositories.SaveLogs(
-		logs,
-	)
+	// Normalize each log in-place before saving.
+	for i := range logs {
+		pf := NormalizeLog(logs[i].LogSource, logs[i].LogMessage)
+		logs[i].ParsedFields = MarshalParsedFields(pf)
+	}
 
-	if err != nil {
+	if err := repositories.SaveLogs(logs); err != nil {
 		return err
 	}
 
+	// Run detection on every log line.
 	for _, log := range logs {
-
-		EvaluateRules(
-			log,
-		)
+		DetectThreats(log)
 	}
 
 	return nil

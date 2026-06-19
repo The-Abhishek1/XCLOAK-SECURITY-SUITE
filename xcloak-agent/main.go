@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 
@@ -16,6 +17,9 @@ const (
 )
 
 func main() {
+
+	// Seed the global RNG used for collection jitter.
+	rand.Seed(time.Now().UnixNano()) //nolint:staticcheck
 
 	var agentID int
 
@@ -52,7 +56,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		// If it's a token error don't keep retrying immediately — pause longer
 		time.Sleep(registerRetryWait)
 	}
 
@@ -67,7 +70,17 @@ startLoops:
 		}
 	}()
 
+	// ── Autonomous collection loops ────────────────────────────
+	// Starts 7 independent goroutines that collect and ship telemetry on
+	// fixed intervals without requiring server-dispatched tasks.
+	// Each collector runs on its own schedule with random jitter on startup
+	// so they don't all hit the server simultaneously.
+	agent.StartCollectors(agentID)
+
 	// ── Task poll loop ─────────────────────────────────────────
+	// Server-dispatched tasks (isolate host, kill process, FIM scan, etc.)
+	// still run from this loop. Autonomous collection above covers the
+	// recurring telemetry that was previously task-dispatched.
 	consecutiveErrors := 0
 
 	for {

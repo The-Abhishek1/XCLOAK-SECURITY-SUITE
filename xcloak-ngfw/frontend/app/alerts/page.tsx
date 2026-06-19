@@ -13,11 +13,11 @@ const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
 const PER_PAGE = 50;
 
 interface PagedResult {
-  data: Alert[];
+  alerts: Alert[];
   total: number;
   page: number;
   per_page: number;
-  total_pages: number;
+  pages: number;
 }
 
 interface AITriage {
@@ -80,7 +80,7 @@ export default function AlertsPage() {
       // Reload to get updated ai_summary
       const res = await alertsAPI.getPaginated(page, PER_PAGE, severity);
       setResult(res.data);
-      const updated = res.data?.data?.find((a: Alert) => a.id === id);
+      const updated = res.data?.alerts?.find((a: Alert) => a.id === id);
       if (updated) setSelected(updated);
     } catch {
       notify('AI triage failed — check LLM config');
@@ -89,7 +89,7 @@ export default function AlertsPage() {
     }
   };
 
-  const alerts   = result?.data || [];
+  const alerts   = result?.alerts || [];
   const filtered = search
     ? alerts.filter(a =>
         a.rule_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -179,7 +179,7 @@ export default function AlertsPage() {
 
         {result && !search && (
           <Pagination
-            page={result.page} totalPages={result.total_pages}
+            page={result.page} totalPages={result.pages}
             total={result.total} perPage={result.per_page}
             onPage={changePage}
           />

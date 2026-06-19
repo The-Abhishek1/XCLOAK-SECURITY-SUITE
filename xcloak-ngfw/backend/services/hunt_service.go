@@ -18,7 +18,12 @@ var huntTargets = map[string]struct {
 }{
 	"process": {
 		table:     "endpoint_processes",
-		cols:      []string{"process_name"},
+		cols:      []string{"process_name", "cmdline", "username", "exe_path"},
+		joinAgent: "agent_id",
+	},
+	"command": {
+		table:     "audit_events",
+		cols:      []string{"cmdline", "exe", "comm", "username", "threat_tag"},
 		joinAgent: "agent_id",
 	},
 	"connection": {
