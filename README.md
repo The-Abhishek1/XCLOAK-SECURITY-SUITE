@@ -55,6 +55,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 - Go 1.21+
 - Node.js 18+
 - PostgreSQL 16
+- Redis (rate limiting + token revocation state)
 - Docker (for Kafka/Prometheus/Grafana)
 
 ### 1. Backend
@@ -64,13 +65,14 @@ cd xcloak-ngfw/backend
 
 # Copy and configure environment
 cp .env.example .env
-# Edit .env — set DB credentials, JWT_SECRET, SMTP settings
+# Edit .env — set DB credentials, JWT_SECRET, METRICS_TOKEN, SMTP settings
 
-# Generate a secure JWT secret
+# Generate a secure JWT secret and metrics token
 openssl rand -hex 32  # paste as JWT_SECRET in .env
+openssl rand -hex 32  # paste as METRICS_TOKEN in .env — also set in prometheus/metrics_token
 
-# Run migrations
-psql -U xcloak -d ngfw < database/schema.sql
+# Migrations run automatically on startup (database/migrate.go applies
+# database/migrations/*.sql via golang-migrate — no manual step needed)
 
 # Start with hot reload
 air
@@ -157,6 +159,22 @@ XCLOAK_INSTALL_TOKEN=<generate from UI>
 - TOTP 2FA support (RFC 4226 — works with Google Authenticator, Authy)
 - Stale task expiry (destructive tasks expire after 15min, others after 1h)
 - Role-based access control (admin / analyst)
+
+## Backups
+
+```bash
+# Manual backup (reads DB_* from xcloak-ngfw/backend/.env)
+./scripts/backup_db.sh
+
+# Restore (DESTRUCTIVE — drops and recreates every table first)
+./scripts/restore_db.sh backups/ngfw_20260619_213343.sql.gz
+```
+
+For automated daily backups, add to crontab (`crontab -e`):
+```
+0 2 * * * /path/to/xcloak/scripts/backup_db.sh >> /var/log/xcloak-backup.log 2>&1
+```
+Backups land in `backups/` (gitignored — contains live data) and are pruned after `RETENTION_DAYS` (default 14).
 
 ## API
 

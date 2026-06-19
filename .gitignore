@@ -1,5 +1,6 @@
 .env
 prometheus/metrics_token
+backups/
 # Build artifacts
 **/tmp/main
 **/tmp/build-errors.log

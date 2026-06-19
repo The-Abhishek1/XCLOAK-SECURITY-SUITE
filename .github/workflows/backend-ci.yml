@@ -1,0 +1,72 @@
+name: backend-ci
+
+on:
+  push:
+    paths:
+      - 'xcloak-ngfw/backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'xcloak-ngfw/backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+defaults:
+  run:
+    working-directory: xcloak-ngfw/backend
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: xcloak
+          POSTGRES_PASSWORD: xcloak_ci_password
+          POSTGRES_DB: ngfw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: xcloak
+      DB_PASSWORD: xcloak_ci_password
+      DB_NAME: ngfw
+      REDIS_ADDR: localhost:6379
+      JWT_SECRET: ci-test-secret-do-not-use-in-prod-32chars-min
+      METRICS_TOKEN: ci-test-metrics-token
+      RUN_INTEGRATION_TESTS: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: xcloak-ngfw/backend/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./... -v

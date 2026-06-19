@@ -76,8 +76,14 @@ func DispatchScript(c *gin.Context) {
 		`, agentID).Scan(&taskID)
 
 		tasks = append(tasks, taskRow{AgentID: agentID, Hostname: hostname, TaskID: taskID})
+
+		// Full script text + shell logged prominently (not just the label) —
+		// arbitrary script execution is the highest-risk SOAR action, so the
+		// audit trail must show exactly what ran, not just who ran something.
 		services.LogEvent("SCRIPT_DISPATCH",
-			fmt.Sprintf("agent #%d label=%q by %s", agentID, req.Label, user), user)
+			fmt.Sprintf("agent #%d (%s) label=%q shell=%s by %s\nscript:\n%s",
+				agentID, hostname, req.Label, req.Shell, user, req.Script),
+			user)
 	}
 
 	c.JSON(200, gin.H{"tasks": tasks})

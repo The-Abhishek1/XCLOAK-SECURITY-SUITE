@@ -1,73 +1,54 @@
 package middleware
 
 import (
+	"context"
+	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+
+	"xcloak-ngfw/services"
 )
 
-// RateLimiter implements a per-IP sliding-window rate limiter backed by an
-// in-process map. No external dependency required (Redis can replace this
-// in Phase 5 for multi-instance deployments).
+// Sliding-window rate limiter backed by Redis (sorted set per key), so
+// limits survive a backend restart and stay consistent across replicas.
 //
 // Default: 100 requests per 60 seconds per IP.
 // Auth endpoints get a tighter limit (10 req/min) to slow brute force.
 
-type windowEntry struct {
-	timestamps []time.Time
-	mu         sync.Mutex
-}
-
-type rateLimiterStore struct {
-	mu      sync.RWMutex
-	entries map[string]*windowEntry
-}
-
-var globalStore = &rateLimiterStore{
-	entries: make(map[string]*windowEntry),
-}
-
-func (s *rateLimiterStore) get(key string) *windowEntry {
-	s.mu.RLock()
-	e, ok := s.entries[key]
-	s.mu.RUnlock()
-	if ok {
-		return e
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	e = &windowEntry{}
-	s.entries[key] = e
-	return e
-}
+var ctx = context.Background()
 
 // isAllowed returns true if the key has fewer than limit requests in the
-// last window duration.
+// last window duration. Uses a Redis sorted set: each request is scored by
+// its timestamp, old entries are trimmed, then the set size is checked —
+// all within one pipeline so concurrent requests don't race past the limit.
 func isAllowed(key string, limit int, window time.Duration) bool {
 
-	e := globalStore.get(key)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
+	redisKey := "ratelimit:" + key
 	now := time.Now()
-	cutoff := now.Add(-window)
+	cutoff := now.Add(-window).UnixNano()
+	member := fmt.Sprintf("%d", now.UnixNano())
 
-	// Drop timestamps outside the window.
-	valid := e.timestamps[:0]
-	for _, t := range e.timestamps {
-		if t.After(cutoff) {
-			valid = append(valid, t)
-		}
+	pipe := services.RDB.Pipeline()
+	pipe.ZRemRangeByScore(ctx, redisKey, "0", fmt.Sprintf("%d", cutoff))
+	card := pipe.ZCard(ctx, redisKey)
+	_, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		// Redis unavailable — fail open rather than block all traffic.
+		return true
 	}
-	e.timestamps = valid
 
-	if len(e.timestamps) >= limit {
+	if card.Val() >= int64(limit) {
 		return false
 	}
 
-	e.timestamps = append(e.timestamps, now)
+	pipe2 := services.RDB.Pipeline()
+	pipe2.ZAdd(ctx, redisKey, redis.Z{Score: float64(now.UnixNano()), Member: member})
+	pipe2.Expire(ctx, redisKey, window)
+	pipe2.Exec(ctx)
+
 	return true
 }
 

@@ -41,6 +41,12 @@ func main() {
 		panic(err)
 	}
 
+	if err := database.Migrate(); err != nil {
+		panic(err)
+	}
+
+	services.InitRedis()
+
 	// ── Kafka event bus ──────────────────────────────────────
 	services.InitKafka()
 	defer services.CloseKafka()
