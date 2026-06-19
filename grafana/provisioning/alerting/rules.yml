@@ -1,0 +1,109 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: xcloak-pipeline-health
+    folder: XCloak Alerts
+    interval: 1m
+    rules:
+      - uid: xcloak-agent-offline-storm
+        title: Agent offline storm
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: xcloak-prometheus
+            model:
+              editorMode: code
+              expr: (xcloak_agents_online / xcloak_agents_total) < bool 0.5
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: More than half of registered agents are offline.
+          description: 'xcloak_agents_online / xcloak_agents_total has been below 0.5 for 5+ minutes — check agent connectivity or a backend outage that stopped processing heartbeats.'
+
+      - uid: xcloak-task-dispatch-backlog
+        title: Agent task dispatch backlog
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: xcloak-prometheus
+            model:
+              editorMode: code
+              expr: xcloak_agent_tasks_pending > bool 50
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Agent tasks are piling up undispatched.
+          description: 'xcloak_agent_tasks_pending has been above 50 for 10+ minutes — agents may be offline, slow to poll, or the response pipeline (SOAR/IOC blocking) is stuck.'
+
+      - uid: xcloak-kafka-ioc-consumer-lag
+        title: Kafka IOC match consumer falling behind
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: xcloak-prometheus
+            model:
+              editorMode: code
+              expr: xcloak_kafka_ioc_consumer_lag > bool 1000
+              instant: true
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: IOC/connection match jobs are backing up in Kafka.
+          description: 'xcloak_kafka_ioc_consumer_lag has been above 1000 messages for 5+ minutes — the xcloak-ioc-matcher consumer is falling behind ingest volume, delaying IOC-match alerts.'

@@ -6,7 +6,7 @@ scrape_configs:
   # host.docker.internal resolves via extra_hosts: host-gateway in docker-compose
   - job_name: 'xcloak-backend'
     static_configs:
-      - targets: ['192.168.7.4:8080']
+      - targets: ['host.docker.internal:8080']
     metrics_path: /metrics
     scrape_interval: 15s
     authorization:

@@ -13,12 +13,13 @@ import (
 
 // ── Topic names ───────────────────────────────────────────────
 const (
-	TopicAlerts    = "xcloak.alerts"
-	TopicIncidents = "xcloak.incidents"
-	TopicTasks     = "xcloak.agent_tasks"
-	TopicAudit     = "xcloak.audit"
-	TopicFIM       = "xcloak.fim_alerts"
-	TopicYARA      = "xcloak.yara_matches"
+	TopicAlerts       = "xcloak.alerts"
+	TopicIncidents    = "xcloak.incidents"
+	TopicTasks        = "xcloak.agent_tasks"
+	TopicAudit        = "xcloak.audit"
+	TopicFIM          = "xcloak.fim_alerts"
+	TopicYARA         = "xcloak.yara_matches"
+	TopicIOCMatchJobs = "xcloak.ioc_match_jobs"
 )
 
 // KafkaEvent is the envelope written to every topic.
@@ -31,10 +32,10 @@ type KafkaEvent struct {
 }
 
 var (
-	kafkaWriters   = map[string]*kafka.Writer{}
-	kafkaMu        sync.RWMutex
-	kafkaEnabled   bool
-	kafkaBrokers   []string
+	kafkaWriters = map[string]*kafka.Writer{}
+	kafkaMu      sync.RWMutex
+	kafkaEnabled bool
+	kafkaBrokers []string
 )
 
 // InitKafka reads env vars and opens writers for all topics.
@@ -56,7 +57,7 @@ func InitKafka() {
 
 	topics := []string{
 		TopicAlerts, TopicIncidents, TopicTasks,
-		TopicAudit, TopicFIM, TopicYARA,
+		TopicAudit, TopicFIM, TopicYARA, TopicIOCMatchJobs,
 	}
 
 	kafkaMu.Lock()
@@ -186,6 +187,18 @@ func PublishYARAMatch(agentID int, ruleName, filePath string) {
 		"rule_name": ruleName,
 		"file_path": filePath,
 	})
+}
+
+// PublishFileHashMatchJob queues a file hash for async IOC matching
+// (consumed by StartIOCMatchConsumer) instead of matching it inline on the
+// ingest request path.
+func PublishFileHashMatchJob(hash any) {
+	publish(TopicIOCMatchJobs, "filehash", hash)
+}
+
+// PublishConnectionMatchJob queues a connection for async IOC matching.
+func PublishConnectionMatchJob(conn any) {
+	publish(TopicIOCMatchJobs, "connection", conn)
 }
 
 // IsKafkaEnabled returns true if Kafka is configured and running.

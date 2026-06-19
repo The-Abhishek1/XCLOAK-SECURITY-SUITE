@@ -73,6 +73,10 @@ var (
 		Name: "xcloak_soar_executions_24h",
 		Help: "Playbook executions in last 24 hours",
 	})
+	KafkaIOCConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_ioc_consumer_lag",
+		Help: "Unconsumed messages on xcloak.ioc_match_jobs (xcloak-ioc-matcher consumer group)",
+	})
 )
 
 // ── Counter metrics (monotonically increasing) ───────────────

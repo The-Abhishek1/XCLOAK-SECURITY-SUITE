@@ -19,7 +19,11 @@ func SaveConnections(
 
 	for _, conn := range connections {
 
-		CheckConnectionIOC(conn)
+		if IsKafkaEnabled() {
+			PublishConnectionMatchJob(conn)
+		} else {
+			CheckConnectionIOC(conn)
+		}
 	}
 
 	return nil

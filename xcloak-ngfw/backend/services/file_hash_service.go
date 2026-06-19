@@ -5,10 +5,10 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-// SaveFileHashes persists the batch and immediately runs IOC matching
-// against every hash. Matching is synchronous so alerts appear before
-// the API response returns — acceptable at current scale, move to a
-// goroutine + channel when batch sizes exceed ~10k files.
+// SaveFileHashes persists the batch, then queues each hash for IOC matching.
+// Matching runs async via StartIOCMatchConsumer when Kafka is enabled, so
+// ingest latency doesn't scale with the IOC list size; falls back to
+// matching inline when Kafka is disabled so detection still works locally.
 func SaveFileHashes(hashes []models.FileHash) error {
 
 	err := repositories.SaveFileHashes(hashes)
@@ -17,7 +17,11 @@ func SaveFileHashes(hashes []models.FileHash) error {
 	}
 
 	for _, hash := range hashes {
-		CheckFileHashIOC(hash)
+		if IsKafkaEnabled() {
+			PublishFileHashMatchJob(hash)
+		} else {
+			CheckFileHashIOC(hash)
+		}
 	}
 
 	return nil

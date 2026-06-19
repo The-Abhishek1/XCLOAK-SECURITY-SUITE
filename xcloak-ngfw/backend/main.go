@@ -50,6 +50,7 @@ func main() {
 	// ── Kafka event bus ──────────────────────────────────────
 	services.InitKafka()
 	defer services.CloseKafka()
+	go services.StartIOCMatchConsumer()
 
 	// Wire WebSocket alert broadcaster (avoids import cycle: services ↔ api).
 	services.RegisterBroadcastFn(func(alert models.Alert) {
