@@ -10,7 +10,24 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-// SyncThreatFeed fetches a feed's source URL, expects a plaintext response
+// SyncThreatFeed dispatches to the right connector based on feed.FeedType.
+// "flatfile" (the default, for backward compatibility with feeds created
+// before connectors existed) is handled inline here; otx/misp/taxii each
+// have their own file.
+func SyncThreatFeed(feed models.ThreatFeed) (int, error) {
+	switch feed.FeedType {
+	case "otx":
+		return syncOTXFeed(feed)
+	case "misp":
+		return syncMISPFeed(feed)
+	case "taxii":
+		return syncTAXIIFeed(feed)
+	default:
+		return syncFlatFileFeed(feed)
+	}
+}
+
+// syncFlatFileFeed fetches a feed's source URL, expects a plaintext response
 // with one indicator per line (IPs, domains, hashes — comments starting
 // with '#' or ';' and blank lines are ignored), and bulk-imports every line
 // as an IOC. This format matches many free open feeds, e.g.:
@@ -22,7 +39,7 @@ import (
 // Returns the number of new indicators imported, and an error if the feed
 // could not be fetched at all (a feed with 0 new indicators is not an error
 // — it just means everything was already in the IOC table).
-func SyncThreatFeed(feed models.ThreatFeed) (int, error) {
+func syncFlatFileFeed(feed models.ThreatFeed) (int, error) {
 
 	req, err := http.NewRequest("GET", feed.Source, nil)
 	if err != nil {
@@ -124,6 +141,23 @@ func guessIOCType(indicator string) string {
 	}
 
 	return "domain"
+}
+
+// importIndicator stores one indicator from a connector feed as an IOC.
+// Shared by the otx/misp/taxii connectors — CreateIOC already no-ops on a
+// duplicate indicator, so this just reports whether the call succeeded.
+func importIndicator(indicator, iocType, severity, feedName string) bool {
+	if indicator == "" || iocType == "" {
+		return false
+	}
+	err := repositories.CreateIOC(models.IOC{
+		Indicator:   indicator,
+		Type:        iocType,
+		Severity:    severity,
+		Description: "Imported from threat feed: " + feedName,
+		Enabled:     true,
+	})
+	return err == nil
 }
 
 type feedHTTPError struct {

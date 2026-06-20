@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
@@ -67,6 +69,22 @@ func GetThreatFeeds(
 		)
 
 		return
+	}
+
+	// Redact credentials — this endpoint is RequireAuth() only, not
+	// admin-gated, so an analyst-role user can hit it too.
+	for i := range feeds {
+		var cfg models.ThreatFeedConfig
+		if json.Unmarshal(feeds[i].Config, &cfg) == nil {
+			if cfg.APIKey != "" {
+				cfg.APIKey = "••••••••"
+			}
+			if cfg.Password != "" {
+				cfg.Password = "••••••••"
+			}
+			redacted, _ := json.Marshal(cfg)
+			feeds[i].Config = redacted
+		}
 	}
 
 	c.JSON(

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/repositories"
@@ -20,13 +22,21 @@ func SyncThreatFeed(c *gin.Context) {
 		return
 	}
 
+	username, _ := c.Get("username")
+	user := fmt.Sprintf("%v", username)
+
 	count, err := services.SyncThreatFeed(*feed)
 	if err != nil {
-		c.JSON(502, gin.H{"error": err.Error()})
+		// Connector feeds (otx/misp/taxii) paginate and may import a real
+		// partial batch before a later page errors — surface that count
+		// rather than discarding it, since those indicators are genuinely
+		// in the IOC table already.
+		services.LogEvent("SYNC_THREAT_FEED_PARTIAL", fmt.Sprintf("%s: %d imported before error: %v", feed.Name, count, err), user)
+		c.JSON(502, gin.H{"error": err.Error(), "count": count})
 		return
 	}
 
-	services.LogEvent("SYNC_THREAT_FEED", feed.Name, "admin")
+	services.LogEvent("SYNC_THREAT_FEED", feed.Name, user)
 
 	c.JSON(200, gin.H{
 		"message": "Feed Synced",

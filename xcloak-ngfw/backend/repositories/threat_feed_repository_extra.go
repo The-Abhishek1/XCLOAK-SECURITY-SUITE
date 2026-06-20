@@ -14,9 +14,10 @@ import (
 func GetThreatFeedByID(id string) (*models.ThreatFeed, error) {
 
 	var feed models.ThreatFeed
+	var configStr string
 
 	err := database.DB.QueryRow(`
-		SELECT id, name, source, enabled, last_sync, created_at
+		SELECT id, name, source, enabled, feed_type, COALESCE(config::text, '{}'), last_sync, created_at
 		FROM threat_feeds
 		WHERE id = $1
 	`, id).Scan(
@@ -24,6 +25,8 @@ func GetThreatFeedByID(id string) (*models.ThreatFeed, error) {
 		&feed.Name,
 		&feed.Source,
 		&feed.Enabled,
+		&feed.FeedType,
+		&configStr,
 		&feed.LastSync,
 		&feed.CreatedAt,
 	)
@@ -31,6 +34,8 @@ func GetThreatFeedByID(id string) (*models.ThreatFeed, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	feed.Config = []byte(configStr)
 
 	return &feed, nil
 }
