@@ -25,9 +25,10 @@ type FrameworkScore struct {
 	Checks    []ComplianceCheck `json:"checks"`
 }
 
-// ComputeAllFrameworkScores computes scores for all 4 frameworks and persists them.
-func ComputeAllFrameworkScores(reportID int) ([]FrameworkScore, error) {
-	snapshot := buildDataSnapshot()
+// ComputeAllFrameworkScores computes scores for all 4 frameworks (scoped to
+// tenantID's data) and persists them.
+func ComputeAllFrameworkScores(reportID int, tenantID int) ([]FrameworkScore, error) {
+	snapshot := buildDataSnapshot(tenantID)
 
 	frameworks := []string{"SOC2", "NIST", "PCI-DSS", "ISO27001"}
 	var scores []FrameworkScore
@@ -38,20 +39,21 @@ func ComputeAllFrameworkScores(reportID int) ([]FrameworkScore, error) {
 
 		checksJSON, _ := json.Marshal(fs.Checks)
 		database.DB.Exec(`
-			INSERT INTO compliance_scores (report_id, framework, score, passed, failed, checks)
-			VALUES ($1,$2,$3,$4,$5,$6)
-		`, reportID, fw, fs.Score, fs.Passed, fs.Failed, checksJSON)
+			INSERT INTO compliance_scores (report_id, framework, score, passed, failed, checks, tenant_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7)
+		`, reportID, fw, fs.Score, fs.Passed, fs.Failed, checksJSON, tenantID)
 	}
 
 	return scores, nil
 }
 
-// GetFrameworkScores returns existing scores for a report.
-func GetFrameworkScores(reportID int) ([]FrameworkScore, error) {
+// GetFrameworkScores returns existing scores for a report, scoped to
+// tenantID.
+func GetFrameworkScores(reportID int, tenantID int) ([]FrameworkScore, error) {
 	rows, err := database.DB.Query(`
 		SELECT framework, score, passed, failed, checks
-		FROM compliance_scores WHERE report_id=$1 ORDER BY framework
-	`, reportID)
+		FROM compliance_scores WHERE report_id=$1 AND tenant_id=$2 ORDER BY framework
+	`, reportID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +89,10 @@ type platformSnapshot struct {
 	unresolvedIncidents int
 }
 
-func buildDataSnapshot() platformSnapshot {
+func buildDataSnapshot(tenantID int) platformSnapshot {
 	s := platformSnapshot{}
 
-	agents, _ := repositories.GetAgents()
+	agents, _ := repositories.GetAgents(tenantID)
 	s.agentCount = len(agents)
 	for _, a := range agents {
 		if a.Status == "online" {
@@ -98,14 +100,14 @@ func buildDataSnapshot() platformSnapshot {
 		}
 	}
 
-	alerts, _ := repositories.GetAlerts()
+	alerts, _ := repositories.GetAlerts(tenantID)
 	for _, a := range alerts {
 		if a.Severity == "critical" {
 			s.critAlerts++
 		}
 	}
 
-	incidents, _ := repositories.GetIncidents()
+	incidents, _ := repositories.GetIncidents(tenantID)
 	for _, i := range incidents {
 		if i.Status == "open" || i.Status == "investigating" {
 			s.openIncidents++
@@ -113,35 +115,35 @@ func buildDataSnapshot() platformSnapshot {
 		}
 	}
 
-	vulns, _ := repositories.GetAllVulnerabilities()
+	vulns, _ := repositories.GetVulnerabilities(tenantID)
 	for _, v := range vulns {
 		if v.Severity == "critical" {
 			s.critVulns++
 		}
 	}
 
-	iocs, _ := repositories.GetIOCs()
+	iocs, _ := repositories.GetIOCs(tenantID)
 	s.iocCount = len(iocs)
 
-	sigma, _ := repositories.GetRules()
+	sigma, _ := repositories.GetRules(tenantID)
 	s.sigmaRules = len(sigma)
 
-	yara, _ := repositories.GetYaraRules()
+	yara, _ := repositories.GetYaraRules(tenantID)
 	s.yaraRules = len(yara)
 
 	var fimCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM fim_baseline`).Scan(&fimCount)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM fim_baselines WHERE tenant_id=$1`, tenantID).Scan(&fimCount)
 	s.fim = fimCount > 0
 	var auditCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM audit_logs`).Scan(&auditCount)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM audit_logs WHERE tenant_id=$1`, tenantID).Scan(&auditCount)
 	s.auditEnabled = auditCount > 0
-	database.DB.QueryRow(`SELECT COUNT(*) FROM firewall_rules WHERE enabled=TRUE`).Scan(&s.firewallRules)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE`).Scan(&s.supprRules)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM compliance_reports`).Scan(&s.complianceReports)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM firewall_rules WHERE enabled=TRUE AND tenant_id=$1`, tenantID).Scan(&s.firewallRules)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE AND tenant_id=$1`, tenantID).Scan(&s.supprRules)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM compliance_reports WHERE tenant_id=$1`, tenantID).Scan(&s.complianceReports)
 
 	// MFA proxy: multiple users registered
 	var userCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE tenant_id=$1`, tenantID).Scan(&userCount)
 	s.mfaEnabled = userCount >= 2
 
 	return s

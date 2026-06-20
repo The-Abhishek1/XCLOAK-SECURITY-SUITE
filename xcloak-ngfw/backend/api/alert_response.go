@@ -50,11 +50,14 @@ func DispatchAlertResponse(c *gin.Context) {
 		return
 	}
 
-	// Look up the alert to get agent_id
+	// Look up the alert to get agent_id — tenant-scoped, otherwise any
+	// authenticated user could dispatch a destructive action (kill_process,
+	// isolate_host, quarantine_file) against another tenant's agent just by
+	// guessing/incrementing the alert id.
 	var agentID int
 	var ruleName, severity string
 	err = database.DB.QueryRow(
-		`SELECT agent_id, rule_name, severity FROM alerts WHERE id=$1`, alertID,
+		`SELECT agent_id, rule_name, severity FROM alerts WHERE id=$1 AND tenant_id=$2`, alertID, tenantIDFromContext(c),
 	).Scan(&agentID, &ruleName, &severity)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "alert not found"})
@@ -110,8 +113,8 @@ func GetAlertWithTriage(c *gin.Context) {
 		       mitre_tactic, mitre_technique, mitre_name,
 		       log_message, created_at,
 		       COALESCE(ai_summary,''), COALESCE(ai_action,'')
-		FROM alerts WHERE id=$1
-	`, id).Scan(
+		FROM alerts WHERE id=$1 AND tenant_id=$2
+	`, id, tenantIDFromContext(c)).Scan(
 		&alert.ID, &alert.AgentID, &alert.Severity, &alert.RuleName,
 		&alert.Fingerprint, &alert.MitreTactic, &alert.MitreTechnique,
 		&alert.MitreName, &alert.LogMessage, &alert.CreatedAt,

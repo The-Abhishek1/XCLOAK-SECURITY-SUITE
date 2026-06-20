@@ -29,9 +29,9 @@ func GetPendingApprovalTasks(c *gin.Context) {
 		       COALESCE(t.payload::text, '{}'), t.created_at
 		FROM agent_tasks t
 		LEFT JOIN agents a ON a.id = t.agent_id
-		WHERE t.status = 'pending_approval'
+		WHERE t.status = 'pending_approval' AND t.tenant_id = $1
 		ORDER BY t.created_at DESC
-	`)
+	`, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -59,7 +59,7 @@ func ApproveTask(c *gin.Context) {
 		return
 	}
 
-	n, err := repositories.ApproveTask(taskID)
+	n, err := repositories.ApproveTask(taskID, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -93,7 +93,7 @@ func RejectTask(c *gin.Context) {
 		body.Reason = "rejected by analyst"
 	}
 
-	n, err := repositories.RejectTask(taskID, body.Reason)
+	n, err := repositories.RejectTask(taskID, body.Reason, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

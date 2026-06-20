@@ -31,6 +31,7 @@ func CreateThreatFeed(
 
 	err := services.CreateThreatFeed(
 		feed,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
@@ -57,7 +58,7 @@ func GetThreatFeeds(
 	c *gin.Context,
 ) {
 
-	feeds, err := services.GetThreatFeeds()
+	feeds, err := services.GetThreatFeeds(tenantIDFromContext(c))
 
 	if err != nil {
 

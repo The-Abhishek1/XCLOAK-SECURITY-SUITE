@@ -1,17 +1,26 @@
 package repositories
 
 import (
+	"errors"
+
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
 
+// ErrIOCNotFound is returned by tenant-scoped mutations below when no row
+// matches id+tenantID — covers both a nonexistent id and a real id
+// belonging to another tenant.
+var ErrIOCNotFound = errors.New("ioc not found")
+
 func CreateIOC(
 	ioc models.IOC,
+	tenantID int,
 ) error {
 
 	if IOCExists(
 		ioc.Indicator,
 		ioc.Type,
+		tenantID,
 	) {
 
 		return nil
@@ -24,81 +33,59 @@ func CreateIOC(
 			type,
 			severity,
 			description,
-			enabled
+			enabled,
+			tenant_id
 		)
-		VALUES ($1,$2,$3,$4,$5)
+		VALUES ($1,$2,$3,$4,$5,$6)
 	`,
 		ioc.Indicator,
 		ioc.Type,
 		ioc.Severity,
 		ioc.Description,
 		ioc.Enabled,
+		tenantID,
 	)
 
 	return err
 }
 
-func GetIOCs() ([]models.IOC, error) {
+// GetIOCs returns IOCs belonging to tenantID only. Use this from
+// user-facing API paths that have a real tenant context from the request.
+func GetIOCs(tenantID int) ([]models.IOC, error) {
+	return queryIOCs(`
+		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
+		FROM iocs
+		WHERE tenant_id = $1
+		ORDER BY id DESC
+	`, tenantID)
+}
 
-	rows, err := database.DB.Query(`
-		SELECT
-			id,
-			indicator,
-			type,
-			severity,
-			description,
-			enabled,
-			created_at
+// GetAllIOCs returns every IOC across every tenant. For internal background
+// jobs (compliance summary/scoring) with no per-request tenant context —
+// not for user-facing API responses, which must use GetIOCs(tenantID).
+func GetAllIOCs() ([]models.IOC, error) {
+	return queryIOCs(`
+		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
 		FROM iocs
 		ORDER BY id DESC
 	`)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	var iocs []models.IOC
-
-	for rows.Next() {
-
-		var ioc models.IOC
-
-		err := rows.Scan(
-			&ioc.ID,
-			&ioc.Indicator,
-			&ioc.Type,
-			&ioc.Severity,
-			&ioc.Description,
-			&ioc.Enabled,
-			&ioc.CreatedAt,
-		)
-
-		if err != nil {
-			continue
-		}
-
-		iocs = append(iocs, ioc)
-	}
-
-	return iocs, nil
 }
 
-func GetEnabledIOCs() ([]models.IOC, error) {
-
-	rows, err := database.DB.Query(`
-		SELECT
-			id,
-			indicator,
-			type,
-			severity,
-			description,
-			enabled,
-			created_at
+// GetEnabledIOCsForAgent returns enabled IOCs for the tenant that owns
+// agentID — used by the connection/file-hash matching engines, which only
+// have an agent_id to work from (no per-request tenant context).
+func GetEnabledIOCsForAgent(agentID int) ([]models.IOC, error) {
+	return queryIOCs(`
+		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
 		FROM iocs
 		WHERE enabled = true
-	`)
+		  AND tenant_id = (SELECT tenant_id FROM agents WHERE id = $1)
+	`, agentID)
+}
+
+func queryIOCs(query string, args ...interface{}) ([]models.IOC, error) {
+
+	rows, err := database.DB.Query(query, args...)
 
 	if err != nil {
 		return nil, err
@@ -119,6 +106,7 @@ func GetEnabledIOCs() ([]models.IOC, error) {
 			&ioc.Severity,
 			&ioc.Description,
 			&ioc.Enabled,
+			&ioc.TenantID,
 			&ioc.CreatedAt,
 		)
 
@@ -132,8 +120,11 @@ func GetEnabledIOCs() ([]models.IOC, error) {
 	return iocs, nil
 }
 
+// GetIOCByID fetches a single IOC, scoped to tenantID — a request for
+// another tenant's IOC gets the same "not found" as a nonexistent one.
 func GetIOCByID(
 	id string,
+	tenantID int,
 ) (*models.IOC, error) {
 
 	var ioc models.IOC
@@ -146,11 +137,13 @@ func GetIOCByID(
 			severity,
 			description,
 			enabled,
+			tenant_id,
 			created_at
 		FROM iocs
-		WHERE id = $1
+		WHERE id = $1 AND tenant_id = $2
 	`,
 		id,
+		tenantID,
 	).Scan(
 		&ioc.ID,
 		&ioc.Indicator,
@@ -158,6 +151,7 @@ func GetIOCByID(
 		&ioc.Severity,
 		&ioc.Description,
 		&ioc.Enabled,
+		&ioc.TenantID,
 		&ioc.CreatedAt,
 	)
 
@@ -171,9 +165,10 @@ func GetIOCByID(
 func UpdateIOC(
 	id string,
 	ioc models.IOC,
+	tenantID int,
 ) error {
 
-	_, err := database.DB.Exec(`
+	tag, err := database.DB.Exec(`
 		UPDATE iocs
 		SET
 			indicator = $1,
@@ -181,7 +176,7 @@ func UpdateIOC(
 			severity = $3,
 			description = $4,
 			enabled = $5
-		WHERE id = $6
+		WHERE id = $6 AND tenant_id = $7
 	`,
 		ioc.Indicator,
 		ioc.Type,
@@ -189,58 +184,88 @@ func UpdateIOC(
 		ioc.Description,
 		ioc.Enabled,
 		id,
+		tenantID,
 	)
-
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrIOCNotFound
+	}
+	return nil
 }
 
 func DeleteIOC(
 	id string,
+	tenantID int,
 ) error {
 
-	_, err := database.DB.Exec(`
+	tag, err := database.DB.Exec(`
 		DELETE FROM iocs
-		WHERE id = $1
+		WHERE id = $1 AND tenant_id = $2
 	`,
 		id,
+		tenantID,
 	)
-
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrIOCNotFound
+	}
+	return nil
 }
 
 func EnableIOC(
 	id string,
+	tenantID int,
 ) error {
 
-	_, err := database.DB.Exec(`
+	tag, err := database.DB.Exec(`
 		UPDATE iocs
 		SET enabled = true
-		WHERE id = $1
+		WHERE id = $1 AND tenant_id = $2
 	`,
 		id,
+		tenantID,
 	)
-
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrIOCNotFound
+	}
+	return nil
 }
 
 func DisableIOC(
 	id string,
+	tenantID int,
 ) error {
 
-	_, err := database.DB.Exec(`
+	tag, err := database.DB.Exec(`
 		UPDATE iocs
 		SET enabled = false
-		WHERE id = $1
+		WHERE id = $1 AND tenant_id = $2
 	`,
 		id,
+		tenantID,
 	)
-
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return ErrIOCNotFound
+	}
+	return nil
 }
 
+// IOCExists checks for a duplicate within tenantID only — the same
+// indicator can exist independently in multiple tenants.
 func IOCExists(
 	indicator string,
 	iocType string,
+	tenantID int,
 ) bool {
 
 	var count int
@@ -251,9 +276,11 @@ func IOCExists(
 		WHERE
 			indicator = $1
 			AND type = $2
+			AND tenant_id = $3
 	`,
 		indicator,
 		iocType,
+		tenantID,
 	).Scan(&count)
 
 	if err != nil {

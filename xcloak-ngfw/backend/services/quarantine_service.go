@@ -14,7 +14,7 @@ func SaveQuarantinedFile(
 	)
 }
 
-func GetQuarantinedFiles() ([]models.QuarantinedFile, error) {
+func GetQuarantinedFiles(tenantID int) ([]models.QuarantinedFile, error) {
 
-	return repositories.GetQuarantinedFiles()
+	return repositories.GetQuarantinedFiles(tenantID)
 }

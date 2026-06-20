@@ -9,9 +9,9 @@ import (
 // TestRules runs every enabled Sigma rule against a sample log message using
 // the SAME evaluation logic as live detection (MatchSigmaRule), so the
 // "Test" button in the UI accurately reflects what would alert in production.
-func TestRules(message string) []models.RuleTestResult {
+func TestRules(message string, tenantID int) []models.RuleTestResult {
 
-	rules, err := GetEnabledSigmaRules()
+	rules, err := GetEnabledSigmaRules(tenantID)
 	if err != nil {
 		return nil
 	}

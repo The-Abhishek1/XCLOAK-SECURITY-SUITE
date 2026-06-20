@@ -9,11 +9,25 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
+// agentOwnedBy404 verifies agentID belongs to the caller's tenant, writing
+// a 404 and returning false if not (or if the agent doesn't exist at all —
+// the two cases are indistinguishable to the caller by design).
+func agentOwnedBy404(c *gin.Context, agentID string) bool {
+	if _, err := repositories.GetAgentByID(agentID, tenantIDFromContext(c)); err != nil {
+		c.JSON(404, gin.H{"error": "agent not found"})
+		return false
+	}
+	return true
+}
+
 // GetAgentProcesses returns recent processes collected for an agent.
 // Route: GET /api/agents/:id/processes
 func GetAgentProcesses(c *gin.Context) {
 
 	id := c.Param("id")
+	if !agentOwnedBy404(c, id) {
+		return
+	}
 
 	rows, err := repositories.GetProcessesByAgent(id)
 	if err != nil {
@@ -33,6 +47,9 @@ func GetAgentProcesses(c *gin.Context) {
 func GetAgentConnections(c *gin.Context) {
 
 	id := c.Param("id")
+	if !agentOwnedBy404(c, id) {
+		return
+	}
 
 	rows, err := repositories.GetConnectionsByAgent(id)
 	if err != nil {
@@ -52,6 +69,9 @@ func GetAgentConnections(c *gin.Context) {
 func GetAgentServicesList(c *gin.Context) {
 
 	id := c.Param("id")
+	if !agentOwnedBy404(c, id) {
+		return
+	}
 
 	rows, err := repositories.GetServicesByAgent(id)
 	if err != nil {
@@ -71,6 +91,9 @@ func GetAgentServicesList(c *gin.Context) {
 func GetAgentUsersList(c *gin.Context) {
 
 	id := c.Param("id")
+	if !agentOwnedBy404(c, id) {
+		return
+	}
 
 	rows, err := repositories.GetUsersByAgent(id)
 	if err != nil {
@@ -90,6 +113,9 @@ func GetAgentUsersList(c *gin.Context) {
 func GetAgentPackagesList(c *gin.Context) {
 
 	id := c.Param("id")
+	if !agentOwnedBy404(c, id) {
+		return
+	}
 
 	rows, err := repositories.GetAgentPackagesList(id)
 	if err != nil {

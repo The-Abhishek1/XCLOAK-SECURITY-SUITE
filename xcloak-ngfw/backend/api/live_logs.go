@@ -41,6 +41,13 @@ func LiveLogsWS(c *gin.Context) {
 		return
 	}
 
+	// Verify the agent belongs to the caller's tenant before upgrading to a
+	// WebSocket and streaming its live logs — every query below filters
+	// only by agent_id, with no tenant check otherwise.
+	if !agentOwnedBy404(c, agentID) {
+		return
+	}
+
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		fmt.Printf("WS upgrade failed: %v\n", err)

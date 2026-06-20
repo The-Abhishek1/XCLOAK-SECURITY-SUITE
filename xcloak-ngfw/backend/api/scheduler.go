@@ -9,7 +9,7 @@ import (
 
 // GetScheduledTasks — GET /api/scheduler/tasks
 func GetScheduledTasks(c *gin.Context) {
-	tasks, err := services.GetScheduledTasks()
+	tasks, err := services.GetScheduledTasks(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -31,7 +31,7 @@ func CreateScheduledTask(c *gin.Context) {
 	username, _ := c.Get("username")
 	st.CreatedBy = username.(string)
 
-	created, err := services.CreateScheduledTask(st)
+	created, err := services.CreateScheduledTask(st, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -47,7 +47,7 @@ func ToggleScheduledTask(c *gin.Context) {
 	}
 	c.ShouldBindJSON(&body)
 
-	if err := services.ToggleScheduledTask(c.Param("id"), body.Enabled); err != nil {
+	if err := services.ToggleScheduledTask(c.Param("id"), body.Enabled, tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -56,7 +56,7 @@ func ToggleScheduledTask(c *gin.Context) {
 
 // RunScheduledTaskNow — POST /api/scheduler/tasks/:id/run
 func RunScheduledTaskNow(c *gin.Context) {
-	if err := services.RunScheduledTaskNow(c.Param("id")); err != nil {
+	if err := services.RunScheduledTaskNow(c.Param("id"), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -65,7 +65,7 @@ func RunScheduledTaskNow(c *gin.Context) {
 
 // DeleteScheduledTask — DELETE /api/scheduler/tasks/:id
 func DeleteScheduledTask(c *gin.Context) {
-	if err := services.DeleteScheduledTask(c.Param("id")); err != nil {
+	if err := services.DeleteScheduledTask(c.Param("id"), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -74,7 +74,7 @@ func DeleteScheduledTask(c *gin.Context) {
 
 // GetDashboardMetrics — GET /api/dashboard/metrics
 func GetDashboardMetrics(c *gin.Context) {
-	metrics, err := services.GetDashboardMetrics()
+	metrics, err := services.GetDashboardMetrics(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

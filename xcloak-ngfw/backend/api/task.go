@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
@@ -17,6 +19,13 @@ func CreateTask(c *gin.Context) {
 			"error": err.Error(),
 		})
 
+		return
+	}
+
+	// task.AgentID comes straight from the request body — without this
+	// check, any authenticated user (any role) could dispatch any task
+	// type, including destructive ones, to an agent outside their tenant.
+	if !agentOwnedBy404(c, strconv.Itoa(task.AgentID)) {
 		return
 	}
 
@@ -39,6 +48,19 @@ func CreateTask(c *gin.Context) {
 func GetAgentTasks(c *gin.Context) {
 
 	agentID := c.Param("id")
+
+	// RequireAgentAuth() only proves the bearer token is valid for SOME
+	// agent — without this check, that agent's token could poll (and
+	// receive/execute) any other agent's queued tasks, including
+	// destructive SOAR actions, by changing the :id in the URL.
+	if authedID, exists := c.Get("agent_id"); exists {
+		if authedIDInt, ok := authedID.(int); ok {
+			if requestedID, err := strconv.Atoi(agentID); err != nil || requestedID != authedIDInt {
+				c.JSON(403, gin.H{"error": "cannot fetch another agent's tasks"})
+				return
+			}
+		}
+	}
 
 	tasks, err := services.GetPendingTasks(agentID)
 
@@ -70,9 +92,16 @@ func SubmitTaskResult(c *gin.Context) {
 		return
 	}
 
+	// Scope completion to the authenticated agent — without this, any
+	// agent's token could submit a fabricated result for any other
+	// agent's task_id, including destructive SOAR actions.
+	agentID, _ := c.Get("agent_id")
+	agentIDInt, _ := agentID.(int)
+
 	err := services.CompleteTask(
 		result.TaskID,
 		result.Result,
+		agentIDInt,
 	)
 
 	if err != nil {

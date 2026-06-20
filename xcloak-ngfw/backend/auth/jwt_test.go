@@ -22,7 +22,7 @@ func parse(t *testing.T, tokenStr string) jwt.MapClaims {
 }
 
 func TestGenerateJWT(t *testing.T) {
-	tokenStr, err := GenerateJWT(42, "alice", "admin")
+	tokenStr, err := GenerateJWT(42, "alice", "admin", 7)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
 	}
@@ -35,6 +35,9 @@ func TestGenerateJWT(t *testing.T) {
 	if got := claims["role"]; got != "admin" {
 		t.Errorf("role = %v, want admin", got)
 	}
+	if got := int(claims["tenant_id"].(float64)); got != 7 {
+		t.Errorf("tenant_id = %v, want 7", got)
+	}
 	if claims["type"] != nil {
 		t.Errorf("access token should not have a type claim, got %v", claims["type"])
 	}
@@ -46,7 +49,7 @@ func TestGenerateJWT(t *testing.T) {
 }
 
 func TestGenerateRefreshToken(t *testing.T) {
-	tokenStr, err := GenerateRefreshToken(42, "alice", "admin")
+	tokenStr, err := GenerateRefreshToken(42, "alice", "admin", 7)
 	if err != nil {
 		t.Fatalf("GenerateRefreshToken: %v", err)
 	}
@@ -55,6 +58,9 @@ func TestGenerateRefreshToken(t *testing.T) {
 
 	if claims["type"] != "refresh" {
 		t.Errorf("type = %v, want refresh", claims["type"])
+	}
+	if got := int(claims["tenant_id"].(float64)); got != 7 {
+		t.Errorf("tenant_id = %v, want 7", got)
 	}
 
 	exp := time.Unix(int64(claims["exp"].(float64)), 0)
@@ -80,31 +86,31 @@ func TestGenerateAgentJWT(t *testing.T) {
 }
 
 func TestTempToken_RoundTrip(t *testing.T) {
-	tokenStr, err := GenerateTempToken(1, "bob", "analyst")
+	tokenStr, err := GenerateTempToken(1, "bob", "analyst", 7)
 	if err != nil {
 		t.Fatalf("GenerateTempToken: %v", err)
 	}
 
-	userID, username, role, err := ValidateTempToken(tokenStr)
+	userID, username, role, tenantID, err := ValidateTempToken(tokenStr)
 	if err != nil {
 		t.Fatalf("ValidateTempToken: %v", err)
 	}
-	if userID != 1 || username != "bob" || role != "analyst" {
-		t.Errorf("got (%d, %s, %s), want (1, bob, analyst)", userID, username, role)
+	if userID != 1 || username != "bob" || role != "analyst" || tenantID != 7 {
+		t.Errorf("got (%d, %s, %s, %d), want (1, bob, analyst, 7)", userID, username, role, tenantID)
 	}
 }
 
 func TestValidateTempToken_RejectsNonTempToken(t *testing.T) {
 	// A normal access token must not be usable as a temp 2FA token.
-	tokenStr, _ := GenerateJWT(1, "bob", "analyst")
+	tokenStr, _ := GenerateJWT(1, "bob", "analyst", 7)
 
-	if _, _, _, err := ValidateTempToken(tokenStr); err == nil {
+	if _, _, _, _, err := ValidateTempToken(tokenStr); err == nil {
 		t.Error("expected error validating a non-temp token as temp, got nil")
 	}
 }
 
 func TestValidateTempToken_RejectsGarbage(t *testing.T) {
-	if _, _, _, err := ValidateTempToken("not-a-jwt"); err == nil {
+	if _, _, _, _, err := ValidateTempToken("not-a-jwt"); err == nil {
 		t.Error("expected error parsing garbage token, got nil")
 	}
 }

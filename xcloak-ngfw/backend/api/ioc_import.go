@@ -29,6 +29,7 @@ func ImportIOCs(
 
 	result := services.ImportIOCs(
 		req,
+		tenantIDFromContext(c),
 	)
 
 	c.JSON(

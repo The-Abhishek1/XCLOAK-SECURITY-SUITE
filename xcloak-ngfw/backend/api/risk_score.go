@@ -11,6 +11,11 @@ func GetRiskScore(c *gin.Context) {
 
 	agentID := c.Param("id")
 
+	if _, err := repositories.GetAgentByID(agentID, tenantIDFromContext(c)); err != nil {
+		c.JSON(404, gin.H{"error": "agent not found"})
+		return
+	}
+
 	score, err := repositories.GetRiskScore(agentID)
 	if err != nil {
 		// No risk score yet (agent just registered, no alerts/vulns).

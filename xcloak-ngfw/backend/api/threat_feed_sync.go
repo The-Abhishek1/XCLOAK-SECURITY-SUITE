@@ -16,7 +16,7 @@ func SyncThreatFeed(c *gin.Context) {
 
 	id := c.Param("id")
 
-	feed, err := repositories.GetThreatFeedByID(id)
+	feed, err := repositories.GetThreatFeedByID(id, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(404, gin.H{"error": "feed not found"})
 		return

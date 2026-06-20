@@ -91,7 +91,7 @@ func syncFlatFileFeed(feed models.ThreatFeed) (int, error) {
 			Severity:    "high",
 			Description: "Imported from threat feed: " + feed.Name,
 			Enabled:     true,
-		})
+		}, feed.TenantID)
 
 		// CreateIOC silently no-ops (returns nil) if the indicator already
 		// exists, so we can't distinguish "already existed" from "inserted"
@@ -146,7 +146,7 @@ func guessIOCType(indicator string) string {
 // importIndicator stores one indicator from a connector feed as an IOC.
 // Shared by the otx/misp/taxii connectors — CreateIOC already no-ops on a
 // duplicate indicator, so this just reports whether the call succeeded.
-func importIndicator(indicator, iocType, severity, feedName string) bool {
+func importIndicator(indicator, iocType, severity, feedName string, tenantID int) bool {
 	if indicator == "" || iocType == "" {
 		return false
 	}
@@ -156,7 +156,7 @@ func importIndicator(indicator, iocType, severity, feedName string) bool {
 		Severity:    severity,
 		Description: "Imported from threat feed: " + feedName,
 		Enabled:     true,
-	})
+	}, tenantID)
 	return err == nil
 }
 

@@ -19,12 +19,19 @@ func autoBlockIOC(alert models.Alert) {
 		return // only auto-block IP addresses
 	}
 
-	// Check if already blocked.
+	var tenantID int
+	if err := database.DB.QueryRow(`SELECT tenant_id FROM agents WHERE id=$1`, alert.AgentID).Scan(&tenantID); err != nil {
+		return
+	}
+
+	// Check if already blocked within this tenant — without the tenant
+	// filter, one tenant blocking an IP would make the engine think every
+	// other tenant had already blocked it too, silently skipping their rule.
 	var existing int
 	database.DB.QueryRow(`
 		SELECT COUNT(*) FROM firewall_rules
-		WHERE source_ip = $1 AND action = 'deny'
-	`, indicator).Scan(&existing)
+		WHERE source_ip = $1 AND action = 'deny' AND tenant_id = $2
+	`, indicator, tenantID).Scan(&existing)
 
 	if existing > 0 {
 		return // already blocked
@@ -39,16 +46,17 @@ func autoBlockIOC(alert models.Alert) {
 		Enabled:   true,
 	}
 
-	err := CreateFirewallRule(rule)
+	err := CreateFirewallRule(rule, tenantID)
 	if err != nil {
 		fmt.Printf("IOC auto-block failed for %s: %v\n", indicator, err)
 		return
 	}
 
-	// Log the block.
+	// Log the block. tenant_id resolved from the owning agent, same
+	// pattern as CreateAlert.
 	database.DB.Exec(`
-		INSERT INTO ioc_firewall_blocks (ioc_id, indicator, agent_id)
-		VALUES (0, $1, $2)
+		INSERT INTO ioc_firewall_blocks (ioc_id, indicator, agent_id, tenant_id)
+		VALUES (0, $1, $2, (SELECT tenant_id FROM agents WHERE id = $2))
 	`, indicator, alert.AgentID)
 
 	LogEvent("IOC_AUTO_BLOCK",
@@ -104,14 +112,15 @@ func isIPAddress(s string) bool {
 	return true
 }
 
-// GetIOCBlocks returns the IOC auto-block history.
-func GetIOCBlocks() ([]map[string]interface{}, error) {
+// GetIOCBlocks returns the IOC auto-block history for tenantID.
+func GetIOCBlocks(tenantID int) ([]map[string]interface{}, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, indicator, agent_id, blocked_at
 		FROM ioc_firewall_blocks
+		WHERE tenant_id = $1
 		ORDER BY blocked_at DESC
 		LIMIT 100
-	`)
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}

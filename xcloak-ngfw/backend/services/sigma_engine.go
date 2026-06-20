@@ -134,7 +134,7 @@ func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 
 func EvaluateRules(log models.Log) {
 
-	rules, err := GetEnabledSigmaRules()
+	rules, err := GetEnabledSigmaRulesForAgent(log.AgentID)
 	if err != nil {
 		return
 	}

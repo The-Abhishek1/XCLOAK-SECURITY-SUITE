@@ -18,7 +18,7 @@ func CreateYaraRule(c *gin.Context) {
 		return
 	}
 
-	if err := repositories.CreateYaraRule(rule); err != nil {
+	if err := repositories.CreateYaraRule(rule, tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -34,7 +34,7 @@ func CreateYaraRule(c *gin.Context) {
 // both middlewares populate the request the same way for this read-only route.
 func GetYaraRules(c *gin.Context) {
 
-	rules, err := repositories.GetYaraRules()
+	rules, err := repositories.GetYaraRules(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -51,7 +51,7 @@ func GetYaraRules(c *gin.Context) {
 // Lightweight endpoint for agents: only enabled rules, used before a scan.
 func GetEnabledYaraRules(c *gin.Context) {
 
-	rules, err := repositories.GetEnabledYaraRules()
+	rules, err := repositories.GetEnabledYaraRules(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -75,7 +75,11 @@ func UpdateYaraRule(c *gin.Context) {
 		return
 	}
 
-	if err := repositories.UpdateYaraRule(id, rule); err != nil {
+	if err := repositories.UpdateYaraRule(id, rule, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrYaraRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -88,7 +92,11 @@ func DeleteYaraRule(c *gin.Context) {
 
 	id := c.Param("id")
 
-	if err := repositories.DeleteYaraRule(id); err != nil {
+	if err := repositories.DeleteYaraRule(id, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrYaraRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -110,7 +118,11 @@ func toggleYaraRule(c *gin.Context, enabled bool) {
 
 	id := c.Param("id")
 
-	if err := repositories.SetYaraRuleEnabled(id, enabled); err != nil {
+	if err := repositories.SetYaraRuleEnabled(id, enabled, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrYaraRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -129,7 +141,7 @@ func GetYaraMatches(c *gin.Context) {
 
 	agentID := c.Query("agent_id")
 
-	matches, err := repositories.GetYaraMatches(agentID)
+	matches, err := repositories.GetYaraMatches(agentID, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

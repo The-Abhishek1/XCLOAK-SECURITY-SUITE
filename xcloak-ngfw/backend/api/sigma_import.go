@@ -64,7 +64,7 @@ func ImportSigmaYAML(c *gin.Context) {
 			continue
 		}
 
-		if err := repositories.CreateSigmaRule(*rule); err != nil {
+		if err := repositories.CreateSigmaRule(*rule, tenantIDFromContext(c)); err != nil {
 			// Likely duplicate title — skip gracefully.
 			errors = append(errors, fh.Filename+": "+err.Error())
 			skipped++

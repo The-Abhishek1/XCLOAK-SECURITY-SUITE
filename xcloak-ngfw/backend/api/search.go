@@ -40,6 +40,7 @@ func GlobalSearch(c *gin.Context) {
 	}
 
 	pattern := "%" + strings.ToLower(q) + "%"
+	tenantID := tenantIDFromContext(c)
 	var results []SearchResult
 
 	// ── Agents ─────────────────────────────────────────────────
@@ -47,9 +48,9 @@ func GlobalSearch(c *gin.Context) {
 		rows, err := database.DB.Query(`
 			SELECT id, hostname, ip_address, status, last_seen
 			FROM agents
-			WHERE LOWER(hostname) LIKE $1 OR ip_address LIKE $1
+			WHERE tenant_id = $2 AND (LOWER(hostname) LIKE $1 OR ip_address LIKE $1)
 			LIMIT 5
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -75,10 +76,10 @@ func GlobalSearch(c *gin.Context) {
 		rows, err := database.DB.Query(`
 			SELECT id, rule_name, severity, log_message, created_at
 			FROM alerts
-			WHERE LOWER(rule_name) LIKE $1 OR LOWER(log_message) LIKE $1
-			  OR LOWER(mitre_technique) LIKE $1
+			WHERE tenant_id = $2 AND (LOWER(rule_name) LIKE $1 OR LOWER(log_message) LIKE $1
+			  OR LOWER(mitre_technique) LIKE $1)
 			ORDER BY created_at DESC LIMIT 8
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -109,9 +110,9 @@ func GlobalSearch(c *gin.Context) {
 		rows, err := database.DB.Query(`
 			SELECT id, title, severity, status, created_at
 			FROM incidents
-			WHERE LOWER(title) LIKE $1 OR LOWER(description) LIKE $1
+			WHERE tenant_id = $2 AND (LOWER(title) LIKE $1 OR LOWER(description) LIKE $1)
 			ORDER BY created_at DESC LIMIT 5
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -138,9 +139,9 @@ func GlobalSearch(c *gin.Context) {
 		rows, err := database.DB.Query(`
 			SELECT id, indicator, type, severity, created_at
 			FROM iocs
-			WHERE LOWER(indicator) LIKE $1 OR LOWER(description) LIKE $1
+			WHERE tenant_id = $2 AND (LOWER(indicator) LIKE $1 OR LOWER(description) LIKE $1)
 			ORDER BY created_at DESC LIMIT 5
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -167,9 +168,9 @@ func GlobalSearch(c *gin.Context) {
 		rows, err := database.DB.Query(`
 			SELECT id, title, severity, created_at
 			FROM sigma_rules
-			WHERE LOWER(title) LIKE $1 OR LOWER(mitre_technique) LIKE $1
+			WHERE tenant_id = $2 AND (LOWER(title) LIKE $1 OR LOWER(mitre_technique) LIKE $1)
 			ORDER BY created_at DESC LIMIT 5
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -196,9 +197,9 @@ func GlobalSearch(c *gin.Context) {
 		rows, err := database.DB.Query(`
 			SELECT id, name, description, created_at
 			FROM yara_rules
-			WHERE LOWER(name) LIKE $1 OR LOWER(description) LIKE $1
+			WHERE tenant_id = $2 AND (LOWER(name) LIKE $1 OR LOWER(description) LIKE $1)
 			ORDER BY created_at DESC LIMIT 5
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -225,9 +226,9 @@ func GlobalSearch(c *gin.Context) {
 			SELECT ep.id, ep.package_name, ep.version, a.hostname, ep.agent_id
 			FROM endpoint_packages ep
 			JOIN agents a ON a.id = ep.agent_id
-			WHERE LOWER(ep.package_name) LIKE $1
+			WHERE ep.tenant_id = $2 AND LOWER(ep.package_name) LIKE $1
 			LIMIT 5
-		`, pattern)
+		`, pattern, tenantID)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {

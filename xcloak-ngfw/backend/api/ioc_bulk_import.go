@@ -78,7 +78,7 @@ func BulkImportIOCs(c *gin.Context) {
 			Severity:    body.Severity,
 			Description: desc,
 			Enabled:     true,
-		})
+		}, tenantIDFromContext(c))
 
 		if err != nil {
 			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {

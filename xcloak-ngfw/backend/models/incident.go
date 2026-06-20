@@ -5,6 +5,7 @@ import "time"
 type Incident struct {
 	ID          int       `json:"id"`
 	AgentID     int       `json:"agent_id"`
+	TenantID    int       `json:"tenant_id"`
 	Title       string    `json:"title"`
 	Severity    string    `json:"severity"`
 	Status      string    `json:"status"`

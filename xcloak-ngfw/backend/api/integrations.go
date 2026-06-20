@@ -7,13 +7,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/database"
-	"xcloak-ngfw/models"
 	"xcloak-ngfw/services"
 )
 
 // GetIntegrations — GET /api/integrations
 func GetIntegrations(c *gin.Context) {
-	result, err := services.GetIntegrations()
+	result, err := services.GetIntegrations(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -36,7 +35,7 @@ func SaveIntegration(c *gin.Context) {
 		return
 	}
 	username, _ := c.Get("username")
-	if err := services.SaveIntegration(name, body.Enabled, body.Config, username.(string)); err != nil {
+	if err := services.SaveIntegration(name, body.Enabled, body.Config, username.(string), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -46,20 +45,13 @@ func SaveIntegration(c *gin.Context) {
 // TestIntegration — POST /api/integrations/:name/test
 func TestIntegration(c *gin.Context) {
 	name := c.Param("name")
-	test := models.Alert{
-		ID:        0,
-		Severity:  "critical",
-		RuleName:  "XCloak Test — " + name,
-		AgentID:   0,
-		LogMessage: "This is a test event from XCloak Security Suite",
-	}
-	go services.FireAlertWebhook(test)
+	go services.FireTestWebhook(name, tenantIDFromContext(c))
 	c.JSON(200, gin.H{"message": "test event fired for " + name})
 }
 
 // GetWebhookDeliveries — GET /api/integrations/deliveries
 func GetWebhookDeliveries(c *gin.Context) {
-	result, err := services.GetWebhookDeliveries()
+	result, err := services.GetWebhookDeliveries(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -79,11 +71,12 @@ func GenerateInstallToken(c *gin.Context) {
 
 	token := randomHex(32)
 	username, _ := c.Get("username")
+	tenantID := tenantIDFromContext(c)
 
 	_, err := database.DB.Exec(`
-		INSERT INTO agent_install_tokens (token, label, created_by)
-		VALUES ($1,$2,$3)
-	`, token, body.Label, username.(string))
+		INSERT INTO agent_install_tokens (token, label, created_by, tenant_id)
+		VALUES ($1,$2,$3,$4)
+	`, token, body.Label, username.(string), tenantID)
 
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -101,8 +94,8 @@ func GenerateInstallToken(c *gin.Context) {
 func GetInstallTokens(c *gin.Context) {
 	rows, err := database.DB.Query(`
 		SELECT id, label, used, created_by, expires_at, created_at
-		FROM agent_install_tokens ORDER BY created_at DESC LIMIT 20
-	`)
+		FROM agent_install_tokens WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 20
+	`, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

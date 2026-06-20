@@ -26,7 +26,11 @@ func UpdatePlaybook(c *gin.Context) {
 		return
 	}
 
-	if err := repositories.UpdatePlaybook(id, playbook); err != nil {
+	if err := repositories.UpdatePlaybook(id, playbook, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrPlaybookNotFound {
+			c.JSON(404, gin.H{"error": "playbook not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -46,7 +50,11 @@ func DeletePlaybook(c *gin.Context) {
 		return
 	}
 
-	if err := repositories.DeletePlaybook(id); err != nil {
+	if err := repositories.DeletePlaybook(id, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrPlaybookNotFound {
+			c.JSON(404, gin.H{"error": "playbook not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -76,7 +84,11 @@ func togglePlaybook(c *gin.Context, enabled bool) {
 		return
 	}
 
-	if err := repositories.SetPlaybookEnabled(id, enabled); err != nil {
+	if err := repositories.SetPlaybookEnabled(id, enabled, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrPlaybookNotFound {
+			c.JSON(404, gin.H{"error": "playbook not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

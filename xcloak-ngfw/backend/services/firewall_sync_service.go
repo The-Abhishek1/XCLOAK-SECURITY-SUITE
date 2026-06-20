@@ -40,22 +40,31 @@ type SyncResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
-// SyncFirewallToAgents fetches all enabled rules, serialises them into a
-// task payload, and dispatches an apply_firewall_rules task to every target.
-// targetAgentIDs: nil or empty = all online agents.
+// SyncFirewallToAgents fetches tenantID's enabled rules, serialises them
+// into a task payload, and dispatches an apply_firewall_rules task to every
+// target — constrained to tenantID's own agents (both the "all online
+// agents" fallback and any explicit targetAgentIDs), so one tenant can
+// never push their firewall config onto (or wipe, in "replace" mode)
+// another tenant's agents.
+// targetAgentIDs: nil or empty = all online agents in tenantID.
 func SyncFirewallToAgents(
 	targetAgentIDs []int,
 	mode string,         // "replace" | "append"
 	manageIP string,     // XCloak server IP — always whitelisted
 	syncedBy string,
+	tenantID int,
 ) ([]SyncResult, error) {
 
 	if mode == "" {
 		mode = "replace"
 	}
 
-	// Fetch all enabled firewall rules ordered by priority.
-	dbRules, err := repositories.GetAllRules()
+	if len(targetAgentIDs) > 0 {
+		targetAgentIDs = filterAgentIDsByTenant(targetAgentIDs, tenantID)
+	}
+
+	// Fetch this tenant's enabled firewall rules ordered by priority.
+	dbRules, err := repositories.GetRulesForTenant(tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch rules: %w", err)
 	}
@@ -87,8 +96,8 @@ func SyncFirewallToAgents(
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
-	// Determine target agents.
-	agents, err := repositories.GetAgents()
+	// Determine target agents — scoped to this tenant only.
+	agents, err := repositories.GetAgents(tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch agents: %w", err)
 	}
@@ -142,7 +151,7 @@ func SyncFirewallToAgents(
 	}
 
 	// Stamp rules as synced.
-	database.DB.Exec(`UPDATE firewall_rules SET synced_at = now() WHERE enabled = TRUE`)
+	database.DB.Exec(`UPDATE firewall_rules SET synced_at = now() WHERE enabled = TRUE AND tenant_id = $1`, tenantID)
 
 	LogEvent(
 		"FIREWALL_SYNC",
@@ -153,18 +162,19 @@ func SyncFirewallToAgents(
 	return results, nil
 }
 
-// GetFirewallSyncLog returns recent sync history.
-func GetFirewallSyncLog(agentID int) ([]map[string]any, error) {
+// GetFirewallSyncLog returns recent sync history for tenantID, optionally
+// filtered to a single agent (still constrained to that tenant).
+func GetFirewallSyncLog(agentID int, tenantID int) ([]map[string]any, error) {
 	query := `
 		SELECT l.id, l.agent_id, a.hostname, l.rule_count,
 		       l.status, l.result, l.synced_by, l.synced_at
 		FROM firewall_sync_log l
-		LEFT JOIN agents a ON a.id = l.agent_id
-		WHERE ($1 = 0 OR l.agent_id = $1)
+		JOIN agents a ON a.id = l.agent_id
+		WHERE ($1 = 0 OR l.agent_id = $1) AND a.tenant_id = $2
 		ORDER BY l.synced_at DESC
 		LIMIT 50
 	`
-	rows, err := database.DB.Query(query, agentID)
+	rows, err := database.DB.Query(query, agentID, tenantID)
 	if err != nil {
 		return nil, err
 	}

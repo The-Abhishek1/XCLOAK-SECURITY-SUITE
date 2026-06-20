@@ -24,6 +24,7 @@ func RunHunt(c *gin.Context) {
 	}
 
 	queryID := 0
+	tenantID := tenantIDFromContext(c)
 
 	if body.Save {
 		username, _ := c.Get("username")
@@ -36,13 +37,13 @@ func RunHunt(c *gin.Context) {
 			QueryType: body.QueryType,
 			QueryText: body.QueryText,
 			CreatedBy: username.(string),
-		})
+		}, tenantID)
 		if err == nil {
 			queryID = saved.ID
 		}
 	}
 
-	result, err := services.RunHuntQuery(queryID, body.QueryType, body.QueryText)
+	result, err := services.RunHuntQuery(queryID, body.QueryType, body.QueryText, tenantID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -53,7 +54,7 @@ func RunHunt(c *gin.Context) {
 
 // GetHuntQueries — GET /api/hunt/queries
 func GetHuntQueries(c *gin.Context) {
-	queries, err := services.GetHuntQueries()
+	queries, err := services.GetHuntQueries(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -67,18 +68,15 @@ func GetHuntQueries(c *gin.Context) {
 // RerunHuntQuery — POST /api/hunt/queries/:id/run
 func RerunHuntQuery(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := tenantIDFromContext(c)
 
-	var q models.HuntQuery
-	err := services.GetDB().QueryRow(`
-		SELECT id, query_type, query_text FROM hunt_queries WHERE id=$1
-	`, id).Scan(&q.ID, &q.QueryType, &q.QueryText)
-
+	q, err := services.GetHuntQueryByID(id, tenantID)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "query not found"})
 		return
 	}
 
-	result, err := services.RunHuntQuery(q.ID, q.QueryType, q.QueryText)
+	result, err := services.RunHuntQuery(q.ID, q.QueryType, q.QueryText, tenantID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -89,7 +87,7 @@ func RerunHuntQuery(c *gin.Context) {
 
 // DeleteHuntQuery — DELETE /api/hunt/queries/:id
 func DeleteHuntQuery(c *gin.Context) {
-	if err := services.DeleteHuntQuery(c.Param("id")); err != nil {
+	if err := services.DeleteHuntQuery(c.Param("id"), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

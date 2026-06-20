@@ -50,7 +50,7 @@ func TestRequireAuth_RejectsGarbageToken(t *testing.T) {
 }
 
 func TestRequireAuth_RejectsRefreshTokenAsAccessToken(t *testing.T) {
-	tokenStr, err := auth.GenerateRefreshToken(1, "alice", "admin")
+	tokenStr, err := auth.GenerateRefreshToken(1, "alice", "admin", 1)
 	if err != nil {
 		t.Fatalf("GenerateRefreshToken: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRequireAuth_RejectsRefreshTokenAsAccessToken(t *testing.T) {
 }
 
 func TestRequireAuth_AcceptsValidAccessToken(t *testing.T) {
-	tokenStr, err := auth.GenerateJWT(1, "alice", "admin")
+	tokenStr, err := auth.GenerateJWT(1, "alice", "admin", 1)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
 	}

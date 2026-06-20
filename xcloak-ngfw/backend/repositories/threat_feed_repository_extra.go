@@ -11,16 +11,18 @@ import (
 	"xcloak-ngfw/models"
 )
 
-func GetThreatFeedByID(id string) (*models.ThreatFeed, error) {
+// GetThreatFeedByID fetches a single feed, scoped to tenantID — a request
+// for another tenant's feed gets the same error as a nonexistent one.
+func GetThreatFeedByID(id string, tenantID int) (*models.ThreatFeed, error) {
 
 	var feed models.ThreatFeed
 	var configStr string
 
 	err := database.DB.QueryRow(`
-		SELECT id, name, source, enabled, feed_type, COALESCE(config::text, '{}'), last_sync, created_at
+		SELECT id, name, source, enabled, feed_type, COALESCE(config::text, '{}'), last_sync, tenant_id, created_at
 		FROM threat_feeds
-		WHERE id = $1
-	`, id).Scan(
+		WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID).Scan(
 		&feed.ID,
 		&feed.Name,
 		&feed.Source,
@@ -28,6 +30,7 @@ func GetThreatFeedByID(id string) (*models.ThreatFeed, error) {
 		&feed.FeedType,
 		&configStr,
 		&feed.LastSync,
+		&feed.TenantID,
 		&feed.CreatedAt,
 	)
 

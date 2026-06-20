@@ -7,17 +7,19 @@ import (
 
 func CreateThreatFeed(
 	feed models.ThreatFeed,
+	tenantID int,
 ) error {
 
 	return repositories.CreateThreatFeed(
 		feed,
+		tenantID,
 	)
 }
 
-func GetThreatFeeds() (
+func GetThreatFeeds(tenantID int) (
 	[]models.ThreatFeed,
 	error,
 ) {
 
-	return repositories.GetThreatFeeds()
+	return repositories.GetThreatFeeds(tenantID)
 }

@@ -88,7 +88,7 @@ func syncOTXFeed(feed models.ThreatFeed) (int, error) {
 				if iocType == "" {
 					continue // unsupported OTX type (e.g. CVE, YARA, Mutex)
 				}
-				if importIndicator(ind.Indicator, iocType, "high", feed.Name) {
+				if importIndicator(ind.Indicator, iocType, "high", feed.Name, feed.TenantID) {
 					imported++
 				}
 			}

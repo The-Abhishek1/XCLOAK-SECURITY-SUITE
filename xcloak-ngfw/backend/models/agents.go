@@ -10,6 +10,7 @@ type Agent struct {
 	IPAddress string    `json:"ip_address"`
 	Status    string    `json:"status"`
 	Token     string    `json:"token,omitempty"` // only sent on first registration
+	TenantID  int       `json:"tenant_id"`
 	LastSeen  time.Time `json:"last_seen"`
 	CreatedAt time.Time `json:"created_at"`
 }

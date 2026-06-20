@@ -40,6 +40,9 @@ func SaveFileHashes(c *gin.Context) {
 func GetAgentFileHashes(c *gin.Context) {
 
 	agentID := c.Param("id")
+	if !agentOwnedBy404(c, agentID) {
+		return
+	}
 
 	hashes, err := services.GetFileHashesByAgent(agentID)
 	if err != nil {

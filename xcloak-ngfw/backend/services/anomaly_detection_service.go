@@ -40,8 +40,9 @@ func RunAnomalyDetection(agentID int) ([]models.AnomalyFinding, error) {
 	return findings, nil
 }
 
-// GetAnomalies returns recent anomaly findings for an agent (or all agents).
-func GetAnomalies(agentID string) ([]models.AnomalyFinding, error) {
+// GetAnomalies returns recent anomaly findings for tenantID, optionally
+// filtered to a single agent (still constrained to that tenant).
+func GetAnomalies(agentID string, tenantID int) ([]models.AnomalyFinding, error) {
 
 	var rows *sql.Rows
 	var err error
@@ -50,17 +51,18 @@ func GetAnomalies(agentID string) ([]models.AnomalyFinding, error) {
 		rows, err = database.DB.Query(`
 			SELECT id, agent_id, finding_type, description, severity, raw_context, created_at
 			FROM anomaly_findings
-			WHERE agent_id = $1
+			WHERE agent_id = $1 AND tenant_id = $2
 			ORDER BY created_at DESC
 			LIMIT 50
-		`, agentID)
+		`, agentID, tenantID)
 	} else {
 		rows, err = database.DB.Query(`
 			SELECT id, agent_id, finding_type, description, severity, raw_context, created_at
 			FROM anomaly_findings
+			WHERE tenant_id = $1
 			ORDER BY created_at DESC
 			LIMIT 100
-		`)
+		`, tenantID)
 	}
 
 	if err != nil {
@@ -185,7 +187,7 @@ func parseAnomalyJSON(agentID int, raw string) []models.AnomalyFinding {
 func saveAnomaly(f models.AnomalyFinding) {
 
 	database.DB.Exec(`
-		INSERT INTO anomaly_findings (agent_id, finding_type, description, severity, raw_context)
-		VALUES ($1,$2,$3,$4,$5)
+		INSERT INTO anomaly_findings (agent_id, finding_type, description, severity, raw_context, tenant_id)
+		VALUES ($1,$2,$3,$4,$5, (SELECT tenant_id FROM agents WHERE id = $1))
 	`, f.AgentID, f.FindingType, f.Description, f.Severity, f.RawContext)
 }

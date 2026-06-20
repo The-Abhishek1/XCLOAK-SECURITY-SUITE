@@ -11,5 +11,6 @@ type PlaybookExecution struct {
 	Status      string    `json:"status"`
 	ErrorDetail string    `json:"error_detail"`
 	TaskID      int       `json:"task_id"`
+	TenantID    int       `json:"tenant_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }

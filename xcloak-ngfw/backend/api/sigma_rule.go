@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -27,6 +28,7 @@ func CreateSigmaRule(
 
 	err := services.CreateSigmaRule(
 		rule,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
@@ -53,7 +55,7 @@ func GetSigmaRules(
 	c *gin.Context,
 ) {
 
-	rules, err := services.GetSigmaRules()
+	rules, err := services.GetSigmaRules(tenantIDFromContext(c))
 
 	if err != nil {
 
@@ -81,6 +83,7 @@ func GetSigmaRuleByID(
 
 	rule, err := services.GetSigmaRuleByID(
 		id,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
@@ -124,9 +127,15 @@ func UpdateSigmaRule(
 	err := services.UpdateSigmaRule(
 		id,
 		rule,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
+
+		if err == repositories.ErrSigmaRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 
 		c.JSON(
 			500,
@@ -154,9 +163,15 @@ func DeleteSigmaRule(
 
 	err := services.DeleteSigmaRule(
 		id,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
+
+		if err == repositories.ErrSigmaRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 
 		c.JSON(
 			500,
@@ -184,9 +199,15 @@ func EnableSigmaRule(
 
 	err := services.EnableSigmaRule(
 		id,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
+
+		if err == repositories.ErrSigmaRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 
 		c.JSON(
 			500,
@@ -214,9 +235,15 @@ func DisableSigmaRule(
 
 	err := services.DisableSigmaRule(
 		id,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
+
+		if err == repositories.ErrSigmaRuleNotFound {
+			c.JSON(404, gin.H{"error": "rule not found"})
+			return
+		}
 
 		c.JSON(
 			500,

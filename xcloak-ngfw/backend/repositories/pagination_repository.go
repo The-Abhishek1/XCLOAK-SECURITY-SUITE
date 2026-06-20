@@ -32,9 +32,9 @@ type PaginatedAuditLogs struct {
 	TotalPages int               `json:"total_pages"`
 }
 
-// GetAlertsPaginated returns one page of alerts, optionally filtered by
-// severity and/or agent_id. Newest first.
-func GetAlertsPaginated(page, perPage int, severity, agentID string) (*PaginatedAlerts, error) {
+// GetAlertsPaginated returns one page of alerts for tenantID, optionally
+// filtered by severity and/or agent_id. Newest first.
+func GetAlertsPaginated(tenantID int, page, perPage int, severity, agentID string) (*PaginatedAlerts, error) {
 
 	if page < 1 {
 		page = 1
@@ -45,9 +45,9 @@ func GetAlertsPaginated(page, perPage int, severity, agentID string) (*Paginated
 
 	offset := (page - 1) * perPage
 
-	where := "WHERE 1=1"
-	args := []interface{}{}
-	idx := 1
+	where := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	idx := 2
 
 	if severity != "" && severity != "all" {
 		where += fmt.Sprintf(" AND severity = $%d", idx)
@@ -106,7 +106,7 @@ func GetAlertsPaginated(page, perPage int, severity, agentID string) (*Paginated
 
 // GetIncidentsPaginated returns one page of incidents, optionally filtered
 // by status. Newest first.
-func GetIncidentsPaginated(page, perPage int, status string) (*PaginatedIncidents, error) {
+func GetIncidentsPaginated(tenantID int, page, perPage int, status string) (*PaginatedIncidents, error) {
 
 	if page < 1 {
 		page = 1
@@ -117,9 +117,9 @@ func GetIncidentsPaginated(page, perPage int, status string) (*PaginatedIncident
 
 	offset := (page - 1) * perPage
 
-	where := "WHERE 1=1"
-	args := []interface{}{}
-	idx := 1
+	where := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	idx := 2
 
 	if status != "" && status != "all" {
 		where += fmt.Sprintf(" AND status = $%d", idx)

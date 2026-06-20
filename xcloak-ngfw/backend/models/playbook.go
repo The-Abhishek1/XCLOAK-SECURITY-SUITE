@@ -13,5 +13,7 @@ type Playbook struct {
 
 	Enabled bool `json:"enabled"`
 
+	TenantID int `json:"tenant_id"`
+
 	CreatedAt time.Time `json:"created_at"`
 }

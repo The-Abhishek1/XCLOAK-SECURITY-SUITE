@@ -101,7 +101,7 @@ func syncTAXIIFeed(feed models.ThreatFeed) (int, error) {
 			if indicator == "" {
 				continue
 			}
-			if importIndicator(indicator, iocType, "high", feed.Name) {
+			if importIndicator(indicator, iocType, "high", feed.Name, feed.TenantID) {
 				imported++
 			}
 		}

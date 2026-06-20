@@ -168,6 +168,7 @@ func SetupRoutes(router *gin.Engine) {
 
 	// ── Users ─────────────────────────────────────────────────────
 	router.GET("/api/users", middleware.RequireAuth(), middleware.RequireRole("admin"), api.GetUsers)
+	router.POST("/api/users/invite", middleware.RequireAuth(), middleware.RequireRole("admin"), api.InviteUserHandler)
 	router.PUT("/api/users/:id/role", middleware.RequireAuth(), middleware.RequireRole("admin"), api.UpdateUserRole)
 	router.PATCH("/api/users/:id/toggle", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleUserActive)
 	router.DELETE("/api/users/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteUser)

@@ -43,7 +43,7 @@ type AgentAlertCount struct {
 	Count    int    `json:"count"`
 }
 
-func GetDashboardMetrics() (*DashboardMetrics, error) {
+func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 
 	m := &DashboardMetrics{}
 
@@ -56,10 +56,10 @@ func GetDashboardMetrics() (*DashboardMetrics, error) {
 			COALESCE(SUM(CASE WHEN severity='medium'   THEN 1 ELSE 0 END), 0) AS medium,
 			COALESCE(SUM(CASE WHEN severity='low'      THEN 1 ELSE 0 END), 0) AS low
 		FROM alerts
-		WHERE created_at > now() - INTERVAL '24 hours'
+		WHERE created_at > now() - INTERVAL '24 hours' AND tenant_id=$1
 		GROUP BY date_trunc('hour', created_at)
 		ORDER BY date_trunc('hour', created_at) ASC
-	`)
+	`, tenantID)
 
 	if err == nil {
 		defer rows.Close()
@@ -77,33 +77,33 @@ func GetDashboardMetrics() (*DashboardMetrics, error) {
 			COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))), 0),
 			COUNT(*) FILTER (WHERE resolved_at IS NOT NULL)
 		FROM incidents
-		WHERE resolved_at IS NOT NULL
-	`).Scan(&m.MTTR.AvgSeconds, &m.MTTR.TotalResolved)
+		WHERE resolved_at IS NOT NULL AND tenant_id=$1
+	`, tenantID).Scan(&m.MTTR.AvgSeconds, &m.MTTR.TotalResolved)
 
 	database.DB.QueryRow(`
 		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))), 0)
 		FROM incidents
 		WHERE resolved_at IS NOT NULL
-		AND created_at > now() - INTERVAL '24 hours'
-	`).Scan(&m.MTTR.Last24h)
+		AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1
+	`, tenantID).Scan(&m.MTTR.Last24h)
 
 	m.MTTR.AvgFormatted = formatDuration(m.MTTR.AvgSeconds)
 
 	// ── Alert velocity (last 1h) ───────────────────────────────
 	database.DB.QueryRow(`
 		SELECT COUNT(*) FROM alerts
-		WHERE created_at > now() - INTERVAL '1 hour'
-	`).Scan(&m.AlertVelocity)
+		WHERE created_at > now() - INTERVAL '1 hour' AND tenant_id=$1
+	`, tenantID).Scan(&m.AlertVelocity)
 
 	// ── Top firing rules (last 7d) ─────────────────────────────
 	ruleRows, err := database.DB.Query(`
 		SELECT rule_name, severity, COUNT(*) as cnt
 		FROM alerts
-		WHERE created_at > now() - INTERVAL '7 days'
+		WHERE created_at > now() - INTERVAL '7 days' AND tenant_id=$1
 		GROUP BY rule_name, severity
 		ORDER BY cnt DESC
 		LIMIT 10
-	`)
+	`, tenantID)
 	if err == nil {
 		defer ruleRows.Close()
 		for ruleRows.Next() {
@@ -119,11 +119,11 @@ func GetDashboardMetrics() (*DashboardMetrics, error) {
 		SELECT a.id, a.hostname, COUNT(al.id) as cnt
 		FROM agents a
 		JOIN alerts al ON al.agent_id = a.id
-		WHERE al.created_at > now() - INTERVAL '7 days'
+		WHERE al.created_at > now() - INTERVAL '7 days' AND a.tenant_id=$1
 		GROUP BY a.id, a.hostname
 		ORDER BY cnt DESC
 		LIMIT 5
-	`)
+	`, tenantID)
 	if err == nil {
 		defer agentRows.Close()
 		for agentRows.Next() {
@@ -136,10 +136,10 @@ func GetDashboardMetrics() (*DashboardMetrics, error) {
 
 	// ── Platform threat score (weighted 0-100) ─────────────────
 	var critAlerts, highAlerts, openIncidents, critVulns int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='critical' AND created_at > now() - INTERVAL '24 hours'`).Scan(&critAlerts)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='high' AND created_at > now() - INTERVAL '24 hours'`).Scan(&highAlerts)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM incidents WHERE status IN ('open','investigating')`).Scan(&openIncidents)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM vulnerabilities WHERE severity='critical'`).Scan(&critVulns)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='critical' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&critAlerts)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='high' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&highAlerts)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM incidents WHERE status IN ('open','investigating') AND tenant_id=$1`, tenantID).Scan(&openIncidents)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vulnerabilities v JOIN agents a ON a.id=v.agent_id WHERE v.severity='critical' AND a.tenant_id=$1`, tenantID).Scan(&critVulns)
 
 	score := (critAlerts * 5) + (highAlerts * 2) + (openIncidents * 10) + (critVulns * 3)
 	if score > 100 {

@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -29,12 +30,18 @@ func CreatePlaybookAction(
 
 	err := services.CreatePlaybookAction(
 		action,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
 
+		status := 500
+		if err == services.ErrPlaybookNotFoundForAction {
+			status = 404
+		}
+
 		c.JSON(
-			500,
+			status,
 			gin.H{
 				"error": err.Error(),
 			},
@@ -59,6 +66,7 @@ func GetPlaybookActions(
 
 	actions, err := services.GetPlaybookActions(
 		playbookID,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
@@ -87,12 +95,18 @@ func DeletePlaybookAction(
 
 	err := services.DeletePlaybookAction(
 		id,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
 
+		status := 500
+		if err == repositories.ErrPlaybookActionNotFound {
+			status = 404
+		}
+
 		c.JSON(
-			500,
+			status,
 			gin.H{
 				"error": err.Error(),
 			},

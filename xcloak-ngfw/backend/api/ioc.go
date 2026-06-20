@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -20,7 +21,7 @@ func CreateIOC(c *gin.Context) {
 		return
 	}
 
-	err := services.CreateIOC(ioc)
+	err := services.CreateIOC(ioc, tenantIDFromContext(c))
 
 	if err != nil {
 
@@ -38,7 +39,7 @@ func CreateIOC(c *gin.Context) {
 
 func GetIOCs(c *gin.Context) {
 
-	iocs, err := services.GetIOCs()
+	iocs, err := services.GetIOCs(tenantIDFromContext(c))
 
 	if err != nil {
 
@@ -56,7 +57,7 @@ func GetIOCByID(c *gin.Context) {
 
 	id := c.Param("id")
 
-	ioc, err := services.GetIOCByID(id)
+	ioc, err := services.GetIOCByID(id, tenantIDFromContext(c))
 
 	if err != nil {
 
@@ -88,9 +89,15 @@ func UpdateIOC(c *gin.Context) {
 	err := services.UpdateIOC(
 		id,
 		ioc,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
+
+		if err == repositories.ErrIOCNotFound {
+			c.JSON(404, gin.H{"error": "ioc not found"})
+			return
+		}
 
 		c.JSON(500, gin.H{
 			"error": err.Error(),
@@ -108,9 +115,14 @@ func DeleteIOC(c *gin.Context) {
 
 	id := c.Param("id")
 
-	err := services.DeleteIOC(id)
+	err := services.DeleteIOC(id, tenantIDFromContext(c))
 
 	if err != nil {
+
+		if err == repositories.ErrIOCNotFound {
+			c.JSON(404, gin.H{"error": "ioc not found"})
+			return
+		}
 
 		c.JSON(500, gin.H{
 			"error": err.Error(),
@@ -128,9 +140,14 @@ func EnableIOC(c *gin.Context) {
 
 	id := c.Param("id")
 
-	err := services.EnableIOC(id)
+	err := services.EnableIOC(id, tenantIDFromContext(c))
 
 	if err != nil {
+
+		if err == repositories.ErrIOCNotFound {
+			c.JSON(404, gin.H{"error": "ioc not found"})
+			return
+		}
 
 		c.JSON(500, gin.H{
 			"error": err.Error(),
@@ -148,9 +165,14 @@ func DisableIOC(c *gin.Context) {
 
 	id := c.Param("id")
 
-	err := services.DisableIOC(id)
+	err := services.DisableIOC(id, tenantIDFromContext(c))
 
 	if err != nil {
+
+		if err == repositories.ErrIOCNotFound {
+			c.JSON(404, gin.H{"error": "ioc not found"})
+			return
+		}
 
 		c.JSON(500, gin.H{
 			"error": err.Error(),

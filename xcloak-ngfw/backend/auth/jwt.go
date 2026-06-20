@@ -36,13 +36,14 @@ var JwtSecret = func() []byte {
 	return []byte(s)
 }()
 
-func GenerateJWT(userID int, username, role string) (string, error) {
+func GenerateJWT(userID int, username, role string, tenantID int) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id":  userID,
-		"username": username,
-		"role":     role,
-		"iat":      time.Now().Unix(),
-		"exp":      time.Now().Add(8 * time.Hour).Unix(), // 8h — reduced from 24h
+		"user_id":   userID,
+		"username":  username,
+		"role":      role,
+		"tenant_id": tenantID,
+		"iat":       time.Now().Unix(),
+		"exp":       time.Now().Add(8 * time.Hour).Unix(), // 8h — reduced from 24h
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(JwtSecret)
@@ -50,14 +51,15 @@ func GenerateJWT(userID int, username, role string) (string, error) {
 
 // GenerateRefreshToken issues a longer-lived refresh token (7 days).
 // Used to silently re-issue access tokens without re-login.
-func GenerateRefreshToken(userID int, username, role string) (string, error) {
+func GenerateRefreshToken(userID int, username, role string, tenantID int) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id":  userID,
-		"username": username,
-		"role":     role,
-		"type":     "refresh",
-		"iat":      time.Now().Unix(),
-		"exp":      time.Now().Add(7 * 24 * time.Hour).Unix(),
+		"user_id":   userID,
+		"username":  username,
+		"role":      role,
+		"tenant_id": tenantID,
+		"type":      "refresh",
+		"iat":       time.Now().Unix(),
+		"exp":       time.Now().Add(7 * 24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(JwtSecret)

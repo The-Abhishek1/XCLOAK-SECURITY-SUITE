@@ -8,6 +8,7 @@ import (
 
 func CreateFirewallRule(
 	rule models.FirewallRule,
+	tenantID int,
 ) error {
 
 	err := validators.ValidateFirewallRule(rule)
@@ -16,7 +17,7 @@ func CreateFirewallRule(
 		return err
 	}
 
-	err = repositories.CreateRule(rule)
+	err = repositories.CreateRule(rule, tenantID)
 
 	if err != nil {
 		return err

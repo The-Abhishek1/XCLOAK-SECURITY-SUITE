@@ -29,17 +29,21 @@ func AcknowledgeAlert(c *gin.Context) {
 	user := fmt.Sprintf("%v", username)
 	now := time.Now()
 
-	_, err = database.DB.Exec(`
+	tag, err := database.DB.Exec(`
 		UPDATE alerts
 		SET status = 'acknowledged',
 		    acknowledged_by = $1,
 		    acknowledged_at = $2,
 		    note = CASE WHEN $3 = '' THEN note ELSE $3 END
-		WHERE id = $4
-	`, user, now, body.Note, id)
+		WHERE id = $4 AND tenant_id = $5
+	`, user, now, body.Note, id, tenantIDFromContext(c))
 
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "alert not found"})
 		return
 	}
 
@@ -70,17 +74,21 @@ func ResolveAlert(c *gin.Context) {
 	username, _ := c.Get("username")
 	user := fmt.Sprintf("%v", username)
 
-	_, err = database.DB.Exec(`
+	tag, err := database.DB.Exec(`
 		UPDATE alerts
 		SET status = 'resolved',
 		    acknowledged_by = $1,
 		    acknowledged_at = NOW(),
 		    note = CASE WHEN $2 = '' THEN note ELSE $2 END
-		WHERE id = $3
-	`, user, body.Note, id)
+		WHERE id = $3 AND tenant_id = $4
+	`, user, body.Note, id, tenantIDFromContext(c))
 
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "alert not found"})
 		return
 	}
 
@@ -105,7 +113,7 @@ func BulkAcknowledgeAlerts(c *gin.Context) {
 	user := fmt.Sprintf("%v", username)
 
 	// Build $1,$2,... placeholder
-	args := []interface{}{user, time.Now(), body.Note}
+	args := []interface{}{user, time.Now(), body.Note, tenantIDFromContext(c)}
 	placeholders := ""
 	for i, id := range body.IDs {
 		if i > 0 {
@@ -121,7 +129,7 @@ func BulkAcknowledgeAlerts(c *gin.Context) {
 		    acknowledged_by = $1,
 		    acknowledged_at = $2,
 		    note = CASE WHEN $3 = '' THEN note ELSE $3 END
-		WHERE id IN (%s) AND status = 'open'
+		WHERE id IN (%s) AND status = 'open' AND tenant_id = $4
 	`, placeholders), args...)
 
 	if err != nil {
@@ -148,9 +156,9 @@ func GetAlertsPaginated(c *gin.Context) {
 	if page < 1    { page = 1 }
 	if perPage > 200 { perPage = 200 }
 
-	where := "WHERE 1=1"
-	args  := []interface{}{}
-	idx   := 1
+	where := "WHERE tenant_id=$1"
+	args  := []interface{}{tenantIDFromContext(c)}
+	idx   := 2
 
 	if severity != "" && severity != "all" {
 		where += fmt.Sprintf(" AND severity=$%d", idx)

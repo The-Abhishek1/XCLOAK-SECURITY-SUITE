@@ -5,6 +5,8 @@ import (
 	"xcloak-ngfw/models"
 )
 
+// SaveQuarantinedFile inserts a quarantine record with tenant_id resolved
+// from the owning agent — same pattern as CreateAlert.
 func SaveQuarantinedFile(
 	file models.QuarantinedFile,
 ) error {
@@ -16,9 +18,10 @@ func SaveQuarantinedFile(
 			original_path,
 			quarantine_path,
 			file_name,
-			reason
+			reason,
+			tenant_id
 		)
-		VALUES ($1,$2,$3,$4,$5)
+		VALUES ($1,$2,$3,$4,$5, (SELECT tenant_id FROM agents WHERE id = $1))
 	`,
 		file.AgentID,
 		file.OriginalPath,
@@ -30,7 +33,8 @@ func SaveQuarantinedFile(
 	return err
 }
 
-func GetQuarantinedFiles() ([]models.QuarantinedFile, error) {
+// GetQuarantinedFiles returns quarantine records belonging to tenantID only.
+func GetQuarantinedFiles(tenantID int) ([]models.QuarantinedFile, error) {
 
 	rows, err := database.DB.Query(`
 		SELECT
@@ -42,8 +46,9 @@ func GetQuarantinedFiles() ([]models.QuarantinedFile, error) {
 			reason,
 			quarantined_at
 		FROM quarantined_files
+		WHERE tenant_id = $1
 		ORDER BY quarantined_at DESC
-	`)
+	`, tenantID)
 
 	if err != nil {
 		return nil, err

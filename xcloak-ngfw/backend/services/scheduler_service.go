@@ -42,7 +42,7 @@ func runDueScheduledTasks() {
 	rows, err := database.DB.Query(`
 		SELECT id, name, task_type,
 		       COALESCE(array_to_json(agent_ids)::text, '[]'),
-		       cron_expr, COALESCE(payload::text, '{}')
+		       cron_expr, COALESCE(payload::text, '{}'), tenant_id
 		FROM scheduled_tasks
 		WHERE enabled = TRUE
 		AND (next_run_at IS NULL OR next_run_at <= now())
@@ -57,7 +57,7 @@ func runDueScheduledTasks() {
 		var st models.ScheduledTask
 		var agentIDsRaw, payloadRaw string
 		if err := rows.Scan(&st.ID, &st.Name, &st.TaskType, &agentIDsRaw,
-			&st.CronExpr, &payloadRaw); err == nil {
+			&st.CronExpr, &payloadRaw, &st.TenantID); err == nil {
 			st.AgentIDs = scanAgentIDs(agentIDsRaw)
 			st.Payload = json.RawMessage(payloadRaw)
 			due = append(due, st)
@@ -69,10 +69,15 @@ func runDueScheduledTasks() {
 	}
 }
 
+// dispatchScheduledTask fans a task out to its target agents, always
+// constrained to st.TenantID — both the "no explicit agent_ids" fallback
+// (every online agent) and an explicit agent_ids list are filtered to that
+// tenant's own agents, so one tenant's schedule can never dispatch
+// (including destructive task types) against another tenant's fleet.
 func dispatchScheduledTask(st models.ScheduledTask) {
-	targets := st.AgentIDs
-	if len(targets) == 0 {
-		agents, err := repositories.GetAgents()
+	var targets []int
+	if len(st.AgentIDs) == 0 {
+		agents, err := repositories.GetAgents(st.TenantID)
 		if err == nil {
 			for _, a := range agents {
 				if a.Status == "online" {
@@ -80,6 +85,8 @@ func dispatchScheduledTask(st models.ScheduledTask) {
 				}
 			}
 		}
+	} else {
+		targets = filterAgentIDsByTenant(st.AgentIDs, st.TenantID)
 	}
 	for _, agentID := range targets {
 		repositories.CreateTask(models.AgentTask{
@@ -98,6 +105,29 @@ func dispatchScheduledTask(st models.ScheduledTask) {
 		st.Name, len(targets), next.Format("15:04:05"))
 }
 
+// filterAgentIDsByTenant returns only the ids that actually belong to
+// tenantID, dropping any explicitly-listed agent id from another tenant.
+func filterAgentIDsByTenant(ids []int, tenantID int) []int {
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := database.DB.Query(
+		`SELECT id FROM agents WHERE id = ANY($1) AND tenant_id = $2`, ids, tenantID,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var valid []int
+	for rows.Next() {
+		var id int
+		if rows.Scan(&id) == nil {
+			valid = append(valid, id)
+		}
+	}
+	return valid
+}
+
 func nextRunTime(expr string) time.Time {
 	fields := strings.Fields(expr)
 	if len(fields) != 5 {
@@ -114,7 +144,17 @@ func nextRunTime(expr string) time.Time {
 	return now.Add(time.Hour)
 }
 
-func CreateScheduledTask(st models.ScheduledTask) (*models.ScheduledTask, error) {
+func CreateScheduledTask(st models.ScheduledTask, tenantID int) (*models.ScheduledTask, error) {
+	// Reject any explicitly-listed agent id that doesn't belong to the
+	// creating tenant up front, rather than silently dropping it later at
+	// dispatch time.
+	if len(st.AgentIDs) > 0 {
+		valid := filterAgentIDsByTenant(st.AgentIDs, tenantID)
+		if len(valid) != len(st.AgentIDs) {
+			return nil, fmt.Errorf("one or more agent_ids do not belong to your tenant")
+		}
+	}
+
 	// Convert []int to PostgreSQL integer[] literal: {1,2,3}
 	pgArray := "{}"
 	if len(st.AgentIDs) > 0 {
@@ -127,11 +167,11 @@ func CreateScheduledTask(st models.ScheduledTask) (*models.ScheduledTask, error)
 	next := nextRunTime(st.CronExpr)
 	err := database.DB.QueryRow(`
 		INSERT INTO scheduled_tasks
-		(name, task_type, agent_ids, cron_expr, payload, enabled, next_run_at, created_by)
-		VALUES ($1,$2,$3::integer[],$4,$5,TRUE,$6,$7)
+		(name, task_type, agent_ids, cron_expr, payload, enabled, next_run_at, created_by, tenant_id)
+		VALUES ($1,$2,$3::integer[],$4,$5,TRUE,$6,$7,$8)
 		RETURNING id, created_at
 	`, st.Name, st.TaskType, pgArray, st.CronExpr,
-		st.Payload, next, st.CreatedBy).
+		st.Payload, next, st.CreatedBy, tenantID).
 		Scan(&st.ID, &st.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -140,14 +180,14 @@ func CreateScheduledTask(st models.ScheduledTask) (*models.ScheduledTask, error)
 	return &st, nil
 }
 
-func GetScheduledTasks() ([]models.ScheduledTask, error) {
+func GetScheduledTasks(tenantID int) ([]models.ScheduledTask, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, name, task_type,
 		       COALESCE(array_to_json(agent_ids)::text, '[]'),
 		       cron_expr, COALESCE(payload::text, '{}'),
 		       enabled, last_run_at, next_run_at, run_count, created_by, created_at
-		FROM scheduled_tasks ORDER BY created_at DESC
-	`)
+		FROM scheduled_tasks WHERE tenant_id=$1 ORDER BY created_at DESC
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -169,18 +209,30 @@ func GetScheduledTasks() ([]models.ScheduledTask, error) {
 	return tasks, nil
 }
 
-func ToggleScheduledTask(id string, enabled bool) error {
-	_, err := database.DB.Exec(
-		`UPDATE scheduled_tasks SET enabled=$1 WHERE id=$2`, enabled, id)
-	return err
+func ToggleScheduledTask(id string, enabled bool, tenantID int) error {
+	tag, err := database.DB.Exec(
+		`UPDATE scheduled_tasks SET enabled=$1 WHERE id=$2 AND tenant_id=$3`, enabled, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return fmt.Errorf("scheduled task not found")
+	}
+	return nil
 }
 
-func DeleteScheduledTask(id string) error {
-	_, err := database.DB.Exec(`DELETE FROM scheduled_tasks WHERE id=$1`, id)
-	return err
+func DeleteScheduledTask(id string, tenantID int) error {
+	tag, err := database.DB.Exec(`DELETE FROM scheduled_tasks WHERE id=$1 AND tenant_id=$2`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return fmt.Errorf("scheduled task not found")
+	}
+	return nil
 }
 
-func RunScheduledTaskNow(id string) error {
+func RunScheduledTaskNow(id string, tenantID int) error {
 	var st models.ScheduledTask
 	var agentIDsRaw, payloadRaw string
 
@@ -188,13 +240,14 @@ func RunScheduledTaskNow(id string) error {
 		SELECT id, name, task_type,
 		       COALESCE(array_to_json(agent_ids)::text, '[]'),
 		       cron_expr, COALESCE(payload::text, '{}')
-		FROM scheduled_tasks WHERE id=$1
-	`, id).Scan(&st.ID, &st.Name, &st.TaskType, &agentIDsRaw, &st.CronExpr, &payloadRaw)
+		FROM scheduled_tasks WHERE id=$1 AND tenant_id=$2
+	`, id, tenantID).Scan(&st.ID, &st.Name, &st.TaskType, &agentIDsRaw, &st.CronExpr, &payloadRaw)
 	if err != nil {
 		return err
 	}
 	st.AgentIDs = scanAgentIDs(agentIDsRaw)
 	st.Payload = json.RawMessage(payloadRaw)
+	st.TenantID = tenantID
 	dispatchScheduledTask(st)
 	return nil
 }

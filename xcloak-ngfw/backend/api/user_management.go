@@ -13,7 +13,7 @@ import (
 // GetUsers — GET /api/users (admin only)
 func GetUsers(c *gin.Context) {
 
-	users, err := repositories.GetAllUsers()
+	users, err := repositories.GetAllUsers(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -24,6 +24,29 @@ func GetUsers(c *gin.Context) {
 	}
 
 	c.JSON(200, users)
+}
+
+// InviteUserHandler — POST /api/users/invite (admin only)
+// Body: { "username": "...", "email": "...", "role": "analyst" }
+// Creates the user in the caller's tenant and emails them a set-password link.
+func InviteUserHandler(c *gin.Context) {
+
+	var body struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Role     string `json:"role"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Username == "" || body.Email == "" || body.Role == "" {
+		c.JSON(400, gin.H{"error": "username, email, and role are required"})
+		return
+	}
+
+	if err := services.InviteUser(body.Username, body.Email, body.Role, tenantIDFromContext(c)); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Invite sent"})
 }
 
 // UpdateUserRole — PUT /api/users/:id/role
@@ -50,7 +73,11 @@ func UpdateUserRole(c *gin.Context) {
 		return
 	}
 
-	if err := repositories.UpdateUserRole(id, body.Role); err != nil {
+	if err := repositories.UpdateUserRole(id, body.Role, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrUserNotFound {
+			c.JSON(404, gin.H{"error": "user not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -77,7 +104,11 @@ func ToggleUserActive(c *gin.Context) {
 		return
 	}
 
-	if err := repositories.SetUserActive(id, body.Active); err != nil {
+	if err := repositories.SetUserActive(id, body.Active, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrUserNotFound {
+			c.JSON(404, gin.H{"error": "user not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -103,7 +134,11 @@ func DeleteUser(c *gin.Context) {
 		}
 	}
 
-	if err := repositories.DeleteUser(id); err != nil {
+	if err := repositories.DeleteUser(id, tenantIDFromContext(c)); err != nil {
+		if err == repositories.ErrUserNotFound {
+			c.JSON(404, gin.H{"error": "user not found"})
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

@@ -7,6 +7,7 @@ import (
 
 func CreateThreatFeed(
 	feed models.ThreatFeed,
+	tenantID int,
 ) error {
 
 	feedType := feed.FeedType
@@ -25,21 +26,25 @@ func CreateThreatFeed(
 			source,
 			enabled,
 			feed_type,
-			config
+			config,
+			tenant_id
 		)
-		VALUES ($1,$2,$3,$4,$5)
+		VALUES ($1,$2,$3,$4,$5,$6)
 	`,
 		feed.Name,
 		feed.Source,
 		feed.Enabled,
 		feedType,
 		config,
+		tenantID,
 	)
 
 	return err
 }
 
-func GetThreatFeeds() (
+// GetThreatFeeds returns feeds belonging to tenantID only. Use this from
+// user-facing API paths that have a real tenant context from the request.
+func GetThreatFeeds(tenantID int) (
 	[]models.ThreatFeed,
 	error,
 ) {
@@ -53,10 +58,12 @@ func GetThreatFeeds() (
 			feed_type,
 			COALESCE(config::text, '{}'),
 			last_sync,
+			tenant_id,
 			created_at
 		FROM threat_feeds
+		WHERE tenant_id = $1
 		ORDER BY id DESC
-	`)
+	`, tenantID)
 
 	if err != nil {
 		return nil, err
@@ -79,6 +86,7 @@ func GetThreatFeeds() (
 			&feed.FeedType,
 			&configStr,
 			&feed.LastSync,
+			&feed.TenantID,
 			&feed.CreatedAt,
 		)
 

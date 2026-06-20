@@ -34,10 +34,12 @@ func GetPendingTasks(
 func CompleteTask(
 	taskID int,
 	result string,
+	agentID int,
 ) error {
 
 	return repositories.CompleteTask(
 		taskID,
 		result,
+		agentID,
 	)
 }

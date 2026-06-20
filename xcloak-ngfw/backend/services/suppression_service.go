@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,10 +23,13 @@ type SuppressionRule struct {
 	Enabled        bool       `json:"enabled"`
 	MatchCount     int        `json:"match_count"`
 	CreatedBy      string     `json:"created_by"`
+	TenantID       int        `json:"tenant_id"`
 	CreatedAt      time.Time  `json:"created_at"`
 }
 
-// IsSuppressed returns true if the alert should be dropped by any active rule.
+// IsSuppressed returns true if the alert should be dropped by any active
+// rule within the alert's own tenant (resolved from agent_id, since this is
+// called from the detection pipeline with no per-request tenant context).
 // Also updates match counts and suppression state in the DB.
 func IsSuppressed(alert models.Alert) bool {
 
@@ -34,7 +38,8 @@ func IsSuppressed(alert models.Alert) bool {
 		FROM suppression_rules
 		WHERE enabled = TRUE
 		AND (expires_at IS NULL OR expires_at > now())
-	`)
+		AND tenant_id = (SELECT tenant_id FROM agents WHERE id = $1)
+	`, alert.AgentID)
 	if err != nil {
 		return false
 	}
@@ -109,13 +114,13 @@ func matchesSuppression(alert models.Alert, ruleName string, agentID int, severi
 	return true
 }
 
-func GetSuppressionRules() ([]SuppressionRule, error) {
+func GetSuppressionRules(tenantID int) ([]SuppressionRule, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, name, description, rule_name, agent_id, severity, mitre_technique,
 		       window_minutes, expires_at AT TIME ZONE 'UTC', enabled, match_count, created_by,
 		       created_at AT TIME ZONE 'UTC'
-		FROM suppression_rules ORDER BY created_at DESC
-	`)
+		FROM suppression_rules WHERE tenant_id=$1 ORDER BY created_at DESC
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,15 +138,15 @@ func GetSuppressionRules() ([]SuppressionRule, error) {
 	return rules, nil
 }
 
-func CreateSuppressionRule(r SuppressionRule) (*SuppressionRule, error) {
+func CreateSuppressionRule(r SuppressionRule, tenantID int) (*SuppressionRule, error) {
 	err := database.DB.QueryRow(`
 		INSERT INTO suppression_rules
 		(name, description, rule_name, agent_id, severity, mitre_technique,
-		 window_minutes, expires_at, enabled, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9)
+		 window_minutes, expires_at, enabled, created_by, tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10)
 		RETURNING id, created_at AT TIME ZONE 'UTC'
 	`, r.Name, r.Description, r.RuleName, r.AgentID, r.Severity,
-		r.MitreTechnique, r.WindowMinutes, r.ExpiresAt, r.CreatedBy).
+		r.MitreTechnique, r.WindowMinutes, r.ExpiresAt, r.CreatedBy, tenantID).
 		Scan(&r.ID, &r.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -149,23 +154,35 @@ func CreateSuppressionRule(r SuppressionRule) (*SuppressionRule, error) {
 	return &r, nil
 }
 
-func DeleteSuppressionRule(id string) error {
-	_, err := database.DB.Exec(`DELETE FROM suppression_rules WHERE id=$1`, id)
-	return err
+func DeleteSuppressionRule(id string, tenantID int) error {
+	tag, err := database.DB.Exec(`DELETE FROM suppression_rules WHERE id=$1 AND tenant_id=$2`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return errors.New("suppression rule not found")
+	}
+	return nil
 }
 
-func ToggleSuppressionRule(id string, enabled bool) error {
-	_, err := database.DB.Exec(
-		`UPDATE suppression_rules SET enabled=$1 WHERE id=$2`, enabled, id)
-	return err
+func ToggleSuppressionRule(id string, enabled bool, tenantID int) error {
+	tag, err := database.DB.Exec(
+		`UPDATE suppression_rules SET enabled=$1 WHERE id=$2 AND tenant_id=$3`, enabled, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return errors.New("suppression rule not found")
+	}
+	return nil
 }
 
-// GetSuppressionStats returns alert counts with/without suppression for a quick view.
-func GetSuppressionStats() map[string]int {
+// GetSuppressionStats returns alert counts with/without suppression for tenantID.
+func GetSuppressionStats(tenantID int) map[string]int {
 	stats := map[string]int{}
 	var activeRules, totalSuppressed int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE`).Scan(&activeRules)
-	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules`).Scan(&totalSuppressed)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM suppression_rules WHERE enabled=TRUE AND tenant_id=$1`, tenantID).Scan(&activeRules)
+	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules WHERE tenant_id=$1`, tenantID).Scan(&totalSuppressed)
 	stats["active_rules"] = activeRules
 	stats["total_suppressed"] = totalSuppressed
 	return stats

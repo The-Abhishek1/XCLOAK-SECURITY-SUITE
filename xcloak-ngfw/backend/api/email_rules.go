@@ -9,8 +9,8 @@ import (
 func GetEmailRules(c *gin.Context) {
 	rows, err := database.DB.Query(`
 		SELECT id, name, severity, recipient, enabled, created_at
-		FROM email_alert_rules ORDER BY created_at DESC
-	`)
+		FROM email_alert_rules WHERE tenant_id=$1 ORDER BY created_at DESC
+	`, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -50,9 +50,9 @@ func CreateEmailRule(c *gin.Context) {
 
 	var id int
 	err := database.DB.QueryRow(`
-		INSERT INTO email_alert_rules (name, severity, recipient)
-		VALUES ($1,$2,$3) RETURNING id
-	`, body.Name, body.Severity, body.Recipient).Scan(&id)
+		INSERT INTO email_alert_rules (name, severity, recipient, tenant_id)
+		VALUES ($1,$2,$3,$4) RETURNING id
+	`, body.Name, body.Severity, body.Recipient, tenantIDFromContext(c)).Scan(&id)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -65,13 +65,13 @@ func ToggleEmailRule(c *gin.Context) {
 	id := c.Param("id")
 	var body struct{ Enabled bool `json:"enabled"` }
 	c.ShouldBindJSON(&body)
-	database.DB.Exec(`UPDATE email_alert_rules SET enabled=$1 WHERE id=$2`, body.Enabled, id)
+	database.DB.Exec(`UPDATE email_alert_rules SET enabled=$1 WHERE id=$2 AND tenant_id=$3`, body.Enabled, id, tenantIDFromContext(c))
 	c.JSON(200, gin.H{"message": "updated"})
 }
 
 // DeleteEmailRule — DELETE /api/notifications/email/:id
 func DeleteEmailRule(c *gin.Context) {
-	database.DB.Exec(`DELETE FROM email_alert_rules WHERE id=$1`, c.Param("id"))
+	database.DB.Exec(`DELETE FROM email_alert_rules WHERE id=$1 AND tenant_id=$2`, c.Param("id"), tenantIDFromContext(c))
 	c.JSON(200, gin.H{"message": "deleted"})
 }
 

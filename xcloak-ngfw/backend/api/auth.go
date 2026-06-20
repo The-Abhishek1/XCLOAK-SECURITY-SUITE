@@ -31,13 +31,13 @@ func Login(c *gin.Context) {
 
 	if needs2FA {
 		// Look up user ID for temp token
-		var userID int
+		var userID, tenantID int
 		var role string
 		database.DB.QueryRow(
-			`SELECT id, role FROM users WHERE username=$1`, req.Username,
-		).Scan(&userID, &role)
+			`SELECT id, role, tenant_id FROM users WHERE username=$1`, req.Username,
+		).Scan(&userID, &role, &tenantID)
 
-		tempToken, _ := auth.GenerateTempToken(userID, req.Username, role)
+		tempToken, _ := auth.GenerateTempToken(userID, req.Username, role, tenantID)
 		c.JSON(200, gin.H{
 			"needs_2fa":  true,
 			"temp_token": tempToken,

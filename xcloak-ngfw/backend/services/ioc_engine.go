@@ -11,7 +11,7 @@ func CheckConnectionIOC(
 	connection models.Connection,
 ) {
 
-	iocs, err := GetEnabledIOCs()
+	iocs, err := GetEnabledIOCsForAgent(connection.AgentID)
 
 	if err != nil {
 		return

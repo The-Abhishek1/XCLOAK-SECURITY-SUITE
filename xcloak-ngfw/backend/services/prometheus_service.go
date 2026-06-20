@@ -155,7 +155,7 @@ func RefreshMetrics() {
 	// Last 24h activity
 	db.QueryRow(`SELECT COUNT(*) FROM fim_alerts WHERE created_at > now() - INTERVAL '24h'`).Scan(&v)
 	FIMViolations24h.Set(v)
-	db.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE matched_at > now() - INTERVAL '24h'`).Scan(&v)
+	db.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE created_at > now() - INTERVAL '24h'`).Scan(&v)
 	YARAMatches24h.Set(v)
 	db.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE created_at > now() - INTERVAL '24h'`).Scan(&v)
 	SOARExecutions24h.Set(v)

@@ -15,7 +15,7 @@ import (
 // so each agent gets its own alert.
 func CheckFileHashIOC(hash models.FileHash) {
 
-	iocs, err := GetEnabledIOCs()
+	iocs, err := GetEnabledIOCsForAgent(hash.AgentID)
 	if err != nil {
 		return
 	}

@@ -27,7 +27,7 @@ func ExecutePlaybooks(alert models.Alert) {
 	fmt.Printf("SOAR: evaluating alert rule=%q severity=%q agent=%d\n",
 		alert.RuleName, alert.Severity, alert.AgentID)
 
-	playbooks, err := repositories.GetEnabledPlaybooks()
+	playbooks, err := repositories.GetEnabledPlaybooksForAgent(alert.AgentID)
 	if err != nil {
 		fmt.Println("SOAR: failed to load playbooks:", err)
 		return

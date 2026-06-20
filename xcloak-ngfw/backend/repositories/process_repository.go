@@ -66,8 +66,8 @@ func SaveAuditEvents(events []models.AuditEvent) error {
 		_, err := tx.Exec(`
 			INSERT INTO audit_events
 			  (agent_id, event_id, ts, pid, ppid, uid, euid,
-			   username, comm, exe, cmdline, success, threat_tag)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			   username, comm, exe, cmdline, success, threat_tag, tenant_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, (SELECT tenant_id FROM agents WHERE id = $1))
 		`,
 			events[i].AgentID, events[i].EventID, events[i].Timestamp,
 			events[i].PID, events[i].PPID, events[i].UID, events[i].EUID,
@@ -116,8 +116,9 @@ func GetAuditEventsByAgent(agentID string, limit int) ([]models.AuditEvent, erro
 	return out, nil
 }
 
-// GetThreatAuditEvents returns only audit events tagged as threats (any agent).
-func GetThreatAuditEvents(limit int) ([]models.AuditEvent, error) {
+// GetThreatAuditEvents returns audit events tagged as threats, across every
+// agent within tenantID.
+func GetThreatAuditEvents(limit int, tenantID int) ([]models.AuditEvent, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -125,10 +126,10 @@ func GetThreatAuditEvents(limit int) ([]models.AuditEvent, error) {
 		SELECT id, agent_id, event_id, ts, pid, ppid, uid, euid,
 		       username, comm, exe, cmdline, success, threat_tag, created_at
 		FROM audit_events
-		WHERE threat_tag <> ''
+		WHERE threat_tag <> '' AND tenant_id = $2
 		ORDER BY created_at DESC
 		LIMIT $1
-	`, limit)
+	`, limit, tenantID)
 	if err != nil {
 		return nil, err
 	}

@@ -7,19 +7,25 @@ import (
 	"xcloak-ngfw/models"
 )
 
+// CreateAuditLog resolves tenant_id from the acting username where
+// possible, falling back to the Default tenant for system/background
+// events (e.g. "system", "admin"-as-fallback literals) that don't match a
+// real user row.
 func CreateAuditLog(action, details, username string) error {
 	_, err := database.DB.Exec(
-		`INSERT INTO audit_logs (action, details, username) VALUES ($1,$2,$3)`,
+		`INSERT INTO audit_logs (action, details, username, tenant_id)
+		 VALUES ($1,$2,$3, COALESCE((SELECT tenant_id FROM users WHERE username=$3), 1))`,
 		action, details, username,
 	)
 	return err
 }
 
-func GetAuditLogs() ([]models.AuditLog, error) {
+// GetAuditLogs returns audit log entries belonging to tenantID only.
+func GetAuditLogs(tenantID int) ([]models.AuditLog, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, action, details, username, created_at
-		FROM audit_logs ORDER BY created_at DESC LIMIT 200
-	`)
+		FROM audit_logs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -42,15 +48,16 @@ type AuditPage struct {
 	Pages   int               `json:"pages"`
 }
 
-// GetAuditLogsFiltered — search + date range filter with pagination.
-func GetAuditLogsFiltered(page, perPage int, q, from, to string) (*AuditPage, error) {
+// GetAuditLogsFiltered — search + date range filter with pagination, scoped
+// to tenantID.
+func GetAuditLogsFiltered(tenantID int, page, perPage int, q, from, to string) (*AuditPage, error) {
 	if page < 1    { page = 1 }
 	if perPage < 1 { perPage = 50 }
 	if perPage > 200 { perPage = 200 }
 
-	where := "WHERE 1=1"
-	args  := []interface{}{}
-	idx   := 1
+	where := "WHERE tenant_id = $1"
+	args  := []interface{}{tenantID}
+	idx   := 2
 
 	if q != "" {
 		where += fmt.Sprintf(

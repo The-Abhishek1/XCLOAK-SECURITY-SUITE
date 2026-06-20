@@ -12,7 +12,8 @@ import (
 // ── Suppression Rules ─────────────────────────────────────────
 
 func GetSuppressionRules(c *gin.Context) {
-	rules, err := services.GetSuppressionRules()
+	tenantID := tenantIDFromContext(c)
+	rules, err := services.GetSuppressionRules(tenantID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -22,7 +23,7 @@ func GetSuppressionRules(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{
 		"rules": rules,
-		"stats": services.GetSuppressionStats(),
+		"stats": services.GetSuppressionStats(tenantID),
 	})
 }
 
@@ -38,7 +39,7 @@ func CreateSuppressionRule(c *gin.Context) {
 		r.WindowMinutes = 60
 	}
 
-	created, err := services.CreateSuppressionRule(r)
+	created, err := services.CreateSuppressionRule(r, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -47,7 +48,7 @@ func CreateSuppressionRule(c *gin.Context) {
 }
 
 func DeleteSuppressionRule(c *gin.Context) {
-	if err := services.DeleteSuppressionRule(c.Param("id")); err != nil {
+	if err := services.DeleteSuppressionRule(c.Param("id"), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -57,7 +58,7 @@ func DeleteSuppressionRule(c *gin.Context) {
 func ToggleSuppressionRule(c *gin.Context) {
 	var body struct{ Enabled bool `json:"enabled"` }
 	c.ShouldBindJSON(&body)
-	if err := services.ToggleSuppressionRule(c.Param("id"), body.Enabled); err != nil {
+	if err := services.ToggleSuppressionRule(c.Param("id"), body.Enabled, tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -82,6 +83,9 @@ func GetGeoIP(c *gin.Context) {
 
 func GetAgentGeoStats(c *gin.Context) {
 	agentID := c.Param("id")
+	if !agentOwnedBy404(c, agentID) {
+		return
+	}
 	results, err := services.GetTopExternalCountries(agentID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -99,6 +103,9 @@ func EnrichAgentConnections(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid agent id"})
 		return
 	}
+	if !agentOwnedBy404(c, c.Param("id")) {
+		return
+	}
 	go services.EnrichConnections(agentID)
 	c.JSON(200, gin.H{"message": "GeoIP enrichment started in background"})
 }
@@ -106,7 +113,7 @@ func EnrichAgentConnections(c *gin.Context) {
 // ── Agent Health ──────────────────────────────────────────────
 
 func GetAgentHealthScores(c *gin.Context) {
-	scores, err := services.GetAgentHealthScores()
+	scores, err := services.GetAgentHealthScores(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -123,6 +130,9 @@ func GetAgentHealth(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid agent id"})
 		return
 	}
+	if !agentOwnedBy404(c, c.Param("id")) {
+		return
+	}
 	h := services.GetAgentHealthByID(agentID)
 	c.JSON(200, h)
 }
@@ -135,7 +145,7 @@ func RefreshAgentHealth(c *gin.Context) {
 // ── IOC Auto-Block ────────────────────────────────────────────
 
 func GetIOCBlocks(c *gin.Context) {
-	blocks, err := services.GetIOCBlocks()
+	blocks, err := services.GetIOCBlocks(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

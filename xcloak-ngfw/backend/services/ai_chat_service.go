@@ -13,9 +13,9 @@ import (
 
 // ChatWithAssistant sends a user message to the AI with full platform context
 // and returns the assistant's response plus the updated history.
-func ChatWithAssistant(username, userMessage string, history []models.ChatMessage) (string, []models.ChatMessage, error) {
+func ChatWithAssistant(username, userMessage string, history []models.ChatMessage, tenantID int) (string, []models.ChatMessage, error) {
 
-	context := buildPlatformContext()
+	context := buildPlatformContext(tenantID)
 
 	historyStr := ""
 	for _, m := range history {
@@ -102,13 +102,15 @@ func persistChatHistory(username string, messages []models.ChatMessage) {
 	`, data, username)
 }
 
-// buildPlatformContext creates a concise snapshot of platform state for AI context.
-func buildPlatformContext() string {
+// buildPlatformContext creates a concise snapshot of tenantID's platform
+// state for AI context — scoped, since this is shown back to a specific
+// logged-in user via the chat assistant, not an internal background job.
+func buildPlatformContext(tenantID int) string {
 
 	var lines []string
 
 	// Agents
-	agents, _ := repositories.GetAgents()
+	agents, _ := repositories.GetAgents(tenantID)
 	online := 0
 	for _, a := range agents {
 		if a.Status == "online" {
@@ -118,7 +120,7 @@ func buildPlatformContext() string {
 	lines = append(lines, fmt.Sprintf("Agents: %d total, %d online", len(agents), online))
 
 	// Alerts
-	alerts, _ := repositories.GetAlerts()
+	alerts, _ := repositories.GetAlerts(tenantID)
 	critCount := 0
 	highCount := 0
 	for _, a := range alerts {
@@ -144,7 +146,7 @@ func buildPlatformContext() string {
 	}
 
 	// Incidents
-	incidents, _ := repositories.GetIncidents()
+	incidents, _ := repositories.GetIncidents(tenantID)
 	openInc := 0
 	for _, i := range incidents {
 		if i.Status == "open" || i.Status == "investigating" {
@@ -154,7 +156,7 @@ func buildPlatformContext() string {
 	lines = append(lines, fmt.Sprintf("Incidents: %d total, %d open", len(incidents), openInc))
 
 	// Vulnerabilities
-	vulns, _ := repositories.GetAllVulnerabilities()
+	vulns, _ := repositories.GetVulnerabilities(tenantID)
 	critVulns := 0
 	for _, v := range vulns {
 		if v.Severity == "critical" {
@@ -164,48 +166,52 @@ func buildPlatformContext() string {
 	lines = append(lines, fmt.Sprintf("Vulnerabilities: %d total (%d critical)", len(vulns), critVulns))
 
 	// IOCs
-	iocs, _ := repositories.GetIOCs()
+	iocs, _ := repositories.GetIOCs(tenantID)
 	lines = append(lines, fmt.Sprintf("IOCs in database: %d", len(iocs)))
 
 	// FIM violations
 	var fimViolations int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM fim_alerts WHERE created_at > now() - INTERVAL '24 hours'`).Scan(&fimViolations)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM fim_alerts WHERE created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&fimViolations)
 	if fimViolations > 0 {
 		lines = append(lines, fmt.Sprintf("FIM violations (last 24h): %d", fimViolations))
 	}
 
 	// YARA matches
 	var yaraMatches int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE matched_at > now() - INTERVAL '24 hours'`).Scan(&yaraMatches)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&yaraMatches)
 	if yaraMatches > 0 {
 		lines = append(lines, fmt.Sprintf("YARA matches (last 24h): %d", yaraMatches))
 	}
 
 	// Playbook executions
 	var playbookFired, playbookFailed int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE status='success' AND created_at > now() - INTERVAL '24 hours'`).Scan(&playbookFired)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE status='failed' AND created_at > now() - INTERVAL '24 hours'`).Scan(&playbookFailed)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE status='success' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&playbookFired)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM playbook_executions WHERE status='failed' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&playbookFailed)
 	if playbookFired+playbookFailed > 0 {
 		lines = append(lines, fmt.Sprintf("SOAR actions (last 24h): %d succeeded, %d failed", playbookFired, playbookFailed))
 	}
 
 	// Suppression stats
 	var suppressedCount int
-	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules WHERE enabled=TRUE`).Scan(&suppressedCount)
+	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM suppression_rules WHERE enabled=TRUE AND tenant_id=$1`, tenantID).Scan(&suppressedCount)
 	if suppressedCount > 0 {
 		lines = append(lines, fmt.Sprintf("Alerts suppressed by rules: %d", suppressedCount))
 	}
 
 	// Quarantined files
 	var quarantineCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM quarantine_files`).Scan(&quarantineCount)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM quarantined_files WHERE tenant_id=$1`, tenantID).Scan(&quarantineCount)
 	if quarantineCount > 0 {
 		lines = append(lines, fmt.Sprintf("Files in quarantine: %d", quarantineCount))
 	}
 
 	// Agent health
 	var unhealthyAgents int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM agent_health WHERE health_status != 'healthy'`).Scan(&unhealthyAgents)
+	database.DB.QueryRow(`
+		SELECT COUNT(*) FROM agent_health ah
+		JOIN agents a ON a.id = ah.agent_id
+		WHERE ah.health_status != 'healthy' AND a.tenant_id=$1
+	`, tenantID).Scan(&unhealthyAgents)
 	if unhealthyAgents > 0 {
 		lines = append(lines, fmt.Sprintf("Unhealthy agents: %d", unhealthyAgents))
 	}

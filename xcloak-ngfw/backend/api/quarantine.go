@@ -40,7 +40,7 @@ func ReceiveQuarantinedFile(c *gin.Context) {
 
 func GetQuarantinedFiles(c *gin.Context) {
 
-	files, err := services.GetQuarantinedFiles()
+	files, err := services.GetQuarantinedFiles(tenantIDFromContext(c))
 
 	if err != nil {
 

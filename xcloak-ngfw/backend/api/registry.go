@@ -57,6 +57,9 @@ func ReceiveRegistry(c *gin.Context) {
 // GetRegistryEntries — GET /api/agents/:id/registry  (user auth)
 func GetRegistryEntries(c *gin.Context) {
 	agentID := c.Param("id")
+	if !agentOwnedBy404(c, agentID) {
+		return
+	}
 
 	rows, err := database.DB.Query(`
 		SELECT id, agent_id, hive, key_path, name, type, data, threat_tag, created_at

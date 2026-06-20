@@ -59,7 +59,7 @@ func GetIncidentDeepDive(c *gin.Context) {
 		return
 	}
 
-	incident, err := repositories.GetIncidentByID(idStr)
+	incident, err := repositories.GetIncidentByID(idStr, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(404, gin.H{"error": "incident not found"})
 		return
@@ -206,7 +206,7 @@ func GetIncidentDeepDive(c *gin.Context) {
 
 	if aiSummary == "" {
 		// Generate on demand
-		summary, llmErr := services.SummarizeIncident(id)
+		summary, llmErr := services.SummarizeIncident(id, tenantIDFromContext(c))
 		if llmErr == nil && summary != nil {
 			aiSummary = summary.Summary
 			report.Recommendations = summary.RecommendedSteps

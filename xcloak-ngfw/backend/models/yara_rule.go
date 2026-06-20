@@ -13,6 +13,8 @@ type YaraRule struct {
 	// rules and writes each to a temp .yar file before invoking the yara CLI.
 	RuleContent string `json:"rule_content"`
 
+	TenantID int `json:"tenant_id"`
+
 	Enabled bool `json:"enabled"`
 
 	CreatedAt time.Time `json:"created_at"`

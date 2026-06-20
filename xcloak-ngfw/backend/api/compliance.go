@@ -26,7 +26,9 @@ func GenerateReport(c *gin.Context) {
 	username, _ := c.Get("username")
 	generatedBy := fmt.Sprintf("%v", username)
 
-	report, err := services.GenerateComplianceReport(body.ReportType, generatedBy)
+	tenantID := tenantIDFromContext(c)
+
+	report, err := services.GenerateComplianceReport(body.ReportType, generatedBy, tenantID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -35,7 +37,7 @@ func GenerateReport(c *gin.Context) {
 	// Compute framework scores for full reports.
 	var frameworkScores interface{}
 	if body.ReportType == "full" || body.ReportType == "" {
-		scores, _ := services.ComputeAllFrameworkScores(report.ID)
+		scores, _ := services.ComputeAllFrameworkScores(report.ID, tenantID)
 		frameworkScores = scores
 	}
 
@@ -48,7 +50,7 @@ func GenerateReport(c *gin.Context) {
 // GetReports — GET /api/compliance/reports
 func GetReports(c *gin.Context) {
 
-	reports, err := services.GetReports()
+	reports, err := services.GetReports(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -65,7 +67,7 @@ func GetReports(c *gin.Context) {
 // GetReport — GET /api/compliance/reports/:id
 func GetReport(c *gin.Context) {
 
-	report, err := services.GetReportByID(c.Param("id"))
+	report, err := services.GetReportByID(c.Param("id"), tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(404, gin.H{"error": "report not found"})
 		return
@@ -77,7 +79,7 @@ func GetReport(c *gin.Context) {
 // DeleteReport — DELETE /api/compliance/reports/:id
 func DeleteReport(c *gin.Context) {
 
-	if err := services.DeleteReport(c.Param("id")); err != nil {
+	if err := services.DeleteReport(c.Param("id"), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -88,7 +90,7 @@ func DeleteReport(c *gin.Context) {
 // ExportAlertsCSV — GET /api/export/alerts
 func ExportAlertsCSV(c *gin.Context) {
 
-	alerts, err := repositories.GetAlerts()
+	alerts, err := repositories.GetAlerts(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -118,7 +120,7 @@ func ExportAlertsCSV(c *gin.Context) {
 // ExportIncidentsCSV — GET /api/export/incidents
 func ExportIncidentsCSV(c *gin.Context) {
 
-	incidents, err := repositories.GetIncidents()
+	incidents, err := repositories.GetIncidents(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -146,7 +148,7 @@ func ExportIncidentsCSV(c *gin.Context) {
 // ExportVulnerabilitiesCSV — GET /api/export/vulnerabilities
 func ExportVulnerabilitiesCSV(c *gin.Context) {
 
-	vulns, err := repositories.GetAllVulnerabilities()
+	vulns, err := repositories.GetVulnerabilities(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -176,7 +178,7 @@ func ExportVulnerabilitiesCSV(c *gin.Context) {
 // ExportAuditJSON — GET /api/export/audit
 func ExportAuditJSON(c *gin.Context) {
 
-	logs, err := repositories.GetAuditLogs()
+	logs, err := repositories.GetAuditLogs(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

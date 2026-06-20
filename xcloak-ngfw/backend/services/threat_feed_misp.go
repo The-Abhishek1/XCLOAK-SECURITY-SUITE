@@ -94,7 +94,7 @@ func syncMISPFeed(feed models.ThreatFeed) (int, error) {
 		if iocType == "" {
 			continue
 		}
-		if importIndicator(attr.Value, iocType, "high", feed.Name) {
+		if importIndicator(attr.Value, iocType, "high", feed.Name, feed.TenantID) {
 			imported++
 		}
 	}

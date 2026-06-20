@@ -56,9 +56,21 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
+		// Reject tokens with no tenant_id claim — e.g. a token issued before
+		// multi-tenancy shipped. Without this, tenantIDFromContext's fail-safe
+		// default would silently resolve every request from that token to
+		// tenant 1 instead of forcing re-authentication, for the token's
+		// entire remaining lifetime (up to 8h).
+		if _, ok := claims["tenant_id"].(float64); !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "session invalid — please log in again"})
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id",      claims["user_id"])
 		c.Set("username",     claims["username"])
 		c.Set("role",         claims["role"])
+		c.Set("tenant_id",    claims["tenant_id"])
 		c.Set("token_string", tokenString) // stored for logout
 
 		c.Next()

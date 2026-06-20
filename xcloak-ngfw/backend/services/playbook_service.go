@@ -7,17 +7,19 @@ import (
 
 func CreatePlaybook(
 	playbook models.Playbook,
+	tenantID int,
 ) error {
 
 	return repositories.CreatePlaybook(
 		playbook,
+		tenantID,
 	)
 }
 
-func GetPlaybooks() (
+func GetPlaybooks(tenantID int) (
 	[]models.Playbook,
 	error,
 ) {
 
-	return repositories.GetPlaybooks()
+	return repositories.GetPlaybooks(tenantID)
 }

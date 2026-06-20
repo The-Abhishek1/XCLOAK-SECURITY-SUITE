@@ -44,6 +44,7 @@ func SyncFirewallRules(c *gin.Context) {
 		body.Mode,
 		body.ManageIP,
 		syncedBy,
+		tenantIDFromContext(c),
 	)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -69,7 +70,7 @@ func SyncFirewallRules(c *gin.Context) {
 func GetFirewallSyncLog(c *gin.Context) {
 	agentID, _ := strconv.Atoi(c.Query("agent_id"))
 
-	logs, err := services.GetFirewallSyncLog(agentID)
+	logs, err := services.GetFirewallSyncLog(agentID, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

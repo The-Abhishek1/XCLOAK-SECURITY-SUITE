@@ -73,7 +73,7 @@ func ImportYARAFiles(c *gin.Context) {
 				Enabled:     true,
 			}
 
-			if err := repositories.CreateYaraRule(rule); err != nil {
+			if err := repositories.CreateYaraRule(rule, tenantIDFromContext(c)); err != nil {
 				errors = append(errors, name+": "+err.Error())
 				skipped++
 				continue

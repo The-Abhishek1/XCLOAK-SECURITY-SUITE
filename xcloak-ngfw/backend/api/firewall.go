@@ -21,7 +21,7 @@ func CreateRule(c *gin.Context) {
 		return
 	}
 
-	err := services.CreateFirewallRule(rule)
+	err := services.CreateFirewallRule(rule, tenantIDFromContext(c))
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -37,7 +37,7 @@ func CreateRule(c *gin.Context) {
 
 func GetRules(c *gin.Context) {
 
-	rules, err := repositories.GetAllRules()
+	rules, err := repositories.GetRulesForTenant(tenantIDFromContext(c))
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -53,7 +53,7 @@ func GetRuleByID(c *gin.Context) {
 
 	id := c.Param("id")
 
-	rule, err := repositories.GetRuleByID(id)
+	rule, err := repositories.GetRuleByID(id, tenantIDFromContext(c))
 
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -81,6 +81,7 @@ func UpdateRule(c *gin.Context) {
 	rowsAffected, err := repositories.UpdateRule(
 		id,
 		rule,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
@@ -106,7 +107,7 @@ func DeleteRule(c *gin.Context) {
 
 	id := c.Param("id")
 
-	rowsAffected, err := repositories.DeleteRule(id)
+	rowsAffected, err := repositories.DeleteRule(id, tenantIDFromContext(c))
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

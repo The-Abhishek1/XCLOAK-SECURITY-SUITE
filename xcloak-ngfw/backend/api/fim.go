@@ -38,6 +38,9 @@ func GetFIMBaseline(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid agent id"})
 		return
 	}
+	if !agentOwnedBy404(c, c.Param("id")) {
+		return
+	}
 
 	baseline, err := repositories.GetFIMBaseline(agentID)
 	if err != nil {
@@ -56,6 +59,9 @@ func GetFIMBaseline(c *gin.Context) {
 func GetFIMAlerts(c *gin.Context) {
 
 	agentID := c.Param("id")
+	if !agentOwnedBy404(c, agentID) {
+		return
+	}
 
 	alerts, err := repositories.GetFIMAlerts(agentID)
 	if err != nil {

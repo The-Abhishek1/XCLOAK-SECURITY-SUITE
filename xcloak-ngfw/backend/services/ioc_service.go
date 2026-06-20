@@ -7,56 +7,72 @@ import (
 
 func CreateIOC(
 	ioc models.IOC,
+	tenantID int,
 ) error {
 
-	return repositories.CreateIOC(ioc)
+	return repositories.CreateIOC(ioc, tenantID)
 }
 
-func GetIOCs() ([]models.IOC, error) {
+func GetIOCs(tenantID int) ([]models.IOC, error) {
 
-	return repositories.GetIOCs()
+	return repositories.GetIOCs(tenantID)
 }
 
-func GetEnabledIOCs() ([]models.IOC, error) {
+// GetAllIOCs returns every IOC across every tenant — for internal
+// background jobs only, see repositories.GetAllIOCs.
+func GetAllIOCs() ([]models.IOC, error) {
 
-	return repositories.GetEnabledIOCs()
+	return repositories.GetAllIOCs()
+}
+
+// GetEnabledIOCsForAgent returns enabled IOCs for the tenant that owns
+// agentID — used by the connection/file-hash matching engines.
+func GetEnabledIOCsForAgent(agentID int) ([]models.IOC, error) {
+
+	return repositories.GetEnabledIOCsForAgent(agentID)
 }
 
 func GetIOCByID(
 	id string,
+	tenantID int,
 ) (*models.IOC, error) {
 
-	return repositories.GetIOCByID(id)
+	return repositories.GetIOCByID(id, tenantID)
 }
 
 func UpdateIOC(
 	id string,
 	ioc models.IOC,
+	tenantID int,
 ) error {
 
 	return repositories.UpdateIOC(
 		id,
 		ioc,
+		tenantID,
 	)
 }
 
 func DeleteIOC(
 	id string,
+	tenantID int,
 ) error {
 
-	return repositories.DeleteIOC(id)
+	return repositories.DeleteIOC(id, tenantID)
 }
 
 func EnableIOC(
 	id string,
+	tenantID int,
 ) error {
 
-	return repositories.EnableIOC(id)
+	return repositories.EnableIOC(id, tenantID)
 }
 
 func DisableIOC(
 	id string,
+	tenantID int,
 ) error {
 
-	return repositories.DisableIOC(id)
+	return repositories.DisableIOC(id, tenantID)
 }

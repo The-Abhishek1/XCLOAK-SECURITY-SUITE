@@ -41,8 +41,9 @@ func GetAgentTaskHistory(agentID string) ([]models.AgentTask, error) {
 	return tasks, nil
 }
 
-// GetTaskByID returns a single task — used to poll for script results.
-func GetTaskByID(taskID string) (*models.AgentTask, error) {
+// GetTaskByID returns a single task, scoped to tenantID — used to poll for
+// script results.
+func GetTaskByID(taskID string, tenantID int) (*models.AgentTask, error) {
 	var t models.AgentTask
 	var payloadStr, result string
 
@@ -52,8 +53,8 @@ func GetTaskByID(taskID string) (*models.AgentTask, error) {
 		       status,
 		       COALESCE(result, ''),
 		       created_at, completed_at
-		FROM agent_tasks WHERE id = $1
-	`, taskID).Scan(
+		FROM agent_tasks WHERE id = $1 AND tenant_id = $2
+	`, taskID, tenantID).Scan(
 		&t.ID, &t.AgentID, &t.TaskType, &payloadStr,
 		&t.Status, &result, &t.CreatedAt, &t.CompletedAt,
 	)

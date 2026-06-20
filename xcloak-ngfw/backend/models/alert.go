@@ -5,6 +5,7 @@ import "time"
 type Alert struct {
 	ID          int    `json:"id"`
 	AgentID     int    `json:"agent_id"`
+	TenantID    int    `json:"tenant_id"`
 	Severity    string `json:"severity"`
 	RuleName    string `json:"rule_name"`
 	Fingerprint string `json:"fingerprint"`

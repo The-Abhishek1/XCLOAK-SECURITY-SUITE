@@ -8,7 +8,7 @@ import (
 
 func GetIncidents(c *gin.Context) {
 
-	incidents, err := services.GetIncidents()
+	incidents, err := services.GetIncidents(tenantIDFromContext(c))
 
 	if err != nil {
 

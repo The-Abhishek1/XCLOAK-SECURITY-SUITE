@@ -34,17 +34,18 @@ func TriageAlert(alert models.Alert) {
 	fmt.Printf("AI triage complete for alert %d: %s\n", alert.ID, result.Summary)
 }
 
-// SummarizeIncident generates an AI narrative for an incident.
-func SummarizeIncident(incidentID int) (*models.AIIncidentSummary, error) {
+// SummarizeIncident generates an AI narrative for an incident, scoped to
+// tenantID so a caller can't summarize another tenant's incident by ID.
+func SummarizeIncident(incidentID int, tenantID int) (*models.AIIncidentSummary, error) {
 
-	incident, err := repositories.GetIncidentByID(fmt.Sprintf("%d", incidentID))
+	incident, err := repositories.GetIncidentByID(fmt.Sprintf("%d", incidentID), tenantID)
 	if err != nil {
 		return nil, err
 	}
 
 	// FIX: GetIncidentEvents takes a string, not an int
 	events, _ := repositories.GetIncidentEvents(fmt.Sprintf("%d", incidentID))
-	alerts, _ := repositories.GetAlerts()
+	alerts, _ := repositories.GetAllAlerts()
 
 	var agentAlerts []models.Alert
 	for _, a := range alerts {

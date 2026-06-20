@@ -47,6 +47,9 @@ func ReceiveAuditEvents(c *gin.Context) {
 func GetAuditEvents(c *gin.Context) {
 
 	agentID := c.Param("id")
+	if !agentOwnedBy404(c, agentID) {
+		return
+	}
 
 	limitStr := c.DefaultQuery("limit", "200")
 	limit, _ := strconv.Atoi(limitStr)
@@ -68,7 +71,7 @@ func GetThreatAuditEvents(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "100")
 	limit, _ := strconv.Atoi(limitStr)
 
-	events, err := repositories.GetThreatAuditEvents(limit)
+	events, err := repositories.GetThreatAuditEvents(limit, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

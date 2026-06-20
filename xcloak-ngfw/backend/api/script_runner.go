@@ -45,6 +45,7 @@ func DispatchScript(c *gin.Context) {
 
 	username, _ := c.Get("username")
 	user := fmt.Sprintf("%v", username)
+	tenantID := tenantIDFromContext(c)
 
 	type taskRow struct {
 		AgentID  int    `json:"agent_id"`
@@ -55,6 +56,14 @@ func DispatchScript(c *gin.Context) {
 	var tasks []taskRow
 
 	for _, agentID := range req.AgentIDs {
+		// Without this check, any admin could run an arbitrary script on
+		// an agent outside their own tenant — script execution is the
+		// highest-risk SOAR action in this codebase.
+		if _, err := repositories.GetAgentByID(strconv.Itoa(agentID), tenantID); err != nil {
+			tasks = append(tasks, taskRow{AgentID: agentID, Error: "agent not found"})
+			continue
+		}
+
 		var hostname string
 		database.DB.QueryRow(`SELECT hostname FROM agents WHERE id=$1`, agentID).Scan(&hostname)
 
@@ -93,7 +102,7 @@ func DispatchScript(c *gin.Context) {
 // Polls until status == "completed".
 func GetScriptResult(c *gin.Context) {
 	taskID := c.Param("task_id")
-	task, err := repositories.GetTaskByID(taskID)
+	task, err := repositories.GetTaskByID(taskID, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(404, gin.H{"error": "task not found"})
 		return
@@ -139,6 +148,7 @@ func GetScriptTemplates(c *gin.Context) {
 // GetScriptHistory — GET /api/scripts/history?agent_id=1
 func GetScriptHistory(c *gin.Context) {
 	agentID := c.Query("agent_id")
+	tenantID := tenantIDFromContext(c)
 
 	var rows interface{ Next() bool; Scan(...any) error; Close() error }
 	var err error
@@ -148,18 +158,18 @@ func GetScriptHistory(c *gin.Context) {
 		rows, err = database.DB.Query(`
 			SELECT t.id, t.agent_id, COALESCE(a.hostname,''), COALESCE(t.payload::text,'{}'),
 			       t.status, COALESCE(t.result,''), t.created_at, t.completed_at
-			FROM agent_tasks t LEFT JOIN agents a ON a.id=t.agent_id
-			WHERE t.task_type='execute_script' AND t.agent_id=$1
+			FROM agent_tasks t JOIN agents a ON a.id=t.agent_id
+			WHERE t.task_type='execute_script' AND t.agent_id=$1 AND a.tenant_id=$2
 			ORDER BY t.id DESC LIMIT 50
-		`, id)
+		`, id, tenantID)
 	} else {
 		rows, err = database.DB.Query(`
 			SELECT t.id, t.agent_id, COALESCE(a.hostname,''), COALESCE(t.payload::text,'{}'),
 			       t.status, COALESCE(t.result,''), t.created_at, t.completed_at
-			FROM agent_tasks t LEFT JOIN agents a ON a.id=t.agent_id
-			WHERE t.task_type='execute_script'
+			FROM agent_tasks t JOIN agents a ON a.id=t.agent_id
+			WHERE t.task_type='execute_script' AND a.tenant_id=$1
 			ORDER BY t.id DESC LIMIT 100
-		`)
+		`, tenantID)
 	}
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})

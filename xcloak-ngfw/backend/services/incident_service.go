@@ -28,7 +28,7 @@ func CreateIncident(
 	return id, nil
 }
 
-func GetIncidents() ([]models.Incident, error) {
+func GetIncidents(tenantID int) ([]models.Incident, error) {
 
-	return repositories.GetIncidents()
+	return repositories.GetIncidents(tenantID)
 }

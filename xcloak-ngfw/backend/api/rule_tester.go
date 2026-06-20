@@ -29,6 +29,7 @@ func TestRules(
 
 	results := services.TestRules(
 		req.Message,
+		tenantIDFromContext(c),
 	)
 
 	c.JSON(

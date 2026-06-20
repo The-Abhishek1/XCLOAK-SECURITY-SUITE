@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -25,6 +26,14 @@ func GetAgentTimeline(
 			},
 		)
 
+		return
+	}
+
+	// Verify the agent belongs to the caller's tenant before building a
+	// timeline from its alerts/incidents/playbook executions — those
+	// queries below only filter by agent_id, not tenant_id.
+	if _, err := repositories.GetAgentByID(c.Param("id"), tenantIDFromContext(c)); err != nil {
+		c.JSON(404, gin.H{"error": "agent not found"})
 		return
 	}
 

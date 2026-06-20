@@ -15,7 +15,7 @@ func GetIncidentsPaginated(c *gin.Context) {
 	perPage, _ := strconv.Atoi(c.DefaultQuery("per_page", "25"))
 	status     := c.Query("status")
 
-	result, err := repositories.GetIncidentsPaginated(page, perPage, status)
+	result, err := repositories.GetIncidentsPaginated(tenantIDFromContext(c), page, perPage, status)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

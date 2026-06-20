@@ -19,8 +19,12 @@ type WebhookPayload struct {
 	Data      map[string]any `json:"data"`
 }
 
-// FireAlertWebhook sends a webhook for a new critical/high alert.
-// Called asynchronously from CreateAlert.
+// FireAlertWebhook sends a webhook for a new critical/high alert, using the
+// webhook/Slack config belonging to the tenant that owns alert.AgentID —
+// without this, a tenant configuring their own Slack channel would also
+// receive (or send) deliveries for every other tenant's alerts, since
+// 'webhook'/'slack' integration rows are now per-tenant (see migration
+// 000005). Called asynchronously from CreateAlert.
 func FireAlertWebhook(alert models.Alert) {
 	if alert.Severity != "critical" && alert.Severity != "high" {
 		return
@@ -40,7 +44,7 @@ func FireAlertWebhook(alert models.Alert) {
 		},
 	}
 
-	go deliverToAll("critical_alert", payload)
+	go deliverToAll("critical_alert", payload, alert.AgentID)
 }
 
 // FireIncidentWebhook sends a webhook when a new incident is created.
@@ -56,17 +60,46 @@ func FireIncidentWebhook(incident models.Incident) {
 			"agent_id": incident.AgentID,
 		},
 	}
-	go deliverToAll("incident_created", payload)
+	go deliverToAll("incident_created", payload, incident.AgentID)
 }
 
-func deliverToAll(eventType string, payload WebhookPayload) {
+// deliverToAll resolves the tenant from agentID once and uses it for both
+// delivery channels.
+func deliverToAll(eventType string, payload WebhookPayload, agentID int) {
+	var tenantID int
+	if err := database.DB.QueryRow(`SELECT tenant_id FROM agents WHERE id=$1`, agentID).Scan(&tenantID); err != nil {
+		return
+	}
+	deliverToAllForTenant(eventType, payload, tenantID)
+}
+
+// deliverToAllForTenant is the tenant-known variant — used directly by the
+// "test integration" button, which has no real agentID to resolve from.
+func deliverToAllForTenant(eventType string, payload WebhookPayload, tenantID int) {
 	// Generic webhook
-	deliverWebhook(eventType, payload)
+	deliverWebhook(eventType, payload, tenantID)
 	// Slack
-	deliverSlack(payload)
+	deliverSlack(payload, tenantID)
 }
 
-func deliverWebhook(eventType string, payload WebhookPayload) {
+// FireTestWebhook sends a synthetic test event for tenantID, used by the
+// "Test" button on the integrations settings page.
+func FireTestWebhook(name string, tenantID int) {
+	payload := WebhookPayload{
+		Event:     "test." + name,
+		Timestamp: time.Now(),
+		Platform:  "XCloak Security Suite",
+		Data: map[string]any{
+			"severity":  "critical",
+			"rule_name": "XCloak Test — " + name,
+			"agent_id":  0,
+			"message":   "This is a test event from XCloak Security Suite",
+		},
+	}
+	deliverToAllForTenant("critical_alert", payload, tenantID)
+}
+
+func deliverWebhook(eventType string, payload WebhookPayload, tenantID int) {
 	var config struct {
 		URL    string   `json:"url"`
 		Secret string   `json:"secret"`
@@ -77,7 +110,7 @@ func deliverWebhook(eventType string, payload WebhookPayload) {
 	var enabled bool
 
 	err := database.DB.QueryRow(
-		`SELECT enabled, config FROM integrations WHERE name='webhook'`,
+		`SELECT enabled, config FROM integrations WHERE name='webhook' AND tenant_id=$1`, tenantID,
 	).Scan(&enabled, &configRaw)
 
 	if err != nil || !enabled {
@@ -109,10 +142,10 @@ func deliverWebhook(eventType string, payload WebhookPayload) {
 		"Content-Type":     "application/json",
 		"X-XCloak-Event":   eventType,
 		"X-XCloak-Version": "1.0",
-	})
+	}, tenantID)
 }
 
-func deliverSlack(payload WebhookPayload) {
+func deliverSlack(payload WebhookPayload, tenantID int) {
 	var config struct {
 		WebhookURL          string `json:"webhook_url"`
 		Channel             string `json:"channel"`
@@ -123,7 +156,7 @@ func deliverSlack(payload WebhookPayload) {
 	var enabled bool
 
 	err := database.DB.QueryRow(
-		`SELECT enabled, config FROM integrations WHERE name='slack'`,
+		`SELECT enabled, config FROM integrations WHERE name='slack' AND tenant_id=$1`, tenantID,
 	).Scan(&enabled, &configRaw)
 
 	if err != nil || !enabled {
@@ -161,14 +194,14 @@ func deliverSlack(payload WebhookPayload) {
 	body, _ := json.Marshal(slackBody)
 	deliver("slack", payload.Event, config.WebhookURL, body, map[string]string{
 		"Content-Type": "application/json",
-	})
+	}, tenantID)
 }
 
-func deliver(integration, eventType, url string, body []byte, headers map[string]string) {
+func deliver(integration, eventType, url string, body []byte, headers map[string]string, tenantID int) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
-		logDelivery(integration, eventType, body, 0, false, err.Error())
+		logDelivery(integration, eventType, body, 0, false, err.Error(), tenantID)
 		return
 	}
 
@@ -178,28 +211,28 @@ func deliver(integration, eventType, url string, body []byte, headers map[string
 
 	resp, err := client.Do(req)
 	if err != nil {
-		logDelivery(integration, eventType, body, 0, false, err.Error())
+		logDelivery(integration, eventType, body, 0, false, err.Error(), tenantID)
 		return
 	}
 	defer resp.Body.Close()
 	io.ReadAll(resp.Body) // drain body
 
 	success := resp.StatusCode >= 200 && resp.StatusCode < 300
-	logDelivery(integration, eventType, body, resp.StatusCode, success, "")
+	logDelivery(integration, eventType, body, resp.StatusCode, success, "", tenantID)
 }
 
-func logDelivery(integration, eventType string, payload []byte, code int, success bool, errMsg string) {
+func logDelivery(integration, eventType string, payload []byte, code int, success bool, errMsg string, tenantID int) {
 	database.DB.Exec(`
-		INSERT INTO webhook_deliveries (integration, event_type, payload, status_code, success, error_msg)
-		VALUES ($1,$2,$3,$4,$5,$6)
-	`, integration, eventType, payload, code, success, errMsg)
+		INSERT INTO webhook_deliveries (integration, event_type, payload, status_code, success, error_msg, tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+	`, integration, eventType, payload, code, success, errMsg, tenantID)
 }
 
-// GetIntegrations returns all integrations config.
-func GetIntegrations() ([]map[string]any, error) {
+// GetIntegrations returns tenantID's integrations config.
+func GetIntegrations(tenantID int) ([]map[string]any, error) {
 	rows, err := database.DB.Query(`
-		SELECT name, enabled, config, updated_at FROM integrations ORDER BY name
-	`)
+		SELECT name, enabled, config, updated_at FROM integrations WHERE tenant_id=$1 ORDER BY name
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -224,27 +257,30 @@ func GetIntegrations() ([]map[string]any, error) {
 	return result, nil
 }
 
-// SaveIntegration upserts an integration config.
-func SaveIntegration(name string, enabled bool, config map[string]any, updatedBy string) error {
+// SaveIntegration upserts an integration config, scoped to tenantID — the
+// ON CONFLICT target is (name, tenant_id) per migration 000005, not just
+// name, so each tenant gets its own row instead of overwriting everyone
+// else's.
+func SaveIntegration(name string, enabled bool, config map[string]any, updatedBy string, tenantID int) error {
 	configJSON, _ := json.Marshal(config)
 	_, err := database.DB.Exec(`
-		INSERT INTO integrations (name, enabled, config, updated_by, updated_at)
-		VALUES ($1,$2,$3,$4,now())
-		ON CONFLICT (name) DO UPDATE SET
+		INSERT INTO integrations (name, enabled, config, updated_by, updated_at, tenant_id)
+		VALUES ($1,$2,$3,$4,now(),$5)
+		ON CONFLICT (name, tenant_id) DO UPDATE SET
 			enabled    = EXCLUDED.enabled,
 			config     = EXCLUDED.config,
 			updated_by = EXCLUDED.updated_by,
 			updated_at = now()
-	`, name, enabled, configJSON, updatedBy)
+	`, name, enabled, configJSON, updatedBy, tenantID)
 	return err
 }
 
-// GetWebhookDeliveries returns recent webhook delivery history.
-func GetWebhookDeliveries() ([]map[string]any, error) {
+// GetWebhookDeliveries returns recent webhook delivery history for tenantID.
+func GetWebhookDeliveries(tenantID int) ([]map[string]any, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, integration, event_type, status_code, success, error_msg, delivered_at
-		FROM webhook_deliveries ORDER BY delivered_at DESC LIMIT 50
-	`)
+		FROM webhook_deliveries WHERE tenant_id=$1 ORDER BY delivered_at DESC LIMIT 50
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}

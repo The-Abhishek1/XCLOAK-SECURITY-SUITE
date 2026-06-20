@@ -9,6 +9,7 @@ type User struct {
 	Password     string     `json:"password,omitempty"`
 	PasswordHash string     `json:"-"`
 	Role         string     `json:"role"`
+	TenantID     int        `json:"tenant_id"`
 	IsActive     bool       `json:"is_active"`
 	LastLogin    *time.Time `json:"last_login"`
 	CreatedAt    *time.Time `json:"created_at"`

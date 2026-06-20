@@ -45,6 +45,7 @@ func RequireAgentAuth() gin.HandlerFunc {
 
 		c.Set(AgentKey, agent)
 		c.Set("agent_id", agent.ID)
+		c.Set("tenant_id", agent.TenantID)
 		c.Next()
 	}
 }

@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,11 +11,11 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-// GenerateComplianceReport builds a full platform health snapshot,
+// GenerateComplianceReport builds a health snapshot scoped to tenantID,
 // persists it to the DB, and returns the report with its ID.
-func GenerateComplianceReport(reportType, generatedBy string) (*models.ComplianceReport, error) {
+func GenerateComplianceReport(reportType, generatedBy string, tenantID int) (*models.ComplianceReport, error) {
 
-	summary, err := buildSummary()
+	summary, err := buildSummary(tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build report summary: %w", err)
 	}
@@ -25,9 +26,9 @@ func GenerateComplianceReport(reportType, generatedBy string) (*models.Complianc
 
 	var id int
 	err = database.DB.QueryRow(`
-		INSERT INTO compliance_reports (title, report_type, generated_by, summary)
-		VALUES ($1,$2,$3,$4) RETURNING id
-	`, title, reportType, generatedBy, summaryJSON).Scan(&id)
+		INSERT INTO compliance_reports (title, report_type, generated_by, summary, tenant_id)
+		VALUES ($1,$2,$3,$4,$5) RETURNING id
+	`, title, reportType, generatedBy, summaryJSON, tenantID).Scan(&id)
 
 	if err != nil {
 		return nil, err
@@ -45,14 +46,15 @@ func GenerateComplianceReport(reportType, generatedBy string) (*models.Complianc
 	}, nil
 }
 
-// GetReports returns all compliance reports, newest first.
-func GetReports() ([]models.ComplianceReport, error) {
+// GetReports returns reports belonging to tenantID, newest first.
+func GetReports(tenantID int) ([]models.ComplianceReport, error) {
 
 	rows, err := database.DB.Query(`
 		SELECT id, title, report_type, generated_by, summary, created_at
 		FROM compliance_reports
+		WHERE tenant_id = $1
 		ORDER BY created_at DESC
-	`)
+	`, tenantID)
 
 	if err != nil {
 		return nil, err
@@ -70,14 +72,15 @@ func GetReports() ([]models.ComplianceReport, error) {
 	return reports, nil
 }
 
-// GetReportByID fetches a single report for the detail/export view.
-func GetReportByID(id string) (*models.ComplianceReport, error) {
+// GetReportByID fetches a single report, scoped to tenantID — a request
+// for another tenant's report gets the same error as a nonexistent one.
+func GetReportByID(id string, tenantID int) (*models.ComplianceReport, error) {
 
 	var r models.ComplianceReport
 	err := database.DB.QueryRow(`
 		SELECT id, title, report_type, generated_by, summary, created_at
-		FROM compliance_reports WHERE id=$1
-	`, id).Scan(&r.ID, &r.Title, &r.ReportType, &r.GeneratedBy, &r.Summary, &r.CreatedAt)
+		FROM compliance_reports WHERE id=$1 AND tenant_id=$2
+	`, id, tenantID).Scan(&r.ID, &r.Title, &r.ReportType, &r.GeneratedBy, &r.Summary, &r.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -86,14 +89,20 @@ func GetReportByID(id string) (*models.ComplianceReport, error) {
 	return &r, nil
 }
 
-// DeleteReport removes a report by ID.
-func DeleteReport(id string) error {
-	_, err := database.DB.Exec(`DELETE FROM compliance_reports WHERE id=$1`, id)
-	return err
+// DeleteReport removes a report by ID, scoped to tenantID.
+func DeleteReport(id string, tenantID int) error {
+	tag, err := database.DB.Exec(`DELETE FROM compliance_reports WHERE id=$1 AND tenant_id=$2`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return errors.New("report not found")
+	}
+	return nil
 }
 
-// buildSummary collects metrics from all repositories to build the report body.
-func buildSummary() (*models.ComplianceSummary, error) {
+// buildSummary collects metrics scoped to tenantID to build the report body.
+func buildSummary(tenantID int) (*models.ComplianceSummary, error) {
 
 	s := &models.ComplianceSummary{
 		VulnsBySeverity:  make(map[string]int),
@@ -101,7 +110,7 @@ func buildSummary() (*models.ComplianceSummary, error) {
 	}
 
 	// Agents
-	agents, _ := repositories.GetAgents()
+	agents, _ := repositories.GetAgents(tenantID)
 	s.TotalAgents = len(agents)
 	for _, a := range agents {
 		if a.Status == "online" {
@@ -110,7 +119,7 @@ func buildSummary() (*models.ComplianceSummary, error) {
 	}
 
 	// Alerts
-	alerts, _ := repositories.GetAlerts()
+	alerts, _ := repositories.GetAlerts(tenantID)
 	s.TotalAlerts = len(alerts)
 	for _, a := range alerts {
 		s.AlertsBySeverity[a.Severity]++
@@ -120,7 +129,7 @@ func buildSummary() (*models.ComplianceSummary, error) {
 	}
 
 	// Incidents
-	incidents, _ := repositories.GetIncidents()
+	incidents, _ := repositories.GetIncidents(tenantID)
 	for _, i := range incidents {
 		if i.Status == "open" || i.Status == "investigating" {
 			s.OpenIncidents++
@@ -138,7 +147,7 @@ func buildSummary() (*models.ComplianceSummary, error) {
 	}
 
 	// Vulnerabilities
-	vulns, _ := repositories.GetAllVulnerabilities()
+	vulns, _ := repositories.GetVulnerabilities(tenantID)
 	s.TotalVulns = len(vulns)
 	for _, v := range vulns {
 		s.VulnsBySeverity[v.Severity]++
@@ -148,13 +157,13 @@ func buildSummary() (*models.ComplianceSummary, error) {
 	}
 
 	// IOCs
-	iocs, _ := repositories.GetIOCs()
+	iocs, _ := repositories.GetIOCs(tenantID)
 	s.TotalIOCs = len(iocs)
 
 	// Rules
-	sigmaRules, _ := repositories.GetRules()
+	sigmaRules, _ := repositories.GetRules(tenantID)
 	s.SigmaRules = len(sigmaRules)
-	yaraRules, _ := repositories.GetYaraRules()
+	yaraRules, _ := repositories.GetYaraRules(tenantID)
 	s.YaraRules = len(yaraRules)
 
 	// Top risk agents (up to 5)

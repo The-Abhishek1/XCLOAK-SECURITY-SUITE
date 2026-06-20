@@ -44,5 +44,6 @@ type ScheduledTask struct {
 	NextRunAt  *time.Time `json:"next_run_at"`
 	RunCount   int        `json:"run_count"`
 	CreatedBy  string     `json:"created_by"`
+	TenantID   int        `json:"tenant_id"`
 	CreatedAt  time.Time  `json:"created_at"`
 }

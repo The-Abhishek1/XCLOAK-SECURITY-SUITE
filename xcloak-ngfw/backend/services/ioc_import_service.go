@@ -7,6 +7,7 @@ import (
 
 func ImportIOCs(
 	req models.IOCImportRequest,
+	tenantID int,
 ) models.IOCImportResult {
 
 	result := models.IOCImportResult{}
@@ -16,6 +17,7 @@ func ImportIOCs(
 		if repositories.IOCExists(
 			indicator,
 			req.Type,
+			tenantID,
 		) {
 
 			result.Skipped++
@@ -30,6 +32,7 @@ func ImportIOCs(
 				Description: req.Description,
 				Enabled:     true,
 			},
+			tenantID,
 		)
 
 		result.Imported++

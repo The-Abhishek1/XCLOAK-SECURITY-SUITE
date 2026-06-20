@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -15,6 +16,12 @@ func UpdateIncidentStatus(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(400, gin.H{"error": "invalid incident id"})
+		return
+	}
+
+	// Verify the incident belongs to the caller's tenant before mutating it.
+	if _, err := repositories.GetIncidentByID(c.Param("id"), tenantIDFromContext(c)); err != nil {
+		c.JSON(404, gin.H{"error": "incident not found"})
 		return
 	}
 
@@ -33,7 +40,7 @@ func UpdateIncidentStatus(c *gin.Context) {
 		return
 	}
 
-	if err := services.UpdateIncidentStatus(id, body.Status); err != nil {
+	if err := services.UpdateIncidentStatus(id, body.Status, tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -62,6 +69,12 @@ func AddIncidentNote(c *gin.Context) {
 		return
 	}
 
+	// Verify the incident belongs to the caller's tenant before mutating it.
+	if _, err := repositories.GetIncidentByID(c.Param("id"), tenantIDFromContext(c)); err != nil {
+		c.JSON(404, gin.H{"error": "incident not found"})
+		return
+	}
+
 	var body struct {
 		Note string `json:"note"`
 	}
@@ -76,7 +89,7 @@ func AddIncidentNote(c *gin.Context) {
 		user = username.(string)
 	}
 
-	if err := services.AddIncidentEvent(id, "note", body.Note, user); err != nil {
+	if err := services.AddIncidentEvent(id, "note", body.Note, user, tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

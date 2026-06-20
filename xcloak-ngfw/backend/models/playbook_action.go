@@ -16,5 +16,7 @@ type PlaybookAction struct {
 
 	Payload json.RawMessage `json:"payload"`
 
+	TenantID int `json:"tenant_id"`
+
 	CreatedAt time.Time `json:"created_at"`
 }

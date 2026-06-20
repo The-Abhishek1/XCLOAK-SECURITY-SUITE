@@ -53,18 +53,22 @@ func LoginUser(username, password string) (string, bool, error) {
 		return "", false, errors.New("account is disabled")
 	}
 
-	// Check if 2FA is enabled
+	// Check if 2FA is enabled. A failed/errored query must NOT be treated as
+	// "2FA disabled" — that would silently issue a real working JWT and
+	// bypass the TOTP requirement on a transient DB hiccup.
 	var totpEnabled bool
-	database.DB.QueryRow(
+	if err := database.DB.QueryRow(
 		`SELECT COALESCE(totp_enabled, FALSE) FROM users WHERE id=$1`, user.ID,
-	).Scan(&totpEnabled)
+	).Scan(&totpEnabled); err != nil {
+		return "", false, errors.New("login temporarily unavailable — please try again")
+	}
 
 	if totpEnabled {
 		// Return empty token — caller must complete TOTP flow
 		return "", true, nil
 	}
 
-	token, err := auth.GenerateJWT(user.ID, user.Username, user.Role)
+	token, err := auth.GenerateJWT(user.ID, user.Username, user.Role, user.TenantID)
 	if err != nil {
 		return "", false, err
 	}
@@ -102,6 +106,84 @@ func ChangePassword(userID int, currentPassword, newPassword string) error {
 	)
 	LogEvent("PASSWORD_CHANGE", "User changed password", fmt.Sprintf("user_id:%d", userID))
 	return err
+}
+
+// InviteUser creates a new user scoped to tenantID and emails them a
+// set-password link (reuses the same password_reset_token/email plumbing as
+// RequestPasswordReset — there's no functional difference between "set your
+// password for the first time" and "reset your password" once a token
+// exists). The account gets an unusable random password hash until the
+// invitee follows the link, so it can't be logged into in the meantime.
+func InviteUser(username, email, role string, tenantID int) error {
+	validRoles := map[string]bool{"admin": true, "analyst": true, "viewer": true}
+	if !validRoles[role] {
+		return errors.New("invalid role — must be admin, analyst, or viewer")
+	}
+
+	var exists bool
+	database.DB.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM users WHERE username=$1 OR email=$2)`, username, email,
+	).Scan(&exists)
+	if exists {
+		return errors.New("a user with that username or email already exists")
+	}
+
+	// Check SMTP before creating the row — an invited user with no email
+	// sent and no API to retrieve their token would be a permanently
+	// orphaned, unusable account.
+	cfg := loadSMTPConfig()
+	if cfg == nil {
+		return fmt.Errorf("SMTP not configured — cannot send invite email")
+	}
+
+	placeholder := make([]byte, 32)
+	rand.Read(placeholder)
+	hash, err := auth.HashPassword(hex.EncodeToString(placeholder))
+	if err != nil {
+		return err
+	}
+
+	var userID int
+	err = database.DB.QueryRow(`
+		INSERT INTO users (username, email, password_hash, role, tenant_id, is_active)
+		VALUES ($1, $2, $3, $4, $5, TRUE)
+		RETURNING id
+	`, username, email, hash, role, tenantID).Scan(&userID)
+	if err != nil {
+		return err
+	}
+
+	b := make([]byte, 32)
+	rand.Read(b)
+	token := hex.EncodeToString(b)
+	expiry := time.Now().Add(24 * time.Hour)
+
+	database.DB.Exec(`
+		UPDATE users
+		SET password_reset_token=$1, password_reset_expiry=$2
+		WHERE id=$3
+	`, token, expiry, userID)
+
+	subject := "XCloak — You've been invited"
+	body := fmt.Sprintf(`Hi %s,
+
+You've been invited to join XCloak Security Suite as a %s.
+
+Click the link below to set your password (expires in 24 hours):
+http://localhost:3000/reset-password?token=%s
+
+— XCloak Security Suite
+`, username, role, token)
+
+	if err := sendEmail(cfg, []string{email}, subject, body); err != nil {
+		// Don't leave a password-less account stranded with no way to claim
+		// it — roll back so the admin can safely retry the invite.
+		database.DB.Exec(`DELETE FROM users WHERE id=$1`, userID)
+		return fmt.Errorf("failed to send invite email: %w", err)
+	}
+
+	LogEvent("INVITE_USER", "Invited "+username+" ("+role+")", fmt.Sprintf("tenant_id:%d", tenantID))
+	return nil
 }
 
 // RequestPasswordReset generates a reset token and sends an email.

@@ -21,7 +21,7 @@ func TriageAlertHandler(c *gin.Context) {
 	}
 
 	// Fetch the alert.
-	alerts, err := services.GetAlerts()
+	alerts, err := services.GetAlerts(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -57,7 +57,7 @@ func SummarizeIncidentHandler(c *gin.Context) {
 		return
 	}
 
-	summary, err := services.SummarizeIncident(id)
+	summary, err := services.SummarizeIncident(id, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(502, gin.H{"error": "AI unavailable: " + err.Error()})
 		return
@@ -73,6 +73,9 @@ func RunAnomalyDetectionHandler(c *gin.Context) {
 	agentID, err := strconv.Atoi(c.Param("agent_id"))
 	if err != nil {
 		c.JSON(400, gin.H{"error": "invalid agent id"})
+		return
+	}
+	if !agentOwnedBy404(c, c.Param("agent_id")) {
 		return
 	}
 
@@ -98,7 +101,7 @@ func GetAnomaliesHandler(c *gin.Context) {
 
 	agentID := c.Query("agent_id")
 
-	findings, err := services.GetAnomalies(agentID)
+	findings, err := services.GetAnomalies(agentID, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -136,7 +139,7 @@ func AIChatHandler(c *gin.Context) {
 		return
 	}
 
-	response, updatedHistory, err := services.ChatWithAssistant(user, body.Message, body.History)
+	response, updatedHistory, err := services.ChatWithAssistant(user, body.Message, body.History, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(502, gin.H{"error": "AI unavailable: " + err.Error()})
 		return

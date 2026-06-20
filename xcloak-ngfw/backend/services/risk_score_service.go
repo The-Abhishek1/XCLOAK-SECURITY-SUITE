@@ -11,7 +11,7 @@ func CalculateRiskScore(
 
 	score := 0
 
-	alerts, _ := repositories.GetAlerts()
+	alerts, _ := repositories.GetAllAlerts()
 
 	for _, alert := range alerts {
 
@@ -43,7 +43,7 @@ func CalculateRiskScore(
 		}
 	}
 
-	incidents, _ := repositories.GetIncidents()
+	incidents, _ := repositories.GetAllIncidents()
 
 	for _, incident := range incidents {
 

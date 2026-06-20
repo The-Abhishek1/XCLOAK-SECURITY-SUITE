@@ -8,7 +8,7 @@ import (
 
 func DashboardOverview(c *gin.Context) {
 
-	overview, err := services.GetDashboardOverview()
+	overview, err := services.GetDashboardOverview(tenantIDFromContext(c))
 
 	if err != nil {
 

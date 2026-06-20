@@ -5,7 +5,7 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-func GetDashboardOverview() (*models.DashboardOverview, error) {
+func GetDashboardOverview(tenantID int) (*models.DashboardOverview, error) {
 
-	return repositories.GetDashboardOverview()
+	return repositories.GetDashboardOverview(tenantID)
 }

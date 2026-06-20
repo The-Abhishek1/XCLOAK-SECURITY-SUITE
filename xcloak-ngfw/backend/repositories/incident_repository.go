@@ -5,6 +5,11 @@ import (
 	"xcloak-ngfw/models"
 )
 
+// CreateIncident inserts a new incident. tenant_id is resolved from the
+// owning agent rather than incident.TenantID — CreateIncident is called from
+// the correlation engine, which only carries agent_id, and the agent is the
+// single source of truth for which tenant an incident belongs to (matches
+// CreateAlert's pattern).
 func CreateIncident(
 	incident models.Incident,
 ) (int, error) {
@@ -24,9 +29,10 @@ func CreateIncident(
 			title,
 			severity,
 			description,
-			fingerprint
+			fingerprint,
+			tenant_id
 		)
-		VALUES ($1,$2,$3,$4,$5)
+		VALUES ($1,$2,$3,$4,$5, (SELECT tenant_id FROM agents WHERE id = $1))
 		RETURNING id
 	`,
 		incident.AgentID,
@@ -43,20 +49,32 @@ func CreateIncident(
 	return incidentID, nil
 }
 
-func GetIncidents() ([]models.Incident, error) {
+// GetIncidents returns incidents belonging to tenantID only. Use this from
+// user-facing API paths that have a real tenant context from the request.
+func GetIncidents(tenantID int) ([]models.Incident, error) {
+	return queryIncidents(`
+		SELECT id, agent_id, title, severity, status, description, created_at, tenant_id
+		FROM incidents
+		WHERE tenant_id = $1
+		ORDER BY created_at DESC
+	`, tenantID)
+}
 
-	rows, err := database.DB.Query(`
-		SELECT
-			id,
-			agent_id,
-			title,
-			severity,
-			status,
-			description,
-			created_at
+// GetAllIncidents returns every incident across every tenant. For internal
+// background jobs (AI chat/compliance/risk scoring) that operate fleet-wide
+// with no per-request tenant context — not for user-facing API responses,
+// which must use GetIncidents(tenantID) instead.
+func GetAllIncidents() ([]models.Incident, error) {
+	return queryIncidents(`
+		SELECT id, agent_id, title, severity, status, description, created_at, tenant_id
 		FROM incidents
 		ORDER BY created_at DESC
 	`)
+}
+
+func queryIncidents(query string, args ...interface{}) ([]models.Incident, error) {
+
+	rows, err := database.DB.Query(query, args...)
 
 	if err != nil {
 		return nil, err
@@ -78,6 +96,7 @@ func GetIncidents() ([]models.Incident, error) {
 			&incident.Status,
 			&incident.Description,
 			&incident.CreatedAt,
+			&incident.TenantID,
 		)
 
 		if err != nil {

@@ -9,7 +9,7 @@ import (
 )
 
 func GetAuditLogs(c *gin.Context) {
-	logs, err := repositories.GetAuditLogs()
+	logs, err := repositories.GetAuditLogs(tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -26,7 +26,7 @@ func GetAuditLogsPaginatedHandler(c *gin.Context) {
 	from := c.Query("from")
 	to := c.Query("to")
 
-	result, err := repositories.GetAuditLogsFiltered(page, perPage, q, from, to)
+	result, err := repositories.GetAuditLogsFiltered(tenantIDFromContext(c), page, perPage, q, from, to)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

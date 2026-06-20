@@ -136,29 +136,34 @@ func LoginWith2FA(c *gin.Context) {
 		return
 	}
 
-	token, _, err := services.LoginUser(req.Username, req.Password)
+	token, needs2FA, err := services.LoginUser(req.Username, req.Password)
 	if err != nil {
 		c.JSON(401, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	// Check if user has 2FA enabled
-	var userID int
-	var totpEnabled bool
-	var role string
-	database.DB.QueryRow(
-		`SELECT id, COALESCE(totp_enabled,FALSE), role FROM users WHERE username=$1`, req.Username,
-	).Scan(&userID, &totpEnabled, &role)
-
-	if !totpEnabled {
-		// Normal login — return token immediately
+	if !needs2FA {
+		// Normal login — LoginUser already issued a real token.
 		c.JSON(http.StatusOK, gin.H{"token": token})
+		return
+	}
+
+	// 2FA required — LoginUser returned needs2FA=true (the authoritative
+	// signal) but no token; fetch the user/role/tenant fields needed to
+	// build the temp token. If this lookup fails, fail closed rather than
+	// falling through to a normal-login response with an empty token.
+	var userID, tenantID int
+	var role string
+	if err := database.DB.QueryRow(
+		`SELECT id, role, tenant_id FROM users WHERE username=$1`, req.Username,
+	).Scan(&userID, &role, &tenantID); err != nil {
+		c.JSON(401, gin.H{"error": "invalid credentials"})
 		return
 	}
 
 	// 2FA required — return a short-lived temp token
 	// Client must call /api/auth/login/2fa to exchange for real token
-	tempToken, _ := auth.GenerateTempToken(userID, req.Username, role)
+	tempToken, _ := auth.GenerateTempToken(userID, req.Username, role, tenantID)
 	c.JSON(200, gin.H{
 		"needs_2fa":  true,
 		"temp_token": tempToken,
@@ -179,7 +184,7 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	// Validate temp token
-	userID, username, _, err := auth.ValidateTempToken(body.TempToken)
+	userID, username, _, tenantID, err := auth.ValidateTempToken(body.TempToken)
 	if err != nil {
 		c.JSON(401, gin.H{"error": "invalid or expired temp token"})
 		return
@@ -198,7 +203,7 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	// Issue real JWT with the role read from the database.
-	token, err := auth.GenerateJWT(userID, username, dbRole)
+	token, err := auth.GenerateJWT(userID, username, dbRole, tenantID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to generate token"})
 		return

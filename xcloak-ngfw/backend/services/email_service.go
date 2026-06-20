@@ -184,13 +184,18 @@ func sendEmail(cfg *SMTPConfig, to []string, subject, body string) error {
 	return smtp.SendMail(addr, auth, from, to, []byte(msg))
 }
 
-// GetEmailRecipients returns enabled recipients for a given severity.
-func GetEmailRecipients(severity string) []string {
+// GetEmailRecipients returns enabled recipients for a given severity, scoped
+// to the tenant that owns agentID — without this, every tenant's configured
+// recipients would be notified about every other tenant's alerts. Resolved
+// from agentID rather than taking a tenantID directly since the only caller
+// (the alert pipeline) has no per-request tenant context of its own.
+func GetEmailRecipients(severity string, agentID int) []string {
 	rows, err := database.DB.Query(`
 		SELECT recipient FROM email_alert_rules
 		WHERE enabled = TRUE
 		  AND (severity = $1 OR severity = 'any')
-	`, severity)
+		  AND tenant_id = (SELECT tenant_id FROM agents WHERE id = $2)
+	`, severity, agentID)
 	if err != nil {
 		return nil
 	}

@@ -77,7 +77,7 @@ func CreateAlert(alert models.Alert) error {
 	if sev == "critical" || sev == "high" {
 		go func() {
 			defer func() { recover() }()
-			recipients := GetEmailRecipients(alert.Severity)
+			recipients := GetEmailRecipients(alert.Severity, alert.AgentID)
 			if len(recipients) > 0 {
 				if err := SendAlertEmail(alert, recipients); err != nil {
 					fmt.Printf("[Email] Failed to send alert email: %v\n", err)
@@ -100,6 +100,6 @@ func RegisterBroadcastFn(fn func(models.Alert)) {
 	broadcastFn = fn
 }
 
-func GetAlerts() ([]models.Alert, error) {
-	return repositories.GetAlerts()
+func GetAlerts(tenantID int) ([]models.Alert, error) {
+	return repositories.GetAlerts(tenantID)
 }

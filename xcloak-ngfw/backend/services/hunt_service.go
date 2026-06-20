@@ -58,9 +58,12 @@ var huntTargets = map[string]struct {
 	},
 }
 
-// RunHuntQuery executes a hunt query safely using parameterized ILIKE search.
+// RunHuntQuery executes a hunt query safely using parameterized ILIKE search,
+// scoped to tenantID via the agents join — without this, a hunt across
+// processes/commands/connections/users/packages/logs/alerts/file_hashes
+// would return every tenant's endpoint telemetry.
 // QueryText is treated as a search term, NOT raw SQL — fully injection-safe.
-func RunHuntQuery(queryID int, queryType, queryText string) (*models.HuntRunResponse, error) {
+func RunHuntQuery(queryID int, queryType, queryText string, tenantID int) (*models.HuntRunResponse, error) {
 
 	start := time.Now()
 
@@ -71,7 +74,7 @@ func RunHuntQuery(queryID int, queryType, queryText string) (*models.HuntRunResp
 
 	// Build ILIKE conditions for each searchable column.
 	conditions := make([]string, 0, len(target.cols))
-	args := []interface{}{"%" + queryText + "%"}
+	args := []interface{}{"%" + queryText + "%", tenantID}
 
 	for _, col := range target.cols {
 		conditions = append(conditions, fmt.Sprintf("CAST(%s AS TEXT) ILIKE $1", col))
@@ -83,7 +86,7 @@ func RunHuntQuery(queryID int, queryType, queryText string) (*models.HuntRunResp
 		SELECT t.*, a.hostname
 		FROM %s t
 		JOIN agents a ON a.id = t.%s
-		WHERE %s
+		WHERE (%s) AND a.tenant_id = $2
 		ORDER BY t.id DESC
 		LIMIT 500
 	`, target.table, target.joinAgent, whereClause)
@@ -138,12 +141,12 @@ func RunHuntQuery(queryID int, queryType, queryText string) (*models.HuntRunResp
 }
 
 // SaveHuntQuery persists a named hunt query for reuse.
-func SaveHuntQuery(q models.HuntQuery) (*models.HuntQuery, error) {
+func SaveHuntQuery(q models.HuntQuery, tenantID int) (*models.HuntQuery, error) {
 
 	err := database.DB.QueryRow(`
-		INSERT INTO hunt_queries (name, description, query_type, query_text, created_by)
-		VALUES ($1,$2,$3,$4,$5) RETURNING id, created_at
-	`, q.Name, q.Description, q.QueryType, q.QueryText, q.CreatedBy).
+		INSERT INTO hunt_queries (name, description, query_type, query_text, created_by, tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, created_at
+	`, q.Name, q.Description, q.QueryType, q.QueryText, q.CreatedBy, tenantID).
 		Scan(&q.ID, &q.CreatedAt)
 
 	if err != nil {
@@ -153,14 +156,14 @@ func SaveHuntQuery(q models.HuntQuery) (*models.HuntQuery, error) {
 	return &q, nil
 }
 
-// GetHuntQueries returns all saved hunt queries.
-func GetHuntQueries() ([]models.HuntQuery, error) {
+// GetHuntQueries returns saved hunt queries belonging to tenantID.
+func GetHuntQueries(tenantID int) ([]models.HuntQuery, error) {
 
 	rows, err := database.DB.Query(`
 		SELECT id, name, description, query_type, query_text,
 		       created_by, hit_count, last_run_at, created_at
-		FROM hunt_queries ORDER BY created_at DESC
-	`)
+		FROM hunt_queries WHERE tenant_id=$1 ORDER BY created_at DESC
+	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,8 +180,26 @@ func GetHuntQueries() ([]models.HuntQuery, error) {
 	return queries, nil
 }
 
-// DeleteHuntQuery removes a saved query.
-func DeleteHuntQuery(id string) error {
-	_, err := database.DB.Exec(`DELETE FROM hunt_queries WHERE id=$1`, id)
-	return err
+// GetHuntQueryByID fetches a single saved query, scoped to tenantID.
+func GetHuntQueryByID(id string, tenantID int) (*models.HuntQuery, error) {
+	var q models.HuntQuery
+	err := database.DB.QueryRow(`
+		SELECT id, query_type, query_text FROM hunt_queries WHERE id=$1 AND tenant_id=$2
+	`, id, tenantID).Scan(&q.ID, &q.QueryType, &q.QueryText)
+	if err != nil {
+		return nil, err
+	}
+	return &q, nil
+}
+
+// DeleteHuntQuery removes a saved query, scoped to tenantID.
+func DeleteHuntQuery(id string, tenantID int) error {
+	tag, err := database.DB.Exec(`DELETE FROM hunt_queries WHERE id=$1 AND tenant_id=$2`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		return fmt.Errorf("hunt query not found")
+	}
+	return nil
 }

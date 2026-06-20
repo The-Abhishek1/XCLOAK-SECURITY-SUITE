@@ -14,10 +14,10 @@ func LogPlaybookExecution(
 	)
 }
 
-func GetPlaybookExecutions() (
+func GetPlaybookExecutions(tenantID int) (
 	[]models.PlaybookExecution,
 	error,
 ) {
 
-	return repositories.GetPlaybookExecutions()
+	return repositories.GetPlaybookExecutions(tenantID)
 }

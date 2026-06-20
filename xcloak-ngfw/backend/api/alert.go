@@ -8,7 +8,7 @@ import (
 
 func GetAlerts(c *gin.Context) {
 
-	alerts, err := services.GetAlerts()
+	alerts, err := services.GetAlerts(tenantIDFromContext(c))
 
 	if err != nil {
 

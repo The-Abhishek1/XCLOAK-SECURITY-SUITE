@@ -33,6 +33,9 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid agent id"})
 		return
 	}
+	if !agentOwnedBy404(c, c.Param("id")) {
+		return
+	}
 
 	// Get base risk score
 	score, err := repositories.GetRiskScore(fmt.Sprintf("%d", agentID))

@@ -10,7 +10,7 @@ func GetPlaybookExecutions(
 	c *gin.Context,
 ) {
 
-	executions, err := services.GetPlaybookExecutions()
+	executions, err := services.GetPlaybookExecutions(tenantIDFromContext(c))
 
 	if err != nil {
 

@@ -29,6 +29,7 @@ func CreatePlaybook(
 
 	err := services.CreatePlaybook(
 		playbook,
+		tenantIDFromContext(c),
 	)
 
 	if err != nil {
@@ -55,7 +56,7 @@ func GetPlaybooks(
 	c *gin.Context,
 ) {
 
-	playbooks, err := services.GetPlaybooks()
+	playbooks, err := services.GetPlaybooks(tenantIDFromContext(c))
 
 	if err != nil {
 
