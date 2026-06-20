@@ -38,6 +38,7 @@ func GetUserByUsername(
 	password_hash,
 	role,
 	tenant_id,
+	is_platform_admin,
 	is_active
 	FROM users
 	WHERE username = $1
@@ -53,6 +54,7 @@ func GetUserByUsername(
 		&user.PasswordHash,
 		&user.Role,
 		&user.TenantID,
+		&user.IsPlatformAdmin,
 		&user.IsActive,
 	)
 

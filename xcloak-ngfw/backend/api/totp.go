@@ -193,9 +193,10 @@ func CompleteTOTPLogin(c *gin.Context) {
 	// Get TOTP secret and the authoritative role from the DB.
 	var secret string
 	var dbRole string
+	var isPlatformAdmin bool
 	database.DB.QueryRow(
-		`SELECT COALESCE(totp_secret,''), role FROM users WHERE id=$1`, userID,
-	).Scan(&secret, &dbRole)
+		`SELECT COALESCE(totp_secret,''), role, is_platform_admin FROM users WHERE id=$1`, userID,
+	).Scan(&secret, &dbRole, &isPlatformAdmin)
 
 	if !services.ValidateTOTP(secret, body.Code) {
 		c.JSON(401, gin.H{"error": "invalid authenticator code"})
@@ -203,7 +204,7 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	// Issue real JWT with the role read from the database.
-	token, err := auth.GenerateJWT(userID, username, dbRole, tenantID)
+	token, err := auth.GenerateJWT(userID, username, dbRole, tenantID, isPlatformAdmin)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to generate token"})
 		return

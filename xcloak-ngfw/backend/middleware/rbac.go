@@ -37,3 +37,27 @@ func RequireRole(
 		c.Next()
 	}
 }
+
+// RequirePlatformAdmin gates platform-operator actions (tenant provisioning)
+// that are independent of — and a strict superset of — the per-tenant admin
+// role. is_platform_admin is never set via any API; it's promoted by direct
+// SQL only, so there is no self-escalation path through this middleware.
+func RequirePlatformAdmin() gin.HandlerFunc {
+
+	return func(c *gin.Context) {
+
+		isPlatformAdmin, _ := c.Get("is_platform_admin")
+
+		if isPlatformAdmin != true {
+
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "platform admin access required",
+			})
+
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

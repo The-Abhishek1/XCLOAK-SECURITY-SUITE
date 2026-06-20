@@ -11,6 +11,7 @@ import {
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
+  Building2,
 } from 'lucide-react';
 
 const NAV = [
@@ -48,6 +49,9 @@ const NAV = [
   ]},
   { group: 'SYSTEM', items: [
     { href: '/settings', label: 'Settings', icon: Settings },
+  ]},
+  { group: 'PLATFORM', items: [
+    { href: '/platform', label: 'Tenants', icon: Building2 },
   ]},
 ];
 

@@ -53,6 +53,13 @@ func LoginUser(username, password string) (string, bool, error) {
 		return "", false, errors.New("account is disabled")
 	}
 
+	var tenantActive bool
+	if err := database.DB.QueryRow(
+		`SELECT is_active FROM tenants WHERE id=$1`, user.TenantID,
+	).Scan(&tenantActive); err != nil || !tenantActive {
+		return "", false, errors.New("this tenant has been suspended")
+	}
+
 	// Check if 2FA is enabled. A failed/errored query must NOT be treated as
 	// "2FA disabled" — that would silently issue a real working JWT and
 	// bypass the TOTP requirement on a transient DB hiccup.
@@ -68,7 +75,7 @@ func LoginUser(username, password string) (string, bool, error) {
 		return "", true, nil
 	}
 
-	token, err := auth.GenerateJWT(user.ID, user.Username, user.Role, user.TenantID)
+	token, err := auth.GenerateJWT(user.ID, user.Username, user.Role, user.TenantID, user.IsPlatformAdmin)
 	if err != nil {
 		return "", false, err
 	}
@@ -274,7 +281,7 @@ func ResetPassword(token, newPassword string) error {
 // GetUserProfile returns profile info for the current user.
 func GetUserProfile(userID int) (map[string]interface{}, error) {
 	var username, email, role string
-	var isActive bool
+	var isActive, isPlatformAdmin bool
 	var lastLogin *time.Time
 	var createdAt *time.Time
 	var totpEnabled bool
@@ -282,23 +289,24 @@ func GetUserProfile(userID int) (map[string]interface{}, error) {
 	err := database.DB.QueryRow(`
 		SELECT username, COALESCE(email,''), role, is_active,
 		       last_login, created_at,
-		       COALESCE(totp_enabled, FALSE)
+		       COALESCE(totp_enabled, FALSE), is_platform_admin
 		FROM users WHERE id=$1
-	`, userID).Scan(&username, &email, &role, &isActive, &lastLogin, &createdAt, &totpEnabled)
+	`, userID).Scan(&username, &email, &role, &isActive, &lastLogin, &createdAt, &totpEnabled, &isPlatformAdmin)
 
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"id":           userID,
-		"username":     username,
-		"email":        email,
-		"role":         role,
-		"is_active":    isActive,
-		"last_login":   lastLogin,
-		"created_at":   createdAt,
-		"totp_enabled": totpEnabled,
+		"id":                userID,
+		"username":          username,
+		"email":             email,
+		"role":              role,
+		"is_active":         isActive,
+		"last_login":        lastLogin,
+		"created_at":        createdAt,
+		"totp_enabled":      totpEnabled,
+		"is_platform_admin": isPlatformAdmin,
 	}, nil
 }
 

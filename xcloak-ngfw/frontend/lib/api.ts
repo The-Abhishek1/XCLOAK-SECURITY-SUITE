@@ -244,4 +244,11 @@ export const correlationAPI = {
   delete:  (id: number)                     => api.delete(`/correlation/rules/${id}`),
 };
 
+export const platformAPI = {
+  getTenants:    ()                                                                            => api.get('/platform/tenants'),
+  createTenant:  (name: string, slug: string, adminUsername: string, adminEmail: string)        =>
+    api.post('/platform/tenants', { name, slug, admin_username: adminUsername, admin_email: adminEmail }),
+  toggleTenant:  (id: number, active: boolean)                                                  => api.patch(`/platform/tenants/${id}/toggle`, { is_active: active }),
+};
+
 export default api;

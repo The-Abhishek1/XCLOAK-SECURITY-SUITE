@@ -22,7 +22,7 @@ func parse(t *testing.T, tokenStr string) jwt.MapClaims {
 }
 
 func TestGenerateJWT(t *testing.T) {
-	tokenStr, err := GenerateJWT(42, "alice", "admin", 7)
+	tokenStr, err := GenerateJWT(42, "alice", "admin", 7, false)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestTempToken_RoundTrip(t *testing.T) {
 
 func TestValidateTempToken_RejectsNonTempToken(t *testing.T) {
 	// A normal access token must not be usable as a temp 2FA token.
-	tokenStr, _ := GenerateJWT(1, "bob", "analyst", 7)
+	tokenStr, _ := GenerateJWT(1, "bob", "analyst", 7, false)
 
 	if _, _, _, _, err := ValidateTempToken(tokenStr); err == nil {
 		t.Error("expected error validating a non-temp token as temp, got nil")

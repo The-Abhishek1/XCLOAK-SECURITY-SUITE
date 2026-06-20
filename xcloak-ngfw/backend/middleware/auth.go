@@ -67,10 +67,17 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
+		// is_platform_admin only grants extra capability (tenant provisioning),
+		// it doesn't gate tenant isolation like tenant_id does — so a
+		// missing/wrong-type claim defaults safely to false rather than
+		// rejecting the request.
+		isPlatformAdmin, _ := claims["is_platform_admin"].(bool)
+
 		c.Set("user_id",      claims["user_id"])
 		c.Set("username",     claims["username"])
 		c.Set("role",         claims["role"])
 		c.Set("tenant_id",    claims["tenant_id"])
+		c.Set("is_platform_admin", isPlatformAdmin)
 		c.Set("token_string", tokenString) // stored for logout
 
 		c.Next()

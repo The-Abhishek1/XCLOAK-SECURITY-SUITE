@@ -173,6 +173,11 @@ func SetupRoutes(router *gin.Engine) {
 	router.PATCH("/api/users/:id/toggle", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleUserActive)
 	router.DELETE("/api/users/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteUser)
 
+	// ── Platform Admin (tenant provisioning) ────────────────────────
+	router.POST("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.CreateTenantHandler)
+	router.GET("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantsHandler)
+	router.PATCH("/api/platform/tenants/:id/toggle", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.ToggleTenantActiveHandler)
+
 	// ── MITRE ─────────────────────────────────────────────────────
 	router.GET("/api/mitre/mappings", middleware.RequireAuth(), api.GetMITREMappings)
 

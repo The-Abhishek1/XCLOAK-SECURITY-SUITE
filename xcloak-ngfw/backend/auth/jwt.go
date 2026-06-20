@@ -36,14 +36,15 @@ var JwtSecret = func() []byte {
 	return []byte(s)
 }()
 
-func GenerateJWT(userID int, username, role string, tenantID int) (string, error) {
+func GenerateJWT(userID int, username, role string, tenantID int, isPlatformAdmin bool) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id":   userID,
-		"username":  username,
-		"role":      role,
-		"tenant_id": tenantID,
-		"iat":       time.Now().Unix(),
-		"exp":       time.Now().Add(8 * time.Hour).Unix(), // 8h — reduced from 24h
+		"user_id":           userID,
+		"username":          username,
+		"role":              role,
+		"tenant_id":         tenantID,
+		"is_platform_admin": isPlatformAdmin,
+		"iat":               time.Now().Unix(),
+		"exp":               time.Now().Add(8 * time.Hour).Unix(), // 8h — reduced from 24h
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(JwtSecret)

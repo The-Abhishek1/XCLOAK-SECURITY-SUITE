@@ -62,7 +62,7 @@ func TestRequireAuth_RejectsRefreshTokenAsAccessToken(t *testing.T) {
 }
 
 func TestRequireAuth_AcceptsValidAccessToken(t *testing.T) {
-	tokenStr, err := auth.GenerateJWT(1, "alice", "admin", 1)
+	tokenStr, err := auth.GenerateJWT(1, "alice", "admin", 1, false)
 	if err != nil {
 		t.Fatalf("GenerateJWT: %v", err)
 	}
