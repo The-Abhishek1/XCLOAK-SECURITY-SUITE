@@ -25,6 +25,12 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/auth/register", middleware.RateLimitAuth(), api.Register)
 	router.POST("/api/auth/login", middleware.RateLimitAuth(), api.Login)
 
+	// ── SSO (OIDC) ────────────────────────────────────────────────
+	// Unauthenticated — these ARE the login entry point for a tenant's
+	// configured identity provider.
+	router.GET("/api/auth/oidc/start", middleware.RateLimitAuth(), api.StartOIDCLoginHandler)
+	router.GET("/api/auth/oidc/callback", api.OIDCCallbackHandler)
+
 	// ── Audit ─────────────────────────────────────────────────────
 	router.GET("/api/audit/logs", middleware.RequireAuth(), api.GetAuditLogs)
 	router.GET("/api/audit/logs/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetAuditLogsPaginatedHandler)

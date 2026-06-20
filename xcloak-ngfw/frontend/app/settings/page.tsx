@@ -10,12 +10,13 @@ import {
   Users, UserCog, Shield, Server, ScrollText,
   Trash2, ToggleLeft, ToggleRight, ChevronDown, Search,
   Webhook, CheckCircle, XCircle, Send, Plus, Key, Copy, Eye, EyeOff,
-  Mail, Lock, Smartphone, QrCode,
+  Mail, Lock, Smartphone, QrCode, Building2,
 } from 'lucide-react';
 
 const TABS = [
   { id: 'users',        label: 'User Management', icon: Users      },
   { id: 'integrations', label: 'Integrations',    icon: Webhook    },
+  { id: 'sso',          label: 'SSO',              icon: Building2 },
   { id: 'profile',      label: 'My Profile',       icon: UserCog   },
   { id: 'email',        label: 'Email Alerts',     icon: Mail      },
   { id: '2fa',          label: '2FA Security',     icon: Lock      },
@@ -60,6 +61,13 @@ export default function SettingsPage() {
   const [genToken, setGenToken]         = useState<string | null>(null);
   const [tokenLabel, setTokenLabel]     = useState('');
   const [showSecrets, setShowSecrets]   = useState<Record<string, boolean>>({});
+
+  // ── SSO (OIDC) ───────────────────────────────────────────────
+  const [ssoLoading, setSsoLoading] = useState(false);
+  const [ssoSaving, setSsoSaving]   = useState(false);
+  const [ssoForm, setSsoForm]       = useState({ enabled: false, issuer_url: '', client_id: '', client_secret: '', button_label: '' });
+  const [showSsoSecret, setShowSsoSecret] = useState(false);
+  const [ssoConfigured, setSsoConfigured] = useState(false);
 
   // ── Profile ──────────────────────────────────────────────────
   const [profile, setProfile]       = useState<any>(null);
@@ -114,6 +122,48 @@ export default function SettingsPage() {
     } finally { setIntLoading(false); }
   }, []);
 
+  const loadSSO = useCallback(async () => {
+    setSsoLoading(true);
+    try {
+      const r = await api.get('/integrations');
+      const row = (r.data || []).find((i: any) => i.name === 'oidc');
+      if (row) {
+        const secret = row.config?.client_secret || '';
+        setSsoForm({
+          enabled: row.enabled,
+          issuer_url: row.config?.issuer_url || '',
+          client_id: row.config?.client_id || '',
+          // client_secret is redacted by the API once saved — leave blank
+          // rather than show the placeholder bullets as if they were real.
+          client_secret: secret === '••••••••' ? '' : secret,
+          button_label: row.config?.button_label || '',
+        });
+        setSsoConfigured(true);
+      } else {
+        setSsoConfigured(false);
+      }
+    } finally { setSsoLoading(false); }
+  }, []);
+
+  const saveSSO = async () => {
+    setSsoSaving(true);
+    try {
+      await api.put('/integrations/oidc', {
+        enabled: ssoForm.enabled,
+        config: {
+          issuer_url: ssoForm.issuer_url,
+          client_id: ssoForm.client_id,
+          client_secret: ssoForm.client_secret,
+          button_label: ssoForm.button_label,
+        },
+      });
+      notify('SSO settings saved');
+      loadSSO();
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to save SSO settings');
+    } finally { setSsoSaving(false); }
+  };
+
   const loadProfile = useCallback(async () => {
     try {
       const r = await api.get('/auth/profile');
@@ -150,6 +200,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tab === 'users')        loadUsers();
     if (tab === 'integrations') loadIntegrations();
+    if (tab === 'sso')          loadSSO();
     if (tab === 'profile')      loadProfile();
     if (tab === 'email')        loadEmailRules();
     if (tab === '2fa')          load2FAStatus();
@@ -480,6 +531,72 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ SSO ══════════ */}
+        {tab === 'sso' && (
+          <div className="g-card p-5 space-y-4 max-w-lg">
+            {ssoLoading ? (
+              <div className="py-12 text-center animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Single Sign-On (OIDC)</p>
+                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                      Let users in this organization sign in via your identity provider
+                      (Okta, Azure AD, Google Workspace, Auth0, Keycloak, etc.)
+                    </p>
+                  </div>
+                  <button onClick={() => setSsoForm(f => ({ ...f, enabled: !f.enabled }))}>
+                    {ssoForm.enabled
+                      ? <ToggleRight className="h-6 w-6" style={{ color: 'var(--accent)' }} />
+                      : <ToggleLeft  className="h-6 w-6" style={{ color: 'var(--text-3)' }} />}
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Issuer URL</label>
+                  <input value={ssoForm.issuer_url} onChange={e => setSsoForm(f => ({ ...f, issuer_url: e.target.value }))}
+                    placeholder="https://your-tenant.okta.com" className="g-input w-full text-xs mono" />
+                </div>
+                <div>
+                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Client ID</label>
+                  <input value={ssoForm.client_id} onChange={e => setSsoForm(f => ({ ...f, client_id: e.target.value }))}
+                    placeholder="Client ID from your IdP app registration" className="g-input w-full text-xs mono" />
+                </div>
+                <div>
+                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Client Secret</label>
+                  <div className="relative">
+                    <input type={showSsoSecret ? 'text' : 'password'}
+                      value={ssoForm.client_secret} onChange={e => setSsoForm(f => ({ ...f, client_secret: e.target.value }))}
+                      placeholder={ssoConfigured ? 'Leave blank to keep current secret' : 'Client secret from your IdP'}
+                      className="g-input w-full pr-8 text-xs mono" />
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2"
+                      onClick={() => setShowSsoSecret(s => !s)} style={{ color: 'var(--text-3)' }}>
+                      {showSsoSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Button Label (optional)</label>
+                  <input value={ssoForm.button_label} onChange={e => setSsoForm(f => ({ ...f, button_label: e.target.value }))}
+                    placeholder="Sign in with Acme Corp" className="g-input w-full text-xs" />
+                </div>
+
+                <div className="rounded-lg px-3 py-2.5 text-[11px]" style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                  Register this callback URL with your identity provider:
+                  <div className="mono mt-1 break-all" style={{ color: 'var(--accent)' }}>
+                    {(process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL || 'http://localhost:8080') + '/api/auth/oidc/callback'}
+                  </div>
+                </div>
+
+                <button onClick={saveSSO} disabled={ssoSaving} className="g-btn g-btn-primary text-xs w-full justify-center">
+                  {ssoSaving ? 'Saving…' : 'Save SSO Settings'}
+                </button>
               </>
             )}
           </div>

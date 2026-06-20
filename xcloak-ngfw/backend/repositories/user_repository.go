@@ -64,3 +64,47 @@ func GetUserByUsername(
 
 	return &user, nil
 }
+
+// GetUserByEmailAndTenant looks up a user by email scoped to a specific
+// tenant — used by OIDC SSO login, where the IdP's email claim must match
+// an existing account within the tenant the SSO flow was started for (no
+// auto-provisioning).
+func GetUserByEmailAndTenant(email string, tenantID int) (*models.User, error) {
+
+	var user models.User
+
+	query := `
+	SELECT
+	id,
+	username,
+	email,
+	password_hash,
+	role,
+	tenant_id,
+	is_platform_admin,
+	is_active
+	FROM users
+	WHERE email = $1 AND tenant_id = $2
+	`
+
+	err := database.DB.QueryRow(
+		query,
+		email,
+		tenantID,
+	).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.PasswordHash,
+		&user.Role,
+		&user.TenantID,
+		&user.IsPlatformAdmin,
+		&user.IsActive,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}

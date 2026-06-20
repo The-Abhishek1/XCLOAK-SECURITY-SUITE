@@ -60,6 +60,24 @@ func GetTenants() ([]models.Tenant, error) {
 	return tenants, nil
 }
 
+// GetTenantBySlug resolves a tenant from the slug a user types into the SSO
+// login form — needed before we know the tenant_id, to look up its OIDC config.
+func GetTenantBySlug(slug string) (*models.Tenant, error) {
+
+	var t models.Tenant
+
+	err := database.DB.QueryRow(`
+		SELECT id, name, slug, is_active, created_at
+		FROM tenants WHERE slug = $1
+	`, slug).Scan(&t.ID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &t, nil
+}
+
 // DeleteTenant removes a tenant row outright — only used to roll back a
 // just-created tenant whose first-admin invite failed to send (see
 // services.CreateTenant). Relies on the tenant having zero users/agents/etc.

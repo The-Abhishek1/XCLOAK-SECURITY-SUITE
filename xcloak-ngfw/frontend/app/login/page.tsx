@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { ShieldCheck, Eye, EyeOff, Lock, User, AlertCircle, Mail, UserPlus, KeyRound, ArrowLeft } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ShieldCheck, Eye, EyeOff, Lock, User, AlertCircle, Mail, UserPlus, KeyRound, ArrowLeft, Building2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { Sun, Moon } from 'lucide-react';
 
@@ -10,12 +10,15 @@ type Tab = 'login' | 'register' | 'forgot';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { theme, toggle } = useTheme();
   const [tab, setTab]           = useState<Tab>('login');
   const [showPass, setShowPass]  = useState(false);
-  const [error, setError]        = useState('');
+  const [error, setError]        = useState(searchParams.get('sso_error') || '');
   const [success, setSuccess]    = useState('');
   const [loading, setLoading]    = useState(false);
+  const [showSSO, setShowSSO]    = useState(false);
+  const [ssoOrg, setSsoOrg]      = useState('');
 
   // Login form
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -32,6 +35,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (localStorage.getItem('token')) router.push('/dashboard');
   }, [router]);
+
+  const startSSO = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ssoOrg) return;
+    window.location.href = `/api/auth/oidc/start?tenant=${encodeURIComponent(ssoOrg)}`;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,7 +237,7 @@ export default function LoginPage() {
               {success && <SuccessMsg msg={success} />}
 
               {/* LOGIN */}
-              {tab === 'login' && (
+              {tab === 'login' && !showSSO && (
                 <form onSubmit={handleLogin} className="space-y-4">
                   <Field label="Username">
                     <div className="relative">
@@ -255,6 +264,31 @@ export default function LoginPage() {
                     className="w-full text-xs text-center mt-1"
                     style={{ color: 'var(--accent)' }}>
                     Forgot password?
+                  </button>
+                  <button type="button" onClick={() => { setShowSSO(true); setError(''); }}
+                    className="w-full text-xs text-center flex items-center justify-center gap-1.5"
+                    style={{ color: 'var(--text-3)' }}>
+                    <Building2 className="h-3 w-3" /> Sign in with SSO
+                  </button>
+                </form>
+              )}
+
+              {/* SSO */}
+              {tab === 'login' && showSSO && (
+                <form onSubmit={startSSO} className="space-y-4">
+                  <Field label="Organization">
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+                      <input value={ssoOrg} onChange={e => setSsoOrg(e.target.value)}
+                        placeholder="your-org-slug" required autoFocus className="g-input pl-9" />
+                    </div>
+                  </Field>
+                  {error && <ErrMsg msg={error} />}
+                  <SubmitBtn loading={false} label="Continue" />
+                  <button type="button" onClick={() => { setShowSSO(false); setError(''); }}
+                    className="w-full text-xs flex items-center justify-center gap-1"
+                    style={{ color: 'var(--text-3)' }}>
+                    <ArrowLeft className="h-3 w-3" /> Back to password sign-in
                   </button>
                 </form>
               )}

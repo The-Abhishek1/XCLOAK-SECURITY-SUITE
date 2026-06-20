@@ -20,6 +20,23 @@ func GetIntegrations(c *gin.Context) {
 	if result == nil {
 		result = []map[string]any{}
 	}
+
+	// OIDC's client_secret is more dangerous than this endpoint's other
+	// already-unredacted secrets (webhook URLs, Slack URLs) — combined with
+	// the issuer/client_id (also in this same response) it lets an attacker
+	// impersonate the relying-party application to the IdP. Redact it here
+	// rather than leave a fresh, more severe leak on top of the existing one.
+	for _, row := range result {
+		if row["name"] != "oidc" {
+			continue
+		}
+		if cfg, ok := row["config"].(map[string]any); ok {
+			if _, has := cfg["client_secret"]; has {
+				cfg["client_secret"] = "••••••••"
+			}
+		}
+	}
+
 	c.JSON(200, result)
 }
 
@@ -34,6 +51,25 @@ func SaveIntegration(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
+	// GetIntegrations redacts oidc's client_secret, so the settings UI can
+	// only ever echo back the placeholder, never the real value — if the
+	// admin saves without re-entering it, keep the previously stored secret
+	// instead of overwriting it with an empty/redacted string.
+	if name == "oidc" {
+		if secret, _ := body.Config["client_secret"].(string); secret == "" || secret == "••••••••" {
+			if existing, err := services.GetIntegrations(tenantIDFromContext(c)); err == nil {
+				for _, row := range existing {
+					if row["name"] != "oidc" {
+						continue
+					}
+					if cfg, ok := row["config"].(map[string]any); ok {
+						body.Config["client_secret"] = cfg["client_secret"]
+					}
+				}
+			}
+		}
+	}
+
 	username, _ := c.Get("username")
 	if err := services.SaveIntegration(name, body.Enabled, body.Config, username.(string), tenantIDFromContext(c)); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
