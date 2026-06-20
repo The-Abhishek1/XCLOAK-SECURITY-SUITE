@@ -46,6 +46,9 @@ export default function SettingsPage() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [roleEditing, setRoleEditing] = useState<number | null>(null);
   const [userSearch, setUserSearch]   = useState('');
+  const [showInvite, setShowInvite]   = useState(false);
+  const [inviteForm, setInviteForm]   = useState({ username: '', email: '', role: 'analyst' });
+  const [inviting, setInviting]       = useState(false);
 
   // ── Integrations ─────────────────────────────────────────────
   const [integrations, setIntegrations] = useState<any[]>([]);
@@ -168,6 +171,22 @@ export default function SettingsPage() {
     try { await usersAPI.delete(id); setUsers(u => u.filter(x => x.id !== id)); notify('User deleted'); }
     catch { notify('Failed to delete user'); }
   };
+  const inviteUser = async () => {
+    if (!inviteForm.username || !inviteForm.email) {
+      notify('Username and email are required');
+      return;
+    }
+    setInviting(true);
+    try {
+      await usersAPI.invite(inviteForm.username, inviteForm.email, inviteForm.role);
+      notify(`Invite sent to ${inviteForm.email}`);
+      setShowInvite(false);
+      setInviteForm({ username: '', email: '', role: 'analyst' });
+      loadUsers();
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to send invite');
+    } finally { setInviting(false); }
+  };
   const filteredUsers = users.filter(u =>
     !userSearch || u.username.toLowerCase().includes(userSearch.toLowerCase())
       || (u.email || '').toLowerCase().includes(userSearch.toLowerCase())
@@ -205,10 +224,15 @@ export default function SettingsPage() {
         {/* ══════════ USER MANAGEMENT ══════════ */}
         {tab === 'users' && (
           <div className="space-y-3">
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
-              <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
-                placeholder="Search users…" className="g-input pl-9" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="relative max-w-sm flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+                <input value={userSearch} onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Search users…" className="g-input pl-9" />
+              </div>
+              <button onClick={() => setShowInvite(true)} className="g-btn g-btn-primary text-xs shrink-0">
+                <Plus className="h-3.5 w-3.5" /> Invite User
+              </button>
             </div>
             <div className="g-table">
               <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 120px 80px 120px 80px' }}>
@@ -831,6 +855,45 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
           </div>
         )}
       </div>
+
+      {showInvite && (
+        <div className="g-modal-backdrop" onClick={() => setShowInvite(false)}>
+          <div className="g-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Invite User</h2>
+              <button onClick={() => setShowInvite(false)} style={{ color: 'var(--text-2)' }}><XCircle className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Username</label>
+                <input value={inviteForm.username} onChange={e => setInviteForm(f => ({ ...f, username: e.target.value }))}
+                  placeholder="jsmith" className="g-input" />
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Email</label>
+                <input value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="jsmith@company.com" className="g-input" />
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Role</label>
+                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
+                  className="g-select w-full">
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                They'll get an email with a link to set their password.
+              </p>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setShowInvite(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={inviteUser} disabled={inviting} className="g-btn g-btn-primary flex-1 justify-center">
+                {inviting ? 'Sending…' : 'Send Invite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </RootLayout>
   );
 }

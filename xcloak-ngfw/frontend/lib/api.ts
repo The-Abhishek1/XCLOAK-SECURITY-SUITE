@@ -184,6 +184,7 @@ export const usersAPI = {
   updateRole: (id: number, role: string)    => api.put(`/users/${id}/role`, { role }),
   toggle:     (id: number, active: boolean) => api.patch(`/users/${id}/toggle`, { is_active: active }),
   delete:     (id: number)                  => api.delete(`/users/${id}`),
+  invite:     (username: string, email: string, role: string) => api.post('/users/invite', { username, email, role }),
 };
 
 export const complianceAPI = {
