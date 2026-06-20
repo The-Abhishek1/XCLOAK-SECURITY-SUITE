@@ -33,3 +33,18 @@ func GetAuditLogsPaginatedHandler(c *gin.Context) {
 	}
 	c.JSON(200, result)
 }
+
+// GetAuditExportStatusHandler — GET /api/audit/export/status
+// Shows how far the immutable export to MinIO has progressed.
+func GetAuditExportStatusHandler(c *gin.Context) {
+	lastID, lastAt, lastKey, err := repositories.GetAuditExportStatus()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{
+		"last_exported_id": lastID,
+		"last_exported_at": lastAt,
+		"last_object_key":  lastKey,
+	})
+}

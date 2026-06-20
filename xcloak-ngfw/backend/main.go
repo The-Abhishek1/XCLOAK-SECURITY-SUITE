@@ -47,6 +47,15 @@ func main() {
 
 	services.InitRedis()
 
+	// ── Immutable audit log export (MinIO + Object Lock) ──────
+	// Non-fatal: audit export is a compliance nice-to-have, not a hard
+	// dependency for the API to serve traffic.
+	if err := services.InitMinIO(); err != nil {
+		log.Println("[AuditExport] MinIO unavailable, audit export disabled:", err)
+	} else {
+		go services.StartAuditExportScheduler()
+	}
+
 	// ── Kafka event bus ──────────────────────────────────────
 	services.InitKafka()
 	defer services.CloseKafka()

@@ -28,6 +28,7 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Audit ─────────────────────────────────────────────────────
 	router.GET("/api/audit/logs", middleware.RequireAuth(), api.GetAuditLogs)
 	router.GET("/api/audit/logs/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetAuditLogsPaginatedHandler)
+	router.GET("/api/audit/export/status", middleware.RequireAuth(), api.GetAuditExportStatusHandler)
 
 	// ── Agents — STATIC routes MUST come before :id wildcard ─────
 	router.POST("/api/agents/register", api.RegisterAgent)
