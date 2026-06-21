@@ -22,15 +22,16 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 ### Detection
 - **Sigma Rules** — custom detection engine with field-level matching
 - **YARA Rules** — malware signature scanning on endpoints
-- **IOC Engine** — IP, domain, hash, URL, email indicator matching
+- **IOC Engine** — IP, domain, hash, URL, email indicator matching, async-matched off the request path via a Kafka consumer
+- **Threat Intel Ingestion** — STIX/TAXII, MISP, and AlienVault OTX feed connectors alongside the original flat-file feed
 - **Brute Force Detection** — automated SSH/auth log analysis
 - **FIM** — file integrity monitoring with SHA256/MD5 hashing
 - **Vulnerability Scanning** — CVE matching against installed packages
 
 ### Response (SOAR)
-- **Playbooks** — automated response chains triggered by alert conditions
+- **Playbooks** — automated response chains triggered by alert conditions, with a human-in-the-loop approval gate before any destructive action (kill process, isolate host, quarantine file, firewall changes, script execution) actually dispatches to an agent
 - **Agent Tasks** — remote execution: kill process, isolate host, quarantine file, FIM scan, script execution
-- **Firewall Sync** — push iptables rules to agents from a central UI
+- **Firewall Sync** — push firewall rules to agents from a central UI; agents apply them locally
 - **Script Runner** — run bash/python scripts on agents with real-time output
 
 ### Investigation
@@ -41,13 +42,20 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 
 ### Compliance
 - **SOC 2, NIST CSF, PCI-DSS, ISO 27001** — automated framework scoring
-- **Audit Trail** — immutable log of all platform actions
+- **Audit Trail** — immutable log of all platform actions, batch-exported to MinIO under Object Lock (WORM/GOVERNANCE retention) so it can't be altered or deleted even by an admin
 - **Compliance Reports** — PDF-ready framework scoring reports
 
+### Multi-Tenancy & Access Control
+- **Tenants** — every agent, alert, rule, playbook, and integration is scoped to a tenant; platform operators provision/suspend tenants from a dedicated admin-only API
+- **Custom Roles** — fine-grained, additive RBAC (19 permissions) on top of the built-in admin/analyst/viewer roles
+- **SSO (OIDC)** — per-tenant generic OpenID Connect login
+- **API Keys** — per-tenant, SHA-256-hashed keys for programmatic access, scoped to a role
+- **TOTP 2FA** — RFC 4226, works with Google Authenticator/Authy
+
 ### Observability
-- **Prometheus** — 16 custom metrics (threat score, alert rates, task queues)
-- **Grafana** — pre-built dashboard with alert rate, agent health, SOAR execution
-- **Kafka** — event bus for alerts, incidents, tasks, FIM, YARA across 6 topics
+- **Prometheus** — custom metrics (threat score, alert rates, task queues, Kafka consumer lag)
+- **Grafana** — pre-built dashboards plus alerting rules (agent-offline storms, task backlog, consumer lag)
+- **Kafka** — event bus for alerts, incidents, tasks, FIM, YARA, and async IOC matching
 
 ## Quick Start
 
@@ -56,7 +64,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 - Node.js 18+
 - PostgreSQL 16
 - Redis (rate limiting + token revocation state)
-- Docker (for Kafka/Prometheus/Grafana)
+- Docker (for Kafka/Prometheus/Grafana/MinIO)
 
 ### 1. Backend
 
@@ -97,6 +105,7 @@ Services:
 - Grafana: http://localhost:3001 (admin/xcloak)
 - Prometheus: http://localhost:9090
 - Kafka UI: http://localhost:8090
+- MinIO Console: http://localhost:9001 (immutable audit log export target)
 
 ### 4. Agent
 
@@ -122,15 +131,36 @@ DB_PORT=5432
 DB_USER=xcloak
 DB_PASSWORD=your_password
 DB_NAME=ngfw
+DB_SSLMODE=disable           # set to require/verify-full in production
+DB_SSLROOTCERT=
+DB_SSLCERT=
+DB_SSLKEY=
 
 # Security — REQUIRED
 JWT_SECRET=<openssl rand -hex 32>
+METRICS_TOKEN=<openssl rand -hex 32>      # gates /metrics; also set in prometheus/metrics_token
+CORS_ALLOWED_ORIGINS=http://localhost:3000
+
+# Agent ↔ backend TLS (optional — agent defaults to plaintext if unset)
+TLS_CERT_FILE=
+TLS_KEY_FILE=
 
 # AI (choose one)
 LLM_PROVIDER=ollama          # or: anthropic
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:3b
 ANTHROPIC_API_KEY=           # if using Claude
+
+# Redis — rate limiting + token revocation (fails open if unreachable)
+REDIS_ADDR=localhost:6379
+
+# MinIO — immutable audit log export (non-fatal to startup if unreachable)
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_AUDIT_BUCKET=xcloak-audit-log
+MINIO_USE_SSL=false
+AUDIT_EXPORT_RETENTION_DAYS=365
 
 # Kafka
 KAFKA_ENABLED=true
@@ -144,21 +174,34 @@ SMTP_PASS=your_app_password
 SMTP_FROM=xcloak@yourdomain.com
 ```
 
+Per-tenant settings (OIDC SSO, threat feed credentials, API keys, custom roles) are configured from the UI and stored in the database, not as env vars — see Settings → SSO / Integrations / API Keys / Roles.
+
 ### Agent (`xcloak-agent/.env`)
 
 ```env
 # Only needed for first-time registration
 XCLOAK_INSTALL_TOKEN=<generate from UI>
+
+# Override the backend URL (defaults to http://localhost:8080)
+SERVER_URL=http://localhost:8080
+
+# TLS to the backend (optional)
+XCLOAK_CA_CERT_PATH=
+XCLOAK_INSECURE_SKIP_VERIFY=false
 ```
 
 ## Security
 
-- JWT authentication with configurable expiry (8h access / 7d refresh)
-- Token blacklist on logout
-- Agent registration requires one-time install tokens (single-use, 24h expiry)
+- JWT authentication with configurable expiry (8h access / 7d refresh), Redis-backed token blacklist on logout
+- Agent registration requires one-time install tokens (single-use, claimed atomically, 24h expiry)
 - TOTP 2FA support (RFC 4226 — works with Google Authenticator, Authy)
+- Multi-tenancy: tenant_id scoping enforced across agents, alerts, rules, playbooks, and integrations; tenant provisioning is platform-operator-only
+- Role-based access control — built-in admin/analyst/viewer plus custom roles with 19 granular permissions
+- Per-tenant SSO (generic OIDC) and per-tenant, SHA-256-hashed API keys
+- SOAR actions that are destructive (kill process, isolate host, quarantine file, firewall changes, scripts) require human approval when triggered autonomously by a playbook; manual dispatch is unaffected
+- Immutable audit log export to MinIO under Object Lock (GOVERNANCE retention) — verified at the storage layer to reject overwrites/deletes of exported batches
+- Postgres and agent↔backend connections support TLS (`DB_SSLMODE`, `TLS_CERT_FILE`/`TLS_KEY_FILE`, agent's `XCLOAK_CA_CERT_PATH`)
 - Stale task expiry (destructive tasks expire after 15min, others after 1h)
-- Role-based access control (admin / analyst)
 
 ## Backups
 
@@ -190,11 +233,17 @@ Key endpoints:
 | GET | `/api/alerts/paginated` | Paginated alerts with status filter |
 | POST | `/api/alerts/:id/acknowledge` | Acknowledge alert |
 | GET | `/api/incidents/paginated` | Paginated incidents |
-| GET | `/api/agents` | List all agents |
+| GET | `/api/agents` | List all agents (tenant-scoped) |
 | POST | `/api/scripts/run` | Execute script on agents |
 | POST | `/api/firewall/sync` | Push firewall rules to agents |
+| GET | `/api/tasks/pending-approval` / POST `/api/tasks/:id/approve` | SOAR human-approval queue |
+| GET/POST | `/api/threat-feeds` | List/create STIX·TAXII/MISP/OTX/flat-file threat feeds |
+| GET/POST/DELETE | `/api/api-keys` | Per-tenant API key management |
+| GET/POST/PUT/DELETE | `/api/custom-roles` | Granular custom role management |
+| GET/POST/PATCH | `/api/platform/tenants` | Tenant provisioning (platform-admin only) |
+| GET | `/api/audit/export/status` | Immutable audit export progress |
 | GET | `/api/kafka/status` | Kafka connection status |
-| GET | `/metrics` | Prometheus metrics endpoint |
+| GET | `/metrics` | Prometheus metrics endpoint (bearer-gated) |
 
 ## Kafka Topics
 
@@ -206,6 +255,7 @@ Key endpoints:
 | `xcloak.audit` | Admin actions |
 | `xcloak.fim_alerts` | File integrity violations |
 | `xcloak.yara_matches` | YARA signature matches |
+| `xcloak.ioc_match_jobs` | Async IOC matching jobs (consumed off the request path) |
 
 ## Agent Capabilities
 
@@ -230,12 +280,14 @@ Key endpoints:
 |-------|-----------|
 | Frontend | Next.js 14, TypeScript, Tailwind CSS |
 | Backend | Go 1.21, Gin, JWT |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 16 (golang-migrate migrations) |
+| Cache / State | Redis (rate limiting, token revocation) |
 | Agent | Go (single binary, no dependencies) |
 | Message Bus | Apache Kafka |
+| Object Storage | MinIO (immutable audit log export, Object Lock) |
 | Metrics | Prometheus + Grafana |
 | AI | Ollama (local) / Anthropic Claude |
-| Auth | JWT + TOTP 2FA |
+| Auth | JWT + TOTP 2FA + per-tenant OIDC SSO + API keys |
 
 ## License
 
