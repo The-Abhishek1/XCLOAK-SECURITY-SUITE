@@ -59,7 +59,9 @@ func runTask(task models.AgentTask) string {
 		return "auth logs collected"
 
 	case "kill_process":
-		KillProcess(task)
+		if err := KillProcess(task); err != nil {
+			return "kill_process failed: " + err.Error()
+		}
 		return "process terminated"
 
 	case "collect_file":

@@ -87,6 +87,33 @@ func DeleteReport(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Report deleted"})
 }
 
+// GetReportPDF — GET /api/compliance/reports/:id/pdf
+func GetReportPDF(c *gin.Context) {
+	tenantID := tenantIDFromContext(c)
+
+	report, err := services.GetReportByID(c.Param("id"), tenantID)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "report not found"})
+		return
+	}
+
+	scores, err := services.GetFrameworkScores(report.ID, tenantID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	pdfBytes, err := services.GenerateCompliancePDF(report, scores)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to render PDF: " + err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("xcloak-compliance-report-%d.pdf", report.ID)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(200, "application/pdf", pdfBytes)
+}
+
 // ExportAlertsCSV — GET /api/export/alerts
 func ExportAlertsCSV(c *gin.Context) {
 

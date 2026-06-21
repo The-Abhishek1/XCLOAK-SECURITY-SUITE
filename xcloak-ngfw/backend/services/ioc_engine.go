@@ -2,10 +2,44 @@ package services
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"xcloak-ngfw/models"
 )
+
+// ipIOCMatches checks whether remoteAddr (host:port, IPv4 or bracketed
+// IPv6) matches an IP-type IOC indicator, which may be a single address
+// or a CIDR range. This replaces a previous strings.Contains check, which
+// matched "1.2.3.4" against "11.2.3.41" and silently dropped every
+// CIDR-typed IOC a threat feed imported.
+func ipIOCMatches(remoteAddr, indicator string) bool {
+	host := remoteAddr
+	if h, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		host = h
+	} else if idx := strings.LastIndex(remoteAddr, ":"); idx > 0 && strings.Count(remoteAddr, ":") == 1 {
+		host = remoteAddr[:idx]
+	}
+
+	remoteIP := net.ParseIP(host)
+	if remoteIP == nil {
+		return false
+	}
+
+	if strings.Contains(indicator, "/") {
+		_, ipNet, err := net.ParseCIDR(indicator)
+		if err != nil {
+			return false
+		}
+		return ipNet.Contains(remoteIP)
+	}
+
+	indicatorIP := net.ParseIP(indicator)
+	if indicatorIP == nil {
+		return false
+	}
+	return remoteIP.Equal(indicatorIP)
+}
 
 func CheckConnectionIOC(
 	connection models.Connection,
@@ -22,10 +56,7 @@ func CheckConnectionIOC(
 		switch ioc.Type {
 
 		case "ip":
-			if strings.Contains(
-				connection.RemoteAddress,
-				ioc.Indicator,
-			) {
+			if ipIOCMatches(connection.RemoteAddress, ioc.Indicator) {
 				alert := models.Alert{
 					AgentID:        connection.AgentID,
 					Severity:       ioc.Severity,

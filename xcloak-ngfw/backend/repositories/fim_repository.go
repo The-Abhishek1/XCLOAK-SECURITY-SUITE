@@ -41,6 +41,29 @@ func UpsertFIMEntry(b models.FIMBaseline) error {
 	return err
 }
 
+// DeleteFIMEntry removes a baseline entry — used when accepting a
+// "deleted" FIM change, since there's no longer a file to track.
+func DeleteFIMEntry(agentID int, filePath string) error {
+	_, err := database.DB.Exec(`DELETE FROM fim_baselines WHERE agent_id = $1 AND file_path = $2`, agentID, filePath)
+	return err
+}
+
+// GetLatestFIMAlert returns the most recent FIM alert for one file, or nil
+// if there isn't one — used to resolve what hash to accept as the new
+// baseline without trusting a client-submitted value.
+func GetLatestFIMAlert(agentID int, filePath string) (*models.FIMAlert, error) {
+	var a models.FIMAlert
+	err := database.DB.QueryRow(`
+		SELECT id, agent_id, file_path, change_type, old_hash, new_hash, created_at
+		FROM fim_alerts WHERE agent_id = $1 AND file_path = $2
+		ORDER BY created_at DESC LIMIT 1
+	`, agentID, filePath).Scan(&a.ID, &a.AgentID, &a.FilePath, &a.ChangeType, &a.OldHash, &a.NewHash, &a.CreatedAt)
+	if err != nil {
+		return nil, nil
+	}
+	return &a, nil
+}
+
 // CreateFIMAlert records a file integrity violation.
 func CreateFIMAlert(a models.FIMAlert) error {
 	_, err := database.DB.Exec(`

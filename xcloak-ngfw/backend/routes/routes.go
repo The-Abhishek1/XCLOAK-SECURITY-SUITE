@@ -73,6 +73,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/:id/users", middleware.RequireAuth(), api.GetAgentUsersList)
 	router.GET("/api/agents/:id/packages", middleware.RequireAuth(), api.GetAgentPackagesList)
 	router.GET("/api/agents/:id/fim/baseline", middleware.RequireAuth(), api.GetFIMBaseline)
+	router.POST("/api/agents/:id/fim/baseline/accept", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.AcceptFIMBaseline)
 	router.GET("/api/agents/:id/fim/alerts", middleware.RequireAuth(), api.GetFIMAlerts)
 	router.GET("/api/agents/:id/logs/stream", middleware.RequireAuth(), api.LiveLogsWS) // WS — was wrongly named LiveLogsSSE
 
@@ -161,6 +162,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/compliance/reports", middleware.RequireAuth(), middleware.RequirePermission("manage_compliance"), api.GenerateReport)
 	router.GET("/api/compliance/reports", middleware.RequireAuth(), api.GetReports)
 	router.GET("/api/compliance/reports/:id", middleware.RequireAuth(), api.GetReport)
+	router.GET("/api/compliance/reports/:id/pdf", middleware.RequireAuth(), api.GetReportPDF)
 	router.DELETE("/api/compliance/reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_compliance"), api.DeleteReport)
 
 	// ── Exports ───────────────────────────────────────────────────

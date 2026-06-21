@@ -32,12 +32,22 @@ func ApplyFirewallRules(task models.AgentTask) (string, error) {
 	var applied, skipped int
 	var log []string
 
+	// The XCLOAK chain and its hook into INPUT/FORWARD must exist before any
+	// "-A XCLOAK ..." below can succeed — both calls are idempotent (a
+	// second "-N" on an existing chain just errors harmlessly, and
+	// hookChain checks before inserting). Previously this only ran inside
+	// the "replace" branch, so "append" silently no-op'd every rule
+	// (including the management-IP whitelist) on a host that had never
+	// had a replace-mode sync.
+	exec.Command("iptables", "-N", "XCLOAK").Run()
+	hookChain("INPUT")
+	hookChain("FORWARD")
+
 	if payload.Mode == "replace" {
-		exec.Command("iptables", "-N", "XCLOAK").Run()
 		exec.Command("iptables", "-F", "XCLOAK").Run()
-		hookChain("INPUT")
-		hookChain("FORWARD")
 		log = append(log, fmt.Sprintf("[replace] flushed XCLOAK chain (sync_id=%d)", payload.SyncID))
+	} else {
+		log = append(log, fmt.Sprintf("[append] adding to existing XCLOAK chain (sync_id=%d)", payload.SyncID))
 	}
 
 	if payload.AllowManage != "" {

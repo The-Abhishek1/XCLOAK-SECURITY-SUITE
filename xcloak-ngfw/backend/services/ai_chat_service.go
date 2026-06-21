@@ -52,22 +52,24 @@ func ChatWithAssistant(username, userMessage string, history []models.ChatMessag
 	if len(updated) > 20 {
 		updated = updated[len(updated)-20:]
 	}
-	persistChatHistory(username, updated)
+	persistChatHistory(username, tenantID, updated)
 
 	return response, updated, nil
 }
 
-// GetChatHistory loads the saved chat session for a user.
-func GetChatHistory(username string) ([]models.ChatMessage, error) {
+// GetChatHistory loads the saved chat session for a user, scoped to
+// tenantID — usernames aren't guaranteed unique across tenants, so without
+// this a user in one tenant could load another tenant's chat transcript.
+func GetChatHistory(username string, tenantID int) ([]models.ChatMessage, error) {
 
 	var messagesJSON []byte
 
 	err := database.DB.QueryRow(`
 		SELECT messages FROM ai_chat_sessions
-		WHERE username = $1
+		WHERE username = $1 AND tenant_id = $2
 		ORDER BY updated_at DESC
 		LIMIT 1
-	`, username).Scan(&messagesJSON)
+	`, username, tenantID).Scan(&messagesJSON)
 
 	if err != nil {
 		return []models.ChatMessage{}, nil // No history yet.
@@ -79,27 +81,27 @@ func GetChatHistory(username string) ([]models.ChatMessage, error) {
 	return messages, nil
 }
 
-// ClearChatHistory wipes the session for a user.
-func ClearChatHistory(username string) error {
-	_, err := database.DB.Exec(`DELETE FROM ai_chat_sessions WHERE username = $1`, username)
+// ClearChatHistory wipes the session for a user, scoped to tenantID.
+func ClearChatHistory(username string, tenantID int) error {
+	_, err := database.DB.Exec(`DELETE FROM ai_chat_sessions WHERE username = $1 AND tenant_id = $2`, username, tenantID)
 	return err
 }
 
-func persistChatHistory(username string, messages []models.ChatMessage) {
+func persistChatHistory(username string, tenantID int, messages []models.ChatMessage) {
 
 	data, _ := json.Marshal(messages)
 
 	database.DB.Exec(`
-		INSERT INTO ai_chat_sessions (username, messages)
-		VALUES ($1, $2)
+		INSERT INTO ai_chat_sessions (username, tenant_id, messages)
+		VALUES ($1, $2, $3)
 		ON CONFLICT DO NOTHING
-	`, username, data)
+	`, username, tenantID, data)
 
 	database.DB.Exec(`
 		UPDATE ai_chat_sessions
 		SET messages = $1, updated_at = now()
-		WHERE username = $2
-	`, data, username)
+		WHERE username = $2 AND tenant_id = $3
+	`, data, username, tenantID)
 }
 
 // buildPlatformContext creates a concise snapshot of tenantID's platform

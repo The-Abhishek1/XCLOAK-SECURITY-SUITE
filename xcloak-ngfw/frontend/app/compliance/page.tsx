@@ -191,6 +191,13 @@ export default function CompliancePage() {
                           style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                           {r.report_type}
                         </span>
+                        <button onClick={e => { e.stopPropagation(); downloadExport(() => complianceAPI.pdfUrl(r.id)); }}
+                          title="Download PDF"
+                          className="p-1.5 rounded" style={{ color: 'var(--text-3)' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                          <FileText className="h-3.5 w-3.5" />
+                        </button>
                         <button onClick={e => { e.stopPropagation(); del(r.id); }}
                           className="p-1.5 rounded" style={{ color: 'var(--text-3)' }}
                           onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}

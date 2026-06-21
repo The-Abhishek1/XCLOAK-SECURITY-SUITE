@@ -193,6 +193,7 @@ export const complianceAPI = {
   getAll:    ()                    => api.get('/compliance/reports'),
   getById:   (id: number)          => api.get(`/compliance/reports/${id}`),
   delete:    (id: number)          => api.delete(`/compliance/reports/${id}`),
+  pdfUrl:    (id: number)          => `${api.defaults.baseURL}/compliance/reports/${id}/pdf`,
 };
 
 export const exportAPI = {
@@ -217,8 +218,9 @@ export const aiAPI = {
 };
 
 export const fimAPI = {
-  getBaseline: (agentId: number) => api.get(`/agents/${agentId}/fim/baseline`),
-  getAlerts:   (agentId: number) => api.get(`/agents/${agentId}/fim/alerts`),
+  getBaseline:    (agentId: number) => api.get(`/agents/${agentId}/fim/baseline`),
+  getAlerts:      (agentId: number) => api.get(`/agents/${agentId}/fim/alerts`),
+  acceptBaseline: (agentId: number, filePath: string) => api.post(`/agents/${agentId}/fim/baseline/accept`, { file_path: filePath }),
 };
 
 export const mitreAPI = {

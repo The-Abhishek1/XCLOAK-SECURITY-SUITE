@@ -21,6 +21,11 @@ import (
 // constraint on incidents.fingerprint handles the upsert).
 func CorrelateAlert(alert models.Alert) {
 
+	// Custom rules run regardless of whether the built-in dedup below opens
+	// an incident — a rule's action (create_incident / notify) is
+	// independent of the built-in severity/IOC/YARA heuristic.
+	EvaluateCorrelationRules(alert)
+
 	if !shouldCreateIncident(alert) {
 		return
 	}
@@ -80,6 +85,98 @@ func shouldCreateIncident(alert models.Alert) bool {
 		return true
 	}
 	return false
+}
+
+// EvaluateCorrelationRules tests every enabled custom correlation rule (see
+// api/correlation_rules.go) against an incoming alert. This is what gives
+// the Correlation Rules UI teeth — until this existed, rules could be
+// created/toggled/deleted but nothing ever read them; only the hardcoded
+// built-in dedup above ever fired.
+//
+// Semantics match what the UI documents: every non-empty condition on a
+// rule must match for it to fire (AND), and a blank condition matches any
+// value.
+func EvaluateCorrelationRules(alert models.Alert) {
+	tenantID, err := repositories.GetTenantIDByAgentID(alert.AgentID)
+	if err != nil {
+		return
+	}
+
+	rules, err := repositories.GetEnabledCorrelationRules(tenantID)
+	if err != nil {
+		return
+	}
+
+	for _, rule := range rules {
+		if !correlationRuleMatches(rule, alert) {
+			continue
+		}
+
+		_ = repositories.IncrementCorrelationRuleMatchCount(rule.ID)
+
+		switch rule.Action {
+		case "create_incident":
+			fireCorrelationIncident(rule, alert)
+		case "notify":
+			fireCorrelationNotification(rule, alert)
+		}
+	}
+}
+
+func correlationRuleMatches(rule repositories.EnabledCorrelationRule, alert models.Alert) bool {
+	if rule.Severity != "" && !strings.EqualFold(rule.Severity, alert.Severity) {
+		return false
+	}
+	if rule.RuleName != "" && !strings.Contains(strings.ToLower(alert.RuleName), strings.ToLower(rule.RuleName)) {
+		return false
+	}
+	if rule.MitreTechnique != "" && !strings.EqualFold(rule.MitreTechnique, alert.MitreTechnique) {
+		return false
+	}
+	if rule.AgentID != 0 && rule.AgentID != alert.AgentID {
+		return false
+	}
+	return true
+}
+
+func fireCorrelationIncident(rule repositories.EnabledCorrelationRule, alert models.Alert) {
+	fingerprint := fmt.Sprintf("corr-rule-%d-%d", rule.ID, alert.AgentID)
+
+	incidentID, err := CreateIncident(models.Incident{
+		AgentID:     alert.AgentID,
+		Title:       fmt.Sprintf("Correlation Rule Matched — Agent #%d", alert.AgentID),
+		Severity:    alert.Severity,
+		Description: fmt.Sprintf("Custom correlation rule #%d matched alert %q. %s", rule.ID, alert.RuleName, truncate(alert.LogMessage, 300)),
+		Fingerprint: fingerprint,
+	})
+	if err != nil {
+		existingID, lookupErr := repositories.GetIncidentIDByFingerprint(fingerprint)
+		if lookupErr == nil && existingID > 0 {
+			CreateIncidentEvent(models.IncidentEvent{
+				IncidentID: existingID,
+				EventType:  "alert_correlated",
+				Details:    fmt.Sprintf("Correlation rule #%d re-fired: %s (severity=%s)", rule.ID, alert.RuleName, alert.Severity),
+			})
+		}
+		return
+	}
+
+	CreateIncidentEvent(models.IncidentEvent{
+		IncidentID: incidentID,
+		EventType:  "incident_opened",
+		Details:    fmt.Sprintf("Auto-created by correlation rule #%d from alert: %s", rule.ID, alert.RuleName),
+	})
+}
+
+func fireCorrelationNotification(rule repositories.EnabledCorrelationRule, alert models.Alert) {
+	recipients := GetEmailRecipients(alert.Severity, alert.AgentID)
+	if len(recipients) == 0 {
+		return
+	}
+	go func() {
+		defer func() { recover() }()
+		_ = SendAlertEmail(alert, recipients)
+	}()
 }
 
 func incidentContext(alert models.Alert) (title, description string) {

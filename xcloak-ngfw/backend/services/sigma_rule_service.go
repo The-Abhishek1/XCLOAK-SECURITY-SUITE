@@ -10,10 +10,14 @@ func CreateSigmaRule(
 	tenantID int,
 ) error {
 
-	return repositories.CreateSigmaRule(
+	err := repositories.CreateSigmaRule(
 		rule,
 		tenantID,
 	)
+	if err == nil {
+		InvalidateSigmaCache(tenantID)
+	}
+	return err
 }
 
 func GetSigmaRules(tenantID int) (
@@ -38,11 +42,15 @@ func UpdateSigmaRule(
 	tenantID int,
 ) error {
 
-	return repositories.UpdateSigmaRule(
+	err := repositories.UpdateSigmaRule(
 		id,
 		rule,
 		tenantID,
 	)
+	if err == nil {
+		InvalidateSigmaCache(tenantID)
+	}
+	return err
 }
 
 func DeleteSigmaRule(
@@ -50,7 +58,11 @@ func DeleteSigmaRule(
 	tenantID int,
 ) error {
 
-	return repositories.DeleteSigmaRule(id, tenantID)
+	err := repositories.DeleteSigmaRule(id, tenantID)
+	if err == nil {
+		InvalidateSigmaCache(tenantID)
+	}
+	return err
 }
 
 func EnableSigmaRule(
@@ -58,10 +70,14 @@ func EnableSigmaRule(
 	tenantID int,
 ) error {
 
-	return repositories.EnableRule(
+	err := repositories.EnableRule(
 		id,
 		tenantID,
 	)
+	if err == nil {
+		InvalidateSigmaCache(tenantID)
+	}
+	return err
 }
 
 func DisableSigmaRule(
@@ -69,21 +85,30 @@ func DisableSigmaRule(
 	tenantID int,
 ) error {
 
-	return repositories.DisableRule(
+	err := repositories.DisableRule(
 		id,
 		tenantID,
 	)
+	if err == nil {
+		InvalidateSigmaCache(tenantID)
+	}
+	return err
 }
 
 // GetEnabledSigmaRulesForAgent returns enabled rules for the tenant that
 // owns agentID — used by the detection engine, which has no per-request
-// tenant context of its own.
+// tenant context of its own. Cached per-tenant (see sigma_cache.go) since
+// this is called on every ingested log line.
 func GetEnabledSigmaRulesForAgent(agentID int) (
 	[]models.SigmaRule,
 	error,
 ) {
 
-	return repositories.GetEnabledRulesForAgent(agentID)
+	tenantID, err := repositories.GetTenantIDByAgentID(agentID)
+	if err != nil {
+		return nil, err
+	}
+	return getEnabledSigmaRulesCached(tenantID)
 }
 
 // GetEnabledSigmaRules returns enabled rules for tenantID — used by the rule
@@ -93,5 +118,5 @@ func GetEnabledSigmaRules(tenantID int) (
 	error,
 ) {
 
-	return repositories.GetEnabledRules(tenantID)
+	return getEnabledSigmaRulesCached(tenantID)
 }

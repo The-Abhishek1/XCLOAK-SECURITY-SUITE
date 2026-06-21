@@ -55,6 +55,41 @@ func GetFIMBaseline(c *gin.Context) {
 	c.JSON(200, baseline)
 }
 
+// AcceptFIMBaseline — POST /api/agents/:id/fim/baseline/accept
+// Explicitly re-baselines one file to its most recently detected hash.
+// Replaces the previous behavior of doing this automatically on every
+// "modified" event, which meant a tampered file silently became the new
+// "good" baseline with no analyst review.
+func AcceptFIMBaseline(c *gin.Context) {
+
+	agentID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid agent id"})
+		return
+	}
+	if !agentOwnedBy404(c, c.Param("id")) {
+		return
+	}
+
+	var body struct {
+		FilePath string `json:"file_path"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.FilePath == "" {
+		c.JSON(400, gin.H{"error": "file_path is required"})
+		return
+	}
+
+	if err := services.AcceptFIMBaseline(agentID, body.FilePath); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	username, _ := c.Get("username")
+	services.LogEvent("FIM_BASELINE_ACCEPTED", fmt.Sprintf("Accepted FIM change for %s on agent %d", body.FilePath, agentID), fmt.Sprintf("%v", username))
+
+	c.JSON(200, gin.H{"message": "baseline updated"})
+}
+
 // GetFIMAlerts — GET /api/agents/:id/fim/alerts
 func GetFIMAlerts(c *gin.Context) {
 
@@ -91,6 +126,3 @@ func GetMITREMappings(c *gin.Context) {
 
 	c.JSON(200, mappings)
 }
-
-// suppress unused
-var _ = fmt.Sprintf

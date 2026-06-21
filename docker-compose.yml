@@ -89,6 +89,16 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: xcloak
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/xcloak-overview.json
+      # SMTP for the alerting contact point in grafana/provisioning/alerting/
+      # contactpoints.yaml — without this, the 3 alert rules already in
+      # rules.yml evaluate and show red in Grafana's UI but notify nobody.
+      # Reuses the same mail account as the backend's own alert emails.
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GF_SMTP_HOST:-smtp.gmail.com:587}
+      GF_SMTP_USER: ${GF_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-xcloak-alerts@localhost}
+      GF_SMTP_FROM_NAME: XCloak Alerting
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

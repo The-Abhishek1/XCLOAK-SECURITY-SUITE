@@ -1,0 +1,45 @@
+name: frontend-ci
+
+on:
+  push:
+    paths:
+      - 'xcloak-ngfw/frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    paths:
+      - 'xcloak-ngfw/frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+
+defaults:
+  run:
+    working-directory: xcloak-ngfw/frontend
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: xcloak-ngfw/frontend/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        # Pre-existing violations (mostly react/no-unescaped-entities and
+        # exhaustive-deps warnings) predate this workflow and aren't fixed
+        # here — informational only until those are cleaned up, so it
+        # doesn't block on unrelated code it didn't introduce.
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build

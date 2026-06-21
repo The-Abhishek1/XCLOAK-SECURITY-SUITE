@@ -160,7 +160,7 @@ func GetChatHistoryHandler(c *gin.Context) {
 		user = username.(string)
 	}
 
-	history, err := services.GetChatHistory(user)
+	history, err := services.GetChatHistory(user, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -178,7 +178,7 @@ func ClearChatHistoryHandler(c *gin.Context) {
 		user = username.(string)
 	}
 
-	services.ClearChatHistory(user)
+	services.ClearChatHistory(user, tenantIDFromContext(c))
 	c.JSON(200, gin.H{"message": "Chat history cleared"})
 }
 

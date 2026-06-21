@@ -200,6 +200,19 @@ export default function AgentDetailPage() {
     }
   };
 
+  const acceptFIMBaseline = async (filePath: string) => {
+    try {
+      await fimAPI.acceptBaseline(agentId, filePath);
+      setToast('✓ Baseline accepted for ' + filePath);
+      setFimAlerts(null); setFimBaseline(null);
+      loadTabData('fim');
+    } catch {
+      setToast('Failed to accept baseline');
+    } finally {
+      setTimeout(() => setToast(null), 4000);
+    }
+  };
+
   const statsCards = [
     { label: 'Processes',   val: summary?.processes   ?? 0, icon: Activity  },
     { label: 'Connections', val: summary?.connections ?? 0, icon: Network   },
@@ -540,12 +553,12 @@ export default function AgentDetailPage() {
                   </div>
                 ) : (
                   <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-                    <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '80px 1fr 1fr 100px' }}>
-                      <span>Change</span><span>File Path</span><span>Hash (new)</span><span>Time</span>
+                    <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '80px 1fr 1fr 100px 80px' }}>
+                      <span>Change</span><span>File Path</span><span>Hash (new)</span><span>Time</span><span></span>
                     </div>
                     {fimAlerts!.map((a: any, i: number) => (
                       <div key={i} className="g-tr grid gap-3 items-center px-4"
-                        style={{ gridTemplateColumns: '80px 1fr 1fr 100px' }}>
+                        style={{ gridTemplateColumns: '80px 1fr 1fr 100px 80px' }}>
                         <span className="text-[11px] font-medium capitalize rounded px-2 py-0.5 w-fit"
                           style={{
                             background: a.change_type === 'modified' ? 'var(--orange-bg)' : a.change_type === 'deleted' ? 'var(--red-bg)' : 'var(--accent-glow)',
@@ -559,6 +572,13 @@ export default function AgentDetailPage() {
                           {a.new_hash?.slice(0, 16) || '—'}
                         </span>
                         <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</span>
+                        {a.change_type !== 'created' ? (
+                          <button onClick={() => acceptFIMBaseline(a.file_path)}
+                            title="Accept this change as the new baseline — stops it from re-alerting"
+                            className="g-btn g-btn-ghost text-[10px] justify-self-start">
+                            Accept
+                          </button>
+                        ) : <span />}
                       </div>
                     ))}
                   </div>

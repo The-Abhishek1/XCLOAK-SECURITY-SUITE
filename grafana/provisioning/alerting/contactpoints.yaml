@@ -1,0 +1,22 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: xcloak-ops-email
+    receivers:
+      - uid: xcloak-ops-email-receiver
+        type: email
+        settings:
+          # EDIT ME — comma-separated recipient list. The contact point
+          # itself can't read GF_SMTP_* env vars (those only configure the
+          # SMTP server Grafana sends *through*, set in docker-compose.yml);
+          # the destination address(es) below are not a secret, just a
+          # one-line edit.
+          addresses: soc-team@example.com
+          singleEmail: true
+
+policies:
+  - orgId: 1
+    receiver: xcloak-ops-email
+    group_by: ["alertname"]
+    routes: []

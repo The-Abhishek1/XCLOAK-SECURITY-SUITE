@@ -47,13 +47,14 @@ func ProcessFIMScan(payload models.FIMScanPayload) error {
 		}
 
 		if existing.SHA256 != f.SHA256 {
-			// File modified.
-			repositories.UpsertFIMEntry(models.FIMBaseline{
-				AgentID:  payload.AgentID,
-				FilePath: f.FilePath,
-				SHA256:   f.SHA256,
-				FileSize: f.FileSize,
-			})
+			// File modified — deliberately do NOT update the baseline here.
+			// Auto-overwriting on every modified event meant a single
+			// tampered file silently became the new "good" baseline, so
+			// repeat tampering (or persistence re-writing the same file)
+			// never re-alerted. The baseline now only changes via an
+			// explicit AcceptFIMBaseline call (see api/fim.go), so this
+			// keeps re-detecting the drift on every scan until an analyst
+			// reviews and accepts it.
 			createFIMChange(payload.AgentID, f.FilePath, "modified", existing.SHA256, f.SHA256)
 		}
 	}
@@ -68,6 +69,29 @@ func ProcessFIMScan(payload models.FIMScanPayload) error {
 	}
 
 	return nil
+}
+
+// AcceptFIMBaseline re-baselines a single file to the hash from its most
+// recent detected change — the explicit action that replaces the old
+// automatic re-baselining. Looks the hash up server-side from the alert
+// trail rather than trusting a client-submitted hash, so accepting a
+// change can't be used to plant an arbitrary baseline value.
+func AcceptFIMBaseline(agentID int, filePath string) error {
+	latest, err := repositories.GetLatestFIMAlert(agentID, filePath)
+	if err != nil {
+		return err
+	}
+	if latest == nil {
+		return fmt.Errorf("no FIM alert found for %s on agent %d", filePath, agentID)
+	}
+	if latest.ChangeType == "deleted" {
+		return repositories.DeleteFIMEntry(agentID, filePath)
+	}
+	return repositories.UpsertFIMEntry(models.FIMBaseline{
+		AgentID:  agentID,
+		FilePath: filePath,
+		SHA256:   latest.NewHash,
+	})
 }
 
 func createFIMChange(agentID int, path, changeType, oldHash, newHash string) {

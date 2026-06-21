@@ -54,7 +54,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 
 ### Observability
 - **Prometheus** — custom metrics (threat score, alert rates, task queues, Kafka consumer lag)
-- **Grafana** — pre-built dashboards plus alerting rules (agent-offline storms, task backlog, consumer lag)
+- **Grafana** — pre-built dashboards plus alerting rules (agent-offline storms, task backlog, consumer lag), with an email contact point — configure `GF_SMTP_*` in the root `.env` and edit the recipient in `grafana/provisioning/alerting/contactpoints.yaml`
 - **Kafka** — event bus for alerts, incidents, tasks, FIM, YARA, and async IOC matching
 
 ## Quick Start

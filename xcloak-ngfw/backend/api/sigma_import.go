@@ -10,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"xcloak-ngfw/models"
-	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -64,7 +63,7 @@ func ImportSigmaYAML(c *gin.Context) {
 			continue
 		}
 
-		if err := repositories.CreateSigmaRule(*rule, tenantIDFromContext(c)); err != nil {
+		if err := services.CreateSigmaRule(*rule, tenantIDFromContext(c)); err != nil {
 			// Likely duplicate title — skip gracefully.
 			errors = append(errors, fh.Filename+": "+err.Error())
 			skipped++
@@ -138,9 +137,6 @@ func parseSigmaYAML(data []byte) (*models.SigmaRule, error) {
 		Condition:      condition,
 		Enabled:        true,
 	}
-
-	// Ensure Sigma engine index is up to date.
-	services.ReloadSigmaRules()
 
 	return rule, nil
 }
