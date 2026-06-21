@@ -366,7 +366,7 @@ export default function AgentsPage() {
                       </div>
                       <button onClick={() => setOnboardStep(2)}
                         className="g-btn g-btn-primary w-full justify-center mt-3">
-                        I've copied the token <ArrowRight className="h-4 w-4" />
+                        I&apos;ve copied the token <ArrowRight className="h-4 w-4" />
                       </button>
                     </div>
                   )}
@@ -422,7 +422,7 @@ export default function AgentsPage() {
                   <div className="flex gap-3">
                     <button onClick={() => setOnboardStep(1)} className="g-btn g-btn-ghost flex-1 justify-center">Back</button>
                     <button onClick={() => setOnboardStep(3)} className="g-btn g-btn-primary flex-1 justify-center">
-                      I've run the agent <ArrowRight className="h-4 w-4" />
+                      I&apos;ve run the agent <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>
                 </div>

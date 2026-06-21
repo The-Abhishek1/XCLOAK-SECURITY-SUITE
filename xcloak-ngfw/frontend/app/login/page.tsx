@@ -196,7 +196,7 @@ export default function LoginPage() {
               <div className="text-center mb-2">
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Reset Password</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                  Enter your email and we'll send a reset link if the account exists.
+                  Enter your email and we&apos;ll send a reset link if the account exists.
                 </p>
               </div>
               <Field label="Email address">

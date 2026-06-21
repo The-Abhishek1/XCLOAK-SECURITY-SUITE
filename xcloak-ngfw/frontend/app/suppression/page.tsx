@@ -159,7 +159,7 @@ export default function SuppressionPage() {
                     <p>
                       IF
                       {r.severity       && <span style={{ color: 'var(--orange)' }}> severity={r.severity}</span>}
-                      {r.rule_name      && <span style={{ color: 'var(--accent)' }}> rule≈"{r.rule_name}"</span>}
+                      {r.rule_name      && <span style={{ color: 'var(--accent)' }}> rule≈&quot;{r.rule_name}&quot;</span>}
                       {r.mitre_technique && <span style={{ color: 'var(--yellow)' }}> mitre={r.mitre_technique}</span>}
                       {r.agent_id > 0   && <span style={{ color: 'var(--blue)' }}> agent=#{r.agent_id}</span>}
                       {(!r.severity && !r.rule_name && !r.mitre_technique && !r.agent_id)

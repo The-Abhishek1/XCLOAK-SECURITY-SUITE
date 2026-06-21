@@ -301,6 +301,10 @@ export default function SigmaRulesPage() {
                 </div>
                 <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-3)' }}>
                   Each selection matches if ANY of its comma-separated keywords appear in the log message.
+                  Keywords can also target a specific field: <span className="mono">user:admin</span> (exact),{' '}
+                  <span className="mono">process|contains:powershell</span>, <span className="mono">process|startswith:cmd</span>,{' '}
+                  <span className="mono">process|endswith:.exe</span>, or <span className="mono">process|re:^pwsh</span> (regex,
+                  case-sensitive unless the pattern starts with <span className="mono">(?i)</span>).
                 </p>
               </div>
 
@@ -311,9 +315,12 @@ export default function SigmaRulesPage() {
                 <div className="flex items-start gap-1.5 mt-1.5">
                   <Info className="h-3 w-3 mt-0.5 shrink-0" style={{ color: 'var(--text-3)' }} />
                   <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                    Combine selection names with <span className="mono">and</span> / <span className="mono">or</span> / <span className="mono">not</span> and parentheses.
-                    Examples: <span className="mono">selection1 and selection2</span> · <span className="mono">selection1 and not selection2</span> · <span className="mono">(selection1 or selection2) and selection3</span>.
-                    Leave blank for "any selection matches" (OR of all).
+                    Combine selection names with <span className="mono">and</span> / <span className="mono">or</span> / <span className="mono">not</span> and parentheses
+                    — precedence is standard (<span className="mono">not</span> then <span className="mono">and</span> then <span className="mono">or</span>).
+                    Examples: <span className="mono">selection1 and not selection2</span> · <span className="mono">(selection1 or selection2) and selection3</span> ·{' '}
+                    <span className="mono">1 of selection*</span> (any selection whose name matches the glob) ·{' '}
+                    <span className="mono">all of them</span> (every selection defined above must match).
+                    Leave blank for &quot;any selection matches&quot; (OR of all).
                   </p>
                 </div>
               </div>

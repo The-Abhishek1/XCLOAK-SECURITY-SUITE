@@ -207,7 +207,7 @@ export default function YaraRulesPage() {
             ) : matches.length === 0 ? (
               <div className="py-16 text-center">
                 <FileWarning className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
-                <p className="text-sm" style={{ color: 'var(--text-2)' }}>No YARA matches yet. Dispatch a "YARA Scan" task from an agent's page.</p>
+                <p className="text-sm" style={{ color: 'var(--text-2)' }}>No YARA matches yet. Dispatch a &quot;YARA Scan&quot; task from an agent&apos;s page.</p>
               </div>
             ) : matches.map(m => (
               <div key={m.id} className="g-tr grid gap-3 items-center px-4"

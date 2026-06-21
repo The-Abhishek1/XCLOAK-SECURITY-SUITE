@@ -244,6 +244,7 @@ export const integrationsAPI = {
 export const correlationAPI = {
   getAll:  ()                               => api.get('/correlation/rules'),
   create:  (rule: any)                      => api.post('/correlation/rules', rule),
+  update:  (id: number, rule: any)          => api.put(`/correlation/rules/${id}`, rule),
   toggle:  (id: number, enabled: boolean)   => api.patch(`/correlation/rules/${id}/toggle`, { enabled }),
   delete:  (id: number)                     => api.delete(`/correlation/rules/${id}`),
 };

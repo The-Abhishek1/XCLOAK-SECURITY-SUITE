@@ -91,7 +91,7 @@ export default function PlatformPage() {
           <ShieldAlert className="mx-auto h-10 w-10 mb-3" style={{ color: 'var(--text-3)' }} />
           <p className="text-sm" style={{ color: 'var(--text-2)' }}>Platform admin access required.</p>
           <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-            This account doesn't have platform-operator privileges.
+            This account doesn&apos;t have platform-operator privileges.
           </p>
         </div>
       </RootLayout>
@@ -177,7 +177,7 @@ export default function PlatformPage() {
                 <input value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
                   placeholder="admin@acme.com" className="g-input" />
                 <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                  They'll get an email with a link to set their password.
+                  They&apos;ll get an email with a link to set their password.
                 </p>
               </div>
             </div>

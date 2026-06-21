@@ -794,7 +794,7 @@ export default function SettingsPage() {
                 <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Custom Roles</p>
                 <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
                   Grant exactly the permissions a role needs — admin always has everything;
-                  custom roles get only what's checked below.
+                  custom roles get only what&apos;s checked below.
                 </p>
               </div>
               <button onClick={() => { setEditingRole(null); setRoleForm({ name: '', permissions: [] }); setShowNewRole(true); }}
@@ -1277,7 +1277,7 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                 </select>
               </div>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                They'll get an email with a link to set their password.
+                They&apos;ll get an email with a link to set their password.
               </p>
             </div>
             <div className="flex gap-3 px-5 pb-5">

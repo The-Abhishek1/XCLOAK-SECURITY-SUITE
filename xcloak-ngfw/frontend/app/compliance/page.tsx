@@ -156,7 +156,7 @@ export default function CompliancePage() {
             <div className="g-card py-14 text-center">
               <FileText className="mx-auto h-10 w-10 mb-3" style={{ color: 'var(--text-3)' }} />
               <p className="text-sm" style={{ color: 'var(--text-2)' }}>No reports generated yet.</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Click "Generate Report" to create a compliance snapshot.</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Click &quot;Generate Report&quot; to create a compliance snapshot.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -356,7 +356,7 @@ export default function CompliancePage() {
               <button onClick={() => setShowModal(false)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
             </div>
             <div className="p-5 space-y-2">
-              <p className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>Select the report type to generate a snapshot of your platform's current security posture.</p>
+              <p className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>Select the report type to generate a snapshot of your platform&apos;s current security posture.</p>
               {REPORT_TYPES.map(t => {
                 const Icon = t.icon;
                 return (

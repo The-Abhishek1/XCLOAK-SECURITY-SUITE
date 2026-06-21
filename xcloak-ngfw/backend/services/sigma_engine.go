@@ -3,7 +3,9 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
+	"sync"
 
 	"xcloak-ngfw/models"
 )
@@ -77,7 +79,9 @@ func matchSigmaRuleWithFields(rule models.SigmaRule, messageLower string, pf Par
 //   field|contains:value  — substring match on named field
 //   field|startswith:value
 //   field|endswith:value
-//   field|re:pattern      — reserved for future regex support
+//   field|re:pattern      — regex match (case-sensitive, like upstream
+//                           Sigma's |re modifier — use an inline "(?i)" in
+//                           the pattern if case-insensitivity is wanted)
 //   plain text            — substring match against the full log message
 func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 
@@ -86,7 +90,8 @@ func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 	if colonIdx > 0 {
 		// Everything before the colon is "field" or "field|op".
 		lhs := keyword[:colonIdx]
-		rhs := strings.ToLower(keyword[colonIdx+1:])
+		rhsRaw := keyword[colonIdx+1:]
+		rhs := strings.ToLower(rhsRaw)
 
 		fieldName := lhs
 		op        := "exact"
@@ -109,6 +114,14 @@ func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 			return false
 		}
 
+		if op == "re" {
+			re, err := compileSigmaRegex(rhsRaw)
+			if err != nil {
+				return false
+			}
+			return re.MatchString(fieldVal)
+		}
+
 		fieldValLower := strings.ToLower(fieldVal)
 
 		switch op {
@@ -125,6 +138,23 @@ func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 
 	// ── Plain keyword → message-level substring match ─────────────
 	return strings.Contains(messageLower, strings.ToLower(keyword))
+}
+
+var sigmaRegexCache sync.Map // pattern string -> *regexp.Regexp
+
+// compileSigmaRegex compiles (and caches) a |re: pattern — EvaluateRules
+// runs every Sigma rule against every ingested log line, so recompiling
+// the same regex per line would be wasteful.
+func compileSigmaRegex(pattern string) (*regexp.Regexp, error) {
+	if cached, ok := sigmaRegexCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	sigmaRegexCache.Store(pattern, re)
+	return re, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

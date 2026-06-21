@@ -213,7 +213,7 @@ export function GlobalSearch() {
           {/* Empty state */}
           {query.length >= 2 && !loading && results.length === 0 && (
             <div className="py-10 text-center">
-              <p className="text-sm" style={{ color: 'var(--text-3)' }}>No results for "{query}"</p>
+              <p className="text-sm" style={{ color: 'var(--text-3)' }}>No results for &quot;{query}&quot;</p>
             </div>
           )}
 

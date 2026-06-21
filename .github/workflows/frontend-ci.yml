@@ -34,12 +34,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Lint
-        # Pre-existing violations (mostly react/no-unescaped-entities and
-        # exhaustive-deps warnings) predate this workflow and aren't fixed
-        # here — informational only until those are cleaned up, so it
-        # doesn't block on unrelated code it didn't introduce.
         run: npm run lint
-        continue-on-error: true
 
       - name: Build
         run: npm run build

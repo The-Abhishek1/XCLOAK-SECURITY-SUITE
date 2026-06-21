@@ -4,19 +4,29 @@ import (
 	"strings"
 )
 
-// EvaluateCondition evaluates a Sigma-lite boolean condition string against
-// a map of selection_name -> bool (whether that selection matched).
+// EvaluateCondition evaluates a Sigma condition string against a map of
+// selection_name -> bool (whether that selection matched).
 //
-// Grammar (case-insensitive keywords "and", "or", "not"):
+// Grammar (case-insensitive keywords):
 //
-//	expr   := term (("and" | "or") term)*
-//	term   := "not" factor | factor
-//	factor := IDENT | "(" expr ")"
+//	expr       := orExpr
+//	orExpr     := andExpr ("or" andExpr)*
+//	andExpr    := notExpr ("and" notExpr)*
+//	notExpr    := "not" factor | factor
+//	factor     := quantifier | IDENT | "(" expr ")"
+//	quantifier := ("1" | "all") "of" target
+//	target     := "them" | IDENT-with-optional-wildcard
 //
-// Operators are left-associative and evaluated left-to-right with equal
-// precedence (no AND-before-OR precedence) — this matches how most simple
-// Sigma conditions read naturally and keeps the implementation small.
-// Use parentheses for explicit grouping when mixing and/or.
+// Precedence matches standard Sigma/boolean convention: NOT binds tightest,
+// then AND, then OR — so "a or b and c" means "a or (b and c)". Use
+// parentheses to override.
+//
+// Quantifiers match real Sigma syntax:
+//   - "1 of them"         — at least one selection (of all defined) matched
+//   - "all of them"       — every defined selection matched
+//   - "1 of selection*"   — at least one selection whose name matches the
+//     glob (e.g. "selection*", "filter_*") matched
+//   - "all of selection*" — every selection matching the glob matched
 //
 // An empty condition string falls back to "true if ANY selection matched"
 // (OR of all selections) — this preserves the old flat-keyword behavior.
@@ -46,9 +56,9 @@ func EvaluateCondition(condition string, results map[string]bool) bool {
 	return val
 }
 
-// tokenizeCondition splits a condition string into tokens: identifiers,
-// "and", "or", "not", "(", ")". Identifiers may contain letters, digits,
-// and underscores (typical Sigma selection names like "selection1").
+// tokenizeCondition splits a condition string into tokens: identifiers
+// (which may include "*" for wildcard quantifier targets), "and", "or",
+// "not", "of", "(", ")".
 func tokenizeCondition(s string) []string {
 
 	var tokens []string
@@ -90,44 +100,67 @@ func (p *conditionParser) peek() string {
 	return ""
 }
 
+// peekAt looks ahead n tokens from the current position without consuming.
+func (p *conditionParser) peekAt(n int) string {
+	if p.pos+n < len(p.tokens) {
+		return strings.ToLower(p.tokens[p.pos+n])
+	}
+	return ""
+}
+
 func (p *conditionParser) next() string {
 	t := p.peek()
 	p.pos++
 	return t
 }
 
-// parseExpr := term (("and" | "or") term)*
+// parseExpr is the entry point — OR has the lowest precedence.
 func (p *conditionParser) parseExpr() (bool, bool) {
+	return p.parseOr()
+}
 
-	left, ok := p.parseTerm()
+// orExpr := andExpr ("or" andExpr)*
+func (p *conditionParser) parseOr() (bool, bool) {
+
+	left, ok := p.parseAnd()
 	if !ok {
 		return false, false
 	}
 
-	for {
-		op := p.peek()
-		if op != "and" && op != "or" {
-			break
-		}
+	for p.peek() == "or" {
 		p.next()
-
-		right, ok := p.parseTerm()
+		right, ok := p.parseAnd()
 		if !ok {
 			return false, false
 		}
-
-		if op == "and" {
-			left = left && right
-		} else {
-			left = left || right
-		}
+		left = left || right
 	}
 
 	return left, true
 }
 
-// term := "not" factor | factor
-func (p *conditionParser) parseTerm() (bool, bool) {
+// andExpr := notExpr ("and" notExpr)*
+func (p *conditionParser) parseAnd() (bool, bool) {
+
+	left, ok := p.parseNot()
+	if !ok {
+		return false, false
+	}
+
+	for p.peek() == "and" {
+		p.next()
+		right, ok := p.parseNot()
+		if !ok {
+			return false, false
+		}
+		left = left && right
+	}
+
+	return left, true
+}
+
+// notExpr := "not" factor | factor
+func (p *conditionParser) parseNot() (bool, bool) {
 
 	if p.peek() == "not" {
 		p.next()
@@ -141,7 +174,7 @@ func (p *conditionParser) parseTerm() (bool, bool) {
 	return p.parseFactor()
 }
 
-// factor := IDENT | "(" expr ")"
+// factor := quantifier | IDENT | "(" expr ")"
 func (p *conditionParser) parseFactor() (bool, bool) {
 
 	tok := p.peek()
@@ -163,7 +196,16 @@ func (p *conditionParser) parseFactor() (bool, bool) {
 		return val, true
 	}
 
-	if tok == "and" || tok == "or" || tok == "not" || tok == ")" {
+	// Quantifier: "1 of <target>" / "all of <target>".
+	if (tok == "1" || tok == "all") && p.peekAt(1) == "of" {
+		quant := tok
+		p.next() // consume "1" / "all"
+		p.next() // consume "of"
+		target := p.next()
+		return p.evalQuantifier(quant, target), true
+	}
+
+	if tok == "and" || tok == "or" || tok == "not" || tok == ")" || tok == "of" {
 		return false, false
 	}
 
@@ -178,4 +220,62 @@ func (p *conditionParser) parseFactor() (bool, bool) {
 	// Unknown selection name referenced — treat as false rather than error,
 	// so a typo in one selection doesn't crash the whole engine.
 	return false, true
+}
+
+// evalQuantifier handles "1 of <target>" / "all of <target>", where target
+// is "them" (every selection) or a possibly-wildcarded selection name.
+func (p *conditionParser) evalQuantifier(quant, target string) bool {
+
+	matchAll := quant == "all"
+	matchEverything := target == "them"
+
+	matched, total := 0, 0
+	for name, val := range p.results {
+		if !matchEverything && !globMatch(strings.ToLower(name), target) {
+			continue
+		}
+		total++
+		if val {
+			matched++
+		}
+	}
+
+	if total == 0 {
+		return false
+	}
+	if matchAll {
+		return matched == total
+	}
+	return matched >= 1
+}
+
+// globMatch supports "*" wildcards anywhere in pattern (Sigma selection
+// names typically use a single trailing wildcard, e.g. "selection*", but
+// this handles multiple segments too).
+func globMatch(name, pattern string) bool {
+
+	if !strings.Contains(pattern, "*") {
+		return name == pattern
+	}
+
+	parts := strings.Split(pattern, "*")
+
+	if !strings.HasPrefix(name, parts[0]) {
+		return false
+	}
+	rest := name[len(parts[0]):]
+
+	for _, part := range parts[1 : len(parts)-1] {
+		if part == "" {
+			continue
+		}
+		idx := strings.Index(rest, part)
+		if idx == -1 {
+			return false
+		}
+		rest = rest[idx+len(part):]
+	}
+
+	last := parts[len(parts)-1]
+	return last == "" || strings.HasSuffix(rest, last)
 }

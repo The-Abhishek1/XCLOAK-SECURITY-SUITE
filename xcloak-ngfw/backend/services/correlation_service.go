@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
@@ -108,19 +109,99 @@ func EvaluateCorrelationRules(alert models.Alert) {
 	}
 
 	for _, rule := range rules {
-		if !correlationRuleMatches(rule, alert) {
-			continue
-		}
-
-		_ = repositories.IncrementCorrelationRuleMatchCount(rule.ID)
-
-		switch rule.Action {
-		case "create_incident":
-			fireCorrelationIncident(rule, alert)
-		case "notify":
-			fireCorrelationNotification(rule, alert)
+		switch rule.CorrelationType {
+		case "event_count":
+			evaluateEventCountRule(rule, alert)
+		case "temporal":
+			evaluateTemporalRule(rule, alert, false)
+		case "temporal_ordered":
+			evaluateTemporalRule(rule, alert, true)
+		default: // "simple", or empty for rows created before correlation_type existed
+			if correlationRuleMatches(rule, alert) {
+				fireCorrelationRule(rule, alert, "")
+			}
 		}
 	}
+}
+
+// evaluateEventCountRule fires when this rule's own conditions have matched
+// at least Threshold times for alert.AgentID within WindowMinutes — a
+// generalized brute-force/threshold detector (e.g. "5+ failed logins in
+// 10 minutes", but for any rule shape, not just auth).
+func evaluateEventCountRule(rule repositories.EnabledCorrelationRule, alert models.Alert) {
+	// Cheap early exit: this specific alert must itself match the rule's
+	// conditions before it's worth running the windowed count query.
+	if !correlationRuleMatches(rule, alert) {
+		return
+	}
+
+	count, err := repositories.CountRecentMatchingAlerts(alert.AgentID, rule.Severity, rule.RuleName, rule.MitreTechnique, rule.WindowMinutes)
+	if err != nil || count < rule.Threshold {
+		return
+	}
+
+	detail := fmt.Sprintf("%d matching alerts within %dmin (threshold %d)", count, rule.WindowMinutes, rule.Threshold)
+	fireCorrelationRule(rule, alert, detail)
+}
+
+// evaluateTemporalRule fires when every stage pattern has at least one
+// matching alert for alert.AgentID within WindowMinutes. When ordered is
+// true, the earliest match for each stage must be in non-decreasing time
+// order — a real multi-step attack chain (e.g. recon, then exploitation,
+// then persistence), not just unrelated alerts that happened to co-occur.
+func evaluateTemporalRule(rule repositories.EnabledCorrelationRule, alert models.Alert, ordered bool) {
+	if len(rule.Stages) < 2 {
+		return // a temporal rule with fewer than 2 stages can't express a chain
+	}
+
+	// Cheap early exit: this alert must match at least one stage, otherwise
+	// it can't be the event that completes the chain.
+	matchesAnyStage := false
+	for _, pattern := range rule.Stages {
+		if strings.Contains(strings.ToLower(alert.RuleName), strings.ToLower(pattern)) {
+			matchesAnyStage = true
+			break
+		}
+	}
+	if !matchesAnyStage {
+		return
+	}
+
+	firstSeen, err := repositories.RecentRuleFirstSeen(alert.AgentID, rule.WindowMinutes)
+	if err != nil {
+		return
+	}
+
+	stageTimes := make([]time.Time, len(rule.Stages))
+	for i, pattern := range rule.Stages {
+		patternLower := strings.ToLower(pattern)
+		var earliest time.Time
+		found := false
+		for ruleName, t := range firstSeen {
+			if !strings.Contains(strings.ToLower(ruleName), patternLower) {
+				continue
+			}
+			if !found || t.Before(earliest) {
+				earliest = t
+				found = true
+			}
+		}
+		if !found {
+			return // this stage hasn't happened within the window — no chain yet
+		}
+		stageTimes[i] = earliest
+	}
+
+	if ordered {
+		for i := 1; i < len(stageTimes); i++ {
+			if stageTimes[i].Before(stageTimes[i-1]) {
+				return // stages happened, but not in the required order
+			}
+		}
+	}
+
+	detail := fmt.Sprintf("%d-stage %s chain matched within %dmin", len(rule.Stages), map[bool]string{true: "ordered", false: "unordered"}[ordered], rule.WindowMinutes)
+	fireCorrelationRule(rule, alert, detail)
 }
 
 func correlationRuleMatches(rule repositories.EnabledCorrelationRule, alert models.Alert) bool {
@@ -139,14 +220,42 @@ func correlationRuleMatches(rule repositories.EnabledCorrelationRule, alert mode
 	return true
 }
 
-func fireCorrelationIncident(rule repositories.EnabledCorrelationRule, alert models.Alert) {
+// fireCorrelationRule executes a matched rule's action. For windowed rule
+// types (event_count/temporal/temporal_ordered), the incident fingerprint
+// is bucketed by the rule's own window so the chain re-fires into a fresh
+// incident once the window has fully rolled over, rather than either
+// spamming a new incident on every contributing alert or silently merging
+// into one incident forever. "simple" rules (no window) keep the original
+// per-agent-per-rule fingerprint.
+func fireCorrelationRule(rule repositories.EnabledCorrelationRule, alert models.Alert, detail string) {
+	_ = repositories.IncrementCorrelationRuleMatchCount(rule.ID)
+
+	switch rule.Action {
+	case "create_incident":
+		fireCorrelationIncident(rule, alert, detail)
+	case "notify":
+		fireCorrelationNotification(rule, alert)
+	}
+}
+
+func fireCorrelationIncident(rule repositories.EnabledCorrelationRule, alert models.Alert, detail string) {
 	fingerprint := fmt.Sprintf("corr-rule-%d-%d", rule.ID, alert.AgentID)
+	if rule.WindowMinutes > 0 {
+		bucket := time.Now().UTC().Truncate(time.Duration(rule.WindowMinutes) * time.Minute)
+		fingerprint = fmt.Sprintf("%s-%s", fingerprint, bucket.Format(time.RFC3339))
+	}
+
+	description := fmt.Sprintf("Custom correlation rule #%d (%s) matched alert %q.", rule.ID, rule.CorrelationType, alert.RuleName)
+	if detail != "" {
+		description += " " + detail
+	}
+	description += " " + truncate(alert.LogMessage, 300)
 
 	incidentID, err := CreateIncident(models.Incident{
 		AgentID:     alert.AgentID,
 		Title:       fmt.Sprintf("Correlation Rule Matched — Agent #%d", alert.AgentID),
 		Severity:    alert.Severity,
-		Description: fmt.Sprintf("Custom correlation rule #%d matched alert %q. %s", rule.ID, alert.RuleName, truncate(alert.LogMessage, 300)),
+		Description: description,
 		Fingerprint: fingerprint,
 	})
 	if err != nil {

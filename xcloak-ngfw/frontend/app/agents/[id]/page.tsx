@@ -547,7 +547,7 @@ export default function AgentDetailPage() {
                   <div className="py-10 text-center space-y-3">
                     <p className="text-sm" style={{ color: 'var(--text-2)' }}>No FIM violations detected.</p>
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                      Click "Run FIM Scan" — the agent will hash watched paths and report any changes (~15s).
+                      Click &quot;Run FIM Scan&quot; — the agent will hash watched paths and report any changes (~15s).
                       Baseline: {fimBaseline?.length || 0} files tracked.
                     </p>
                   </div>
@@ -605,7 +605,7 @@ export default function AgentDetailPage() {
                   <div className="py-10 text-center space-y-3">
                     <p className="text-sm" style={{ color: 'var(--text-2)' }}>No auth logs collected yet.</p>
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                      Click "Collect Auth Logs" — the agent will read /var/log/auth.log and send entries here (~15s).
+                      Click &quot;Collect Auth Logs&quot; — the agent will read /var/log/auth.log and send entries here (~15s).
                     </p>
                   </div>
                 ) : (
@@ -811,7 +811,7 @@ function DataTable({
           </div>
           <div className="max-h-96 overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="py-8 text-center text-xs" style={{ color: 'var(--text-3)' }}>No matches for "{search}"</div>
+              <div className="py-8 text-center text-xs" style={{ color: 'var(--text-3)' }}>No matches for &quot;{search}&quot;</div>
             ) : filtered.map((row, i) => (
               <div key={i} className="g-tr grid gap-3 items-center px-3 py-2"
                 style={{ gridTemplateColumns: columns.map(c => c.width || '1fr').join(' ') }}>

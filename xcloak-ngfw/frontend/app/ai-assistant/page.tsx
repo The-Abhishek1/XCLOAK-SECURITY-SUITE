@@ -201,7 +201,7 @@ export default function AIAssistantPage() {
               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>XCloak AI Assistant</p>
             </div>
             <p className="text-xs mb-4" style={{ color: 'var(--text-3)' }}>
-              Ask me anything about your platform's security posture. I have real-time access to agents, alerts, incidents, and vulnerabilities.
+              Ask me anything about your platform&apos;s security posture. I have real-time access to agents, alerts, incidents, and vulnerabilities.
             </p>
             <div className="grid grid-cols-2 gap-2">
               {QUICK_PROMPTS.map(q => {
