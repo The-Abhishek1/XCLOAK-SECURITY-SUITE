@@ -12,8 +12,6 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
-var validAPIKeyRoles = map[string]bool{"admin": true, "analyst": true, "viewer": true}
-
 // hashAPIKey is the lookup hash — SHA-256, not bcrypt. bcrypt's slow,
 // salted design defends against brute-forcing a low-entropy human password;
 // these keys are already 256 bits of crypto/rand, so a fast deterministic
@@ -29,8 +27,8 @@ func hashAPIKey(rawKey string) string {
 // its hash and a short display prefix are.
 func CreateAPIKey(tenantID int, createdBy, label, role string, expiresAt *time.Time) (string, *models.APIKey, error) {
 
-	if !validAPIKeyRoles[role] {
-		return "", nil, errors.New("invalid role — must be admin, analyst, or viewer")
+	if !IsValidRole(role, tenantID) {
+		return "", nil, errors.New("invalid role — must be admin, analyst, viewer, or an existing custom role")
 	}
 
 	b := make([]byte, 32)

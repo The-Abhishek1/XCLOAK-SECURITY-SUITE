@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { usersAPI, auditAPI, apiKeysAPI } from '@/lib/api';
+import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import {
@@ -18,6 +18,7 @@ const TABS = [
   { id: 'integrations', label: 'Integrations',    icon: Webhook    },
   { id: 'sso',          label: 'SSO',              icon: Building2 },
   { id: 'apikeys',      label: 'API Keys',         icon: Key       },
+  { id: 'roles',        label: 'Roles',            icon: Shield    },
   { id: 'profile',      label: 'My Profile',       icon: UserCog   },
   { id: 'email',        label: 'Email Alerts',     icon: Mail      },
   { id: '2fa',          label: '2FA Security',     icon: Lock      },
@@ -77,6 +78,15 @@ export default function SettingsPage() {
   const [genApiKey, setGenApiKey]   = useState<string | null>(null);
   const [creatingKey, setCreatingKey] = useState(false);
   const [revokingKey, setRevokingKey] = useState<number | null>(null);
+
+  // ── Custom Roles ─────────────────────────────────────────────
+  const [customRoles, setCustomRoles]   = useState<any[]>([]);
+  const [allPermissions, setAllPermissions] = useState<string[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [showNewRole, setShowNewRole]   = useState(false);
+  const [editingRole, setEditingRole]   = useState<any | null>(null);
+  const [roleForm, setRoleForm]         = useState({ name: '', permissions: [] as string[] });
+  const [savingRole, setSavingRole]     = useState(false);
 
   // ── Profile ──────────────────────────────────────────────────
   const [profile, setProfile]       = useState<any>(null);
@@ -205,6 +215,50 @@ export default function SettingsPage() {
     } finally { setRevokingKey(null); }
   };
 
+  const loadCustomRoles = useCallback(async () => {
+    setRolesLoading(true);
+    try {
+      const [r1, r2] = await Promise.all([customRolesAPI.getAll(), customRolesAPI.getPermissions()]);
+      setCustomRoles(r1.data || []);
+      setAllPermissions(r2.data || []);
+    } finally { setRolesLoading(false); }
+  }, []);
+
+  const saveCustomRole = async () => {
+    if (!roleForm.name && !editingRole) { notify('Name is required'); return; }
+    setSavingRole(true);
+    try {
+      if (editingRole) {
+        await customRolesAPI.update(editingRole.id, roleForm.permissions);
+        notify('Role updated');
+      } else {
+        await customRolesAPI.create(roleForm.name, roleForm.permissions);
+        notify('Role created');
+      }
+      setShowNewRole(false); setEditingRole(null);
+      setRoleForm({ name: '', permissions: [] });
+      loadCustomRoles();
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to save role');
+    } finally { setSavingRole(false); }
+  };
+
+  const deleteCustomRole = async (id: number) => {
+    if (!confirm('Delete this role?')) return;
+    try {
+      await customRolesAPI.delete(id);
+      notify('Role deleted');
+      loadCustomRoles();
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to delete role');
+    }
+  };
+
+  const togglePerm = (p: string) => setRoleForm(f => ({
+    ...f,
+    permissions: f.permissions.includes(p) ? f.permissions.filter(x => x !== p) : [...f.permissions, p],
+  }));
+
   const loadProfile = useCallback(async () => {
     try {
       const r = await api.get('/auth/profile');
@@ -239,10 +293,11 @@ export default function SettingsPage() {
 
   // Load on tab switch
   useEffect(() => {
-    if (tab === 'users')        loadUsers();
+    if (tab === 'users')        { loadUsers(); loadCustomRoles(); }
     if (tab === 'integrations') loadIntegrations();
     if (tab === 'sso')          loadSSO();
-    if (tab === 'apikeys')      loadAPIKeys();
+    if (tab === 'apikeys')      { loadAPIKeys(); loadCustomRoles(); }
+    if (tab === 'roles')        loadCustomRoles();
     if (tab === 'profile')      loadProfile();
     if (tab === 'email')        loadEmailRules();
     if (tab === '2fa')          load2FAStatus();
@@ -349,7 +404,7 @@ export default function SettingsPage() {
                     <select defaultValue={u.role} onChange={e => updateRole(u.id, e.target.value)}
                       onBlur={() => setRoleEditing(null)} autoFocus
                       className="g-select text-xs" style={{ height: 28, padding: '0 6px' }}>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {[...ROLES, ...customRoles.map(cr => cr.name)].map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   ) : (
                     <button onClick={() => setRoleEditing(u.id)}
@@ -667,7 +722,7 @@ export default function SettingsPage() {
                 <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Role</label>
                 <select value={newKeyForm.role} onChange={e => setNewKeyForm(f => ({ ...f, role: e.target.value }))}
                   className="g-select text-xs" style={{ width: 110 }}>
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  {[...ROLES, ...customRoles.map(cr => cr.name)].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
@@ -720,6 +775,87 @@ export default function SettingsPage() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════ ROLES ══════════ */}
+        {tab === 'roles' && (
+          <div className="g-card max-w-2xl">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3"
+              style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Custom Roles</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  Grant exactly the permissions a role needs — admin always has everything;
+                  custom roles get only what's checked below.
+                </p>
+              </div>
+              <button onClick={() => { setEditingRole(null); setRoleForm({ name: '', permissions: [] }); setShowNewRole(true); }}
+                className="g-btn g-btn-primary text-xs">
+                <Plus className="h-3.5 w-3.5" /> New Role
+              </button>
+            </div>
+
+            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+              {rolesLoading ? (
+                <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+              ) : customRoles.length === 0 ? (
+                <p className="px-5 py-4 text-xs" style={{ color: 'var(--text-3)' }}>No custom roles yet.</p>
+              ) : customRoles.map((r: any) => (
+                <div key={r.id} className="flex items-center gap-3 px-5 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs" style={{ color: 'var(--text-1)' }}>{r.name}</p>
+                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                      {r.permissions.length} permission{r.permissions.length === 1 ? '' : 's'} · by {r.created_by}
+                    </p>
+                  </div>
+                  <button onClick={() => { setEditingRole(r); setRoleForm({ name: r.name, permissions: r.permissions }); setShowNewRole(true); }}
+                    className="g-btn g-btn-ghost text-xs">Edit</button>
+                  <button onClick={() => deleteCustomRole(r.id)} className="g-btn g-btn-ghost text-xs" style={{ color: 'var(--red)' }}>
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showNewRole && (
+          <div className="g-modal-backdrop" onClick={() => setShowNewRole(false)}>
+            <div className="g-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  {editingRole ? `Edit "${editingRole.name}"` : 'New Role'}
+                </h2>
+                <button onClick={() => setShowNewRole(false)} style={{ color: 'var(--text-2)' }}><XCircle className="h-4 w-4" /></button>
+              </div>
+              <div className="p-5 space-y-3">
+                {!editingRole && (
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Role name</label>
+                    <input value={roleForm.name} onChange={e => setRoleForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="rule-editor" className="g-input w-full" />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs mb-2" style={{ color: 'var(--text-3)' }}>Permissions</label>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {allPermissions.map(p => (
+                      <label key={p} className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-1)' }}>
+                        <input type="checkbox" checked={roleForm.permissions.includes(p)} onChange={() => togglePerm(p)} />
+                        {p.replace(/_/g, ' ')}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 px-5 pb-5">
+                <button onClick={() => setShowNewRole(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+                <button onClick={saveCustomRole} disabled={savingRole} className="g-btn g-btn-primary flex-1 justify-center">
+                  {savingRole ? 'Saving…' : editingRole ? 'Save Changes' : 'Create Role'}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1117,7 +1253,7 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                 <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Role</label>
                 <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
                   className="g-select w-full">
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  {[...ROLES, ...customRoles.map(cr => cr.name)].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>

@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"xcloak-ngfw/services"
 )
 
 func RequireRole(
@@ -30,6 +32,39 @@ func RequireRole(
 				"error": "access denied",
 			})
 
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RequirePermission gates an action by permission rather than by exact role
+// match — admin always passes (unchanged superuser behavior); a custom role
+// passes only if it was explicitly granted perm. analyst/viewer never match
+// a custom role, so they're denied exactly as RequireRole("admin") already
+// denied them before this existed — zero behavior change for anyone not on
+// a custom role.
+func RequirePermission(perm string) gin.HandlerFunc {
+
+	return func(c *gin.Context) {
+
+		role, _ := c.Get("role")
+		roleStr, _ := role.(string)
+
+		tenantID := 1
+		if v, exists := c.Get("tenant_id"); exists {
+			switch t := v.(type) {
+			case int:
+				tenantID = t
+			case float64:
+				tenantID = int(t)
+			}
+		}
+
+		if !services.HasPermission(roleStr, tenantID, perm) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 			c.Abort()
 			return
 		}

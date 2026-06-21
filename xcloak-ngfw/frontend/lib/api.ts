@@ -252,6 +252,14 @@ export const apiKeysAPI = {
   revoke:  (id: number)                                           => api.delete(`/api-keys/${id}`),
 };
 
+export const customRolesAPI = {
+  getAll:        ()                                          => api.get('/custom-roles'),
+  getPermissions:()                                          => api.get('/permissions'),
+  create:        (name: string, permissions: string[])       => api.post('/custom-roles', { name, permissions }),
+  update:        (id: number, permissions: string[])         => api.put(`/custom-roles/${id}`, { permissions }),
+  delete:        (id: number)                                => api.delete(`/custom-roles/${id}`),
+};
+
 export const platformAPI = {
   getTenants:    ()                                                                            => api.get('/platform/tenants'),
   createTenant:  (name: string, slug: string, adminUsername: string, adminEmail: string)        =>

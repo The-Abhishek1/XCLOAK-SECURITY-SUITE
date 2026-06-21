@@ -67,9 +67,8 @@ func UpdateUserRole(c *gin.Context) {
 		return
 	}
 
-	validRoles := map[string]bool{"admin": true, "analyst": true, "viewer": true}
-	if !validRoles[body.Role] {
-		c.JSON(400, gin.H{"error": "invalid role — must be admin, analyst, or viewer"})
+	if !services.IsValidRole(body.Role, tenantIDFromContext(c)) {
+		c.JSON(400, gin.H{"error": "invalid role — must be admin, analyst, viewer, or an existing custom role"})
 		return
 	}
 

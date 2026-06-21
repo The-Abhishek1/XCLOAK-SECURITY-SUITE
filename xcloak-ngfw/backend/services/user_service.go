@@ -122,9 +122,8 @@ func ChangePassword(userID int, currentPassword, newPassword string) error {
 // exists). The account gets an unusable random password hash until the
 // invitee follows the link, so it can't be logged into in the meantime.
 func InviteUser(username, email, role string, tenantID int) error {
-	validRoles := map[string]bool{"admin": true, "analyst": true, "viewer": true}
-	if !validRoles[role] {
-		return errors.New("invalid role — must be admin, analyst, or viewer")
+	if !IsValidRole(role, tenantID) {
+		return errors.New("invalid role — must be admin, analyst, viewer, or an existing custom role")
 	}
 
 	var exists bool
