@@ -56,11 +56,13 @@ func Register() (int, error) {
 
 	body, _ := json.Marshal(data)
 
-	resp, err := http.Post(
-		config.ServerURL+"/api/agents/register",
-		"application/json",
-		bytes.NewBuffer(body),
-	)
+	req, err := http.NewRequest("POST", config.ServerURL()+"/api/agents/register", bytes.NewBuffer(body))
+	if err != nil {
+		return 0, fmt.Errorf("register request failed: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := Client().Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("register request failed: %w", err)
 	}

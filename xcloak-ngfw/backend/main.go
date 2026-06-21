@@ -123,6 +123,14 @@ func main() {
 	// Prometheus metrics scrape endpoint — static bearer token (METRICS_TOKEN).
 	router.GET("/metrics", middleware.RequireMetricsAuth(), api.MetricsHandler())
 
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+	if certFile != "" && keyFile != "" {
+		log.Println("XCloak API Running (TLS)")
+		router.RunTLS(":8443", certFile, keyFile)
+		return
+	}
+
 	log.Println("XCloak API Running")
 	router.Run(":8080")
 }

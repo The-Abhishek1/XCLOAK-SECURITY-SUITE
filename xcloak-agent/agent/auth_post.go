@@ -19,7 +19,7 @@ func authPost(path string, body []byte) (*http.Response, error) {
 
 	req, err := http.NewRequest(
 		"POST",
-		config.ServerURL+path,
+		config.ServerURL()+path,
 		bytes.NewBuffer(body),
 	)
 
@@ -30,5 +30,5 @@ func authPost(path string, body []byte) (*http.Response, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+LoadToken())
 
-	return http.DefaultClient.Do(req)
+	return Client().Do(req)
 }

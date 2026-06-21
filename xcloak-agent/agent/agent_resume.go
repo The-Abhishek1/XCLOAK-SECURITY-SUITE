@@ -16,14 +16,13 @@ func ResumeSession() (int, error) {
 		return 0, fmt.Errorf("no saved token")
 	}
 
-	req, err := http.NewRequest("GET", config.ServerURL+"/api/agents/me", nil)
+	req, err := http.NewRequest("GET", config.ServerURL()+"/api/agents/me", nil)
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := Client().Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("server unreachable: %w", err)
 	}

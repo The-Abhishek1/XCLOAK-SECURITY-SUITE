@@ -52,7 +52,7 @@ func doFetchTasks(agentID int) ([]models.AgentTask, error) {
 
 	req, err := http.NewRequest(
 		"GET",
-		config.ServerURL+"/api/tasks/agent/"+strconv.Itoa(agentID),
+		config.ServerURL()+"/api/tasks/agent/"+strconv.Itoa(agentID),
 		nil,
 	)
 	if err != nil {
@@ -61,7 +61,7 @@ func doFetchTasks(agentID int) ([]models.AgentTask, error) {
 
 	req.Header.Set("Authorization", "Bearer "+LoadToken())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Client().Do(req)
 	if err != nil {
 		return nil, err
 	}

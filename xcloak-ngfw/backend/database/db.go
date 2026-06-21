@@ -27,14 +27,32 @@ func Connect() error {
 
 	godotenv.Load()
 
+	sslmode := os.Getenv("DB_SSLMODE")
+	if sslmode == "" {
+		sslmode = "disable" // preserve today's behavior unless the operator opts in
+	}
+
 	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
 		os.Getenv("DB_USER"),
 		os.Getenv("DB_PASSWORD"),
 		os.Getenv("DB_NAME"),
+		sslmode,
 	)
+
+	// lib/pq reads these directly off the DSN — only appended when set, so
+	// `require` works with just a self-signed server cert and no extra config.
+	if v := os.Getenv("DB_SSLROOTCERT"); v != "" {
+		connStr += " sslrootcert=" + v
+	}
+	if v := os.Getenv("DB_SSLCERT"); v != "" {
+		connStr += " sslcert=" + v
+	}
+	if v := os.Getenv("DB_SSLKEY"); v != "" {
+		connStr += " sslkey=" + v
+	}
 
 	var db *sql.DB
 	var err error

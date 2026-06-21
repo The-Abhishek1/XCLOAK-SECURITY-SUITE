@@ -30,7 +30,7 @@ func fetchYaraRules() []remoteYaraRule {
 
 	req, err := http.NewRequest(
 		"GET",
-		config.ServerURL+"/api/yara/rules/enabled",
+		config.ServerURL()+"/api/yara/rules/enabled",
 		nil,
 	)
 	if err != nil {
@@ -39,7 +39,7 @@ func fetchYaraRules() []remoteYaraRule {
 
 	req.Header.Set("Authorization", "Bearer "+LoadToken())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := Client().Do(req)
 	if err != nil {
 		return nil
 	}
