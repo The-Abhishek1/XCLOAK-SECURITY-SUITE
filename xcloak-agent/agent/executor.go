@@ -92,7 +92,9 @@ func runTask(task models.AgentTask) string {
 
 	case "scan_yara":
 		var payload models.TaskPayload
-		json.Unmarshal(task.Payload, &payload)
+		if err := json.Unmarshal(task.Payload, &payload); err != nil {
+			return "invalid scan_yara payload: " + err.Error()
+		}
 		if payload.Path == "" {
 			return "missing path in payload"
 		}

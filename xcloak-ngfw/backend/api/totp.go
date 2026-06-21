@@ -71,9 +71,12 @@ func Verify2FA(c *gin.Context) {
 	}
 
 	// Enable 2FA
-	database.DB.Exec(`
+	if _, err := database.DB.Exec(`
 		UPDATE users SET totp_enabled=TRUE, totp_verified=TRUE WHERE id=$1
-	`, userID)
+	`, userID); err != nil {
+		c.JSON(500, gin.H{"error": "failed to enable 2FA: " + err.Error()})
+		return
+	}
 
 	username, _ := c.Get("username")
 	services.LogEvent("2FA_ENABLED", "2FA enabled", fmt.Sprintf("%v", username))
@@ -94,19 +97,25 @@ func Disable2FA(c *gin.Context) {
 	}
 
 	var secret string
-	database.DB.QueryRow(
+	if err := database.DB.QueryRow(
 		`SELECT COALESCE(totp_secret,'') FROM users WHERE id=$1`, userID,
-	).Scan(&secret)
+	).Scan(&secret); err != nil {
+		c.JSON(401, gin.H{"error": "invalid TOTP code"})
+		return
+	}
 
 	if !services.ValidateTOTP(secret, body.Code) {
 		c.JSON(401, gin.H{"error": "invalid TOTP code"})
 		return
 	}
 
-	database.DB.Exec(`
+	if _, err := database.DB.Exec(`
 		UPDATE users SET totp_enabled=FALSE, totp_secret=NULL, totp_verified=FALSE
 		WHERE id=$1
-	`, userID)
+	`, userID); err != nil {
+		c.JSON(500, gin.H{"error": "failed to disable 2FA: " + err.Error()})
+		return
+	}
 
 	username, _ := c.Get("username")
 	services.LogEvent("2FA_DISABLED", "2FA disabled", fmt.Sprintf("%v", username))

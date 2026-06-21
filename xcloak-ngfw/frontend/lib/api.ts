@@ -177,6 +177,7 @@ export const auditAPI = {
   getLogs:      ()                                     => api.get('/audit/logs'),
   getPaginated: (page = 1, perPage = 50, action = '') =>
     api.get('/audit/logs/paginated', { params: { page, per_page: perPage, action: action || undefined } }),
+  getExportStatus: () => api.get('/audit/export/status'),
 };
 
 export const usersAPI = {

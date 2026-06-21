@@ -35,7 +35,7 @@ interface UserRow {
   last_login: string | null; created_at: string | null;
 }
 interface AuditPage {
-  data: any[]; total: number; page: number;
+  logs: any[]; total: number; page: number;
   per_page: number; pages: number;
 }
 
@@ -112,6 +112,7 @@ export default function SettingsPage() {
   const [auditP, setAuditP]         = useState(1);
   const [auditSearch, setAuditSearch] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
+  const [exportStatus, setExportStatus] = useState<any>(null);
 
   const currentUsername = typeof window !== 'undefined'
     ? localStorage.getItem('username') || 'admin' : 'admin';
@@ -291,6 +292,11 @@ export default function SettingsPage() {
     finally { setAuditLoading(false); }
   }, []);
 
+  const loadExportStatus = useCallback(async () => {
+    try { const r = await auditAPI.getExportStatus(); setExportStatus(r.data); }
+    catch { setExportStatus(null); }
+  }, []);
+
   // Load on tab switch
   useEffect(() => {
     if (tab === 'users')        { loadUsers(); loadCustomRoles(); }
@@ -301,7 +307,7 @@ export default function SettingsPage() {
     if (tab === 'profile')      loadProfile();
     if (tab === 'email')        loadEmailRules();
     if (tab === '2fa')          load2FAStatus();
-    if (tab === 'audit')        loadAudit(1, '');
+    if (tab === 'audit')        { loadAudit(1, ''); loadExportStatus(); }
   }, [tab]);
 
   // ── User actions ─────────────────────────────────────────────
@@ -792,7 +798,7 @@ export default function SettingsPage() {
                 </p>
               </div>
               <button onClick={() => { setEditingRole(null); setRoleForm({ name: '', permissions: [] }); setShowNewRole(true); }}
-                className="g-btn g-btn-primary text-xs">
+                disabled={rolesLoading} className="g-btn g-btn-primary text-xs">
                 <Plus className="h-3.5 w-3.5" /> New Role
               </button>
             </div>
@@ -1186,6 +1192,20 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
         {/* ══════════ AUDIT LOG ══════════ */}
         {tab === 'audit' && (
           <div className="space-y-3">
+            <div className="g-card p-4">
+              <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Immutable Export (MinIO, GOVERNANCE retention)</p>
+              {!exportStatus ? (
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Export status unavailable.</p>
+              ) : !exportStatus.last_exported_at ? (
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>No batches exported yet — runs every 5 minutes.</p>
+              ) : (
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                  Last batch: log #{exportStatus.last_exported_id} at {timeAgo(exportStatus.last_exported_at)}
+                  {exportStatus.last_object_key && <> · <span className="mono">{exportStatus.last_object_key}</span></>}
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center gap-3">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />

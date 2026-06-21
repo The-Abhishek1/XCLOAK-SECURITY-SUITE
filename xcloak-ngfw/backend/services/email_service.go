@@ -132,6 +132,21 @@ View in XCloak: http://localhost:3000/incidents
 	return sendEmail(cfg, recipients, subject, body)
 }
 
+// SendTestEmail sends a one-off test message to verify SMTP configuration
+// from the Settings UI.
+func SendTestEmail(recipient string) error {
+	cfg := loadSMTPConfig()
+	if cfg == nil {
+		return fmt.Errorf("SMTP not configured — set SMTP_HOST in .env")
+	}
+	subject := "✅ [XCloak] Test Email"
+	body := fmt.Sprintf(`This is a test email from XCloak Security Suite.
+
+If you're reading this, your SMTP configuration (host: %s) is working correctly.
+`, cfg.Host)
+	return sendEmail(cfg, []string{recipient}, subject, body)
+}
+
 // sendEmail is the low-level SMTP sender.
 func sendEmail(cfg *SMTPConfig, to []string, subject, body string) error {
 	from := cfg.From

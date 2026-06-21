@@ -142,7 +142,7 @@ func GetEnabledPlaybooksForAgent(agentID int) (
 
 		var p models.Playbook
 
-		rows.Scan(
+		if err := rows.Scan(
 			&p.ID,
 			&p.Name,
 			&p.TriggerType,
@@ -150,7 +150,9 @@ func GetEnabledPlaybooksForAgent(agentID int) (
 			&p.Enabled,
 			&p.TenantID,
 			&p.CreatedAt,
-		)
+		); err != nil {
+			return nil, err
+		}
 
 		playbooks = append(
 			playbooks,
@@ -158,5 +160,5 @@ func GetEnabledPlaybooksForAgent(agentID int) (
 		)
 	}
 
-	return playbooks, nil
+	return playbooks, rows.Err()
 }

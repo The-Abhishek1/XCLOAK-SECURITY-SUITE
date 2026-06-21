@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -54,7 +55,10 @@ func Register() (int, error) {
 		InstallToken: installToken,
 	}
 
-	body, _ := json.Marshal(data)
+	body, err := json.Marshal(data)
+	if err != nil {
+		return 0, fmt.Errorf("failed to encode registration request: %w", err)
+	}
 
 	req, err := http.NewRequest("POST", config.ServerURL()+"/api/agents/register", bytes.NewBuffer(body))
 	if err != nil {
@@ -149,8 +153,22 @@ func detectOS() string {
 	return "Linux"
 }
 
+// getLocalIP returns the local IP this host would use to reach the network
+// (no packet is actually sent — UDP "connect" just picks a route/interface).
+// Falls back to 127.0.0.1 only if the host has no usable network route,
+// e.g. fully offline.
 func getLocalIP() string {
-	return "127.0.0.1"
+	conn, err := net.Dial("udp", "1.1.1.1:80")
+	if err != nil {
+		return "127.0.0.1"
+	}
+	defer conn.Close()
+
+	addr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return "127.0.0.1"
+	}
+	return addr.IP.String()
 }
 
 func min(a, b int) int {

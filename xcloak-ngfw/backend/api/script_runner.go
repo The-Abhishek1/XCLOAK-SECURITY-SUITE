@@ -65,7 +65,9 @@ func DispatchScript(c *gin.Context) {
 		}
 
 		var hostname string
-		database.DB.QueryRow(`SELECT hostname FROM agents WHERE id=$1`, agentID).Scan(&hostname)
+		if err := database.DB.QueryRow(`SELECT hostname FROM agents WHERE id=$1`, agentID).Scan(&hostname); err != nil {
+			hostname = "unknown"
+		}
 
 		err := repositories.CreateTask(models.AgentTask{
 			AgentID:  agentID,

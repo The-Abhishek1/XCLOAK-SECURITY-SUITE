@@ -138,12 +138,14 @@ func GetThreatAuditEvents(limit int, tenantID int) ([]models.AuditEvent, error) 
 	var out []models.AuditEvent
 	for rows.Next() {
 		var e models.AuditEvent
-		rows.Scan(
+		if err := rows.Scan(
 			&e.ID, &e.AgentID, &e.EventID, &e.Timestamp, &e.PID, &e.PPID,
 			&e.UID, &e.EUID, &e.Username, &e.Comm, &e.Exe,
 			&e.Cmdline, &e.Success, &e.ThreatTag, &e.CreatedAt,
-		)
+		); err != nil {
+			return nil, err
+		}
 		out = append(out, e)
 	}
-	return out, nil
+	return out, rows.Err()
 }

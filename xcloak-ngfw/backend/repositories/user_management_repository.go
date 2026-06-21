@@ -33,11 +33,13 @@ func GetAllUsers(tenantID int) ([]models.User, error) {
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.TenantID, &u.IsActive, &u.LastLogin, &u.CreatedAt)
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.TenantID, &u.IsActive, &u.LastLogin, &u.CreatedAt); err != nil {
+			return nil, err
+		}
 		users = append(users, u)
 	}
 
-	return users, nil
+	return users, rows.Err()
 }
 
 // UpdateUserRole changes a user's role, scoped to tenantID.

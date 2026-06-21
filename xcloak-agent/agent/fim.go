@@ -47,7 +47,9 @@ type fimTaskPayload struct {
 func RunFIMScan(agentID int, taskPayload []byte) {
 
 	var taskPL fimTaskPayload
-	json.Unmarshal(taskPayload, &taskPL)
+	if err := json.Unmarshal(taskPayload, &taskPL); err != nil {
+		fmt.Println("FIM: invalid task payload, falling back to default watch paths:", err)
+	}
 
 	paths := DefaultWatchPaths
 	if len(taskPL.WatchPaths) > 0 {

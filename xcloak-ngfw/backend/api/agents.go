@@ -1,8 +1,8 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -37,26 +37,21 @@ func RegisterAgent(c *gin.Context) {
 		return
 	}
 
+	// Atomically claim the token: only one concurrent request can flip
+	// used=false -> true for a given token, so two requests racing on the
+	// same token can't both register an agent off it.
 	var tokenID, tenantID int
-	var used bool
-	var expiresAt *time.Time
 
 	err := database.DB.QueryRow(`
-		SELECT id, used, expires_at, tenant_id
-		FROM agent_install_tokens
-		WHERE token = $1
-	`, reg.InstallToken).Scan(&tokenID, &used, &expiresAt, &tenantID)
+		UPDATE agent_install_tokens
+		SET used = true, used_at = NOW()
+		WHERE token = $1 AND used = false
+		  AND (expires_at IS NULL OR expires_at > NOW())
+		RETURNING id, tenant_id
+	`, reg.InstallToken).Scan(&tokenID, &tenantID)
 
 	if err != nil {
-		c.JSON(401, gin.H{"error": "invalid install token"})
-		return
-	}
-	if used {
-		c.JSON(401, gin.H{"error": "install token has already been used"})
-		return
-	}
-	if expiresAt != nil && time.Now().After(*expiresAt) {
-		c.JSON(401, gin.H{"error": "install token has expired"})
+		c.JSON(401, gin.H{"error": "invalid, already-used, or expired install token"})
 		return
 	}
 
@@ -75,11 +70,14 @@ func RegisterAgent(c *gin.Context) {
 		return
 	}
 
-	database.DB.Exec(`
-		UPDATE agent_install_tokens
-		SET used = true, used_at = NOW(), used_by_agent_id = $1
-		WHERE id = $2
-	`, agentID, tokenID)
+	if _, err := database.DB.Exec(`
+		UPDATE agent_install_tokens SET used_by_agent_id = $1 WHERE id = $2
+	`, agentID, tokenID); err != nil {
+		// Token is already consumed above; this only loses the audit
+		// link back to the agent it provisioned, not worth failing the
+		// registration over.
+		services.LogEvent("AGENT_REGISTER_WARN", "failed to record used_by_agent_id for install token "+fmt.Sprint(tokenID), "system")
+	}
 
 	services.LogEvent(
 		"AGENT_REGISTERED",

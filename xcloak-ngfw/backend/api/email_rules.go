@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"xcloak-ngfw/database"
+	"xcloak-ngfw/services"
 )
 
 // GetEmailRules — GET /api/notifications/email
@@ -65,13 +66,29 @@ func ToggleEmailRule(c *gin.Context) {
 	id := c.Param("id")
 	var body struct{ Enabled bool `json:"enabled"` }
 	c.ShouldBindJSON(&body)
-	database.DB.Exec(`UPDATE email_alert_rules SET enabled=$1 WHERE id=$2 AND tenant_id=$3`, body.Enabled, id, tenantIDFromContext(c))
+	res, err := database.DB.Exec(`UPDATE email_alert_rules SET enabled=$1 WHERE id=$2 AND tenant_id=$3`, body.Enabled, id, tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "email rule not found"})
+		return
+	}
 	c.JSON(200, gin.H{"message": "updated"})
 }
 
 // DeleteEmailRule — DELETE /api/notifications/email/:id
 func DeleteEmailRule(c *gin.Context) {
-	database.DB.Exec(`DELETE FROM email_alert_rules WHERE id=$1 AND tenant_id=$2`, c.Param("id"), tenantIDFromContext(c))
+	res, err := database.DB.Exec(`DELETE FROM email_alert_rules WHERE id=$1 AND tenant_id=$2`, c.Param("id"), tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "email rule not found"})
+		return
+	}
 	c.JSON(200, gin.H{"message": "deleted"})
 }
 
@@ -83,8 +100,9 @@ func TestEmailRule(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "recipient required"})
 		return
 	}
-	// Send a test email
-	cfg := struct{ Host string }{Host: ""}
-	_ = cfg
-	c.JSON(200, gin.H{"message": "test email queued (check SMTP logs)"})
+	if err := services.SendTestEmail(body.Recipient); err != nil {
+		c.JSON(502, gin.H{"error": "failed to send test email: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "test email sent to " + body.Recipient})
 }

@@ -24,7 +24,9 @@ type IsolatePayload struct {
 func IsolateHost(task models.AgentTask) error {
 
 	var payload IsolatePayload
-	json.Unmarshal(task.Payload, &payload)
+	if err := json.Unmarshal(task.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid isolate_host payload: %w", err)
+	}
 
 	// Verify iptables is available.
 	if _, err := exec.LookPath("iptables"); err != nil {

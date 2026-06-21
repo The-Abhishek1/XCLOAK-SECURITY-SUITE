@@ -60,7 +60,9 @@ func LiveLogsWS(c *gin.Context) {
 
 	// Check if there are any logs; if not, auto-dispatch collect_auth_logs.
 	var logCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM endpoint_logs WHERE agent_id = $1`, agentID).Scan(&logCount)
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM endpoint_logs WHERE agent_id = $1`, agentID).Scan(&logCount); err != nil {
+		fmt.Printf("log count query failed for agent %v: %v\n", agentID, err)
+	}
 
 	if logCount == 0 {
 		services.CreateTaskForAgent(agentIDInt, "collect_auth_logs")

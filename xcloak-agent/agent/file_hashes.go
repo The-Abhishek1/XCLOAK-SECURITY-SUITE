@@ -90,7 +90,9 @@ func hashFile(path string) (HashResult, error) {
 
 	// Use TeeReader to hash both in a single pass (more efficient)
 	tee := io.TeeReader(file, md5h)
-	io.Copy(sha, tee)
+	if _, err := io.Copy(sha, tee); err != nil {
+		return HashResult{}, err
+	}
 
 	return HashResult{
 		MD5Hash:    hex.EncodeToString(md5h.Sum(nil)),

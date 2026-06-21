@@ -26,6 +26,18 @@ type RiskBreakdown struct {
 	UpdatedAt string       `json:"updated_at"`
 }
 
+// countQuery runs a single-value COUNT query and logs (rather than
+// silently swallows) a failure, returning 0 so a transient DB error
+// degrades to "no factor" instead of panicking or corrupting the response.
+func countQuery(query string, agentID int) int {
+	var n int
+	if err := database.DB.QueryRow(query, agentID).Scan(&n); err != nil {
+		fmt.Printf("risk breakdown count query failed for agent %d: %v\n", agentID, err)
+		return 0
+	}
+	return n
+}
+
 // GetAgentRiskBreakdown — GET /api/agents/:id/risk/breakdown
 func GetAgentRiskBreakdown(c *gin.Context) {
 	agentID, err := strconv.Atoi(c.Param("id"))
@@ -46,16 +58,15 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 
 	// Get agent hostname
 	var hostname string
-	database.DB.QueryRow(`SELECT hostname FROM agents WHERE id=$1`, agentID).Scan(&hostname)
+	if err := database.DB.QueryRow(`SELECT hostname FROM agents WHERE id=$1`, agentID).Scan(&hostname); err != nil {
+		fmt.Printf("risk breakdown hostname lookup failed for agent %d: %v\n", agentID, err)
+	}
 
 	// Build factor breakdown by querying real data
 	var factors []RiskFactor
 
 	// Critical alerts
-	var critAlerts int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND severity='critical'`, agentID,
-	).Scan(&critAlerts)
+	critAlerts := countQuery(`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND severity='critical'`, agentID)
 	if critAlerts > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "Critical Alerts", Points: critAlerts * 20, Count: critAlerts,
@@ -64,10 +75,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// High alerts
-	var highAlerts int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND severity='high'`, agentID,
-	).Scan(&highAlerts)
+	highAlerts := countQuery(`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND severity='high'`, agentID)
 	if highAlerts > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "High Alerts", Points: highAlerts * 10, Count: highAlerts,
@@ -76,10 +84,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// Medium alerts
-	var medAlerts int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND severity='medium'`, agentID,
-	).Scan(&medAlerts)
+	medAlerts := countQuery(`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND severity='medium'`, agentID)
 	if medAlerts > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "Medium Alerts", Points: medAlerts * 5, Count: medAlerts,
@@ -88,10 +93,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// IOC matches
-	var iocMatches int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND rule_name ILIKE '%IOC%'`, agentID,
-	).Scan(&iocMatches)
+	iocMatches := countQuery(`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND rule_name ILIKE '%IOC%'`, agentID)
 	if iocMatches > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "IOC Matches", Points: iocMatches * 20, Count: iocMatches,
@@ -100,10 +102,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// YARA matches
-	var yaraMatches int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND rule_name ILIKE '%YARA%'`, agentID,
-	).Scan(&yaraMatches)
+	yaraMatches := countQuery(`SELECT COUNT(*) FROM alerts WHERE agent_id=$1 AND rule_name ILIKE '%YARA%'`, agentID)
 	if yaraMatches > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "YARA Matches", Points: yaraMatches * 25, Count: yaraMatches,
@@ -112,10 +111,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// Critical incidents
-	var critIncidents int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM incidents WHERE agent_id=$1 AND severity='critical' AND status != 'resolved'`, agentID,
-	).Scan(&critIncidents)
+	critIncidents := countQuery(`SELECT COUNT(*) FROM incidents WHERE agent_id=$1 AND severity='critical' AND status != 'resolved'`, agentID)
 	if critIncidents > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "Critical Incidents", Points: critIncidents * 30, Count: critIncidents,
@@ -124,10 +120,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// Critical vulnerabilities
-	var critVulns int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM vulnerabilities WHERE agent_id=$1 AND severity='critical'`, agentID,
-	).Scan(&critVulns)
+	critVulns := countQuery(`SELECT COUNT(*) FROM vulnerabilities WHERE agent_id=$1 AND severity='critical'`, agentID)
 	if critVulns > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "Critical CVEs", Points: critVulns * 5, Count: critVulns,
@@ -136,10 +129,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// FIM violations
-	var fimViolations int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM fim_alerts WHERE agent_id=$1 AND created_at > now() - INTERVAL '7 days'`, agentID,
-	).Scan(&fimViolations)
+	fimViolations := countQuery(`SELECT COUNT(*) FROM fim_alerts WHERE agent_id=$1 AND created_at > now() - INTERVAL '7 days'`, agentID)
 	if fimViolations > 0 {
 		factors = append(factors, RiskFactor{
 			Label: "FIM Violations", Points: fimViolations * 8, Count: fimViolations,
