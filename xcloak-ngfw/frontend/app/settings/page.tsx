@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { usersAPI, auditAPI } from '@/lib/api';
+import { usersAPI, auditAPI, apiKeysAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import {
@@ -17,6 +17,7 @@ const TABS = [
   { id: 'users',        label: 'User Management', icon: Users      },
   { id: 'integrations', label: 'Integrations',    icon: Webhook    },
   { id: 'sso',          label: 'SSO',              icon: Building2 },
+  { id: 'apikeys',      label: 'API Keys',         icon: Key       },
   { id: 'profile',      label: 'My Profile',       icon: UserCog   },
   { id: 'email',        label: 'Email Alerts',     icon: Mail      },
   { id: '2fa',          label: '2FA Security',     icon: Lock      },
@@ -68,6 +69,14 @@ export default function SettingsPage() {
   const [ssoForm, setSsoForm]       = useState({ enabled: false, issuer_url: '', client_id: '', client_secret: '', button_label: '' });
   const [showSsoSecret, setShowSsoSecret] = useState(false);
   const [ssoConfigured, setSsoConfigured] = useState(false);
+
+  // ── API Keys ─────────────────────────────────────────────────
+  const [apiKeys, setApiKeys]       = useState<any[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [newKeyForm, setNewKeyForm] = useState({ label: '', role: 'viewer', expiresInDays: '' });
+  const [genApiKey, setGenApiKey]   = useState<string | null>(null);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [revokingKey, setRevokingKey] = useState<number | null>(null);
 
   // ── Profile ──────────────────────────────────────────────────
   const [profile, setProfile]       = useState<any>(null);
@@ -164,6 +173,38 @@ export default function SettingsPage() {
     } finally { setSsoSaving(false); }
   };
 
+  const loadAPIKeys = useCallback(async () => {
+    setApiKeysLoading(true);
+    try { const r = await apiKeysAPI.getAll(); setApiKeys(r.data || []); }
+    finally { setApiKeysLoading(false); }
+  }, []);
+
+  const createAPIKey = async () => {
+    if (!newKeyForm.label) { notify('Label is required'); return; }
+    setCreatingKey(true);
+    try {
+      const days = newKeyForm.expiresInDays ? parseInt(newKeyForm.expiresInDays, 10) : 0;
+      const r = await apiKeysAPI.create(newKeyForm.label, newKeyForm.role, days);
+      setGenApiKey(r.data.key);
+      setNewKeyForm({ label: '', role: 'viewer', expiresInDays: '' });
+      loadAPIKeys();
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to create API key');
+    } finally { setCreatingKey(false); }
+  };
+
+  const revokeAPIKey = async (id: number) => {
+    if (!confirm('Revoke this API key? Anything using it will stop working immediately.')) return;
+    setRevokingKey(id);
+    try {
+      await apiKeysAPI.revoke(id);
+      setApiKeys(ks => ks.map(k => k.id === id ? { ...k, revoked_at: new Date().toISOString() } : k));
+      notify('API key revoked');
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to revoke key');
+    } finally { setRevokingKey(null); }
+  };
+
   const loadProfile = useCallback(async () => {
     try {
       const r = await api.get('/auth/profile');
@@ -201,6 +242,7 @@ export default function SettingsPage() {
     if (tab === 'users')        loadUsers();
     if (tab === 'integrations') loadIntegrations();
     if (tab === 'sso')          loadSSO();
+    if (tab === 'apikeys')      loadAPIKeys();
     if (tab === 'profile')      loadProfile();
     if (tab === 'email')        loadEmailRules();
     if (tab === '2fa')          load2FAStatus();
@@ -599,6 +641,86 @@ export default function SettingsPage() {
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* ══════════ API KEYS ══════════ */}
+        {tab === 'apikeys' && (
+          <div className="g-card max-w-2xl">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3"
+              style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>API Keys</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  Long-lived credentials for scripts and automation — each key acts like a user with the chosen role.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-end gap-2 px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex-1">
+                <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Label</label>
+                <input value={newKeyForm.label} onChange={e => setNewKeyForm(f => ({ ...f, label: e.target.value }))}
+                  placeholder="ci-pipeline" className="g-input text-xs w-full" />
+              </div>
+              <div>
+                <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Role</label>
+                <select value={newKeyForm.role} onChange={e => setNewKeyForm(f => ({ ...f, role: e.target.value }))}
+                  className="g-select text-xs" style={{ width: 110 }}>
+                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Expires (days)</label>
+                <input value={newKeyForm.expiresInDays} onChange={e => setNewKeyForm(f => ({ ...f, expiresInDays: e.target.value }))}
+                  placeholder="never" className="g-input text-xs" style={{ width: 90 }} />
+              </div>
+              <button onClick={createAPIKey} disabled={creatingKey} className="g-btn g-btn-primary text-xs">
+                <Plus className="h-3.5 w-3.5" /> Generate
+              </button>
+            </div>
+
+            {genApiKey && (
+              <div className="mx-4 my-3 p-3 rounded-xl"
+                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                <p className="text-[10px] mb-1" style={{ color: 'var(--text-3)' }}>New key — copy now (shown once, never displayed again):</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-[11px] font-mono break-all" style={{ color: 'var(--accent)' }}>{genApiKey}</code>
+                  <button onClick={() => { navigator.clipboard.writeText(genApiKey!); notify('Copied!'); }}
+                    style={{ color: 'var(--accent)' }}><Copy className="h-4 w-4" /></button>
+                </div>
+              </div>
+            )}
+
+            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+              {apiKeysLoading ? (
+                <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+              ) : apiKeys.length === 0 ? (
+                <p className="px-5 py-4 text-xs" style={{ color: 'var(--text-3)' }}>No API keys yet.</p>
+              ) : apiKeys.map((k: any) => (
+                <div key={k.id} className="flex items-center gap-3 px-5 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs flex items-center gap-2" style={{ color: 'var(--text-1)' }}>
+                      {k.label}
+                      <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{k.key_prefix}…</span>
+                    </p>
+                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                      {k.role} · by {k.created_by} · {k.last_used_at ? `last used ${timeAgo(k.last_used_at)}` : 'never used'}
+                      {k.expires_at ? ` · expires ${new Date(k.expires_at).toLocaleDateString()}` : ' · never expires'}
+                    </p>
+                  </div>
+                  {k.revoked_at ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded font-medium s-offline">revoked</span>
+                  ) : (
+                    <button onClick={() => revokeAPIKey(k.id)} disabled={revokingKey === k.id}
+                      className="g-btn g-btn-ghost text-xs"
+                      style={{ color: 'var(--red)' }}>
+                      <Trash2 className="h-3.5 w-3.5" /> Revoke
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

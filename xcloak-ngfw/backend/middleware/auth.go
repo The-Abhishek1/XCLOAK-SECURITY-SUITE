@@ -30,6 +30,28 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
+		// API keys (xck_...) are a separate, non-JWT auth path — direct DB
+		// lookup by hash, not a token to parse. JWTs never collide with this
+		// prefix (they're always two dot-separated base64 segments), so
+		// there's no ambiguity. Every existing RequireRole/tenant-scoped
+		// route downstream works unchanged: same context keys get set.
+		if strings.HasPrefix(tokenString, "xck_") {
+			key, err := services.ValidateAPIKey(tokenString)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+				c.Abort()
+				return
+			}
+
+			c.Set("user_id", 0)
+			c.Set("username", "api-key:"+key.Label)
+			c.Set("role", key.Role)
+			c.Set("tenant_id", key.TenantID)
+			c.Set("is_platform_admin", false)
+			c.Next()
+			return
+		}
+
 		// 3. Check blacklist (revoked on logout).
 		if services.IsRevoked(tokenString) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked — please log in again"})

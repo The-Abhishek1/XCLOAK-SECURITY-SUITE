@@ -179,6 +179,11 @@ func SetupRoutes(router *gin.Engine) {
 	router.PATCH("/api/users/:id/toggle", middleware.RequireAuth(), middleware.RequireRole("admin"), api.ToggleUserActive)
 	router.DELETE("/api/users/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteUser)
 
+	// ── API Keys (programmatic access) ──────────────────────────────
+	router.POST("/api/api-keys", middleware.RequireAuth(), middleware.RequireRole("admin"), api.CreateAPIKeyHandler)
+	router.GET("/api/api-keys", middleware.RequireAuth(), middleware.RequireRole("admin"), api.GetAPIKeysHandler)
+	router.DELETE("/api/api-keys/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.RevokeAPIKeyHandler)
+
 	// ── Platform Admin (tenant provisioning) ────────────────────────
 	router.POST("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.CreateTenantHandler)
 	router.GET("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantsHandler)

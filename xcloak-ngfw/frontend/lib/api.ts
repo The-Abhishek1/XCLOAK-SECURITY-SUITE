@@ -245,6 +245,13 @@ export const correlationAPI = {
   delete:  (id: number)                     => api.delete(`/correlation/rules/${id}`),
 };
 
+export const apiKeysAPI = {
+  getAll:  ()                                                     => api.get('/api-keys'),
+  create:  (label: string, role: string, expiresInDays?: number)  =>
+    api.post('/api-keys', { label, role, expires_in_days: expiresInDays || 0 }),
+  revoke:  (id: number)                                           => api.delete(`/api-keys/${id}`),
+};
+
 export const platformAPI = {
   getTenants:    ()                                                                            => api.get('/platform/tenants'),
   createTenant:  (name: string, slug: string, adminUsername: string, adminEmail: string)        =>
