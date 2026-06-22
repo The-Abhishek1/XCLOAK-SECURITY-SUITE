@@ -156,6 +156,41 @@ export interface Vulnerability {
   kev_ransomware: boolean;
 }
 
+export interface AttackPathNode {
+  id: string;
+  type: 'internet' | 'agent';
+  agent_id?: number;
+  hostname?: string;
+  risk_score: number;
+  risk_level: string;
+  max_epss: number;
+  has_kev: boolean;
+  kev_count: number;
+  exposed: boolean;
+  compromise_cost: number;
+}
+
+export interface AttackPathEdge {
+  source: string;
+  target: string;
+  kind: 'internet_exposure' | 'lateral';
+}
+
+export interface RankedAttackPath {
+  hops: string[];
+  total_cost: number;
+  target_hostname: string;
+  target_risk_level: string;
+  score: number;
+}
+
+export interface AttackPathGraph {
+  nodes: AttackPathNode[];
+  edges: AttackPathEdge[];
+  top_paths: RankedAttackPath[];
+  has_entry_point: boolean;
+}
+
 export interface TimelineEvent {
   id?: number;
   event_type: string;

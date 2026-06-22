@@ -40,9 +40,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/agents/register", api.RegisterAgent)
 	router.POST("/api/agents/heartbeat", middleware.RequireAgentAuth(), api.Heartbeat)
 	router.POST("/api/agents/logs", middleware.RequireAgentAuth(), api.ReceiveLogs)
-	router.POST("/api/agents/processes",     middleware.RequireAgentAuth(), api.ReceiveProcesses)
-	router.POST("/api/agents/audit-events",  middleware.RequireAgentAuth(), api.ReceiveAuditEvents)
-	router.POST("/api/agents/registry",      middleware.RequireAgentAuth(), api.ReceiveRegistry)
+	router.POST("/api/agents/processes", middleware.RequireAgentAuth(), api.ReceiveProcesses)
+	router.POST("/api/agents/audit-events", middleware.RequireAgentAuth(), api.ReceiveAuditEvents)
+	router.POST("/api/agents/registry", middleware.RequireAgentAuth(), api.ReceiveRegistry)
 	router.POST("/api/agents/connections", middleware.RequireAgentAuth(), api.ReceiveConnections)
 	router.POST("/api/agents/services", middleware.RequireAgentAuth(), api.ReceiveServices)
 	router.POST("/api/agents/packages", middleware.RequireAgentAuth(), api.ReceivePackages)
@@ -65,10 +65,10 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/agents/:id/vulnerability-scan", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ScanAgentVulnerabilities)
 	router.GET("/api/agents/:id/filehashes", middleware.RequireAuth(), api.GetAgentFileHashes)
 	router.GET("/api/agents/:id/processes", middleware.RequireAuth(), api.GetAgentProcesses)
-	router.GET("/api/agents/:id/connections",   middleware.RequireAuth(), api.GetAgentConnections)
+	router.GET("/api/agents/:id/connections", middleware.RequireAuth(), api.GetAgentConnections)
 	router.GET("/api/agents/:id/audit-events", middleware.RequireAuth(), api.GetAuditEvents)
-	router.GET("/api/agents/:id/registry",    middleware.RequireAuth(), api.GetRegistryEntries)
-	router.GET("/api/audit-events/threats",    middleware.RequireAuth(), api.GetThreatAuditEvents)
+	router.GET("/api/agents/:id/registry", middleware.RequireAuth(), api.GetRegistryEntries)
+	router.GET("/api/audit-events/threats", middleware.RequireAuth(), api.GetThreatAuditEvents)
 	router.GET("/api/agents/:id/services", middleware.RequireAuth(), api.GetAgentServicesList)
 	router.GET("/api/agents/:id/users", middleware.RequireAuth(), api.GetAgentUsersList)
 	router.GET("/api/agents/:id/packages", middleware.RequireAuth(), api.GetAgentPackagesList)
@@ -91,6 +91,9 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Alerts ───────────────────────────────────────────────────
 	router.GET("/api/alerts", middleware.RequireAuth(), api.GetAlerts)
 	router.GET("/api/alerts/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetAlertsPaginated)
+
+	// ── Attack path graph ────────────────────────────────────────
+	router.GET("/api/attack-path", middleware.RequireAuth(), api.GetAttackPathGraph)
 
 	// ── Incidents ────────────────────────────────────────────────
 	router.GET("/api/incidents", middleware.RequireAuth(), api.GetIncidents)

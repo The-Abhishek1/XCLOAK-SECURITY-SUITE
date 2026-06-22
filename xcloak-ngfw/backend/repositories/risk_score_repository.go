@@ -34,6 +34,33 @@ func UpsertRiskScore(
 	return err
 }
 
+// GetRiskScoresByTenant returns the risk score for every agent in tenantID
+// that has one computed. Agents without a row yet (never scanned) are simply
+// absent — callers should treat a missing entry as "unknown", not zero risk.
+func GetRiskScoresByTenant(tenantID int) ([]models.AssetRiskScore, error) {
+
+	rows, err := database.DB.Query(`
+		SELECT s.id, s.agent_id, s.risk_score, s.risk_level, s.updated_at
+		FROM asset_risk_scores s
+		JOIN agents a ON a.id = s.agent_id
+		WHERE a.tenant_id = $1
+	`, tenantID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.AssetRiskScore
+	for rows.Next() {
+		var s models.AssetRiskScore
+		if err := rows.Scan(&s.ID, &s.AgentID, &s.RiskScore, &s.RiskLevel, &s.UpdatedAt); err == nil {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
 func GetRiskScore(
 	agentID string,
 ) (*models.AssetRiskScore, error) {

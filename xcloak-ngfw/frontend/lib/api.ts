@@ -100,6 +100,10 @@ export const dashboardAPI = {
   getOverview: () => api.get('/dashboard/overview'),
 };
 
+export const attackPathAPI = {
+  get: () => api.get('/attack-path'),
+};
+
 export const iocsAPI = {
   getAll:     ()                         => api.get('/iocs'),
   getById:    (id: number)               => api.get(`/iocs/${id}`),

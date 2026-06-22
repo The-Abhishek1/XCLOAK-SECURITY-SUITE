@@ -11,7 +11,7 @@ import {
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
-  Building2,
+  Building2, Crosshair,
 } from 'lucide-react';
 
 const NAV = [
@@ -19,6 +19,7 @@ const NAV = [
     { href: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
     { href: '/agents',      label: 'Agents',      icon: Cpu },
     { href: '/network-map', label: 'Network Map', icon: Map },
+    { href: '/attack-path', label: 'Attack Paths', icon: Crosshair },
     { href: '/timeline',    label: 'Timeline',    icon: Clock },
   ]},
   { group: 'DETECTION', items: [

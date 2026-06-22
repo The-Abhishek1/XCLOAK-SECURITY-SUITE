@@ -70,6 +70,35 @@ func GetConnectionsByAgent(agentID string) ([]models.Connection, error) {
 	return out, nil
 }
 
+// GetConnectionsByTenant returns the most recent connections across every
+// agent in tenantID — for tenant-wide aggregate views (e.g. the attack-path
+// graph) that need cross-agent reachability, not one agent's connection list.
+func GetConnectionsByTenant(tenantID int) ([]models.Connection, error) {
+
+	rows, err := database.DB.Query(`
+		SELECT c.id, c.agent_id, c.protocol, c.local_address, c.remote_address, c.state, c.collected_at
+		FROM endpoint_connections c
+		JOIN agents a ON a.id = c.agent_id
+		WHERE a.tenant_id = $1
+		ORDER BY c.id DESC
+		LIMIT 5000
+	`, tenantID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.Connection
+	for rows.Next() {
+		var c models.Connection
+		if err := rows.Scan(&c.ID, &c.AgentID, &c.Protocol, &c.LocalAddress, &c.RemoteAddress, &c.State, &c.CollectedAt); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 // GetServicesByAgent returns all services for an agent.
 func GetServicesByAgent(agentID string) ([]models.Service, error) {
 
