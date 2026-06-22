@@ -43,6 +43,21 @@ func CalculateRiskScore(
 		}
 	}
 
+	vulns, _ := repositories.GetVulnerabilitiesByAgentID(agentID)
+
+	for _, v := range vulns {
+		// A vuln on CISA's confirmed-active-exploitation list is a far
+		// bigger real-world risk than CVSS alone implies — weighted above
+		// even the YARA/IOC match bonuses below.
+		if v.IsKEV {
+			score += 30
+		} else if v.EPSSScore >= 0.5 {
+			// EPSS >= 0.5 means FIRST.org predicts a coin-flip-or-better
+			// chance of exploitation within 30 days — worth a smaller bump.
+			score += 10
+		}
+	}
+
 	incidents, _ := repositories.GetAllIncidents()
 
 	for _, incident := range incidents {

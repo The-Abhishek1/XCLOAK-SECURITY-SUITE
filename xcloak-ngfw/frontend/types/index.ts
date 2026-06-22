@@ -149,6 +149,11 @@ export interface Vulnerability {
   remediation: string;
   detected_at: string;
   discovered_at: string;
+  epss_score: number;
+  epss_percentile: number;
+  is_kev: boolean;
+  kev_date_added?: string;
+  kev_ransomware: boolean;
 }
 
 export interface TimelineEvent {

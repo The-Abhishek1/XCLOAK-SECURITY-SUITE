@@ -7,7 +7,7 @@ import { Vulnerability, Agent } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import {
   Bug, Search, Download, Play, ChevronDown,
-  ExternalLink, Shield, AlertTriangle,
+  ExternalLink, Shield, AlertTriangle, Flame, Skull,
 } from 'lucide-react';
 
 interface CVEData {
@@ -27,6 +27,7 @@ export default function VulnerabilitiesPage() {
   const [scanning, setScanning]   = useState(false);
   const [search, setSearch]       = useState('');
   const [sevFilter, setSevFilter] = useState('');
+  const [kevFilter, setKevFilter] = useState(false);
   const [cveDetail, setCveDetail] = useState<CVEData | null>(null);
   const [cveLoading, setCveLoading] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,16 +88,19 @@ export default function VulnerabilitiesPage() {
 
   const filtered = vulns.filter(v => {
     const matchSev  = !sevFilter || v.severity === sevFilter;
+    const matchKev  = !kevFilter || v.is_kev;
     const matchSearch = !search || v.cve_id?.toLowerCase().includes(search.toLowerCase())
       || v.package_name?.toLowerCase().includes(search.toLowerCase())
       || v.name?.toLowerCase().includes(search.toLowerCase());
-    return matchSev && matchSearch;
+    return matchSev && matchKev && matchSearch;
   });
 
   const bySev = ['critical','high','medium','low'].reduce((acc, s) => {
     acc[s] = vulns.filter(v => v.severity === s).length;
     return acc;
   }, {} as Record<string, number>);
+
+  const kevCount = vulns.filter(v => v.is_kev).length;
 
   const selectedAgentObj = agents.find(a => a.id === selectedAgent);
 
@@ -132,6 +136,18 @@ export default function VulnerabilitiesPage() {
 
           {vulns.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap mt-4">
+              {kevCount > 0 && (
+                <button onClick={() => setKevFilter(!kevFilter)}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all"
+                  style={{
+                    background: kevFilter ? 'rgba(248,81,73,0.15)' : 'var(--glass-bg)',
+                    border: `1px solid ${kevFilter ? '#f85149' : 'var(--border)'}`,
+                    color: kevFilter ? '#f85149' : 'var(--text-2)',
+                  }}>
+                  <Skull className="h-3.5 w-3.5" /> KEV
+                  <span className="font-bold tabular-nums" style={{ color: '#f85149' }}>{kevCount}</span>
+                </button>
+              )}
               {['critical','high','medium','low'].map(s => (
                 <button key={s} onClick={() => setSevFilter(sevFilter === s ? '' : s)}
                   className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all"
@@ -249,8 +265,8 @@ export default function VulnerabilitiesPage() {
         {/* Table */}
         <div className="g-table">
           <div className="g-thead grid gap-3 px-4"
-            style={{ gridTemplateColumns: '100px 1fr 100px 70px 80px 1fr 80px' }}>
-            <span>CVE ID</span><span>Package</span><span>Name</span>
+            style={{ gridTemplateColumns: '100px 1fr 100px 90px 70px 80px 1fr 80px' }}>
+            <span>CVE ID</span><span>Package</span><span>Name</span><span>Exploit</span>
             <span>CVSS</span><span>Severity</span><span>Remediation</span><span className="text-right">Lookup</span>
           </div>
 
@@ -265,13 +281,27 @@ export default function VulnerabilitiesPage() {
             </div>
           ) : filtered.map(v => (
             <div key={v.id} className="g-tr grid gap-3 items-center px-4"
-              style={{ gridTemplateColumns: '100px 1fr 100px 70px 80px 1fr 80px' }}>
+              style={{ gridTemplateColumns: '100px 1fr 100px 90px 70px 80px 1fr 80px' }}>
               <span className="mono text-[11px] font-medium" style={{ color: 'var(--accent)' }}>{v.cve_id}</span>
               <div className="min-w-0">
                 <p className="text-xs truncate" style={{ color: 'var(--text-1)' }}>{v.package_name}</p>
                 <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{v.package_version}</p>
               </div>
               <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{v.name || '—'}</span>
+              {v.is_kev ? (
+                <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold w-fit"
+                  style={{ background: 'rgba(248,81,73,0.15)', color: '#f85149' }}
+                  title={`Confirmed actively exploited (CISA KEV)${v.kev_ransomware ? ' — used in ransomware campaigns' : ''}${v.kev_date_added ? `, added ${new Date(v.kev_date_added).toLocaleDateString()}` : ''}`}>
+                  {v.kev_ransomware ? <Skull className="h-3 w-3" /> : <Flame className="h-3 w-3" />} KEV
+                </span>
+              ) : v.epss_score > 0 ? (
+                <span className="text-[11px] tabular-nums" style={{ color: v.epss_score >= 0.5 ? 'var(--orange)' : 'var(--text-3)' }}
+                  title="EPSS — probability of exploitation in the next 30 days">
+                  {(v.epss_score * 100).toFixed(1)}%
+                </span>
+              ) : (
+                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>—</span>
+              )}
               <span className="text-xs font-bold tabular-nums" style={{
                 color: (v.cvss_score || 0) >= 9 ? 'var(--red)' : (v.cvss_score || 0) >= 7 ? 'var(--orange)' : 'var(--yellow)',
               }}>
