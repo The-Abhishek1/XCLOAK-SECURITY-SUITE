@@ -18,7 +18,7 @@ import (
 // where WMIC is deprecated, we fall back to PowerShell Get-CimInstance.
 func CollectProcesses(agentID int) {
 
-	processes, err := collectViaWMIC(agentID)
+	processes, err := collectProcessesViaWMIC(agentID)
 	if err != nil || len(processes) == 0 {
 		// WMIC unavailable (Win11 22H2+ or restricted policy) — try PowerShell.
 		fmt.Println("[collector] processes: WMIC failed, trying PowerShell CIM")
@@ -41,8 +41,8 @@ func CollectProcesses(agentID int) {
 	fmt.Printf("[collector] processes: sent %d\n", len(processes))
 }
 
-// collectViaWMIC uses `wmic process get` to enumerate processes with rich fields.
-func collectViaWMIC(agentID int) ([]models.Process, error) {
+// collectProcessesViaWMIC uses `wmic process get` to enumerate processes with rich fields.
+func collectProcessesViaWMIC(agentID int) ([]models.Process, error) {
 
 	out, err := exec.Command(
 		"wmic", "process", "get",

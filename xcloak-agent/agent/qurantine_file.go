@@ -11,10 +11,6 @@ import (
 	"xcloak-agent/models"
 )
 
-type QuarantineFilePayload struct {
-	Path string `json:"path"`
-}
-
 func QuarantineFile(
 	task models.AgentTask,
 ) error {

@@ -12,12 +12,6 @@ import (
 	"xcloak-agent/models"
 )
 
-type ExecuteScriptPayload struct {
-	Script string `json:"script"`
-	Shell  string `json:"shell"`  // "bash" | "sh" | "python3" — default bash
-	Label  string `json:"label"`
-}
-
 const scriptTimeout = 120 * time.Second
 
 func ExecuteScript(task models.AgentTask) (string, error) {

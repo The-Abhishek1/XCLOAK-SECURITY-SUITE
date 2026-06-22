@@ -10,11 +10,6 @@ import (
 	"xcloak-agent/models"
 )
 
-type IsolatePayload struct {
-	AllowIPs []string `json:"allow_ips"` // IPs to keep reachable (e.g. XCloak server)
-	Duration int      `json:"duration"`  // seconds; 0 = permanent until manual rollback
-}
-
 // IsolateHost applies iptables rules to block all traffic except to/from
 // the XCloak management server (so the agent stays in contact).
 //

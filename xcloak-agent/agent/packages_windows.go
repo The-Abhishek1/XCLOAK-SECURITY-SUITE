@@ -19,7 +19,7 @@ import (
 // is unavailable (Windows 11 22H2+).
 func CollectPackages(agentID int) {
 
-	packages := collectViaWMIC(agentID)
+	packages := collectPackagesViaWMIC(agentID)
 	if len(packages) == 0 {
 		packages = collectViaRegistry(agentID)
 	}
@@ -42,8 +42,8 @@ func CollectPackages(agentID int) {
 	fmt.Printf("[collector] packages: sent %d\n", len(packages))
 }
 
-// collectViaWMIC uses `wmic product get Name,Version /FORMAT:CSV`.
-func collectViaWMIC(agentID int) []models.Package {
+// collectPackagesViaWMIC uses `wmic product get Name,Version /FORMAT:CSV`.
+func collectPackagesViaWMIC(agentID int) []models.Package {
 
 	out, err := exec.Command(
 		"wmic", "product", "get", "Name,Version", "/FORMAT:CSV",
