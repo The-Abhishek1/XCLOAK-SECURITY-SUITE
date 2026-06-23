@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xcloak",
+  "type": "object",
+  "required": ["global", "backend", "frontend"],
+  "properties": {
+    "global": {
+      "type": "object",
+      "required": ["ingress"],
+      "properties": {
+        "ingress": {
+          "type": "object",
+          "required": ["host"],
+          "properties": {
+            "host": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "image": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "image": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "redis": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    }
+  }
+}

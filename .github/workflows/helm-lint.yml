@@ -1,0 +1,53 @@
+name: helm-lint
+
+on:
+  push:
+    paths:
+      - 'charts/xcloak/**'
+      - '.github/workflows/helm-lint.yml'
+  pull_request:
+    paths:
+      - 'charts/xcloak/**'
+      - '.github/workflows/helm-lint.yml'
+
+jobs:
+  lint-and-template:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: charts/xcloak
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: helm dependency update
+        run: helm dependency update .
+
+      - name: helm lint
+        run: helm lint . --values ci/smoke-values.yaml
+
+      - name: helm template (default values, bundled infra)
+        run: helm template xcloak . --values ci/smoke-values.yaml > /dev/null
+
+      - name: helm template (BYO infra mode)
+        run: |
+          helm template xcloak . --values ci/smoke-values.yaml \
+            --set postgresql.enabled=false \
+            --set redis.enabled=false \
+            --set postgresqlExternal.host=external-pg.example.com \
+            --set postgresqlExternal.existingSecret=external-pg-secret \
+            --set redisExternal.host=external-redis.example.com \
+            --set redisExternal.existingSecret=external-redis-secret \
+            > /dev/null
+
+      - name: helm template (HA mode — replicaCount > 1, autoscaling)
+        run: |
+          helm template xcloak . --values ci/smoke-values.yaml \
+            --set backend.replicaCount=3 \
+            --set backend.autoscaling.enabled=true \
+            --set frontend.autoscaling.enabled=true \
+            > /dev/null

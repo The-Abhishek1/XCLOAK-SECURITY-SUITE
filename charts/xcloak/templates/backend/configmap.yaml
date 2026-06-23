@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xcloak.backend.fullname" . }}
+  labels:
+    {{- include "xcloak.backend.labels" . | nindent 4 }}
+data:
+  PORT: "8080"
+  CORS_ALLOWED_ORIGINS: {{ include "xcloak.frontendURL" . | quote }}
+  FRONTEND_URL: {{ include "xcloak.frontendURL" . | quote }}
+  BACKEND_PUBLIC_URL: {{ include "xcloak.backendPublicURL" . | quote }}
+
+  {{- if .Values.postgresql.enabled }}
+  DB_HOST: {{ include "xcloak.postgresql.host" . | quote }}
+  DB_PORT: "5432"
+  DB_USER: {{ .Values.postgresql.auth.username | quote }}
+  DB_NAME: {{ .Values.postgresql.auth.database | quote }}
+  {{- else }}
+  DB_HOST: {{ .Values.postgresqlExternal.host | quote }}
+  DB_PORT: {{ .Values.postgresqlExternal.port | quote }}
+  DB_USER: {{ .Values.postgresqlExternal.username | quote }}
+  DB_NAME: {{ .Values.postgresqlExternal.database | quote }}
+  {{- end }}
+  DB_SSLMODE: {{ .Values.backend.env.DB_SSLMODE | quote }}
+
+  {{- if .Values.redis.enabled }}
+  REDIS_ADDR: "{{ include "xcloak.redis.host" . }}:6379"
+  {{- else if .Values.redisExternal.host }}
+  REDIS_ADDR: "{{ .Values.redisExternal.host }}:{{ .Values.redisExternal.port }}"
+  {{- end }}
+
+  {{- if .Values.kafkaExternal.enabled }}
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKER: {{ .Values.kafkaExternal.brokers | quote }}
+  {{- else }}
+  KAFKA_ENABLED: "false"
+  {{- end }}
+
+  {{- if .Values.minioExternal.enabled }}
+  MINIO_ENDPOINT: {{ .Values.minioExternal.endpoint | quote }}
+  MINIO_USE_SSL: {{ .Values.minioExternal.useSSL | quote }}
+  {{- end }}
+
+  LLM_PROVIDER: {{ .Values.backend.env.LLM_PROVIDER | quote }}
+  {{- if .Values.backend.env.OLLAMA_URL }}
+  OLLAMA_URL: {{ .Values.backend.env.OLLAMA_URL | quote }}
+  {{- end }}
+  {{- if .Values.backend.env.OLLAMA_MODEL }}
+  OLLAMA_MODEL: {{ .Values.backend.env.OLLAMA_MODEL | quote }}
+  {{- end }}
+  {{- if .Values.backend.env.ANTHROPIC_MODEL }}
+  ANTHROPIC_MODEL: {{ .Values.backend.env.ANTHROPIC_MODEL | quote }}
+  {{- end }}
+
+  AUDIT_EXPORT_RETENTION_DAYS: {{ .Values.backend.env.AUDIT_EXPORT_RETENTION_DAYS | quote }}
+
+  {{- if .Values.backend.env.SMTP_HOST }}
+  SMTP_HOST: {{ .Values.backend.env.SMTP_HOST | quote }}
+  SMTP_PORT: {{ .Values.backend.env.SMTP_PORT | quote }}
+  SMTP_FROM: {{ .Values.backend.env.SMTP_FROM | quote }}
+  SMTP_USER: {{ .Values.backend.env.SMTP_USER | quote }}
+  SMTP_TLS: {{ .Values.backend.env.SMTP_TLS | quote }}
+  {{- end }}
+
+  {{- if .Values.backend.tls.enabled }}
+  TLS_CERT_FILE: /etc/xcloak/tls/tls.crt
+  TLS_KEY_FILE: /etc/xcloak/tls/tls.key
+  {{- end }}

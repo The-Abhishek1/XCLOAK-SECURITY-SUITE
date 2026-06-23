@@ -220,16 +220,18 @@ func IsKEVCVE(cveID string) (isKEV bool, dateAdded *time.Time, ransomware bool) 
 // StartKEVRefreshScheduler refreshes the CISA KEV catalog immediately and
 // then every 6 hours. Call as `go services.StartKEVRefreshScheduler()`.
 func StartKEVRefreshScheduler() {
-	if err := RefreshKEVCatalog(); err != nil {
-		fmt.Printf("KEV catalog refresh failed: %v\n", err)
+	refresh := func() {
+		if err := RefreshKEVCatalog(); err != nil {
+			fmt.Printf("KEV catalog refresh failed: %v\n", err)
+		}
 	}
+
+	WithSingletonLock("kev_refresh", refresh)
 
 	ticker := time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if err := RefreshKEVCatalog(); err != nil {
-			fmt.Printf("KEV catalog refresh failed: %v\n", err)
-		}
+		WithSingletonLock("kev_refresh", refresh)
 	}
 }

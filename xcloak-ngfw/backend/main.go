@@ -73,12 +73,15 @@ func main() {
 
 	go func() {
 		for {
-			services.MarkOfflineAgents()
+			services.WithSingletonLock("mark_offline_agents", services.MarkOfflineAgents)
 			time.Sleep(30 * time.Second)
 		}
 	}()
 
 	// ── Prometheus metrics refresh (every 30s) ────────────────
+	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
+	// replica's /metrics independently (per-pod, not via the Service VIP),
+	// so every replica must keep its own in-process gauges current.
 	go func() {
 		// Initial scrape so metrics are populated before first Prometheus poll
 		services.RefreshMetrics()

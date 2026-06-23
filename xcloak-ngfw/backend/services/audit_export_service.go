@@ -89,9 +89,11 @@ func ExportAuditBatch() (int, error) {
 // a goroutine from main after InitMinIO.
 func StartAuditExportScheduler() {
 	for {
-		if _, err := ExportAuditBatch(); err != nil {
-			fmt.Println("[AuditExport] export failed:", err)
-		}
+		WithSingletonLock("audit_export", func() {
+			if _, err := ExportAuditBatch(); err != nil {
+				fmt.Println("[AuditExport] export failed:", err)
+			}
+		})
 		time.Sleep(5 * time.Minute)
 	}
 }

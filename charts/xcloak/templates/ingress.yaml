@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "xcloak.fullname" . }}
+  labels:
+    {{- include "xcloak.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.global.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "xcloak.backend.fullname" . }}
+                port:
+                  number: {{ .Values.backend.service.port }}
+          # /metrics is deliberately NOT exposed here — it's protected only
+          # by a static bearer token (METRICS_TOKEN), not mTLS, so it should
+          # stay in-cluster-only. Point Prometheus (bundled or your own) at
+          # the backend Service directly, e.g.
+          # http://{{ include "xcloak.backend.fullname" . }}:{{ .Values.backend.service.port }}/metrics
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "xcloak.frontend.fullname" . }}
+                port:
+                  number: {{ .Values.frontend.service.port }}
+{{- end }}

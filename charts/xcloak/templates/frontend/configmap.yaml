@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xcloak.frontend.fullname" . }}
+  labels:
+    {{- include "xcloak.frontend.labels" . | nindent 4 }}
+data:
+  BACKEND_INTERNAL_URL: "http://{{ include "xcloak.backend.fullname" . }}:{{ .Values.backend.service.port }}"

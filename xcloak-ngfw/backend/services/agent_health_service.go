@@ -184,11 +184,11 @@ func GetAgentHealthByID(agentID int) AgentHealth {
 func StartHealthScheduler() {
 	go func() {
 		// Initial computation.
-		ComputeAgentHealth()
+		WithSingletonLock("agent_health", ComputeAgentHealth)
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			ComputeAgentHealth()
+			WithSingletonLock("agent_health", ComputeAgentHealth)
 		}
 	}()
 	fmt.Println("Agent health scheduler started")

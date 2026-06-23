@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "xcloak.backend.fullname" . }}
+  labels:
+    {{- include "xcloak.backend.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "xcloak.backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "xcloak.backend.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.backend.serviceAccount.name | default (include "xcloak.backend.fullname" .) }}
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        - name: wait-for-postgresql
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z {{ include "xcloak.postgresql.host" . }} 5432; do echo waiting for postgresql; sleep 2; done
+      {{- end }}
+      containers:
+        - name: backend
+          image: "{{ if .Values.global.imageRegistry }}{{ .Values.global.imageRegistry }}/{{ end }}{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.tls.enabled | ternary 8443 8080 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "xcloak.backend.fullname" . }}
+          env:
+            {{- $secretName := .Values.backend.secrets.existingSecret | default (include "xcloak.backend.fullname" .) }}
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: JWT_SECRET } }
+            - name: METRICS_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: METRICS_TOKEN } }
+            {{- if or .Values.backend.secrets.anthropicApiKey .Values.backend.secrets.existingSecret }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: ANTHROPIC_API_KEY, optional: true } }
+            {{- end }}
+            {{- if or .Values.backend.secrets.smtpPass .Values.backend.secrets.existingSecret }}
+            - name: SMTP_PASS
+              valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: SMTP_PASS, optional: true } }
+            {{- end }}
+
+            {{- if .Values.postgresql.enabled }}
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Release.Name }}-postgresql, key: password } }
+            {{- else if .Values.postgresqlExternal.existingSecret }}
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.postgresqlExternal.existingSecret }}, key: password } }
+            {{- else }}
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: DB_PASSWORD } }
+            {{- end }}
+
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Release.Name }}-redis, key: redis-password } }
+            {{- else if .Values.redisExternal.existingSecret }}
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.redisExternal.existingSecret }}, key: password } }
+            {{- end }}
+
+            {{- if and .Values.minioExternal.enabled .Values.minioExternal.existingSecret }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.minioExternal.existingSecret }}, key: accessKey } }
+            - name: MINIO_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.minioExternal.existingSecret }}, key: secretKey } }
+            {{- end }}
+          {{- if .Values.backend.tls.enabled }}
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/xcloak/tls
+              readOnly: true
+          {{- end }}
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: {{ .Values.backend.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.backend.probes.startup.failureThreshold }}
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.backend.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: {{ .Values.backend.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.backend.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+      {{- if .Values.backend.tls.enabled }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ .Values.backend.tls.existingSecret }}
+      {{- end }}

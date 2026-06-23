@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+tmp/
+*.log
+.git
+.gitignore
+dist/
+*.exe

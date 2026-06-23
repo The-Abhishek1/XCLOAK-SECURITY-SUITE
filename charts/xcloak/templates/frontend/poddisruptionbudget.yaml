@@ -1,0 +1,13 @@
+{{- if .Values.frontend.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "xcloak.frontend.fullname" . }}
+  labels:
+    {{- include "xcloak.frontend.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "xcloak.frontend.selectorLabels" . | nindent 6 }}
+{{- end }}

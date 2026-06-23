@@ -1,0 +1,27 @@
+XCLOAK has been deployed.
+
+{{- if .Values.ingress.enabled }}
+Application URL: {{ include "xcloak.scheme" . }}://{{ .Values.global.ingress.host }}
+(make sure DNS for {{ .Values.global.ingress.host }} points at your ingress controller)
+{{- else }}
+Ingress is disabled. Reach the frontend with:
+  kubectl port-forward svc/{{ include "xcloak.frontend.fullname" . }} 3000:{{ .Values.frontend.service.port }} -n {{ .Release.Namespace }}
+and the backend API with:
+  kubectl port-forward svc/{{ include "xcloak.backend.fullname" . }} 8080:{{ .Values.backend.service.port }} -n {{ .Release.Namespace }}
+{{- end }}
+
+{{- if gt (.Values.backend.replicaCount | int) 1 }}
+backend.replicaCount is set above 1 — this relies on the Postgres
+advisory-lock guard around the backend's singleton background jobs
+(services/leader_lock.go, added 2026-06-23). If you're running an older
+backend image from before that change, set backend.replicaCount back to 1
+or you will get duplicate scheduled-task dispatch and duplicate audit log
+exports.
+{{- end }}
+
+Run `helm test {{ .Release.Name }}` to verify the backend and frontend are
+both serving traffic.
+
+See README.md for the full list of values, required Secret keys if you're
+using backend.secrets.existingSecret, and how to bring your own
+Postgres/Redis/Kafka/MinIO instead of the bundled ones.

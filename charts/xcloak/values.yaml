@@ -1,0 +1,205 @@
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  imageRegistry: ""
+  ingress:
+    # Single source of truth for FRONTEND_URL/BACKEND_PUBLIC_URL/CORS_ALLOWED_ORIGINS
+    # (see _helpers.tpl) — set this to your real public hostname.
+    host: xcloak.example.com
+  # Only set these if the public URL must differ from global.ingress.host
+  # (e.g. a CDN/different DNS in front of the Ingress). Leave blank otherwise.
+  frontendURL: ""
+  backendPublicURL: ""
+
+backend:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/the-abhishek1/xcloak-backend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+
+  # Safe to enable now that the backend's singleton background jobs
+  # (audit export, scheduled-task dispatch, health scoring, KEV refresh,
+  # offline-agent marking) are guarded by a Postgres advisory lock
+  # (services/leader_lock.go) — only one replica ever runs a given job per
+  # tick, the others skip it for that tick. The Kafka IOC consumer needs no
+  # such guard (already partition-exclusive via its consumer group).
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  serviceAccount:
+    create: true
+    name: ""
+
+  probes:
+    startup:
+      # 12 x 5s = 60s budget, comfortably covers the app's own 10x3s
+      # Postgres connect-retry loop (database/db.go) before liveness/
+      # readiness start being evaluated.
+      periodSeconds: 5
+      failureThreshold: 12
+    liveness:
+      periodSeconds: 10
+      failureThreshold: 3
+    readiness:
+      periodSeconds: 5
+      failureThreshold: 3
+
+  tls:
+    # Mounts a kubernetes.io/tls Secret and switches the backend to listen
+    # on :8443 (TLS_CERT_FILE/TLS_KEY_FILE) instead of :8080. Usually left
+    # off in favor of TLS termination at the Ingress.
+    enabled: false
+    existingSecret: ""
+
+  # Non-secret env vars, merged into the backend ConfigMap as-is.
+  env:
+    LLM_PROVIDER: "ollama"
+    OLLAMA_URL: ""
+    OLLAMA_MODEL: ""
+    ANTHROPIC_MODEL: ""
+    AUDIT_EXPORT_RETENTION_DAYS: "365"
+    SMTP_HOST: ""
+    SMTP_PORT: "587"
+    SMTP_FROM: ""
+    SMTP_USER: ""
+    SMTP_TLS: "true"
+    DB_SSLMODE: "disable"
+
+  secrets:
+    # If set, the chart creates NO Secret of its own and reads every key
+    # below from this pre-existing Secret instead (e.g. one created by your
+    # own Vault/External-Secrets-Operator pipeline). Required keys: see
+    # README.md "Required Secret keys".
+    existingSecret: ""
+    # Used only when existingSecret is empty. jwtSecret/metricsToken auto-
+    # generate (and are preserved across `helm upgrade` — see
+    # _helpers.tpl's preservedSecretValue) if left blank. dbPassword is only
+    # consulted when postgresql.enabled is false (external Postgres) —
+    # when bundled, the chart reads the Bitnami subchart's own generated
+    # credentials directly instead of duplicating secret management.
+    jwtSecret: ""
+    metricsToken: ""
+    dbPassword: ""
+    anthropicApiKey: ""
+    smtpPass: ""
+
+frontend:
+  # Stateless — no singleton-job concerns, safe to scale freely regardless
+  # of the backend's replica/lock story.
+  replicaCount: 2
+  image:
+    repository: ghcr.io/the-abhishek1/xcloak-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    # The app sends WebSocket keepalive pings every 20s
+    # (/api/notifications/stream, /api/agents/:id/logs/stream) — nginx's
+    # default 60s read/send timeout already covers that, but set explicitly
+    # rather than relying on the default being correct.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+  tls:
+    enabled: false
+    secretName: ""
+
+# ──────────────────────────────────────────────────────────────────────────
+# Bundled stateful infra (Bitnami community charts). Each is independently
+# disableable — set <name>.enabled: false and fill in the matching
+# <name>External block below to bring your own managed service instead.
+# This is the supported path for real production deployments; bundled mode
+# is meant for evaluation/trial installs (no backup/replication story for
+# the single-node defaults below).
+# ──────────────────────────────────────────────────────────────────────────
+
+postgresql:
+  enabled: true
+  auth:
+    username: xcloak
+    password: "" # blank = Bitnami chart auto-generates, stored in <release>-postgresql Secret
+    database: ngfw
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+
+redis:
+  enabled: true
+  # App only uses Redis for rate-limit/token-revocation cache state — no
+  # need for the chart's replication default.
+  architecture: standalone
+  auth:
+    enabled: true
+    password: "" # blank = Bitnami chart auto-generates, stored in <release>-redis Secret
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+
+# ── External (BYO) infra — read only when the matching *.enabled above is false ──
+postgresqlExternal:
+  host: ""
+  port: 5432
+  database: ngfw
+  username: xcloak
+  existingSecret: "" # key: password
+redisExternal:
+  host: ""
+  port: 6379
+  existingSecret: "" # key: password
+
+# Kafka and MinIO have no bundled option (see Chart.yaml comment — no free
+# Bitnami image currently available for either). Both are fully optional
+# from the app's own perspective (graceful degradation if unreachable), so
+# "disabled" is a completely supported, normal configuration, not a
+# fallback. Set enabled: true and fill in the rest only if you have an
+# external Kafka/S3-compatible store to point at.
+kafkaExternal:
+  enabled: false
+  brokers: ""
+minioExternal:
+  enabled: false
+  endpoint: ""
+  useSSL: false
+  existingSecret: "" # keys: accessKey, secretKey

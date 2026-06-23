@@ -1,0 +1,14 @@
+# Used by .github/workflows/helm-lint.yml for `helm lint`/`helm template`
+# smoke testing — not meant for any real deployment. Disables nothing on
+# its own; just supplies a real-looking host so global.ingress.host isn't
+# left at the example.com placeholder in CI output.
+global:
+  ingress:
+    host: xcloak.ci-smoke-test.local
+
+backend:
+  image:
+    tag: "ci-smoke-test"
+frontend:
+  image:
+    tag: "ci-smoke-test"

@@ -1,0 +1,33 @@
+apiVersion: v2
+name: xcloak
+description: XCLOAK Security Suite — Go/Gin backend + Next.js SOC dashboard, with optional bundled Postgres/Redis/Kafka/MinIO for evaluation/trial installs.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Bundled stateful infra is via community (Bitnami) charts, each gated by its
+# own `<name>.enabled` flag so customers with their own managed Postgres/
+# Redis store can disable either and point the backend at external services
+# instead via values.<name>External.*.
+#
+# Kafka and MinIO are deliberately NOT bundled here — verified live
+# (2026-06-23, in a real kind cluster) that Bitnami no longer publishes
+# free images for either under docker.io/bitnami/* (neither the pinned
+# version tags nor even :latest resolve; postgresql/redis still do, at
+# :latest). Both features already degrade gracefully in the app when
+# unreachable (Kafka behind KAFKA_ENABLED, MinIO/audit-export non-fatal on
+# connect failure — see main.go), so BYO-only for these two costs nothing
+# functionally. Revisit if Bitnami's catalog changes again, or if a
+# different vendor/chart is explicitly chosen for them.
+#
+# Pin exact versions here (not floating ranges) — re-run `helm dependency
+# update` deliberately when bumping, don't let it drift silently.
+dependencies:
+  - name: postgresql
+    version: "18.7.7"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "27.0.12"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

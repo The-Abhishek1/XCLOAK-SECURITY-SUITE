@@ -18,8 +18,10 @@ func StartScheduler() {
 		defer ticker.Stop()
 		fmt.Println("Scheduler started — checking every 30s")
 		for range ticker.C {
-			runDueScheduledTasks()
-			ExpireStaleTasks()
+			WithSingletonLock("scheduler", func() {
+				runDueScheduledTasks()
+				ExpireStaleTasks()
+			})
 		}
 	}()
 }
