@@ -16,7 +16,11 @@ type Process struct {
 	CollectedAt time.Time `json:"collected_at"`
 }
 
-// AuditEvent represents a single execve recorded by auditd on Linux.
+// AuditEvent represents a single execve event — sourced either from auditd
+// log-tailing (requires auditd installed + exec audit rules configured) or
+// the agent's eBPF module (tracepoint/sched/sched_process_exec, self-contained,
+// no external daemon dependency). Both producers POST the same shape to
+// POST /api/agents/audit-events.
 type AuditEvent struct {
 	ID        int       `json:"id"`
 	AgentID   int       `json:"agent_id"`

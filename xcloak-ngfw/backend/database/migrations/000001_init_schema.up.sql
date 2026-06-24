@@ -11,7 +11,16 @@ SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+-- `true` (transaction-local), not pg_dump's default `false` (session-wide):
+-- golang-migrate runs every migration file over one dedicated *sql.Conn, sent
+-- as a single multi-statement message — which Postgres treats as one implicit
+-- transaction. `false` would leave search_path empty on that connection for
+-- every later migration file, and they don't all schema-qualify their DDL
+-- like pg_dump output does, so they'd fail with "no schema has been selected
+-- to create in". `true` reverts it once this migration's implicit
+-- transaction ends, which is also when this file's own (schema-qualified)
+-- statements are done needing it.
+SELECT pg_catalog.set_config('search_path', '', true);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;

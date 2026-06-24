@@ -72,6 +72,10 @@ func StartCollectors(agentID int) {
 		CollectRegistryPersistence(agentID)
 	})
 
+	// Real-time outbound TCP connect events via eBPF — event-driven, not on
+	// a poll interval. No-op on non-Linux (stub in connect_events_other.go).
+	go StartConnectEventStream(agentID)
+
 	// File hashes: the collector returns a slice; SendFileHashes ships it.
 	go runCollector("file_hashes", intervalFileHashes, maxJitter, func() {
 		hashes := CollectFileHashes(agentID)
