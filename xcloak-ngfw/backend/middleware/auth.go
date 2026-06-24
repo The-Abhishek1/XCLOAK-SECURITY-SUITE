@@ -60,7 +60,7 @@ func RequireAuth() gin.HandlerFunc {
 		}
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return auth.JwtSecret, nil
+			return auth.JwtSecret(), nil
 		})
 
 		if err != nil || !token.Valid {

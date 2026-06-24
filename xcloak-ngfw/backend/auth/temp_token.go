@@ -19,13 +19,13 @@ func GenerateTempToken(userID int, username, role string, tenantID int) (string,
 		"exp":       time.Now().Add(5 * time.Minute).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JwtSecret)
+	return token.SignedString(JwtSecret())
 }
 
 // ValidateTempToken parses a temp token and returns user info.
 func ValidateTempToken(tokenStr string) (userID int, username, role string, tenantID int, err error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-		return JwtSecret, nil
+		return JwtSecret(), nil
 	})
 	if err != nil || !token.Valid {
 		return 0, "", "", 0, fmt.Errorf("invalid token")

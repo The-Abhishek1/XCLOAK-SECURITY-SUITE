@@ -10,6 +10,7 @@ import (
 
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/secrets"
 )
 
 // SMTPConfig holds connection details loaded from env.
@@ -34,8 +35,8 @@ func loadSMTPConfig() *SMTPConfig {
 	return &SMTPConfig{
 		Host:     host,
 		Port:     port,
-		Username: os.Getenv("SMTP_USER"),
-		Password: os.Getenv("SMTP_PASS"),
+		Username: secrets.Resolve("SMTP_USER", "xcloak/backend", "smtp_user"),
+		Password: secrets.Resolve("SMTP_PASS", "xcloak/backend", "smtp_password"),
 		From:     os.Getenv("SMTP_FROM"),
 		TLS:      os.Getenv("SMTP_TLS") == "true",
 	}

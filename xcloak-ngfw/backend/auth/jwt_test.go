@@ -1,16 +1,27 @@
 package auth
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// TestMain sets a JWT_SECRET before any test runs. JwtSecret() now panics
+// (intentionally — see jwt.go) rather than silently falling back to a
+// hardcoded dev secret, so tests must provide a real one, same as
+// production. Resolved once via sync.Once for this whole test binary, so
+// this must run before the first test, not inside one.
+func TestMain(m *testing.M) {
+	os.Setenv("JWT_SECRET", "test-jwt-secret-at-least-32-characters-long")
+	os.Exit(m.Run())
+}
+
 func parse(t *testing.T, tokenStr string) jwt.MapClaims {
 	t.Helper()
 	token, err := jwt.Parse(tokenStr, func(*jwt.Token) (interface{}, error) {
-		return JwtSecret, nil
+		return JwtSecret(), nil
 	})
 	if err != nil {
 		t.Fatalf("parsing token: %v", err)

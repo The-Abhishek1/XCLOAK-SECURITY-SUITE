@@ -203,3 +203,17 @@ minioExternal:
   endpoint: ""
   useSSL: false
   existingSecret: "" # keys: accessKey, secretKey
+
+# HashiCorp Vault integration — distinct from backend.secrets.existingSecret
+# above (which only covers *static* startup secrets and works with any
+# BYO-secret pipeline, Vault-backed or not). This section is for the
+# backend's *direct* runtime use of Vault: per-tenant integration
+# credentials (OIDC/webhook/Slack) in KV, and TOTP secrets via the transit
+# engine — both need the app talking to Vault itself, not just a Secret
+# populated once at deploy time. Optional and disabled by default; every
+# feature it backs degrades gracefully to Postgres-only storage when off.
+vault:
+  enabled: false
+  addr: ""
+  existingSecret: "" # key: token (see vault.tokenSecretKey)
+  tokenSecretKey: "token"

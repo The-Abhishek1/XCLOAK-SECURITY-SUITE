@@ -18,6 +18,7 @@ import (
 	"xcloak-ngfw/auth"
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/repositories"
+	"xcloak-ngfw/secrets"
 )
 
 // OIDCConfig is a tenant's SSO provider settings, stored as an `integrations`
@@ -70,6 +71,11 @@ func loadOIDCConfig(tenantID int) (*OIDCConfig, error) {
 	var cfg OIDCConfig
 	if err := json.Unmarshal(configJSON, &cfg); err != nil {
 		return nil, err
+	}
+	if secrets.Enabled() {
+		if v, ok := secrets.GetKV(integrationVaultPath(tenantID, "oidc"), "client_secret"); ok {
+			cfg.ClientSecret = v
+		}
 	}
 	if cfg.IssuerURL == "" || cfg.ClientID == "" || cfg.ClientSecret == "" {
 		return nil, nil
@@ -132,7 +138,7 @@ func StartOIDCLogin(ctx context.Context, tenantSlug string) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
 		},
 	})
-	signedState, err := state.SignedString(auth.JwtSecret)
+	signedState, err := state.SignedString(auth.JwtSecret())
 	if err != nil {
 		return "", err
 	}
@@ -149,7 +155,7 @@ func StartOIDCLogin(ctx context.Context, tenantSlug string) (string, error) {
 func CompleteOIDCLogin(ctx context.Context, code, stateStr string) (string, error) {
 	var claims oidcStateClaims
 	_, err := jwt.ParseWithClaims(stateStr, &claims, func(t *jwt.Token) (interface{}, error) {
-		return auth.JwtSecret, nil
+		return auth.JwtSecret(), nil
 	})
 	if err != nil {
 		return "", errors.New("invalid or expired SSO session — please try again")

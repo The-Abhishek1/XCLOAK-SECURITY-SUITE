@@ -8,6 +8,8 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+
+	"xcloak-ngfw/secrets"
 )
 
 var DB *sql.DB
@@ -32,12 +34,17 @@ func Connect() error {
 		sslmode = "disable" // preserve today's behavior unless the operator opts in
 	}
 
+	// DB_PASSWORD: Vault KV at secret/data/xcloak/backend#db_password when
+	// Vault is configured (see secrets.Init, called in main before this),
+	// else the env var — same fallback every secret in this function uses.
+	dbPassword := secrets.Resolve("DB_PASSWORD", "xcloak/backend", "db_password")
+
 	connStr := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
 		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
+		dbPassword,
 		os.Getenv("DB_NAME"),
 		sslmode,
 	)

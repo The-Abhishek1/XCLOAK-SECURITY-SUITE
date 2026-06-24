@@ -2,39 +2,43 @@ package auth
 
 import (
 	"fmt"
-	"os"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"xcloak-ngfw/secrets"
 )
 
-// jwtSecret loads the JWT signing key from JWT_SECRET env var.
-// Panics on startup if not set — intentional, fail-fast is safer than running
-// with a predictable secret.
-func jwtSecret() []byte {
-	s := os.Getenv("JWT_SECRET")
-	if s == "" {
-		panic("JWT_SECRET environment variable is not set — refusing to start. " +
-			"Generate one with: openssl rand -hex 32")
-	}
-	if len(s) < 32 {
-		panic(fmt.Sprintf("JWT_SECRET is too short (%d chars) — minimum 32 characters required", len(s)))
-	}
-	return []byte(s)
-}
+// JwtSecret returns the JWT signing key — Vault KV at
+// secret/data/xcloak/backend#jwt_secret when Vault is configured, else the
+// JWT_SECRET env var. Panics if neither yields at least 32 chars: a
+// predictable signing key is worse than refusing to start.
+//
+// Resolved lazily (sync.Once) rather than at package-var-init time: package
+// vars initialize before main() runs godotenv.Load()/secrets.Init(), so an
+// eager init here would always miss a .env-file-only JWT_SECRET and silently
+// fall back to a hardcoded dev secret — which is exactly the bug this
+// lazy-and-cached form fixes (the previous package-var-IIFE had this name
+// and intent but ran too early to ever see the resolved value).
+var (
+	jwtSecretOnce  sync.Once
+	jwtSecretValue []byte
+)
 
-// JwtSecret is the package-level accessor used by middleware.
-// Evaluated once at first call (after env is loaded).
-var JwtSecret = func() []byte {
-	// Lazy init so tests can set the env var before first use.
-	s := os.Getenv("JWT_SECRET")
-	if s == "" {
-		// Fallback warning — development only.
-		fmt.Println("[WARN] JWT_SECRET not set — using insecure default. DO NOT use in production.")
-		return []byte("dev-insecure-secret-change-me-in-production-32c")
-	}
-	return []byte(s)
-}()
+func JwtSecret() []byte {
+	jwtSecretOnce.Do(func() {
+		s := secrets.Resolve("JWT_SECRET", "xcloak/backend", "jwt_secret")
+		if len(s) < 32 {
+			panic(fmt.Sprintf(
+				"JWT secret missing or too short (%d chars, need >=32) — set JWT_SECRET "+
+					"or a Vault secret/data/xcloak/backend#jwt_secret. Generate one with: openssl rand -hex 32",
+				len(s)))
+		}
+		jwtSecretValue = []byte(s)
+	})
+	return jwtSecretValue
+}
 
 func GenerateJWT(userID int, username, role string, tenantID int, isPlatformAdmin bool) (string, error) {
 	claims := jwt.MapClaims{
@@ -47,7 +51,7 @@ func GenerateJWT(userID int, username, role string, tenantID int, isPlatformAdmi
 		"exp":               time.Now().Add(8 * time.Hour).Unix(), // 8h — reduced from 24h
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JwtSecret)
+	return token.SignedString(JwtSecret())
 }
 
 // GenerateRefreshToken issues a longer-lived refresh token (7 days).
@@ -63,5 +67,5 @@ func GenerateRefreshToken(userID int, username, role string, tenantID int) (stri
 		"exp":       time.Now().Add(7 * 24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JwtSecret)
+	return token.SignedString(JwtSecret())
 }

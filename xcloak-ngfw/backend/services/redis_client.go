@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/redis/go-redis/v9"
+
+	"xcloak-ngfw/secrets"
 )
 
 // RDB is the shared Redis client used for state that must survive a backend
@@ -22,6 +24,6 @@ func InitRedis() {
 
 	RDB = redis.NewClient(&redis.Options{
 		Addr:     addr,
-		Password: os.Getenv("REDIS_PASSWORD"),
+		Password: secrets.Resolve("REDIS_PASSWORD", "xcloak/backend", "redis_password"),
 	})
 }

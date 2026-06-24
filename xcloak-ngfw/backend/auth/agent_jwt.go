@@ -16,5 +16,5 @@ func GenerateAgentJWT(agentID int) (string, error) {
 		"exp":      time.Now().Add(90 * 24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JwtSecret)
+	return token.SignedString(JwtSecret())
 }

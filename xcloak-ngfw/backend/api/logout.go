@@ -22,7 +22,7 @@ func Logout(c *gin.Context) {
 
 	// Parse to get expiry time for blacklist TTL.
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-		return auth.JwtSecret, nil
+		return auth.JwtSecret(), nil
 	})
 
 	expiry := time.Now().Add(8 * time.Hour) // fallback

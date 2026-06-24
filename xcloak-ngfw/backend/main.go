@@ -8,11 +8,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/joho/godotenv"
+
 	"xcloak-ngfw/api"
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/middleware"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/routes"
+	"xcloak-ngfw/secrets"
 	"xcloak-ngfw/services"
 )
 
@@ -35,6 +38,22 @@ func loadAllowedOrigins() {
 }
 
 func main() {
+
+	godotenv.Load()
+
+	// Vault is optional (same BYO-infra pattern as Kafka/MinIO): Init no-ops
+	// if VAULT_ADDR isn't set. Must run before database.Connect/InitRedis/
+	// auth.JwtSecret's first call, since those Resolve() secrets through it.
+	if err := secrets.Init(); err != nil {
+		panic(err)
+	}
+	if err := secrets.EnsureTransitKey(services.TOTPTransitKey); err != nil {
+		// Non-fatal at startup (the API should still serve everything else),
+		// but every Setup2FA/Verify2FA/Disable2FA call will 500 until this is
+		// fixed — encryption failing loudly beats silently storing 2FA
+		// secrets in plaintext.
+		log.Println("[Vault] could not ensure TOTP transit key, 2FA endpoints will fail until resolved:", err)
+	}
 
 	err := database.Connect()
 	if err != nil {
@@ -131,10 +150,17 @@ func main() {
 	keyFile := os.Getenv("TLS_KEY_FILE")
 	if certFile != "" && keyFile != "" {
 		log.Println("XCloak API Running (TLS)")
-		router.RunTLS(":8443", certFile, keyFile)
+		if err := router.RunTLS(":8443", certFile, keyFile); err != nil {
+			log.Fatal("server exited: ", err)
+		}
 		return
 	}
 
 	log.Println("XCloak API Running")
-	router.Run(":8080")
+	if err := router.Run(":8080"); err != nil {
+		// Was previously discarded — a port already in use (e.g. a stale
+		// process from a prior run) made the process exit silently right
+		// after printing every other startup log, looking deceptively healthy.
+		log.Fatal("server exited: ", err)
+	}
 }

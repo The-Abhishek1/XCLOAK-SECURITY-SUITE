@@ -23,11 +23,17 @@ func Setup2FA(c *gin.Context) {
 		return
 	}
 
+	storedSecret, err := services.EncryptTOTPSecret(secret)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to encrypt secret"})
+		return
+	}
+
 	// Save secret (unverified until user confirms first code)
 	_, err = database.DB.Exec(`
 		UPDATE users SET totp_secret=$1, totp_enabled=FALSE, totp_verified=FALSE
 		WHERE id=$2
-	`, secret, userID)
+	`, storedSecret, userID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -56,12 +62,18 @@ func Verify2FA(c *gin.Context) {
 	}
 
 	// Get stored secret
-	var secret string
+	var storedSecret string
 	err := database.DB.QueryRow(
 		`SELECT COALESCE(totp_secret,'') FROM users WHERE id=$1`, userID,
-	).Scan(&secret)
-	if err != nil || secret == "" {
+	).Scan(&storedSecret)
+	if err != nil || storedSecret == "" {
 		c.JSON(400, gin.H{"error": "2FA setup not initiated — call /api/auth/2fa/setup first"})
+		return
+	}
+
+	secret, err := services.DecryptTOTPSecret(storedSecret)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to decrypt secret"})
 		return
 	}
 
@@ -96,11 +108,17 @@ func Disable2FA(c *gin.Context) {
 		return
 	}
 
-	var secret string
+	var storedSecret string
 	if err := database.DB.QueryRow(
 		`SELECT COALESCE(totp_secret,'') FROM users WHERE id=$1`, userID,
-	).Scan(&secret); err != nil {
+	).Scan(&storedSecret); err != nil {
 		c.JSON(401, gin.H{"error": "invalid TOTP code"})
+		return
+	}
+
+	secret, err := services.DecryptTOTPSecret(storedSecret)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to decrypt secret"})
 		return
 	}
 
@@ -200,12 +218,18 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	// Get TOTP secret and the authoritative role from the DB.
-	var secret string
+	var storedSecret string
 	var dbRole string
 	var isPlatformAdmin bool
 	database.DB.QueryRow(
 		`SELECT COALESCE(totp_secret,''), role, is_platform_admin FROM users WHERE id=$1`, userID,
-	).Scan(&secret, &dbRole, &isPlatformAdmin)
+	).Scan(&storedSecret, &dbRole, &isPlatformAdmin)
+
+	secret, err := services.DecryptTOTPSecret(storedSecret)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to decrypt secret"})
+		return
+	}
 
 	if !services.ValidateTOTP(secret, body.Code) {
 		c.JSON(401, gin.H{"error": "invalid authenticator code"})

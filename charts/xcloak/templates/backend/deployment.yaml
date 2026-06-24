@@ -76,6 +76,11 @@ spec:
             - name: MINIO_SECRET_KEY
               valueFrom: { secretKeyRef: { name: {{ .Values.minioExternal.existingSecret }}, key: secretKey } }
             {{- end }}
+
+            {{- if .Values.vault.enabled }}
+            - name: VAULT_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ .Values.vault.existingSecret }}, key: {{ .Values.vault.tokenSecretKey }} } }
+            {{- end }}
           {{- if .Values.backend.tls.enabled }}
           volumeMounts:
             - name: tls

@@ -66,3 +66,7 @@ data:
   TLS_CERT_FILE: /etc/xcloak/tls/tls.crt
   TLS_KEY_FILE: /etc/xcloak/tls/tls.key
   {{- end }}
+
+  {{- if .Values.vault.enabled }}
+  VAULT_ADDR: {{ .Values.vault.addr | quote }}
+  {{- end }}

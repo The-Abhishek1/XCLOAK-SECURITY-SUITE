@@ -10,7 +10,70 @@ import (
 
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/secrets"
 )
+
+// integrationSecretFields lists, per integration name, which config keys
+// hold credential material that belongs in Vault (when configured) rather
+// than the integrations.config jsonb column: OIDC's client_secret, the
+// webhook signing secret, and Slack's webhook URL (itself bearer-style
+// credential material, not just an endpoint).
+//
+// When Vault is disabled these fields simply stay in the jsonb column,
+// exactly as before Vault support existed — see splitIntegrationSecrets/
+// mergeIntegrationSecrets below.
+var integrationSecretFields = map[string][]string{
+	"oidc":    {"client_secret"},
+	"webhook": {"secret"},
+	"slack":   {"webhook_url"},
+}
+
+func integrationVaultPath(tenantID int, name string) string {
+	return fmt.Sprintf("xcloak/tenants/%d/integrations/%s", tenantID, name)
+}
+
+// mergeIntegrationSecrets fills name's secret fields into cfg from Vault.
+// No-op if Vault is disabled (the fields are already in cfg in that case,
+// read straight out of Postgres) or if nothing's been stored yet.
+func mergeIntegrationSecrets(tenantID int, name string, cfg map[string]any) {
+	if !secrets.Enabled() || len(integrationSecretFields[name]) == 0 {
+		return
+	}
+	vaultData, ok := secrets.GetKVMap(integrationVaultPath(tenantID, name))
+	if !ok {
+		return
+	}
+	for _, f := range integrationSecretFields[name] {
+		if v, ok := vaultData[f]; ok {
+			cfg[f] = v
+		}
+	}
+}
+
+// splitIntegrationSecrets removes name's secret fields from cfg and writes
+// them to Vault instead, so they never reach Postgres. No-op (fields stay
+// in cfg, headed for Postgres as before) if Vault is disabled.
+func splitIntegrationSecrets(tenantID int, name string, cfg map[string]any) error {
+	fields := integrationSecretFields[name]
+	if len(fields) == 0 || !secrets.Enabled() {
+		return nil
+	}
+	vaultData := make(map[string]string, len(fields))
+	for _, f := range fields {
+		v, ok := cfg[f]
+		if !ok {
+			continue
+		}
+		if s, ok := v.(string); ok && s != "" {
+			vaultData[f] = s
+		}
+		delete(cfg, f)
+	}
+	if len(vaultData) == 0 {
+		return nil
+	}
+	return secrets.PutKV(integrationVaultPath(tenantID, name), vaultData)
+}
 
 type WebhookPayload struct {
 	Event     string         `json:"event"`
@@ -119,6 +182,12 @@ func deliverWebhook(eventType string, payload WebhookPayload, tenantID int) {
 
 	json.Unmarshal(configRaw, &config)
 
+	if secrets.Enabled() {
+		if v, ok := secrets.GetKV(integrationVaultPath(tenantID, "webhook"), "secret"); ok {
+			config.Secret = v
+		}
+	}
+
 	if config.URL == "" {
 		return
 	}
@@ -164,6 +233,12 @@ func deliverSlack(payload WebhookPayload, tenantID int) {
 	}
 
 	json.Unmarshal(configRaw, &config)
+
+	if secrets.Enabled() {
+		if v, ok := secrets.GetKV(integrationVaultPath(tenantID, "slack"), "webhook_url"); ok {
+			config.WebhookURL = v
+		}
+	}
 
 	if config.WebhookURL == "" {
 		return
@@ -246,6 +321,10 @@ func GetIntegrations(tenantID int) ([]map[string]any, error) {
 		if err := rows.Scan(&name, &enabled, &config, &updatedAt); err == nil {
 			var cfg map[string]any
 			json.Unmarshal(config, &cfg)
+			if cfg == nil {
+				cfg = map[string]any{}
+			}
+			mergeIntegrationSecrets(tenantID, name, cfg)
 			result = append(result, map[string]any{
 				"name":       name,
 				"enabled":    enabled,
@@ -262,6 +341,9 @@ func GetIntegrations(tenantID int) ([]map[string]any, error) {
 // name, so each tenant gets its own row instead of overwriting everyone
 // else's.
 func SaveIntegration(name string, enabled bool, config map[string]any, updatedBy string, tenantID int) error {
+	if err := splitIntegrationSecrets(tenantID, name, config); err != nil {
+		return err
+	}
 	configJSON, _ := json.Marshal(config)
 	_, err := database.DB.Exec(`
 		INSERT INTO integrations (name, enabled, config, updated_by, updated_at, tenant_id)

@@ -10,7 +10,35 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"xcloak-ngfw/secrets"
 )
+
+// TOTPTransitKey is the Vault transit key users.totp_secret is encrypted
+// under. Created idempotently at startup — see secrets.EnsureTransitKey.
+const TOTPTransitKey = "xcloak-totp"
+
+// EncryptTOTPSecret wraps a freshly generated TOTP secret for storage.
+// Returns it unchanged (plaintext) if Vault is disabled — same behavior
+// the column had before Vault support existed.
+func EncryptTOTPSecret(secret string) (string, error) {
+	if !secrets.Enabled() {
+		return secret, nil
+	}
+	return secrets.TransitEncrypt(TOTPTransitKey, secret)
+}
+
+// DecryptTOTPSecret reverses EncryptTOTPSecret. A stored value without the
+// "vault:" envelope prefix is assumed to be a pre-Vault plaintext secret (or
+// Vault is disabled) and is returned as-is — so existing 2FA enrollments
+// keep working across a Vault rollout without forcing every user to
+// re-enroll the moment Vault gets turned on.
+func DecryptTOTPSecret(stored string) (string, error) {
+	if !strings.HasPrefix(stored, "vault:") {
+		return stored, nil
+	}
+	return secrets.TransitDecrypt(TOTPTransitKey, stored)
+}
 
 // GenerateTOTPSecret generates a random base32 secret for TOTP.
 func GenerateTOTPSecret() (string, error) {
