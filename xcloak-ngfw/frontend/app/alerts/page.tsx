@@ -372,11 +372,13 @@ export default function AlertsPage() {
                         if (responseAction === 'quarantine_file' && responseFile)
                           payload.file_path = responseFile;
                         try {
-                          await api.post(`/alerts/${selected.id}/respond`, {
+                          const { data } = await api.post(`/alerts/${selected.id}/respond`, {
                             action_type: responseAction,
                             payload,
                           });
-                          notify(`Dispatched: ${responseAction}`);
+                          notify(data.message === 'task pending approval'
+                            ? `${responseAction} queued for admin approval — see SOAR Approvals`
+                            : `Dispatched: ${responseAction}`);
                         } catch {
                           notify('Dispatch failed');
                         } finally {

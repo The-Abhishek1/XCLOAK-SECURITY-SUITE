@@ -14,7 +14,7 @@ import (
 func CreateAuditLog(action, details, username string) error {
 	_, err := database.DB.Exec(
 		`INSERT INTO audit_logs (action, details, username, tenant_id)
-		 VALUES ($1,$2,$3, COALESCE((SELECT tenant_id FROM users WHERE username=$3), 1))`,
+		 VALUES ($1,$2,$3::varchar, COALESCE((SELECT tenant_id FROM users WHERE username=$3::varchar), 1))`,
 		action, details, username,
 	)
 	return err

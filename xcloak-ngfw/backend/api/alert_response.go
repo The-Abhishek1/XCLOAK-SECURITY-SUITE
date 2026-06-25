@@ -75,18 +75,43 @@ func DispatchAlertResponse(c *gin.Context) {
 	}
 	payloadJSON, _ := json.Marshal(taskPayload)
 
-	err = repositories.CreateTask(models.AgentTask{
+	task := models.AgentTask{
 		AgentID:  agentID,
 		TaskType: body.ActionType,
 		Payload:  payloadJSON,
-	})
+	}
+
+	// Destructive actions go through the same pending_approval gate as
+	// playbook-dispatched ones — a compromised/malicious session hitting
+	// this endpoint directly is no less dangerous than a bad playbook.
+	username, _ := c.Get("username")
+	user := fmt.Sprintf("%v", username)
+	requiresApproval := services.IsDestructiveTask(body.ActionType)
+	if requiresApproval {
+		err = repositories.CreateTaskPendingApproval(task)
+	} else {
+		err = repositories.CreateTask(task)
+	}
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to dispatch task: " + err.Error()})
 		return
 	}
 
-	username, _ := c.Get("username")
-	user := fmt.Sprintf("%v", username)
+	if requiresApproval {
+		services.LogEvent(
+			"MANUAL_RESPONSE_PENDING_APPROVAL",
+			fmt.Sprintf("Alert #%d → %s on agent #%d requested by %s, awaiting approval", alertID, body.ActionType, agentID, user),
+			user,
+		)
+		c.JSON(200, gin.H{
+			"message":  "task pending approval",
+			"action":   body.ActionType,
+			"agent_id": agentID,
+			"alert_id": alertID,
+		})
+		return
+	}
+
 	services.LogEvent(
 		"MANUAL_RESPONSE",
 		fmt.Sprintf("Alert #%d → %s on agent #%d by %s", alertID, body.ActionType, agentID, user),
@@ -94,10 +119,10 @@ func DispatchAlertResponse(c *gin.Context) {
 	)
 
 	c.JSON(200, gin.H{
-		"message":    "task dispatched",
-		"action":     body.ActionType,
-		"agent_id":   agentID,
-		"alert_id":   alertID,
+		"message":  "task dispatched",
+		"action":   body.ActionType,
+		"agent_id": agentID,
+		"alert_id": alertID,
 	})
 }
 

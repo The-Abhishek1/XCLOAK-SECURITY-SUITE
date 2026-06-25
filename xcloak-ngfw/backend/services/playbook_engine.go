@@ -103,12 +103,13 @@ func matchesTrigger(triggerType string, alert models.Alert) bool {
 // action's stored payload with the alert context (so actions like
 // quarantine_file can pick up the matched file path automatically).
 //
-// Destructive action types (see isDestructiveTask) are held as
+// Destructive action types (see IsDestructiveTask) are held as
 // pending_approval instead of being dispatched immediately — ExecutePlaybooks
 // runs with zero human review, so a misconfigured or overly broad trigger
 // could otherwise isolate/kill/quarantine across the whole fleet before
-// anyone notices. Manual dispatch (DispatchAlertResponse, DispatchScript)
-// already has a human clicking the button and isn't affected by this gate.
+// anyone notices. Manual dispatch (DispatchAlertResponse) goes through the
+// same gate, since a compromised/malicious session hitting the API directly
+// is no less dangerous than a bad playbook trigger.
 func dispatchAction(action models.PlaybookAction, alert models.Alert) error {
 
 	// Merge alert context into action payload so the agent has full info.
@@ -120,8 +121,16 @@ func dispatchAction(action models.PlaybookAction, alert models.Alert) error {
 		Payload:  payload,
 	}
 
-	if isDestructiveTask(action.ActionType) {
-		return repositories.CreateTaskPendingApproval(task)
+	if IsDestructiveTask(action.ActionType) {
+		if err := repositories.CreateTaskPendingApproval(task); err != nil {
+			return err
+		}
+		LogEvent(
+			"SOAR_ACTION_PENDING_APPROVAL",
+			fmt.Sprintf("Playbook → %s on agent #%d from alert %q, awaiting approval", action.ActionType, alert.AgentID, alert.RuleName),
+			"system",
+		)
+		return nil
 	}
 	return CreateTask(task)
 }

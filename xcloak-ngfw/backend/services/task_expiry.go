@@ -25,10 +25,11 @@ var destructiveTasks = []string{
 	"execute_script",
 }
 
-// isDestructiveTask reports whether a task type is in destructiveTasks —
-// used by the playbook engine to decide which autonomous SOAR actions need
-// human approval before dispatch.
-func isDestructiveTask(taskType string) bool {
+// IsDestructiveTask reports whether a task type is in destructiveTasks —
+// used by the playbook engine (and the manual alert-response endpoint) to
+// decide which actions need human approval before dispatch, regardless of
+// whether they were triggered autonomously or by a one-click manual action.
+func IsDestructiveTask(taskType string) bool {
 	for _, t := range destructiveTasks {
 		if t == taskType {
 			return true
