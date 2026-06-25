@@ -104,6 +104,11 @@ export const attackPathAPI = {
   get: () => api.get('/attack-path'),
 };
 
+export const networkMapAPI = {
+  get: (sinceMinutes = 60, limit = 5000) =>
+    api.get('/network-map', { params: { since_minutes: sinceMinutes, limit } }),
+};
+
 export const iocsAPI = {
   getAll:     ()                         => api.get('/iocs'),
   getById:    (id: number)               => api.get(`/iocs/${id}`),

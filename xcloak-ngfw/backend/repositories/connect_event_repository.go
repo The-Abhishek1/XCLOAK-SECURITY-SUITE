@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"time"
+
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
@@ -37,6 +39,43 @@ func SaveConnectEvents(events []models.ConnectEvent) error {
 	}
 
 	return tx.Commit()
+}
+
+// GetConnectEventsByTenant returns connect events for every agent in a
+// tenant inserted since `since`, newest first. Filters on created_at (the
+// server-side insert time), not event_ts — event_ts is bpf_ktime_get_ns(),
+// a per-host CLOCK_MONOTONIC nanosecond reading since boot, not a wall-clock
+// timestamp, so it can't be compared across agents or against time.Now().
+// Used to build the fleet-wide network map rather than a single agent's view.
+func GetConnectEventsByTenant(tenantID int, since time.Time, limit int) ([]models.ConnectEvent, error) {
+	if limit <= 0 {
+		limit = 5000
+	}
+
+	rows, err := database.DB.Query(`
+		SELECT id, agent_id, pid, comm, uid, protocol, local_address,
+		       remote_address, state, event_ts, created_at
+		FROM network_connect_events
+		WHERE tenant_id = $1 AND created_at >= $2
+		ORDER BY id DESC
+		LIMIT $3
+	`, tenantID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.ConnectEvent
+	for rows.Next() {
+		var ev models.ConnectEvent
+		if err := rows.Scan(
+			&ev.ID, &ev.AgentID, &ev.PID, &ev.Comm, &ev.UID, &ev.Protocol,
+			&ev.LocalAddress, &ev.RemoteAddress, &ev.State, &ev.EventTS, &ev.CreatedAt,
+		); err == nil {
+			out = append(out, ev)
+		}
+	}
+	return out, nil
 }
 
 // GetConnectEventsByAgent returns the most recent connect events for an

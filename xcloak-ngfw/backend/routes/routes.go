@@ -97,6 +97,9 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Attack path graph ────────────────────────────────────────
 	router.GET("/api/attack-path", middleware.RequireAuth(), api.GetAttackPathGraph)
 
+	// ── Fleet-wide network map ───────────────────────────────────
+	router.GET("/api/network-map", middleware.RequireAuth(), api.GetNetworkMap)
+
 	// ── Incidents ────────────────────────────────────────────────
 	router.GET("/api/incidents", middleware.RequireAuth(), api.GetIncidents)
 	router.GET("/api/incidents/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetIncidentsPaginated)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -152,12 +153,17 @@ func saveGeoIPCache(r *GeoIPResult) {
 	`, r.IP, r.Country, r.CountryCode, r.City, r.ISP, r.IsProxy)
 }
 
+// isPrivateIP reports whether ip is RFC1918/loopback. Uses net.IP.IsPrivate
+// (Go 1.17+) rather than a hand-rolled prefix check — a prior version
+// treated the entire 172.x.x.x/8 as private instead of just the actual
+// RFC1918 slice (172.16.0.0–172.31.255.255), e.g. misclassifying a public
+// IP like 172.64.0.1 (Cloudflare) as internal.
 func isPrivateIP(ip string) bool {
-	return strings.HasPrefix(ip, "10.") ||
-		strings.HasPrefix(ip, "192.168.") ||
-		strings.HasPrefix(ip, "172.") ||
-		strings.HasPrefix(ip, "127.") ||
-		ip == "::1" || ip == "0.0.0.0"
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	return parsed.IsPrivate() || parsed.IsLoopback() || ip == "0.0.0.0"
 }
 
 // GetTopExternalCountries returns the top external countries in connections for an agent.

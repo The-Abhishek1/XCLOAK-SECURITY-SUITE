@@ -191,6 +191,34 @@ export interface AttackPathGraph {
   has_entry_point: boolean;
 }
 
+export interface NetworkMapNode {
+  id: string;
+  type: 'agent' | 'external_ip';
+  agent_id?: number;
+  hostname?: string;
+  ip?: string;
+  zone: 'internal' | 'dmz' | 'external';
+  country?: string;
+  risk_score: number;
+  risk_level: string;
+}
+
+export interface NetworkMapEdge {
+  source: string;
+  target: string;
+  protocol: string;
+  port: string;
+  process: string;
+  count: number;
+  last_seen: string;
+}
+
+export interface NetworkMapGraph {
+  nodes: NetworkMapNode[];
+  edges: NetworkMapEdge[];
+  generated_at: string;
+}
+
 export interface TimelineEvent {
   id?: number;
   event_type: string;
