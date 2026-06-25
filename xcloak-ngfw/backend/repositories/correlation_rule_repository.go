@@ -6,22 +6,35 @@ import (
 	"xcloak-ngfw/database"
 )
 
+// CorrelationStage is one step of a temporal/temporal_ordered rule's chain.
+// SourceType selects what kind of data Pattern is matched against — see
+// stageMatchTime in services/correlation_service.go for the per-type
+// matching logic. "alert" (the default/zero value) preserves the original
+// rule_name-substring-on-alerts behavior every pre-existing stage row has.
+type CorrelationStage struct {
+	Pattern    string
+	SourceType string // "alert" | "vulnerability" | "network_connect" | "risk_score"
+}
+
 // EnabledCorrelationRule is the subset of correlation_rules columns the
 // evaluator needs. Stages is only populated for "temporal"/"temporal_ordered"
 // rule types (see CorrelationType) — "simple" and "event_count" rules use
-// the single Severity/RuleName/MitreTechnique/AgentID condition instead.
+// the single Severity/RuleName/MitreTechnique/AgentID/SourceType/
+// ConditionValue condition instead.
 type EnabledCorrelationRule struct {
-	ID               int
-	Severity         string
-	RuleName         string
-	MitreTechnique   string
-	AgentID          int
-	Action           string
-	PlaybookID       int
-	CorrelationType  string // "simple" | "event_count" | "temporal" | "temporal_ordered"
-	WindowMinutes    int
-	Threshold        int
-	Stages           []string // ordered rule_name patterns, for temporal types
+	ID              int
+	Severity        string
+	RuleName        string
+	MitreTechnique  string
+	AgentID         int
+	Action          string
+	PlaybookID      int
+	CorrelationType string // "simple" | "event_count" | "temporal" | "temporal_ordered"
+	WindowMinutes   int
+	Threshold       int
+	SourceType      string // "alert" | "vulnerability" | "network_connect" | "risk_score" — simple/event_count only
+	ConditionValue  string // generic pattern/threshold, used when SourceType != "alert"
+	Stages          []CorrelationStage
 }
 
 // GetEnabledCorrelationRules returns every enabled correlation rule for a
@@ -29,7 +42,8 @@ type EnabledCorrelationRule struct {
 func GetEnabledCorrelationRules(tenantID int) ([]EnabledCorrelationRule, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, severity, rule_name, mitre_technique, agent_id, action,
-		       COALESCE(playbook_id, 0), correlation_type, window_minutes, threshold
+		       COALESCE(playbook_id, 0), correlation_type, window_minutes, threshold,
+		       source_type, condition_value
 		FROM correlation_rules
 		WHERE tenant_id = $1 AND enabled = true
 	`, tenantID)
@@ -42,7 +56,8 @@ func GetEnabledCorrelationRules(tenantID int) ([]EnabledCorrelationRule, error) 
 	for rows.Next() {
 		var r EnabledCorrelationRule
 		if err := rows.Scan(&r.ID, &r.Severity, &r.RuleName, &r.MitreTechnique, &r.AgentID, &r.Action,
-			&r.PlaybookID, &r.CorrelationType, &r.WindowMinutes, &r.Threshold); err != nil {
+			&r.PlaybookID, &r.CorrelationType, &r.WindowMinutes, &r.Threshold,
+			&r.SourceType, &r.ConditionValue); err != nil {
 			return nil, err
 		}
 		rules = append(rules, r)
@@ -64,10 +79,10 @@ func GetEnabledCorrelationRules(tenantID int) ([]EnabledCorrelationRule, error) 
 	return rules, nil
 }
 
-// GetCorrelationRuleStages returns a rule's ordered stage patterns.
-func GetCorrelationRuleStages(ruleID int) ([]string, error) {
+// GetCorrelationRuleStages returns a rule's ordered stages (pattern + source type).
+func GetCorrelationRuleStages(ruleID int) ([]CorrelationStage, error) {
 	rows, err := database.DB.Query(`
-		SELECT rule_name_pattern FROM correlation_rule_stages
+		SELECT rule_name_pattern, source_type FROM correlation_rule_stages
 		WHERE rule_id = $1 ORDER BY stage_order ASC
 	`, ruleID)
 	if err != nil {
@@ -75,10 +90,10 @@ func GetCorrelationRuleStages(ruleID int) ([]string, error) {
 	}
 	defer rows.Close()
 
-	var stages []string
+	var stages []CorrelationStage
 	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
+		var s CorrelationStage
+		if err := rows.Scan(&s.Pattern, &s.SourceType); err != nil {
 			return nil, err
 		}
 		stages = append(stages, s)
@@ -89,7 +104,7 @@ func GetCorrelationRuleStages(ruleID int) ([]string, error) {
 // ReplaceCorrelationRuleStages deletes and re-inserts a rule's stage list —
 // used on both create and update so editing a temporal rule's stages is a
 // single atomic replace rather than a diff.
-func ReplaceCorrelationRuleStages(ruleID int, stages []string) error {
+func ReplaceCorrelationRuleStages(ruleID int, stages []CorrelationStage) error {
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return err
@@ -99,16 +114,22 @@ func ReplaceCorrelationRuleStages(ruleID int, stages []string) error {
 	if _, err := tx.Exec(`DELETE FROM correlation_rule_stages WHERE rule_id = $1`, ruleID); err != nil {
 		return err
 	}
-	for i, pattern := range stages {
-		if pattern == "" {
+	i := 0
+	for _, stage := range stages {
+		if stage.Pattern == "" {
 			continue
 		}
+		sourceType := stage.SourceType
+		if sourceType == "" {
+			sourceType = "alert"
+		}
 		if _, err := tx.Exec(`
-			INSERT INTO correlation_rule_stages (rule_id, stage_order, rule_name_pattern)
-			VALUES ($1, $2, $3)
-		`, ruleID, i, pattern); err != nil {
+			INSERT INTO correlation_rule_stages (rule_id, stage_order, rule_name_pattern, source_type)
+			VALUES ($1, $2, $3, $4)
+		`, ruleID, i, stage.Pattern, sourceType); err != nil {
 			return err
 		}
+		i++
 	}
 	return tx.Commit()
 }

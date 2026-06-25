@@ -1,15 +1,26 @@
 package repositories
 
 import (
+	"errors"
+
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
 
-// CreateIncident inserts a new incident. tenant_id is resolved from the
-// owning agent rather than incident.TenantID — CreateIncident is called from
-// the correlation engine, which only carries agent_id, and the agent is the
-// single source of truth for which tenant an incident belongs to (matches
-// CreateAlert's pattern).
+// errIncidentAlreadyExists signals CreateIncident's dedup hit (fingerprint
+// fired within the last hour) — every existing caller already treats a
+// non-nil error here as "go look up the existing incident," so this reuses
+// that path instead of needing callers to special-case it.
+var errIncidentAlreadyExists = errors.New("incident already exists for fingerprint")
+
+// CreateIncident inserts a new incident, or returns the existing one's ID
+// if the fingerprint already fired within the dedup window (IncidentExists).
+// Every caller distinguishes "new" vs "existing" by checking err != nil —
+// returning (0, nil) for the existing case used to break that contract:
+// callers took the "new incident" branch on a nil error regardless, firing
+// incident_created playbooks again and logging a timeline event against a
+// nonexistent incident #0 on every repeat. Resolving the real ID here means
+// callers can't get this wrong even if they assume err!=nil means "exists".
 func CreateIncident(
 	incident models.Incident,
 ) (int, error) {
@@ -17,7 +28,11 @@ func CreateIncident(
 	if IncidentExists(
 		incident.Fingerprint,
 	) {
-		return 0, nil
+		existingID, err := GetIncidentIDByFingerprint(incident.Fingerprint)
+		if err != nil {
+			return 0, err
+		}
+		return existingID, errIncidentAlreadyExists
 	}
 
 	var incidentID int

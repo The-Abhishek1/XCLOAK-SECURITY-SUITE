@@ -250,6 +250,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/correlation/rules/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.UpdateCorrelationRule)
 	router.PATCH("/api/correlation/rules/:id/toggle", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.ToggleCorrelationRule)
 	router.DELETE("/api/correlation/rules/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.DeleteCorrelationRule)
+	router.GET("/api/correlation/matches", middleware.RequireAuth(), api.GetCorrelationMatches)
 	router.GET("/api/hunt/run", middleware.RequireAuth(), api.RunHunt)
 	router.POST("/api/hunt/run", middleware.RequireAuth(), api.RunHunt)
 	router.GET("/api/hunt/queries", middleware.RequireAuth(), api.GetHuntQueries)

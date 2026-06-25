@@ -40,29 +40,54 @@ func ExecutePlaybooks(alert models.Alert) {
 		}
 
 		fmt.Printf("SOAR: playbook %q triggered (trigger=%q)\n", playbook.Name, playbook.TriggerType)
+		runPlaybookActions(playbook, alert)
+	}
+}
 
-		actions, err := repositories.GetPlaybookActions(playbook.ID)
+// ExecutePlaybookByID runs a specific playbook's actions directly, bypassing
+// trigger matching entirely — used when something already knows which
+// playbook should run (a correlation rule naming a playbook explicitly)
+// rather than relying on alert_critical/alert_high/etc trigger evaluation.
+// A nonexistent or disabled playbook is a no-op, not an error worth
+// surfacing — the caller fired because its own conditions matched; a
+// missing/disabled playbook link shouldn't block the rest of that flow.
+func ExecutePlaybookByID(playbookID, tenantID int, alert models.Alert) error {
+	playbook, err := repositories.GetPlaybookByID(playbookID, tenantID)
+	if err != nil {
+		return nil
+	}
+	if !playbook.Enabled {
+		return nil
+	}
+	runPlaybookActions(*playbook, alert)
+	return nil
+}
+
+// runPlaybookActions loads and dispatches every action for playbook against
+// alert, logging each one — the shared inner loop for both trigger-matched
+// (ExecutePlaybooks) and directly-named (ExecutePlaybookByID) execution.
+func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
+	actions, err := repositories.GetPlaybookActions(playbook.ID)
+	if err != nil {
+		fmt.Printf("SOAR: failed to load actions for playbook %d: %v\n", playbook.ID, err)
+		return
+	}
+
+	for _, action := range actions {
+
+		err := dispatchAction(action, alert)
+
+		status := "success"
+		errDetail := ""
 		if err != nil {
-			fmt.Printf("SOAR: failed to load actions for playbook %d: %v\n", playbook.ID, err)
-			continue
+			status = "failed"
+			errDetail = err.Error()
+			fmt.Printf("SOAR: action %q failed: %v\n", action.ActionType, err)
+		} else {
+			fmt.Printf("SOAR: action %q dispatched for agent %d\n", action.ActionType, alert.AgentID)
 		}
 
-		for _, action := range actions {
-
-			err := dispatchAction(action, alert)
-
-			status := "success"
-			errDetail := ""
-			if err != nil {
-				status = "failed"
-				errDetail = err.Error()
-				fmt.Printf("SOAR: action %q failed: %v\n", action.ActionType, err)
-			} else {
-				fmt.Printf("SOAR: action %q dispatched for agent %d\n", action.ActionType, alert.AgentID)
-			}
-
-			logPlaybookExecution(playbook, action, alert, status, errDetail)
-		}
+		logPlaybookExecution(playbook, action, alert, status, errDetail)
 	}
 }
 

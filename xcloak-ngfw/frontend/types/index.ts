@@ -184,6 +184,19 @@ export interface RankedAttackPath {
   score: number;
 }
 
+export interface CorrelationMatch {
+  id: number;
+  rule_id: number;
+  rule_name: string;
+  agent_id: number;
+  hostname: string;
+  trigger_alert_id?: number;
+  incident_id?: number;
+  confidence: number;
+  detail: string;
+  matched_at: string;
+}
+
 export interface AttackPathGraph {
   nodes: AttackPathNode[];
   edges: AttackPathEdge[];
