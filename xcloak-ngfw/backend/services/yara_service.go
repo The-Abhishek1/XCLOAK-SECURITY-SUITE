@@ -1,6 +1,8 @@
 package services
 
 import (
+	"fmt"
+
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
@@ -19,6 +21,14 @@ func SaveYaraMatches(
 
 	for _, match := range matches {
 
+		logMessage := fmt.Sprintf("%s matched on %s", match.RuleName, match.FilePath)
+		if match.FileHash != "" {
+			logMessage += fmt.Sprintf(" (sha256 %s)", match.FileHash)
+		}
+		if match.Description != "" {
+			logMessage += ": " + match.Description
+		}
+
 		alert := models.Alert{
 			AgentID: match.AgentID,
 
@@ -26,7 +36,7 @@ func SaveYaraMatches(
 
 			RuleName: "YARA Match",
 
-			LogMessage: match.FilePath,
+			LogMessage: logMessage,
 
 			MitreTactic: "Execution",
 
@@ -39,9 +49,12 @@ func SaveYaraMatches(
 				match.FilePath,
 		}
 
+		// CreateAlert already fires CorrelateAlert itself (in a goroutine,
+		// see alert_service.go) — a second explicit call here used to
+		// double-run every correlation rule for every single YARA match
+		// (double-counting event_count rules, double-attempting incident
+		// creation).
 		CreateAlert(alert)
-
-		CorrelateAlert(alert)
 	}
 
 	return nil

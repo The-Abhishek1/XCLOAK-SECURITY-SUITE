@@ -22,13 +22,33 @@ func CreateTask(task models.AgentTask) error {
 	return nil
 }
 
+// GetPendingTasks returns an agent's pending tasks and immediately marks
+// each as "running". repositories.GetPendingTasks only ever selects
+// status='pending'; without flipping it here, a task whose execution takes
+// longer than the agent's poll interval (any recursive scan — e.g. a
+// fleet-wide YARA sweep, or fim_scan over a large tree) stays 'pending'
+// until the goroutine running it finally submits a result, so the next
+// poll fetches and re-dispatches the same task concurrently. Confirmed
+// live: a YARA scan_yara task against /bin,/usr/bin,etc took longer than
+// the 15s poll interval and was executed twice, submitting duplicate
+// results — repositories.MarkTaskRunning already existed for exactly this
+// but was never called anywhere.
 func GetPendingTasks(
 	agentID string,
 ) ([]models.AgentTask, error) {
 
-	return repositories.GetPendingTasks(
+	tasks, err := repositories.GetPendingTasks(
 		agentID,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, t := range tasks {
+		_ = repositories.MarkTaskRunning(t.ID)
+	}
+
+	return tasks, nil
 }
 
 func CompleteTask(

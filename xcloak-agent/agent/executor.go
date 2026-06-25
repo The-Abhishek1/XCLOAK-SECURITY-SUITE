@@ -97,9 +97,8 @@ func runTask(task models.AgentTask) string {
 		if err := json.Unmarshal(task.Payload, &payload); err != nil {
 			return "invalid scan_yara payload: " + err.Error()
 		}
-		if payload.Path == "" {
-			return "missing path in payload"
-		}
+		// Empty path means "scan default targets" (scheduled/automatic
+		// scans dispatch with payload {}) — see ScanWithYara.
 		matches := ScanWithYara(task.AgentID, payload.Path)
 		SendYaraMatches(matches)
 		return fmt.Sprintf("YARA matches found: %d", len(matches))

@@ -3,9 +3,24 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { yaraAPI } from '@/lib/api';
+import api from '@/lib/api';
 import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
-import { Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2, Upload, CheckCircle } from 'lucide-react';
+import {
+  Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2, Upload, CheckCircle,
+  ChevronDown, ChevronUp, Clock, Hash,
+} from 'lucide-react';
+
+interface MatchedString { identifier: string; offset: string; data: string; }
+
+interface ScheduledTaskLite {
+  id: number;
+  name: string;
+  task_type: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
 
 const emptyRule = {
   name: '',
@@ -40,19 +55,43 @@ export default function YaraRulesPage() {
   const [showEdit, setShowEdit] = useState<YaraRule | null>(null);
   const [form, setForm]       = useState({ ...emptyRule });
   const [saving, setSaving]   = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [scheduledScan, setScheduledScan] = useState<ScheduledTaskLite | null>(null);
+  const [scheduling, setScheduling] = useState(false);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
-    const [rr, mr] = await Promise.allSettled([yaraAPI.getAll(), yaraAPI.getMatches()]);
+    const [rr, mr, sr] = await Promise.allSettled([
+      yaraAPI.getAll(), yaraAPI.getMatches(), api.get('/scheduler/tasks'),
+    ]);
     if (rr.status === 'fulfilled') setRules(rr.value.data || []);
     if (mr.status === 'fulfilled') setMatches(mr.value.data || []);
+    if (sr.status === 'fulfilled') {
+      const found = (sr.value.data || []).find((t: ScheduledTaskLite) => t.task_type === 'scan_yara');
+      setScheduledScan(found || null);
+    }
     setLoading(false);
     setRefreshing(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const enablePeriodicScan = async () => {
+    setScheduling(true);
+    try {
+      const r = await api.post('/scheduler/tasks', {
+        name: 'Periodic YARA Scan',
+        task_type: 'scan_yara',
+        cron_expr: '0 */6 * * *',
+        payload: {},
+      });
+      setScheduledScan(r.data);
+      notify('Periodic scan enabled — runs every 6 hours against default targets');
+    } catch { notify('Failed to schedule periodic scan'); }
+    finally { setScheduling(false); }
+  };
 
   const add = async () => {
     if (!form.name.trim() || !form.rule_content.trim()) return;
@@ -106,7 +145,7 @@ export default function YaraRulesPage() {
                   const form = new FormData();
                   files.forEach(f => form.append('rules', f));
                   try {
-                    const r = await (await import('@/lib/api')).default.post('/yara/import', form, {
+                    const r = await api.post('/yara/import', form, {
                       headers: { 'Content-Type': 'multipart/form-data' },
                     });
                     notify(r.data?.message || 'Imported');
@@ -119,7 +158,19 @@ export default function YaraRulesPage() {
               <Plus className="h-3.5 w-3.5" /> New Rule
             </button>
           </div>
-        ) : undefined
+        ) : (
+          scheduledScan ? (
+            <a href="/scheduled-tasks" className="g-btn g-btn-ghost text-xs">
+              <Clock className="h-3.5 w-3.5" style={{ color: scheduledScan.enabled ? 'var(--green)' : 'var(--text-3)' }} />
+              Periodic scan {scheduledScan.enabled ? 'active' : 'paused'}
+              {scheduledScan.last_run_at && <span style={{ color: 'var(--text-3)' }}>· last run {timeAgo(scheduledScan.last_run_at)}</span>}
+            </a>
+          ) : (
+            <button onClick={enablePeriodicScan} disabled={scheduling} className="g-btn g-btn-ghost text-xs">
+              <Clock className="h-3.5 w-3.5" /> {scheduling ? 'Enabling…' : 'Enable Periodic Scan'}
+            </button>
+          )
+        )
       }>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 200 }}>{toast}</div>}
@@ -199,26 +250,55 @@ export default function YaraRulesPage() {
         {/* MATCHES TAB */}
         {tab === 'matches' && (
           <div className="g-table">
-            <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '24px 100px 1fr 1fr 100px' }}>
-              <span /><span>Agent</span><span>Rule</span><span>File Path</span><span>Detected</span>
+            <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '90px 70px 1fr 1fr 100px 20px' }}>
+              <span>Agent</span><span>Severity</span><span>Rule</span><span>File Path</span><span>Detected</span><span />
             </div>
             {loading ? (
               <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
             ) : matches.length === 0 ? (
               <div className="py-16 text-center">
                 <FileWarning className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
-                <p className="text-sm" style={{ color: 'var(--text-2)' }}>No YARA matches yet. Dispatch a &quot;YARA Scan&quot; task from an agent&apos;s page.</p>
+                <p className="text-sm" style={{ color: 'var(--text-2)' }}>No YARA matches yet. Dispatch a &quot;YARA Scan&quot; task from an agent&apos;s page, or enable periodic scanning above.</p>
               </div>
-            ) : matches.map(m => (
-              <div key={m.id} className="g-tr grid gap-3 items-center px-4"
-                style={{ gridTemplateColumns: '24px 100px 1fr 1fr 100px' }}>
-                <span className="h-2 w-2 rounded-full" style={{ background: 'var(--red)' }} />
-                <span className="text-xs" style={{ color: 'var(--text-2)' }}>#{m.agent_id}</span>
-                <span className="mono text-xs font-medium" style={{ color: 'var(--accent)' }}>{m.rule_name}</span>
-                <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{m.file_path}</span>
-                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(m.created_at)}</span>
-              </div>
-            ))}
+            ) : matches.map(m => {
+              let parsedStrings: MatchedString[] = [];
+              try { parsedStrings = JSON.parse(m.matched_strings || '[]'); } catch { /* old rows, malformed JSON */ }
+              const expanded = expandedId === m.id;
+              return (
+                <div key={m.id}>
+                  <div className="g-tr grid gap-3 items-center px-4 cursor-pointer"
+                    onClick={() => setExpandedId(expanded ? null : m.id)}
+                    style={{ gridTemplateColumns: '90px 70px 1fr 1fr 100px 20px' }}>
+                    <span className="text-xs" style={{ color: 'var(--text-2)' }}>#{m.agent_id}</span>
+                    <span className={sevClass(m.severity)}>{m.severity}</span>
+                    <span className="mono text-xs font-medium" style={{ color: 'var(--accent)' }}>{m.rule_name}</span>
+                    <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{m.file_path}</span>
+                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(m.created_at)}</span>
+                    {expanded ? <ChevronUp className="h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} /> : <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />}
+                  </div>
+                  {expanded && (
+                    <div className="px-4 pb-3 pt-1 space-y-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <p className="text-xs" style={{ color: 'var(--text-2)' }}>{m.description}</p>
+                      {m.file_hash && (
+                        <p className="text-[11px] mono flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                          <Hash className="h-3 w-3" /> {m.file_hash}
+                        </p>
+                      )}
+                      {parsedStrings.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Matched Strings</p>
+                          {parsedStrings.map((s, i) => (
+                            <p key={i} className="text-[11px] mono" style={{ color: 'var(--text-2)' }}>
+                              <span style={{ color: 'var(--accent)' }}>{s.identifier}</span> @ {s.offset}: <span style={{ color: 'var(--text-1)' }}>{s.data}</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -83,6 +83,8 @@ export interface YaraMatch {
   rule_name: string;
   severity: string;
   description: string;
+  matched_strings: string;
+  file_hash: string;
   created_at: string;
 }
 export interface IOC {

@@ -21,15 +21,19 @@ func SaveYaraMatches(matches []models.YaraMatch) error {
 				rule_name,
 				severity,
 				description,
+				matched_strings,
+				file_hash,
 				tenant_id
 			)
-			VALUES ($1,$2,$3,$4,$5, (SELECT tenant_id FROM agents WHERE id = $1))
+			VALUES ($1,$2,$3,$4,$5,$6,$7, (SELECT tenant_id FROM agents WHERE id = $1))
 		`,
 			match.AgentID,
 			match.FilePath,
 			match.RuleName,
 			match.Severity,
 			match.Description,
+			match.MatchedStrings,
+			match.FileHash,
 		)
 
 		if err != nil {
@@ -49,7 +53,7 @@ func GetYaraMatches(agentID string, tenantID int) ([]models.YaraMatch, error) {
 
 	if agentID != "" {
 		rows, err = database.DB.Query(`
-			SELECT id, agent_id, file_path, rule_name, severity, description, tenant_id, created_at
+			SELECT id, agent_id, file_path, rule_name, severity, description, matched_strings, file_hash, tenant_id, created_at
 			FROM yara_matches
 			WHERE agent_id = $1 AND tenant_id = $2
 			ORDER BY id DESC
@@ -57,7 +61,7 @@ func GetYaraMatches(agentID string, tenantID int) ([]models.YaraMatch, error) {
 		`, agentID, tenantID)
 	} else {
 		rows, err = database.DB.Query(`
-			SELECT id, agent_id, file_path, rule_name, severity, description, tenant_id, created_at
+			SELECT id, agent_id, file_path, rule_name, severity, description, matched_strings, file_hash, tenant_id, created_at
 			FROM yara_matches
 			WHERE tenant_id = $1
 			ORDER BY id DESC
@@ -74,7 +78,8 @@ func GetYaraMatches(agentID string, tenantID int) ([]models.YaraMatch, error) {
 
 	for rows.Next() {
 		var m models.YaraMatch
-		if err := rows.Scan(&m.ID, &m.AgentID, &m.FilePath, &m.RuleName, &m.Severity, &m.Description, &m.TenantID, &m.CreatedAt); err == nil {
+		if err := rows.Scan(&m.ID, &m.AgentID, &m.FilePath, &m.RuleName, &m.Severity, &m.Description,
+			&m.MatchedStrings, &m.FileHash, &m.TenantID, &m.CreatedAt); err == nil {
 			matches = append(matches, m)
 		}
 	}

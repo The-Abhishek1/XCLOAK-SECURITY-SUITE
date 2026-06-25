@@ -59,13 +59,18 @@ func ExpireStaleTasks() {
 		}
 	}
 
-	// Expire destructive tasks after 15 minutes.
+	// Expire destructive tasks after 15 minutes. Covers 'running' as well as
+	// 'pending' — GetPendingTasks now flips a fetched task to 'running'
+	// immediately (see task_service.go), so a task whose agent died or lost
+	// connectivity mid-execution would otherwise sit in 'running' forever,
+	// since this query used to be the only thing that ever moved a task out
+	// of a non-terminal status.
 	destructiveList := "'" + joinStrings(destructiveTasks, "','") + "'"
 	res, err = database.DB.Exec(fmt.Sprintf(`
 		UPDATE agent_tasks
 		SET status = 'expired',
 		    result = 'Task expired: agent was offline too long for this destructive action'
-		WHERE status = 'pending'
+		WHERE status IN ('pending', 'running')
 		  AND task_type IN (%s)
 		  AND created_at < NOW() - INTERVAL '%d minutes'
 	`, destructiveList, int(destructiveTaskTTL.Minutes())))
@@ -76,12 +81,12 @@ func ExpireStaleTasks() {
 		}
 	}
 
-	// Expire all other tasks after 1 hour.
+	// Expire all other tasks after 1 hour — same 'running' reasoning as above.
 	res, err = database.DB.Exec(fmt.Sprintf(`
 		UPDATE agent_tasks
 		SET status = 'expired',
 		    result = 'Task expired: agent did not pick up within %d minutes'
-		WHERE status = 'pending'
+		WHERE status IN ('pending', 'running')
 		  AND task_type NOT IN (%s)
 		  AND created_at < NOW() - INTERVAL '%d minutes'
 	`, int(defaultTaskTTL.Minutes()), destructiveList, int(defaultTaskTTL.Minutes())))
