@@ -8,6 +8,7 @@ import (
 	"xcloak-ngfw/services"
 )
 
+
 func CreateSigmaRule(
 	c *gin.Context,
 ) {
@@ -261,4 +262,18 @@ func DisableSigmaRule(
 			"message": "Rule Disabled",
 		},
 	)
+}
+
+// GetSigmaStats — GET /api/sigma/stats
+// Returns hit count and last-matched-at per rule for the calling tenant.
+func GetSigmaStats(c *gin.Context) {
+	stats, err := services.GetSigmaStats(tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if stats == nil {
+		stats = []repositories.SigmaRuleStat{}
+	}
+	c.JSON(200, stats)
 }

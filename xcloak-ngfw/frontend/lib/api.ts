@@ -143,6 +143,8 @@ export const sigmaAPI = {
   enable:   (id: number)            => api.patch(`/sigma/rules/${id}/enable`),
   disable:  (id: number)            => api.patch(`/sigma/rules/${id}/disable`),
   test:     (data: { message: string }) => api.post('/sigma/rules/test', data),
+  import:   (form: FormData)        => api.post('/sigma/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  stats:    ()                      => api.get('/sigma/stats'),
 };
 
 export const tasksAPI = {

@@ -1,67 +1,132 @@
 package services
 
 import (
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf16"
 
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MatchSigmaRule evaluates a single Sigma-lite rule against a log entry.
-//
-// Detection model:
-//   1. Field-level selections (new): each keyword in a selection can be
-//      "field:value" for field-level matching, "field|contains:value" for
-//      substring, or a plain keyword for message-level matching.
-//   2. Legacy keyword-only rules are preserved with backward compatibility.
-//
-// Examples of field-level keywords (stored in rule.Selections):
-//   "src_ip:10.0.0.1"         — exact match on src_ip field
-//   "src_ip|contains:10.0"    — substring match
-//   "event_id:4625"           — exact match on event_id
-//   "user|contains:admin"     — substring
-//   "auth_result:failure"     — exact
-//   "Failed password"         — plain keyword → checked against log_message
+// EvaluateRules runs every enabled Sigma rule against an incoming log line.
+// If parsed_fields JSON is present, field-level matching is used.
+// Matches that pass logsource filtering are recorded as hits and fire alerts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func EvaluateRules(log models.Log) {
+	rules, err := GetEnabledSigmaRulesForAgent(log.AgentID)
+	if err != nil {
+		return
+	}
+
+	messageLower := strings.ToLower(log.LogMessage)
+
+	var pf ParsedFields
+	if log.ParsedFields != "" && log.ParsedFields != "{}" {
+		json.Unmarshal([]byte(log.ParsedFields), &pf)
+	}
+
+	for _, rule := range rules {
+		if !ruleMatchesLogsource(rule, pf) {
+			continue
+		}
+		if !matchSigmaRuleWithFields(rule, messageLower, pf) {
+			continue
+		}
+
+		alert := models.Alert{
+			AgentID:        log.AgentID,
+			RuleName:       rule.Title,
+			Severity:       rule.Severity,
+			MitreTactic:    rule.MitreTactic,
+			MitreTechnique: rule.MitreTechnique,
+			MitreName:      rule.MitreName,
+			Fingerprint: fmt.Sprintf("%d-%s", log.AgentID,
+				strings.ReplaceAll(rule.Title, " ", "-")),
+			LogMessage: log.LogMessage,
+		}
+
+		CreateAlert(alert)
+		CorrelateAlert(alert)
+
+		// Record the hit asynchronously — must not block the ingestion pipeline.
+		go func(ruleID, agentID int) {
+			tenantID, _ := repositories.GetTenantIDByAgentID(agentID)
+			repositories.RecordSigmaHit(ruleID, agentID, tenantID)
+		}(rule.ID, log.AgentID)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Logsource matching
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ruleMatchesLogsource returns false only when the rule has an explicit product
+// or service constraint that is incompatible with the log's parsed format.
+func ruleMatchesLogsource(rule models.SigmaRule, pf ParsedFields) bool {
+	if rule.LogsourceProduct == "" && rule.LogsourceCategory == "" && rule.LogsourceService == "" {
+		return true // unconstrained — applies to everything
+	}
+
+	prod := strings.ToLower(rule.LogsourceProduct)
+	svc := strings.ToLower(rule.LogsourceService)
+	format := strings.ToLower(pf.Format)
+
+	switch prod {
+	case "windows":
+		if format != "" && format != "winevent" {
+			return false
+		}
+	case "linux", "unix":
+		if format != "" && format != "syslog3164" && format != "syslog5424" && format != "raw" {
+			return false
+		}
+	case "network":
+		if format != "" && format != "cef" && format != "raw" {
+			return false
+		}
+	}
+
+	// Service-level filter: check process name
+	if svc != "" && pf.Process != "" {
+		if !strings.Contains(strings.ToLower(pf.Process), svc) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule matching
 // ─────────────────────────────────────────────────────────────────────────────
 
 func MatchSigmaRule(rule models.SigmaRule, messageLower string) bool {
 	return matchSigmaRuleWithFields(rule, messageLower, ParsedFields{})
 }
 
-// MatchSigmaRuleWithFields is the field-aware version used when parsed fields
-// are available (called from EvaluateRules when log has ParsedFields JSON).
 func matchSigmaRuleWithFields(rule models.SigmaRule, messageLower string, pf ParsedFields) bool {
-
 	selections := rule.Selections
-
 	if len(selections) == 0 {
 		if len(rule.Keywords) == 0 {
 			return false
 		}
-		selections = map[string][]string{
-			"selection1": rule.Keywords,
-		}
+		selections = map[string][]string{"selection1": rule.Keywords}
 	}
 
 	results := make(map[string]bool, len(selections))
 
 	for name, keywords := range selections {
-		matched := false
-		for _, kw := range keywords {
-			kw = strings.TrimSpace(kw)
-			if kw == "" {
-				continue
-			}
-			if matchKeyword(kw, messageLower, pf) {
-				matched = true
-				break
-			}
-		}
-		results[name] = matched
+		results[name] = evalSelection(keywords, messageLower, pf)
 	}
 
 	condition := rule.Condition
@@ -72,79 +137,227 @@ func matchSigmaRuleWithFields(rule models.SigmaRule, messageLower string, pf Par
 	return EvaluateCondition(condition, results)
 }
 
-// matchKeyword matches a single keyword against the log.
-//
-// Syntax:
-//   field:value           — exact match (case-insensitive) on named field
-//   field|contains:value  — substring match on named field
-//   field|startswith:value
-//   field|endswith:value
-//   field|re:pattern      — regex match (case-sensitive, like upstream
-//                           Sigma's |re modifier — use an inline "(?i)" in
-//                           the pattern if case-insensitivity is wanted)
-//   plain text            — substring match against the full log message
-func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
+// evalSelection evaluates a selection's keyword list against the log.
+// If all keywords carry the "__ALL__" prefix the selection requires every
+// keyword to match (AND); otherwise any match suffices (OR).
+func evalSelection(keywords []string, messageLower string, pf ParsedFields) bool {
+	if len(keywords) == 0 {
+		return false
+	}
 
-	// ── Field-level match: "field:value" or "field|op:value" ─────
-	colonIdx := strings.Index(keyword, ":")
-	if colonIdx > 0 {
-		// Everything before the colon is "field" or "field|op".
-		lhs := keyword[:colonIdx]
-		rhsRaw := keyword[colonIdx+1:]
-		rhs := strings.ToLower(rhsRaw)
+	allRequired := strings.HasPrefix(keywords[0], "__ALL__")
 
-		fieldName := lhs
-		op        := "exact"
-
-		if pipeIdx := strings.Index(lhs, "|"); pipeIdx >= 0 {
-			fieldName = lhs[:pipeIdx]
-			op        = strings.ToLower(lhs[pipeIdx+1:])
-		}
-
-		fieldVal, exists := GetFieldValue(pf, strings.ToLower(fieldName))
-		if !exists {
-			// Field not extracted — fall through to message-level check only
-			// if the keyword doesn't look like a field expression.
-			// A bare IP or word before ":" could be a timestamp or URL.
-			// Heuristic: if fieldName contains spaces or is longer than 30
-			// chars, it's not a field name.
-			if strings.Contains(fieldName, " ") || len(fieldName) > 30 {
-				return strings.Contains(messageLower, strings.ToLower(keyword))
-			}
-			return false
-		}
-
-		if op == "re" {
-			re, err := compileSigmaRegex(rhsRaw)
-			if err != nil {
+	if allRequired {
+		for _, kw := range keywords {
+			kw = strings.TrimPrefix(kw, "__ALL__")
+			if !matchKeyword(kw, messageLower, pf) {
 				return false
 			}
-			return re.MatchString(fieldVal)
 		}
+		return true
+	}
 
-		fieldValLower := strings.ToLower(fieldVal)
+	for _, kw := range keywords {
+		if matchKeyword(kw, messageLower, pf) {
+			return true
+		}
+	}
+	return false
+}
 
-		switch op {
-		case "contains":
-			return strings.Contains(fieldValLower, rhs)
-		case "startswith":
-			return strings.HasPrefix(fieldValLower, rhs)
-		case "endswith":
-			return strings.HasSuffix(fieldValLower, rhs)
-		default: // "exact" or unknown
-			return fieldValLower == rhs
+// ─────────────────────────────────────────────────────────────────────────────
+// Keyword matching with full Sigma modifier chain support
+//
+// Keyword syntax: field|mod1|mod2:value   OR   plain keyword
+//
+// Transform modifiers (applied to value before comparison):
+//   base64        — base64-encode the value
+//   base64offset  — generate 3 base64 variants covering alignment offsets
+//   windash       — expand to -, /, – (en-dash), — (em-dash) variants
+//   utf16le       — encode value as UTF-16LE bytes (typically chained with base64)
+//   utf16be       — encode value as UTF-16BE bytes
+//
+// Comparison modifiers:
+//   contains      — substring match (case-insensitive)
+//   startswith    — prefix match
+//   endswith      — suffix match
+//   re            — regex (case-sensitive; add (?i) for insensitivity)
+//   cidr          — CIDR range (field must be an IP address)
+//   lt / lte / gt / gte — numeric comparison
+//   (default)     — exact match (case-insensitive)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
+	colonIdx := strings.Index(keyword, ":")
+	if colonIdx <= 0 {
+		// Plain keyword → substring match against full message.
+		return strings.Contains(messageLower, strings.ToLower(keyword))
+	}
+
+	lhs := keyword[:colonIdx]
+	rhsRaw := keyword[colonIdx+1:]
+
+	// Split lhs into field name and modifier chain.
+	parts := strings.Split(lhs, "|")
+	fieldName := parts[0]
+	modifiers := parts[1:]
+
+	// Separate transform modifiers from the comparison modifier.
+	var transforms []string
+	comparison := "exact"
+	for _, mod := range modifiers {
+		switch strings.ToLower(mod) {
+		case "base64", "base64offset", "windash", "utf16le", "utf16be":
+			transforms = append(transforms, strings.ToLower(mod))
+		case "contains", "startswith", "endswith", "re", "cidr",
+			"lt", "lte", "gt", "gte":
+			comparison = strings.ToLower(mod)
+		case "all":
+			// handled by __ALL__ prefix at import time
 		}
 	}
 
-	// ── Plain keyword → message-level substring match ─────────────
-	return strings.Contains(messageLower, strings.ToLower(keyword))
+	fieldVal, exists := GetFieldValue(pf, strings.ToLower(fieldName))
+	if !exists {
+		// Field not in parsed fields — fall back to message-level match
+		// only if the field name looks non-standard (contains spaces or is long).
+		if strings.Contains(fieldName, " ") || len(fieldName) > 30 {
+			return strings.Contains(messageLower, strings.ToLower(keyword))
+		}
+		return false
+	}
+
+	// Apply value transforms to generate the set of candidate values to match against.
+	candidates := applyTransforms(rhsRaw, transforms)
+
+	// For regex, don't lowercase.
+	if comparison == "re" {
+		re, err := compileSigmaRegex(rhsRaw)
+		if err != nil {
+			return false
+		}
+		return re.MatchString(fieldVal)
+	}
+
+	fvLower := strings.ToLower(fieldVal)
+
+	for _, cand := range candidates {
+		candLower := strings.ToLower(cand)
+		switch comparison {
+		case "exact":
+			if fvLower == candLower {
+				return true
+			}
+		case "contains":
+			if strings.Contains(fvLower, candLower) {
+				return true
+			}
+		case "startswith":
+			if strings.HasPrefix(fvLower, candLower) {
+				return true
+			}
+		case "endswith":
+			if strings.HasSuffix(fvLower, candLower) {
+				return true
+			}
+		case "cidr":
+			_, network, err := net.ParseCIDR(cand)
+			if err == nil {
+				ip := net.ParseIP(fieldVal)
+				if ip != nil && network.Contains(ip) {
+					return true
+				}
+			}
+		case "lt", "lte", "gt", "gte":
+			f, err1 := strconv.ParseFloat(fieldVal, 64)
+			v, err2 := strconv.ParseFloat(cand, 64)
+			if err1 == nil && err2 == nil {
+				switch comparison {
+				case "lt":
+					if f < v {
+						return true
+					}
+				case "lte":
+					if f <= v {
+						return true
+					}
+				case "gt":
+					if f > v {
+						return true
+					}
+				case "gte":
+					if f >= v {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
-var sigmaRegexCache sync.Map // pattern string -> *regexp.Regexp
+// applyTransforms applies a chain of transform modifiers to a raw value and
+// returns all candidate values that should be tested against the field.
+func applyTransforms(value string, transforms []string) []string {
+	values := []string{value}
+	for _, t := range transforms {
+		var next []string
+		switch t {
+		case "base64":
+			for _, v := range values {
+				next = append(next, base64.StdEncoding.EncodeToString([]byte(v)))
+			}
+		case "base64offset":
+			// Generate 3 variants to cover alignment at byte offsets 0, 1, 2.
+			for _, v := range values {
+				for _, pad := range []string{"", "A", "AA"} {
+					padded := []byte(pad + v)
+					encoded := base64.StdEncoding.EncodeToString(padded)
+					// Strip the base64 chars that encode the padding prefix.
+					skip := (len(pad) * 4) / 3
+					if skip > 0 && skip < len(encoded) {
+						encoded = encoded[skip:]
+					}
+					next = append(next, encoded)
+				}
+			}
+		case "windash":
+			for _, v := range values {
+				next = append(next,
+					v,
+					strings.ReplaceAll(v, "-", "/"),
+					strings.ReplaceAll(v, "-", "–"), // en-dash
+					strings.ReplaceAll(v, "-", "—"), // em-dash
+				)
+			}
+		case "utf16le":
+			for _, v := range values {
+				next = append(next, encodeUTF16(v, binary.LittleEndian))
+			}
+		case "utf16be":
+			for _, v := range values {
+				next = append(next, encodeUTF16(v, binary.BigEndian))
+			}
+		default:
+			next = values
+		}
+		values = next
+	}
+	return values
+}
 
-// compileSigmaRegex compiles (and caches) a |re: pattern — EvaluateRules
-// runs every Sigma rule against every ingested log line, so recompiling
-// the same regex per line would be wasteful.
+// encodeUTF16 returns a string of the UTF-16 byte sequence of s.
+func encodeUTF16(s string, order binary.ByteOrder) string {
+	runes := utf16.Encode([]rune(s))
+	buf := make([]byte, len(runes)*2)
+	for i, r := range runes {
+		order.PutUint16(buf[i*2:], r)
+	}
+	return string(buf)
+}
+
+var sigmaRegexCache sync.Map
+
 func compileSigmaRegex(pattern string) (*regexp.Regexp, error) {
 	if cached, ok := sigmaRegexCache.Load(pattern); ok {
 		return cached.(*regexp.Regexp), nil
@@ -155,56 +368,6 @@ func compileSigmaRegex(pattern string) (*regexp.Regexp, error) {
 	}
 	sigmaRegexCache.Store(pattern, re)
 	return re, nil
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EvaluateRules runs every enabled Sigma rule against an incoming log line.
-// If parsed_fields JSON is present on the log, field-level matching is used.
-// ─────────────────────────────────────────────────────────────────────────────
-
-func EvaluateRules(log models.Log) {
-
-	rules, err := GetEnabledSigmaRulesForAgent(log.AgentID)
-	if err != nil {
-		return
-	}
-
-	messageLower := strings.ToLower(log.LogMessage)
-
-	// Deserialise parsed fields if available.
-	var pf ParsedFields
-	if log.ParsedFields != "" && log.ParsedFields != "{}" {
-		json.Unmarshal([]byte(log.ParsedFields), &pf)
-	}
-
-	for _, rule := range rules {
-
-		if !matchSigmaRuleWithFields(rule, messageLower, pf) {
-			continue
-		}
-
-		alert := models.Alert{
-			AgentID: log.AgentID,
-
-			RuleName: rule.Title,
-			Severity: rule.Severity,
-
-			MitreTactic:    rule.MitreTactic,
-			MitreTechnique: rule.MitreTechnique,
-			MitreName:      rule.MitreName,
-
-			Fingerprint: fmt.Sprintf(
-				"%d-%s",
-				log.AgentID,
-				strings.ReplaceAll(rule.Title, " ", "-"),
-			),
-
-			LogMessage: log.LogMessage,
-		}
-
-		CreateAlert(alert)
-		CorrelateAlert(alert)
-	}
 }
 
 // EvaluateCondition, tokenizeCondition, and the condition parser live in

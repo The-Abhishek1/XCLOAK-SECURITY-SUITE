@@ -59,6 +59,22 @@ type ParsedFields struct {
 	CEFName       string `json:"cef_name,omitempty"`
 	CEFSeverity   string `json:"cef_severity,omitempty"`
 
+	// Windows process-creation fields (EventID 4688 / Sysmon EventID 1)
+	// These map to the standard Sigma field names used in community rules.
+	Image              string `json:"image,omitempty"`               // full executable path
+	CommandLine        string `json:"command_line,omitempty"`        // process command line
+	ParentImage        string `json:"parent_image,omitempty"`        // parent executable path
+	ParentCommandLine  string `json:"parent_command_line,omitempty"` // parent command line
+	IntegrityLevel     string `json:"integrity_level,omitempty"`     // Low/Medium/High/System
+	Hashes             string `json:"hashes,omitempty"`              // MD5=...,SHA256=...
+	OriginalFileName   string `json:"original_file_name,omitempty"`  // original PE filename
+	CurrentDirectory   string `json:"current_directory,omitempty"`   // working directory
+
+	// Windows service / scheduled task fields (EventID 7045, 4698)
+	ServiceName string `json:"service_name,omitempty"`
+	ServiceType string `json:"service_type,omitempty"`
+	StartType   string `json:"start_type,omitempty"`
+
 	// Freeform key=value extras that don't fit above
 	Extra map[string]string `json:"extra,omitempty"`
 
@@ -257,21 +273,42 @@ func parseWindowsEvent(message string) *ParsedFields {
 			if f.SubjectUser == "" { f.SubjectUser = val }
 		case "target account name", "target user name":
 			f.TargetUser = val
-		case "source network address", "ip address":
+		case "source network address", "ip address", "ipaddress":
 			f.SrcIP = val
 		case "source port", "ip port":
 			f.SrcPort = val
-		case "workstation name":
+		case "workstation name", "workstationname":
 			f.WorkstationName = val
 		case "logon type":
 			f.LogonType = val
 		case "account domain", "subject domain name":
-			// attach to user
 			if f.SubjectUser != "" && val != "" {
 				f.SubjectUser = val + `\` + f.SubjectUser
 			}
-		case "process name":
-			f.Process = val
+		case "process name", "creator process name", "parentimage":
+			if f.ParentImage == "" { f.ParentImage = val }
+			if f.Process == ""    { f.Process = val }
+		case "new process name", "image":
+			f.Image = val
+			if f.Process == "" { f.Process = val }
+		case "process command line", "commandline":
+			f.CommandLine = val
+		case "parent command line", "parentcommandline":
+			f.ParentCommandLine = val
+		case "token elevation type", "mandatory label", "integrity level":
+			f.IntegrityLevel = val
+		case "hashes":
+			f.Hashes = val
+		case "original file name", "originalfilename":
+			f.OriginalFileName = val
+		case "current directory", "currentdirectory":
+			f.CurrentDirectory = val
+		case "service name", "servicename":
+			f.ServiceName = val
+		case "service type", "servicetype":
+			f.ServiceType = val
+		case "start type", "starttype":
+			f.StartType = val
 		case "level":
 			f.Severity = strings.ToLower(val)
 		}
@@ -292,8 +329,10 @@ func parseWindowsEvent(message string) *ParsedFields {
 		f.AuthResult = "logoff"
 		if f.User == "" { f.User = f.SubjectUser }
 	case "4688":
-		// Process creation — user is SubjectUser
+		// Process creation — user is SubjectUser; Image/CommandLine parsed above
 		f.User = f.SubjectUser
+	case "7045":
+		// Service installation
 	case "4720", "4726":
 		// User account created/deleted
 		f.User = f.TargetUser
@@ -381,18 +420,27 @@ func parseJSON(message string) *ParsedFields {
 		return ""
 	}
 
-	f.Timestamp  = str("timestamp", "@timestamp", "time", "ts", "datetime")
-	f.Hostname   = str("hostname", "host", "computer_name", "computer")
-	f.User       = str("user", "username", "user_name", "account_name")
-	f.Process    = str("process", "process_name", "program", "app")
-	f.PID        = str("pid", "process_id")
-	f.SrcIP      = str("src_ip", "src", "source_ip", "remote_ip", "client_ip")
-	f.DstIP      = str("dst_ip", "dst", "dest_ip", "destination_ip")
-	f.SrcPort    = str("src_port", "source_port")
-	f.DstPort    = str("dst_port", "dest_port", "port")
-	f.EventID    = str("event_id", "EventID", "eventId")
-	f.Severity   = str("level", "severity", "log_level", "loglevel")
-	f.AuthResult = str("auth_result", "result", "outcome")
+	f.Timestamp        = str("timestamp", "@timestamp", "time", "ts", "datetime")
+	f.Hostname         = str("hostname", "host", "computer_name", "computer", "ComputerName")
+	f.User             = str("user", "username", "user_name", "account_name", "AccountName")
+	f.Process          = str("process", "process_name", "program", "app")
+	f.PID              = str("pid", "process_id", "ProcessId")
+	f.SrcIP            = str("src_ip", "src", "source_ip", "remote_ip", "client_ip", "IpAddress", "SourceIp")
+	f.DstIP            = str("dst_ip", "dst", "dest_ip", "destination_ip", "DestinationIp")
+	f.SrcPort          = str("src_port", "source_port", "SourcePort")
+	f.DstPort          = str("dst_port", "dest_port", "port", "DestinationPort")
+	f.EventID          = str("event_id", "EventID", "eventId", "EventId")
+	f.Severity         = str("level", "severity", "log_level", "loglevel")
+	f.AuthResult       = str("auth_result", "result", "outcome")
+	f.Image            = str("Image", "image", "exe", "process_path")
+	f.CommandLine      = str("CommandLine", "command_line", "cmdline", "cmd")
+	f.ParentImage      = str("ParentImage", "parent_image", "parent_exe")
+	f.ParentCommandLine = str("ParentCommandLine", "parent_command_line")
+	f.IntegrityLevel   = str("IntegrityLevel", "integrity_level")
+	f.Hashes           = str("Hashes", "hashes", "hash")
+	f.OriginalFileName = str("OriginalFileName", "original_file_name")
+	f.ServiceName      = str("ServiceName", "service_name")
+	f.Channel          = str("Channel", "channel", "log_name")
 
 	if f.Timestamp == "" && f.Hostname == "" && f.User == "" &&
 		f.SrcIP == "" && f.EventID == "" {
@@ -466,37 +514,96 @@ func parseKVPairs(s string) map[string]string {
 // GetFieldValue looks up a named field on a ParsedFields struct.
 // Used by the Sigma engine for field-level matching.
 // Returns ("", false) if the field doesn't exist or is empty.
+// GetFieldValue looks up a named field, accepting both our internal names and
+// the standard Sigma/ECS field names used in community rule sets.
 func GetFieldValue(f ParsedFields, fieldName string) (string, bool) {
 	fieldName = strings.ToLower(fieldName)
 	var val string
 	switch fieldName {
-	case "timestamp":    val = f.Timestamp
-	case "user", "username": val = f.User
-	case "uid":          val = f.UID
-	case "process", "process_name": val = f.Process
-	case "pid":          val = f.PID
-	case "src_ip", "src": val = f.SrcIP
-	case "dst_ip", "dst": val = f.DstIP
-	case "src_port":     val = f.SrcPort
-	case "dst_port":     val = f.DstPort
-	case "proto", "protocol": val = f.Proto
-	case "hostname", "host": val = f.Hostname
-	case "auth_method":  val = f.AuthMethod
-	case "auth_result":  val = f.AuthResult
-	case "session_id":   val = f.SessionID
-	case "event_id", "eventid": val = f.EventID
-	case "channel":      val = f.Channel
-	case "subject_user": val = f.SubjectUser
-	case "target_user":  val = f.TargetUser
-	case "logon_type":   val = f.LogonType
-	case "workstation":  val = f.WorkstationName
-	case "severity":     val = f.Severity
-	case "facility":     val = f.Facility
-	case "device_vendor": val = f.DeviceVendor
-	case "device_product": val = f.DeviceProduct
-	case "cef_name":     val = f.CEFName
-	case "cef_severity": val = f.CEFSeverity
-	case "format":       val = f.Format
+	// ── Core ──────────────────────────────────────────────────────────────
+	case "timestamp":
+		val = f.Timestamp
+	case "user", "username", "accountname", "account_name", "subjectaccountname":
+		val = f.User
+	case "uid":
+		val = f.UID
+	case "process", "process_name", "processname":
+		val = f.Process
+	case "pid", "processid", "process_id":
+		val = f.PID
+	// ── Network ───────────────────────────────────────────────────────────
+	case "src_ip", "src", "sourceip", "source_ip", "ipaddress", "remoteaddress":
+		val = f.SrcIP
+	case "dst_ip", "dst", "destinationip", "destination_ip", "destip":
+		val = f.DstIP
+	case "src_port", "sourceport", "source_port":
+		val = f.SrcPort
+	case "dst_port", "destinationport", "destination_port", "destport":
+		val = f.DstPort
+	case "proto", "protocol":
+		val = f.Proto
+	// ── Host ──────────────────────────────────────────────────────────────
+	case "hostname", "host", "computername", "computer_name":
+		val = f.Hostname
+	// ── Auth ──────────────────────────────────────────────────────────────
+	case "auth_method":
+		val = f.AuthMethod
+	case "auth_result", "authresult":
+		val = f.AuthResult
+	case "session_id":
+		val = f.SessionID
+	// ── Windows event log ─────────────────────────────────────────────────
+	case "event_id", "eventid":
+		val = f.EventID
+	case "channel":
+		val = f.Channel
+	case "subject_user", "subjectusername", "subjectaccountsid":
+		val = f.SubjectUser
+	case "target_user", "targetusername", "targetusernam", "target_user_name":
+		val = f.TargetUser
+	case "logon_type", "logontype":
+		val = f.LogonType
+	case "workstation", "workstationname", "workstation_name":
+		val = f.WorkstationName
+	// ── Process creation (Sigma: process_creation / Sysmon 1 / EID 4688) ─
+	case "image", "newprocessname", "new_process_name", "commandpath":
+		val = f.Image
+	case "commandline", "command_line":
+		val = f.CommandLine
+	case "parentimage", "parent_image", "creatorprocessname", "creator_process_name":
+		val = f.ParentImage
+	case "parentcommandline", "parent_command_line":
+		val = f.ParentCommandLine
+	case "integritylevel", "integrity_level":
+		val = f.IntegrityLevel
+	case "hashes":
+		val = f.Hashes
+	case "originalfilename", "original_file_name":
+		val = f.OriginalFileName
+	case "currentdirectory", "current_directory":
+		val = f.CurrentDirectory
+	// ── Windows service / task ────────────────────────────────────────────
+	case "servicename", "service_name":
+		val = f.ServiceName
+	case "servicetype", "service_type":
+		val = f.ServiceType
+	case "starttype", "start_type":
+		val = f.StartType
+	// ── Syslog / CEF ──────────────────────────────────────────────────────
+	case "severity":
+		val = f.Severity
+	case "facility":
+		val = f.Facility
+	case "device_vendor", "devicevendor":
+		val = f.DeviceVendor
+	case "device_product", "deviceproduct":
+		val = f.DeviceProduct
+	case "cef_name", "cefname":
+		val = f.CEFName
+	case "cef_severity", "cefseverity":
+		val = f.CEFSeverity
+	case "format":
+		val = f.Format
 	default:
 		if f.Extra != nil {
 			val = f.Extra[fieldName]

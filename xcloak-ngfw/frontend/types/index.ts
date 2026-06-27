@@ -59,16 +59,32 @@ export interface Incident {
 export interface SigmaRule {
   id: number;
   title: string;
+  description: string;
+  status: string;
   severity: string;
   mitre_tactic: string;
   mitre_technique: string;
   mitre_name: string;
+  logsource_cat: string;
+  logsource_prod: string;
+  logsource_svc: string;
+  tags: string[];
+  falsepositives: string[];
+  references: string[];
   keywords: string[];
-  // NEW — sigma-lite
   selections: Record<string, string[]>;
   condition: string;
   enabled: boolean;
+  hit_count?: number;
+  last_matched_at?: string;
   created_at: string;
+}
+
+export interface SigmaRuleStat {
+  rule_id: number;
+  title: string;
+  hit_count: number;
+  last_matched_at: string | null;
 }
 
 export interface YaraRule {

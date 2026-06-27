@@ -5,7 +5,9 @@ import "time"
 type SigmaRule struct {
 	ID int `json:"id"`
 
-	Title string `json:"title"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"` // experimental | test | stable | deprecated
 
 	Severity string `json:"severity"`
 
@@ -13,28 +15,35 @@ type SigmaRule struct {
 	MitreTechnique string `json:"mitre_technique"`
 	MitreName      string `json:"mitre_name"`
 
-	// Legacy: flat keyword list. Kept for backward compatibility — if
-	// Selections is empty, the engine treats Keywords as a single
-	// selection named "selection1" with Condition "selection1".
+	// Logsource block from the Sigma YAML
+	LogsourceCategory string `json:"logsource_cat"`
+	LogsourceProduct  string `json:"logsource_prod"`
+	LogsourceService  string `json:"logsource_svc"`
+
+	// Tags and false-positive hints from Sigma YAML
+	Tags           []string `json:"tags"`
+	FalsePositives []string `json:"falsepositives"`
+	References     []string `json:"references"`
+
+	// Legacy flat keyword list — kept for backward compatibility.
+	// If Selections is non-empty, Keywords is ignored by the engine.
 	Keywords []string `json:"keywords"`
 
-	// Sigma-lite: named groups of keywords. A selection is TRUE if ANY
-	// keyword in its list is found in the log message (case-insensitive).
-	// Example: {"selection1": ["sudo","session opened"], "selection2": ["root"]}
+	// Named detection groups.  Each selection is TRUE if the group's match
+	// semantics are satisfied (OR by default; ALL if keywords are prefixed
+	// with __ALL__).
 	Selections map[string][]string `json:"selections"`
 
-	// Boolean expression over selection names, e.g.
-	//   "selection1 and selection2"
-	//   "selection1 or selection2"
-	//   "selection1 and not selection2"
-	//   "(selection1 or selection2) and selection3"
-	// Supports: and, or, not, parentheses. Empty = OR of all selections
-	// (backward-compatible "any keyword anywhere" behavior).
+	// Boolean expression over selection names.
 	Condition string `json:"condition"`
 
 	Enabled bool `json:"enabled"`
 
 	TenantID int `json:"tenant_id"`
+
+	// Hit statistics — populated by GetSigmaStats, not stored directly.
+	HitCount      int        `json:"hit_count,omitempty"`
+	LastMatchedAt *time.Time `json:"last_matched_at,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 }

@@ -120,3 +120,8 @@ func GetEnabledSigmaRules(tenantID int) (
 
 	return getEnabledSigmaRulesCached(tenantID)
 }
+
+// GetSigmaStats returns per-rule hit counts and last-matched time for tenantID.
+func GetSigmaStats(tenantID int) ([]repositories.SigmaRuleStat, error) {
+	return repositories.GetSigmaStats(tenantID)
+}

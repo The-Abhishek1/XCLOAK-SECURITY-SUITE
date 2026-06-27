@@ -261,6 +261,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/search", middleware.RequireAuth(), api.GlobalSearch)
 	router.POST("/api/yara/import", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.ImportYARAFiles)
 	router.POST("/api/sigma/import", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.ImportSigmaYAML)
+	router.GET("/api/sigma/stats", middleware.RequireAuth(), api.GetSigmaStats)
 	router.GET("/api/compliance/reports/:id/scores", middleware.RequireAuth(), api.GetComplianceFrameworkScores)
 	router.POST("/api/incidents/:id/notes", middleware.RequireAuth(), api.AddIncidentNote)
 	router.GET("/api/incidents/:id/deepdive", middleware.RequireAuth(), api.GetIncidentDeepDive)
