@@ -6,52 +6,126 @@ import (
 	"strings"
 	"time"
 
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
 
-// NetworkMapNode is one host in the fleet-wide network map — either a real
-// agent or an external IP observed in outbound connect events.
 type NetworkMapNode struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"` // "agent" | "external_ip"
-	AgentID   int    `json:"agent_id,omitempty"`
-	Hostname  string `json:"hostname,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	Zone      string `json:"zone"` // "internal" | "dmz" | "external"
-	Country   string `json:"country,omitempty"`
-	RiskScore int    `json:"risk_score"`
-	RiskLevel string `json:"risk_level"`
+	ID          string `json:"id"`
+	Type        string `json:"type"` // "agent" | "external_ip"
+	AgentID     int    `json:"agent_id,omitempty"`
+	Hostname    string `json:"hostname,omitempty"`
+	IP          string `json:"ip,omitempty"`
+	Zone        string `json:"zone"` // "internal" | "dmz" | "external"
+	Country     string `json:"country,omitempty"`
+	RiskScore   int    `json:"risk_score"`
+	RiskLevel   string `json:"risk_level"`
+	Status      string `json:"status,omitempty"`   // "online" | "offline"
+	AlertCount  int    `json:"alert_count"`         // unacknowledged alerts
+	IsIOC       bool   `json:"is_ioc"`
+	IOCSeverity string `json:"ioc_severity,omitempty"`
 }
 
-// NetworkMapEdge is an aggregated view of every connect event sharing the
-// same source agent, destination host, port, protocol, and process — the
-// raw network_connect_events stream is a pure append log, so a "map" needs
-// to collapse repeated connects into one edge with a count and last-seen
-// time rather than rendering every individual event.
 type NetworkMapEdge struct {
 	Source   string    `json:"source"`
 	Target   string    `json:"target"`
 	Protocol string    `json:"protocol"`
 	Port     string    `json:"port"`
+	Service  string    `json:"service,omitempty"` // human name for port, e.g. "HTTPS"
 	Process  string    `json:"process"`
 	Count    int       `json:"count"`
 	LastSeen time.Time `json:"last_seen"`
+	EdgeType string    `json:"edge_type"` // "internal" | "external"
+}
+
+type NetworkMapSummary struct {
+	TotalAgents   int `json:"total_agents"`
+	OnlineAgents  int `json:"online_agents"`
+	ExternalIPs   int `json:"external_ips"`
+	TotalEdges    int `json:"total_edges"`
+	IOCHits       int `json:"ioc_hits"`
+	AlertingNodes int `json:"alerting_nodes"`
 }
 
 type NetworkMapGraph struct {
-	Nodes       []NetworkMapNode `json:"nodes"`
-	Edges       []NetworkMapEdge `json:"edges"`
-	GeneratedAt time.Time        `json:"generated_at"`
+	Nodes       []NetworkMapNode  `json:"nodes"`
+	Edges       []NetworkMapEdge  `json:"edges"`
+	Summary     NetworkMapSummary `json:"summary"`
+	GeneratedAt time.Time         `json:"generated_at"`
 }
 
 const maxNetworkMapEdges = 500
 
-// BuildNetworkMap aggregates the eBPF-sourced network_connect_events stream
-// into a fleet-wide graph: one node per agent plus one per distinct external
-// IP, edges collapsed by source/destination/port/protocol/process, nodes
-// zoned internal/dmz/external and colored by the same asset risk score used
-// by the attack-path graph.
+// wellKnownPorts maps port numbers to human-readable service names.
+var wellKnownPorts = map[string]string{
+	"20": "FTP-data", "21": "FTP", "22": "SSH", "23": "Telnet",
+	"25": "SMTP", "53": "DNS", "67": "DHCP", "68": "DHCP",
+	"80": "HTTP", "110": "POP3", "123": "NTP", "143": "IMAP",
+	"161": "SNMP", "179": "BGP", "443": "HTTPS", "465": "SMTPS",
+	"514": "Syslog", "587": "SMTP-TLS", "636": "LDAPS",
+	"993": "IMAPS", "995": "POP3S",
+	"1433": "MSSQL", "1521": "Oracle", "2181": "Zookeeper",
+	"2375": "Docker", "2376": "Docker-TLS", "3000": "Dev-HTTP",
+	"3306": "MySQL", "3389": "RDP", "4369": "EPMD",
+	"5432": "Postgres", "5601": "Kibana", "5672": "AMQP",
+	"6379": "Redis", "6443": "K8s-API", "8080": "HTTP-alt",
+	"8443": "HTTPS-alt", "8888": "Jupyter", "9000": "MinIO",
+	"9090": "Prometheus", "9092": "Kafka", "9200": "Elasticsearch",
+	"9300": "ES-transport", "27017": "MongoDB",
+}
+
+func portService(port string) string {
+	if s, ok := wellKnownPorts[port]; ok {
+		return s
+	}
+	return ""
+}
+
+// alertCountsByAgent returns a map of agent_id → unacked alert count for a tenant.
+func alertCountsByAgent(tenantID int) (map[int]int, error) {
+	rows, err := database.DB.Query(
+		`SELECT agent_id, COUNT(*) FROM alerts
+		 WHERE tenant_id=$1 AND acknowledged=false
+		 GROUP BY agent_id`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]int{}
+	for rows.Next() {
+		var id, cnt int
+		if err := rows.Scan(&id, &cnt); err == nil {
+			out[id] = cnt
+		}
+	}
+	return out, nil
+}
+
+// iocIPSet returns a set of enabled IP-type IOC indicators for the tenant,
+// mapping indicator → severity so the frontend can color-code them.
+func iocIPSet(tenantID int) (map[string]string, error) {
+	rows, err := database.DB.Query(
+		`SELECT indicator, severity FROM iocs
+		 WHERE tenant_id=$1 AND enabled=true AND type='ip'`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var indicator, severity string
+		if err := rows.Scan(&indicator, &severity); err == nil {
+			out[indicator] = severity
+		}
+	}
+	return out, nil
+}
+
 func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph, error) {
 
 	agents, err := repositories.GetAgents(tenantID)
@@ -69,6 +143,16 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 		return nil, fmt.Errorf("loading connect events: %w", err)
 	}
 
+	alertCounts, err := alertCountsByAgent(tenantID)
+	if err != nil {
+		alertCounts = map[int]int{} // non-fatal
+	}
+
+	iocIPs, err := iocIPSet(tenantID)
+	if err != nil {
+		iocIPs = map[string]string{} // non-fatal
+	}
+
 	riskByAgent := map[int]models.AssetRiskScore{}
 	for _, r := range risks {
 		riskByAgent[r.AgentID] = r
@@ -84,13 +168,15 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 			agentByIP[a.IPAddress] = a
 		}
 		n := &NetworkMapNode{
-			ID:        agentNodeID(a.ID),
-			Type:      "agent",
-			AgentID:   a.ID,
-			Hostname:  a.Hostname,
-			IP:        a.IPAddress,
-			Zone:      "internal",
-			RiskLevel: "unknown",
+			ID:         agentNodeID(a.ID),
+			Type:       "agent",
+			AgentID:    a.ID,
+			Hostname:   a.Hostname,
+			IP:         a.IPAddress,
+			Zone:       "internal",
+			RiskLevel:  "unknown",
+			Status:     a.Status,
+			AlertCount: alertCounts[a.ID],
 		}
 		if r, ok := riskByAgent[a.ID]; ok {
 			n.RiskScore = r.RiskScore
@@ -110,7 +196,7 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 		srcID := agentNodeID(ev.AgentID)
 		src, ok := nodes[srcID]
 		if !ok {
-			continue // event from an agent outside this tenant's current agent list
+			continue
 		}
 
 		host := hostFromAddress(ev.RemoteAddress)
@@ -118,33 +204,34 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 			continue
 		}
 
-		var dstID string
-		if remoteAgent, ok := agentByIP[host]; ok {
-			if remoteAgent.ID == ev.AgentID {
-				continue // loopback to self, not a meaningful edge
-			}
-			dstID = agentNodeID(remoteAgent.ID)
-		} else {
-			dstID = externalNodeID(host)
-			if _, exists := nodes[dstID]; !exists {
-				nodes[dstID] = &NetworkMapNode{
-					ID:        dstID,
-					Type:      "external_ip",
-					IP:        host,
-					Zone:      "external",
-					RiskLevel: "unknown",
-				}
-			}
-			// An internal agent reaching an external IP is, by definition,
-			// internet-exposed — promote it out of the plain "internal"
-			// zone so it reads differently on the map than an agent that
-			// only ever talks to other internal agents.
-			src.Zone = "dmz"
-		}
-
 		port := ""
 		if idx := strings.LastIndex(ev.RemoteAddress, ":"); idx >= 0 {
 			port = ev.RemoteAddress[idx+1:]
+		}
+
+		var dstID string
+		edgeType := "external"
+		if remoteAgent, ok := agentByIP[host]; ok {
+			if remoteAgent.ID == ev.AgentID {
+				continue
+			}
+			dstID = agentNodeID(remoteAgent.ID)
+			edgeType = "internal"
+		} else {
+			dstID = externalNodeID(host)
+			if _, exists := nodes[dstID]; !exists {
+				iocSev := iocIPs[host]
+				nodes[dstID] = &NetworkMapNode{
+					ID:          dstID,
+					Type:        "external_ip",
+					IP:          host,
+					Zone:        "external",
+					RiskLevel:   "unknown",
+					IsIOC:       iocSev != "",
+					IOCSeverity: iocSev,
+				}
+			}
+			src.Zone = "dmz"
 		}
 
 		key := srcID + "|" + dstID + "|" + port + "|" + ev.Protocol + "|" + ev.Comm
@@ -153,8 +240,13 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 			agg = &edgeAgg{}
 			edgeAggs[key] = agg
 			edgeMeta[key] = NetworkMapEdge{
-				Source: srcID, Target: dstID, Protocol: ev.Protocol,
-				Port: port, Process: ev.Comm,
+				Source:   srcID,
+				Target:   dstID,
+				Protocol: ev.Protocol,
+				Port:     port,
+				Service:  portService(port),
+				Process:  ev.Comm,
+				EdgeType: edgeType,
 			}
 		}
 		agg.count++
@@ -163,9 +255,7 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 		}
 	}
 
-	// Cache-only GeoIP enrichment for external nodes — no live lookups
-	// during graph build, so the endpoint stays fast even with many
-	// never-before-seen external IPs.
+	// Cache-only GeoIP enrichment for external nodes.
 	for _, n := range nodes {
 		if n.Type != "external_ip" {
 			continue
@@ -193,9 +283,30 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 	}
 	sort.Slice(outNodes, func(i, j int) bool { return outNodes[i].ID < outNodes[j].ID })
 
+	// Build summary.
+	summary := NetworkMapSummary{TotalEdges: len(edges)}
+	for _, n := range outNodes {
+		switch n.Type {
+		case "agent":
+			summary.TotalAgents++
+			if n.Status == "online" {
+				summary.OnlineAgents++
+			}
+			if n.AlertCount > 0 {
+				summary.AlertingNodes++
+			}
+		case "external_ip":
+			summary.ExternalIPs++
+			if n.IsIOC {
+				summary.IOCHits++
+			}
+		}
+	}
+
 	return &NetworkMapGraph{
 		Nodes:       outNodes,
 		Edges:       edges,
+		Summary:     summary,
 		GeneratedAt: time.Now(),
 	}, nil
 }

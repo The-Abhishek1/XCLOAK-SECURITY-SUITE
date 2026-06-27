@@ -340,6 +340,10 @@ export interface NetworkMapNode {
   country?: string;
   risk_score: number;
   risk_level: string;
+  status?: 'online' | 'offline';
+  alert_count: number;
+  is_ioc: boolean;
+  ioc_severity?: string;
 }
 
 export interface NetworkMapEdge {
@@ -347,14 +351,26 @@ export interface NetworkMapEdge {
   target: string;
   protocol: string;
   port: string;
+  service?: string;
   process: string;
   count: number;
   last_seen: string;
+  edge_type: 'internal' | 'external';
+}
+
+export interface NetworkMapSummary {
+  total_agents: number;
+  online_agents: number;
+  external_ips: number;
+  total_edges: number;
+  ioc_hits: number;
+  alerting_nodes: number;
 }
 
 export interface NetworkMapGraph {
   nodes: NetworkMapNode[];
   edges: NetworkMapEdge[];
+  summary: NetworkMapSummary;
   generated_at: string;
 }
 
