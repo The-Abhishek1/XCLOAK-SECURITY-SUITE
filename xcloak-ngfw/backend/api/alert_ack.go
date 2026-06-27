@@ -156,43 +156,45 @@ func GetAlertsPaginated(c *gin.Context) {
 	if page < 1    { page = 1 }
 	if perPage > 200 { perPage = 200 }
 
-	where := "WHERE tenant_id=$1"
+	where := "WHERE alerts.tenant_id=$1"
 	args  := []interface{}{tenantIDFromContext(c)}
 	idx   := 2
 
 	if severity != "" && severity != "all" {
-		where += fmt.Sprintf(" AND severity=$%d", idx)
+		where += fmt.Sprintf(" AND alerts.severity=$%d", idx)
 		args = append(args, severity); idx++
 	}
 	if status != "" && status != "all" {
-		where += fmt.Sprintf(" AND status=$%d", idx)
+		where += fmt.Sprintf(" AND alerts.status=$%d", idx)
 		args = append(args, status); idx++
 	} else if status == "" {
-		// Default: show open alerts only
-		where += " AND status='open'"
+		where += " AND alerts.status='open'"
 	}
 	if agentID != "" {
-		where += fmt.Sprintf(" AND agent_id=$%d", idx)
+		where += fmt.Sprintf(" AND alerts.agent_id=$%d", idx)
 		args = append(args, agentID); idx++
 	}
 	if q != "" {
-		where += fmt.Sprintf(" AND (rule_name ILIKE $%d OR log_message ILIKE $%d OR mitre_technique ILIKE $%d)", idx, idx, idx)
+		where += fmt.Sprintf(" AND (alerts.rule_name ILIKE $%d OR alerts.log_message ILIKE $%d OR alerts.mitre_technique ILIKE $%d)", idx, idx, idx)
 		args = append(args, "%"+q+"%"); idx++
 	}
 
 	var total int
-	database.DB.QueryRow("SELECT COUNT(*) FROM alerts "+where, args...).Scan(&total)
+	database.DB.QueryRow("SELECT COUNT(*) FROM alerts LEFT JOIN agents ON agents.id=alerts.agent_id "+where, args...).Scan(&total)
 
 	dataArgs := append(args, perPage, (page-1)*perPage)
 	rows, err := database.DB.Query(fmt.Sprintf(`
-		SELECT id, agent_id, severity, rule_name, fingerprint,
-		       mitre_tactic, mitre_technique, mitre_name,
-		       log_message, created_at,
-		       COALESCE(status,'open'),
-		       COALESCE(acknowledged_by,''),
-		       COALESCE(note,'')
-		FROM alerts %s
-		ORDER BY created_at DESC
+		SELECT alerts.id, alerts.agent_id, COALESCE(agents.hostname,'')::text,
+		       alerts.severity, alerts.rule_name, alerts.fingerprint,
+		       alerts.mitre_tactic, alerts.mitre_technique, alerts.mitre_name,
+		       alerts.log_message, alerts.created_at,
+		       COALESCE(alerts.status,'open'),
+		       COALESCE(alerts.acknowledged_by,''),
+		       COALESCE(alerts.note,'')
+		FROM alerts
+		LEFT JOIN agents ON agents.id = alerts.agent_id
+		%s
+		ORDER BY alerts.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, where, idx, idx+1), dataArgs...)
 
@@ -205,6 +207,7 @@ func GetAlertsPaginated(c *gin.Context) {
 	type AlertRow struct {
 		ID             int    `json:"id"`
 		AgentID        int    `json:"agent_id"`
+		Hostname       string `json:"hostname"`
 		Severity       string `json:"severity"`
 		RuleName       string `json:"rule_name"`
 		Fingerprint    string `json:"fingerprint"`
@@ -222,7 +225,7 @@ func GetAlertsPaginated(c *gin.Context) {
 	for rows.Next() {
 		var a AlertRow
 		if err := rows.Scan(
-			&a.ID, &a.AgentID, &a.Severity, &a.RuleName, &a.Fingerprint,
+			&a.ID, &a.AgentID, &a.Hostname, &a.Severity, &a.RuleName, &a.Fingerprint,
 			&a.MitreTactic, &a.MitreTechnique, &a.MitreName,
 			&a.LogMessage, &a.CreatedAt,
 			&a.Status, &a.AcknowledgedBy, &a.Note,

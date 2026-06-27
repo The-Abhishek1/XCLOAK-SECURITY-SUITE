@@ -30,6 +30,7 @@ export interface AgentSummary {
 export interface Alert {
   id: number;
   agent_id: number;
+  hostname?: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   rule_name: string;
   log_message: string;
@@ -48,6 +49,7 @@ export interface Alert {
 export interface Incident {
   id: number;
   agent_id: number;
+  hostname?: string;
   title: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   status: 'open' | 'investigating' | 'resolved' | 'closed';

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
 import {
   LayoutDashboard, Cpu, Bell, AlertTriangle, Play,
   Shield, Bug, Settings, ShieldCheck, LogOut,
@@ -14,7 +15,7 @@ import {
   Building2, Crosshair, Activity, SearchCode, UserCircle2,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { UserProfile } from '@/types';
+import type { UserProfile } from '@/types';
 
 const NAV = [
   { group: 'OVERVIEW', items: [
@@ -202,15 +203,11 @@ export function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
   const { theme, toggle } = useTheme();
+  const { profile } = useUser();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [profile, setProfile]       = useState<UserProfile | null>(null);
   const [badges, setBadges]         = useState<Record<string, number>>({});
 
   useEffect(() => {
-    api.get('/auth/profile')
-      .then(r => setProfile(r.data))
-      .catch(() => null);
-
     const loadBadges = async () => {
       const [alertRes, approvalRes] = await Promise.allSettled([
         api.get('/alerts/paginated', { params: { page: 1, per_page: 1, severity: 'critical' } }),

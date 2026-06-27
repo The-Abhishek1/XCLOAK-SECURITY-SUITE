@@ -117,26 +117,32 @@ func GetIncidentsPaginated(tenantID int, page, perPage int, status string) (*Pag
 
 	offset := (page - 1) * perPage
 
-	where := "WHERE tenant_id = $1"
+	where := "WHERE incidents.tenant_id = $1"
 	args := []interface{}{tenantID}
 	idx := 2
 
 	if status != "" && status != "all" {
-		where += fmt.Sprintf(" AND status = $%d", idx)
+		where += fmt.Sprintf(" AND incidents.status = $%d", idx)
 		args = append(args, status)
 		idx++
 	}
 
 	var total int
-	if err := database.DB.QueryRow("SELECT COUNT(*) FROM incidents "+where, args...).Scan(&total); err != nil {
+	if err := database.DB.QueryRow(
+		"SELECT COUNT(*) FROM incidents LEFT JOIN agents ON agents.id=incidents.agent_id "+where, args...,
+	).Scan(&total); err != nil {
 		return nil, err
 	}
 
 	dataArgs := append(args, perPage, offset)
 	rows, err := database.DB.Query(fmt.Sprintf(`
-		SELECT id, agent_id, title, severity, status, description, created_at
-		FROM incidents %s
-		ORDER BY created_at DESC
+		SELECT incidents.id, incidents.agent_id, COALESCE(agents.hostname,'')::text,
+		       incidents.title, incidents.severity, incidents.status,
+		       incidents.description, incidents.created_at
+		FROM incidents
+		LEFT JOIN agents ON agents.id = incidents.agent_id
+		%s
+		ORDER BY incidents.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, where, idx, idx+1), dataArgs...)
 
@@ -148,7 +154,7 @@ func GetIncidentsPaginated(tenantID int, page, perPage int, status string) (*Pag
 	var incidents []models.Incident
 	for rows.Next() {
 		var i models.Incident
-		if err := rows.Scan(&i.ID, &i.AgentID, &i.Title, &i.Severity,
+		if err := rows.Scan(&i.ID, &i.AgentID, &i.Hostname, &i.Title, &i.Severity,
 			&i.Status, &i.Description, &i.CreatedAt); err == nil {
 			incidents = append(incidents, i)
 		}

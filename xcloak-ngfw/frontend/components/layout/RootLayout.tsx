@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
 import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock } from 'lucide-react';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { timeAgo } from '@/lib/utils';
@@ -30,24 +31,25 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
   );
 }
 
+const ROLE_COLORS: Record<string, string> = {
+  admin:   'var(--red)',
+  analyst: 'var(--orange)',
+  viewer:  'var(--text-3)',
+};
+
 function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<RootLayoutProps, 'children'>) {
   const { notifications, unread, markRead, markAllRead, dismiss } = useNotifications();
   const { theme, toggle } = useTheme();
+  const { profile } = useUser();
   const [bellOpen, setBellOpen] = useState(false);
   const [time, setTime] = useState('');
-  const [username, setUsername] = useState<string | null>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
-  // CRITICAL FIX: localStorage is unavailable during SSR. Reading it directly
-  // in render causes a server/client text mismatch ("Admin" vs "admin").
-  // Instead, read it only after mount via useEffect, and render nothing
-  // (or a stable placeholder) until then.
   useEffect(() => {
-    setUsername(localStorage.getItem('username') || 'admin');
-  }, []);
-
-  useEffect(() => {
-    const update = () => setTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
+    const update = () => setTime(new Date().toLocaleTimeString('en-US', {
+      timeZone: 'UTC',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }));
     update();
     const t = setInterval(update, 1000);
     return () => clearInterval(t);
@@ -203,17 +205,25 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<Roo
           )}
         </div>
 
-        {/* User badge — only rendered after mount, avoids SSR text mismatch */}
-        {username && (
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-lg"
+        {/* User badge — hydrated from shared UserContext */}
+        {profile && (
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
             style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
-            <div className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+            <div className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
               style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
-              {username.charAt(0).toUpperCase()}
+              {profile.username.charAt(0).toUpperCase()}
             </div>
-            <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>
-              {username}
-            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold leading-none" style={{ color: 'var(--text-1)' }}>
+                {profile.username}
+              </p>
+              <p className="text-[9px] leading-none mt-0.5" style={{ color: 'var(--text-3)' }}>
+                <span style={{ color: ROLE_COLORS[profile.role] ?? 'var(--text-3)', fontWeight: 600 }}>
+                  {profile.role}
+                </span>
+                {' · '}{profile.tenant_name}
+              </p>
+            </div>
           </div>
         )}
       </div>

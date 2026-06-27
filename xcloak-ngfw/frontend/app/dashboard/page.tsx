@@ -122,6 +122,8 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, [load]);
 
+  const agentName = (id: number) => agents.find(a => a.id === id)?.hostname || `#${id}`;
+
   const onlineAgents   = agents.filter(a => a.status === 'online').length;
   const openIncidents  = incidents.filter(i => i.status === 'open' || i.status === 'investigating').length;
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length;
@@ -366,7 +368,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs truncate" style={{ color: 'var(--text-1)' }}>{a.rule_name}</p>
                       <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                        Agent #{a.agent_id}
+                        {agentName(a.agent_id)}
                         {a.message && ` · ${a.message.slice(0, 40)}${a.message.length > 40 ? '…' : ''}`}
                       </p>
                     </div>
@@ -414,7 +416,7 @@ export default function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs truncate" style={{ color: 'var(--text-1)' }}>
                       <span className="mono" style={{ color: 'var(--accent)' }}>{ex.action_type}</span>
-                      <span style={{ color: 'var(--text-3)' }}> on </span>Agent #{ex.agent_id}
+                      <span style={{ color: 'var(--text-3)' }}> on </span>{agentName(ex.agent_id)}
                     </p>
                     <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
                       Trigger: {ex.alert_rule}
@@ -447,7 +449,7 @@ export default function DashboardPage() {
                     style={{ background: SEV_COLORS[a.severity] || 'var(--text-3)' }} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs truncate" style={{ color: 'var(--text-1)' }}>{a.rule_name}</p>
-                    <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>Agent #{a.agent_id}</p>
+                    <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{agentName(a.agent_id)}</p>
                   </div>
                   <div className="shrink-0 text-right">
                     <span className={sevClass(a.severity)}>{a.severity}</span>
@@ -477,7 +479,7 @@ export default function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{inc.title}</p>
                     <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
-                      Agent #{inc.agent_id} · {inc.description?.slice(0, 60)}…
+                      {agentName(inc.agent_id)} · {inc.description?.slice(0, 60)}…
                     </p>
                   </div>
                   <div className="shrink-0 text-right">

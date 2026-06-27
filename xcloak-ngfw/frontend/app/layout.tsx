@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NotificationProvider } from '@/context/NotificationContext';
+import { UserProvider } from '@/context/UserContext';
 
 export const metadata: Metadata = {
   title: 'XCloak Security Suite',
@@ -31,7 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeProvider>
           <NotificationProvider>
-            {children}
+            <UserProvider>
+              {children}
+            </UserProvider>
           </NotificationProvider>
         </ThemeProvider>
       </body>

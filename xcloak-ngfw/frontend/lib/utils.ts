@@ -55,6 +55,16 @@ export function getRiskLevel(risk: number): string {
   return 'Low';
 }
 
+export function formatUptime(seconds: number | undefined | null): string {
+  if (seconds == null) return '—';
+  if (seconds < 60)   return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  return `${d}d ${h}h`;
+}
+
 export function getRiskColor(risk: number): string {
   if (risk >= 80) return 'text-red-600';
   if (risk >= 60) return 'text-orange-600';

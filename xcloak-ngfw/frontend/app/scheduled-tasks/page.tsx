@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import api from '@/lib/api';
-import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, X } from 'lucide-react';
+import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, X, Cpu, Check } from 'lucide-react';
+import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
 
 const TASK_TYPES = [
@@ -34,12 +35,14 @@ interface ScheduledTask {
 }
 
 export default function ScheduledTasksPage() {
-  const [tasks, setTasks]       = useState<ScheduledTask[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [showNew, setShowNew]   = useState(false);
-  const [form, setForm]         = useState({ name: '', task_type: 'collect_auth_logs', cron_expr: '*/15 * * * *', agent_ids: '' });
-  const [saving, setSaving]     = useState(false);
-  const [toast, setToast]       = useState<string | null>(null);
+  const [tasks, setTasks]         = useState<ScheduledTask[]>([]);
+  const [agents, setAgents]       = useState<Agent[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showNew, setShowNew]     = useState(false);
+  const [form, setForm]           = useState({ name: '', task_type: 'collect_auth_logs', cron_expr: '*/15 * * * *' });
+  const [selectedAgents, setSelectedAgents] = useState<number[]>([]);
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
@@ -52,19 +55,28 @@ export default function ScheduledTasksPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    api.get('/agents').then(r => setAgents(r.data || [])).catch(() => {});
+  }, []);
+
+  const toggleAgent = (id: number) =>
+    setSelectedAgents(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const openNew = () => {
+    setForm({ name: '', task_type: 'collect_auth_logs', cron_expr: '*/15 * * * *' });
+    setSelectedAgents([]);
+    setShowNew(true);
+  };
+
   const create = async () => {
     if (!form.name || !form.cron_expr) return;
     setSaving(true);
     try {
-      const agentIds = form.agent_ids
-        ? form.agent_ids.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
-        : [];
       await api.post('/scheduler/tasks', {
         name: form.name, task_type: form.task_type,
-        cron_expr: form.cron_expr, agent_ids: agentIds,
+        cron_expr: form.cron_expr, agent_ids: selectedAgents,
       });
       setShowNew(false);
-      setForm({ name: '', task_type: 'collect_auth_logs', cron_expr: '*/15 * * * *', agent_ids: '' });
       load();
       notify('Scheduled task created');
     } catch { notify('Failed to create task'); }
@@ -92,7 +104,7 @@ export default function ScheduledTasksPage() {
     <RootLayout title="Scheduled Tasks" subtitle="Recurring automated agent data collection"
       onRefresh={() => load(true)} refreshing={refreshing}
       actions={
-        <button onClick={() => setShowNew(true)} className="g-btn g-btn-primary text-xs">
+        <button onClick={openNew} className="g-btn g-btn-primary text-xs">
           <Plus className="h-3.5 w-3.5" /> New Schedule
         </button>
       }>
@@ -197,11 +209,55 @@ export default function ScheduledTasksPage() {
               </div>
 
               <div>
-                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>
-                  Agent IDs (comma-separated, blank = all agents)
+                <label className="text-xs mb-1.5 block" style={{ color: 'var(--text-3)' }}>
+                  Target Agents
+                  <span className="ml-1.5" style={{ color: 'var(--text-3)', fontWeight: 400 }}>
+                    ({selectedAgents.length === 0 ? 'all agents' : `${selectedAgents.length} selected`})
+                  </span>
                 </label>
-                <input value={form.agent_ids} onChange={e => setForm(f => ({ ...f, agent_ids: e.target.value }))}
-                  placeholder="126, 73 or leave blank for all" className="g-input w-full font-mono" />
+                {agents.length === 0 ? (
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>No agents registered yet.</p>
+                ) : (
+                  <div className="rounded-xl overflow-hidden max-h-40 overflow-y-auto"
+                    style={{ border: '1px solid var(--border)', background: 'var(--glass-bg)' }}>
+                    {agents.map(a => {
+                      const checked = selectedAgents.includes(a.id);
+                      return (
+                        <button key={a.id} type="button"
+                          onClick={() => toggleAgent(a.id)}
+                          className="flex items-center gap-3 w-full px-3 py-2 text-left transition-colors"
+                          style={{ borderBottom: '1px solid var(--border)' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                          <div className="h-4 w-4 rounded flex items-center justify-center shrink-0"
+                            style={{
+                              background: checked ? 'var(--accent-glow)' : 'transparent',
+                              border: `1px solid ${checked ? 'var(--accent)' : 'var(--border-md)'}`,
+                            }}>
+                            {checked && <Check className="h-2.5 w-2.5" style={{ color: 'var(--accent)' }} />}
+                          </div>
+                          <Cpu className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} />
+                          <span className="text-[11px] flex-1 min-w-0 truncate" style={{ color: 'var(--text-1)' }}>
+                            {a.hostname}
+                          </span>
+                          <span className="text-[9px] shrink-0 px-1.5 py-0.5 rounded-full"
+                            style={{
+                              background: a.status === 'online' ? 'var(--green-bg)' : 'var(--glass-bg-2)',
+                              color: a.status === 'online' ? 'var(--green)' : 'var(--text-3)',
+                            }}>
+                            {a.status}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedAgents.length > 0 && (
+                  <button type="button" onClick={() => setSelectedAgents([])}
+                    className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    Clear selection (run on all agents)
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex gap-3 px-5 pb-5">

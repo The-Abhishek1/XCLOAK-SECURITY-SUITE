@@ -6,6 +6,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { alertsAPI, aiAPI, agentsAPI } from '@/lib/api';
 import { Alert, Agent } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
+import Link from 'next/link';
 import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -222,7 +223,12 @@ export default function AlertsPage() {
                 opacity: a.status === 'acknowledged' ? 0.6 : 1,
               }}
               onClick={() => openAlert(a)}>
-              <span className="mono text-xs" style={{ color: 'var(--text-2)' }}>#{a.agent_id}</span>
+              <Link href={`/agents/${a.agent_id}`}
+                onClick={e => e.stopPropagation()}
+                className="mono text-xs truncate hover:underline"
+                style={{ color: 'var(--accent)' }}>
+                {a.hostname || `#${a.agent_id}`}
+              </Link>
               <div className="min-w-0">
                 <p className="text-xs font-medium truncate" style={{
                   color: 'var(--text-1)',
@@ -311,7 +317,7 @@ export default function AlertsPage() {
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: 'Alert ID',   val: `#${selected.id}` },
-                  { label: 'Agent',      val: `#${selected.agent_id}` },
+                  { label: 'Agent',      val: selected.hostname || `#${selected.agent_id}` },
                   { label: 'Time',       val: formatDate(selected.created_at) },
                   { label: 'Fingerprint', val: selected.fingerprint?.slice(0, 16) + '…' || '—' },
                 ].map(({ label, val }) => (

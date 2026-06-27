@@ -6,6 +6,7 @@ import { incidentsAPI, aiAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { Incident } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
+import Link from 'next/link';
 import {
   AlertTriangle, X, Clock, Bot, Loader2,
   MessageSquare, Send, ChevronRight,
@@ -181,7 +182,12 @@ export default function IncidentsPage() {
                 {inc.status}
               </span>
 
-              <span className="text-xs" style={{ color: 'var(--text-2)' }}>#{inc.agent_id}</span>
+              <Link href={`/agents/${inc.agent_id}`}
+                onClick={e => e.stopPropagation()}
+                className="text-xs mono hover:underline"
+                style={{ color: 'var(--accent)' }}>
+                {inc.hostname || `#${inc.agent_id}`}
+              </Link>
               <span className={sevClass(inc.severity)}>{inc.severity}</span>
 
               <select value={inc.status} disabled={updatingId === inc.id}
@@ -221,7 +227,10 @@ export default function IncidentsPage() {
                     style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
                     {selected.status}
                   </span>
-                  <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>Agent #{selected.agent_id}</span>
+                  <Link href={`/agents/${selected.agent_id}`}
+                    className="text-[10px] mono hover:underline" style={{ color: 'var(--accent)' }}>
+                    {selected.hostname || `#${selected.agent_id}`}
+                  </Link>
                 </div>
               </div>
               <button onClick={() => setSelected(null)} style={{ color: 'var(--text-3)' }}>

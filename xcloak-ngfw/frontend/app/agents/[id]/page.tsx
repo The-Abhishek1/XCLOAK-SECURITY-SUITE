@@ -7,7 +7,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, alertsAPI, tasksAPI, fimAPI, aiAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { Agent, AgentSummary, Vulnerability, TimelineEvent, Alert } from '@/types';
-import { sevClass, formatDate, timeAgo } from '@/lib/utils';
+import { sevClass, formatDate, timeAgo, formatUptime } from '@/lib/utils';
 import {
   ArrowLeft, Activity, Network, Database, Package,
   Users, Clock, Bug, FileSearch, Bell, Play, ShieldAlert, Search,
@@ -263,6 +263,10 @@ export default function AgentDetailPage() {
             <div><p style={{ color: 'var(--text-3)' }}>Machine ID</p><p className="mt-0.5 mono truncate" style={{ color: 'var(--text-1)' }}>{agent.machine_id ? agent.machine_id.slice(0, 16) + '…' : '—'}</p></div>
             <div><p style={{ color: 'var(--text-3)' }}>IP Address</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{agent.ip_address}</p></div>
             <div><p style={{ color: 'var(--text-3)' }}>Last Seen</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{timeAgo(agent.last_seen)}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>Agent Version</p><p className="mt-0.5 mono font-medium" style={{ color: 'var(--text-1)' }}>{agent.version || '—'}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>Uptime</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{formatUptime(agent.uptime_seconds)}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>Memory</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{agent.mem_alloc_mb != null ? `${agent.mem_alloc_mb} MB` : '—'}</p></div>
+            <div><p style={{ color: 'var(--text-3)' }}>Goroutines</p><p className="mt-0.5 font-medium" style={{ color: 'var(--text-1)' }}>{agent.goroutines ?? '—'}</p></div>
           </div>
         </div>
 
