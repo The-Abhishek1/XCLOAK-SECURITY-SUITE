@@ -32,7 +32,7 @@ function ParsedFieldsGrid({ raw }: { raw: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Log row
 // ─────────────────────────────────────────────────────────────────────────────
-function LogRow({ log }: { log: LogEntry }) {
+function LogRow({ log, agentName }: { log: LogEntry; agentName?: string }) {
   const [open, setOpen] = useState(false);
   let ts = '';
   try { ts = new Date(log.collected_at).toLocaleString(); } catch { ts = log.collected_at; }
@@ -54,7 +54,7 @@ function LogRow({ log }: { log: LogEntry }) {
               style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
               {log.log_source || 'unknown'}
             </span>
-            <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>agent:{log.agent_id}</span>
+            <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{agentName || `agent:${log.agent_id}`}</span>
           </div>
           <p className="text-[12px] font-mono truncate" style={{ color: 'var(--text-1)' }}>
             {log.log_message}
@@ -413,7 +413,7 @@ export default function LogSearchPage() {
                   {result.logs.length === 0 ? (
                     <p className="text-sm text-center py-8" style={{ color: 'var(--text-3)' }}>No logs found</p>
                   ) : (
-                    result.logs.map(l => <LogRow key={l.id} log={l} />)
+                    result.logs.map(l => <LogRow key={l.id} log={l} agentName={agents.find(a => a.id === l.agent_id)?.hostname} />)
                   )}
                 </div>
 
