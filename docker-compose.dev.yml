@@ -1,0 +1,48 @@
+# Minimal dev stack — Postgres + Redis only (~300 MB total)
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# What you get vs. the full stack:
+#   ✅ Postgres  — required (all data lives here)
+#   ✅ Redis     — required (rate-limiting, token revocation)
+#   ❌ Kafka     — set KAFKA_ENABLED=false in .env (already the graceful path)
+#   ❌ Zookeeper — not needed without Kafka
+#   ❌ Kafka UI  — not needed without Kafka
+#   ❌ MinIO     — audit export silently disabled; everything else works
+#   ❌ Prometheus — metrics endpoint still works, just nobody scrapes it
+#   ❌ Grafana   — dashboards unavailable; all app features still work
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: xcloak-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: xcloak
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-xcloak}
+      POSTGRES_DB: ngfw
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  redis:
+    image: redis:7-alpine
+    container_name: xcloak-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-xcloak} --maxmemory 64mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 96m
+
+volumes:
+  postgres_dev_data:

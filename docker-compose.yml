@@ -7,9 +7,14 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_HEAP_OPTS: "-Xmx256m -Xms128m"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
+    deploy:
+      resources:
+        limits:
+          memory: 384m
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
@@ -28,8 +33,13 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
     volumes:
       - kafka_data:/var/lib/kafka/data
+    deploy:
+      resources:
+        limits:
+          memory: 640m
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -43,6 +53,10 @@ services:
       KAFKA_CLUSTERS_0_NAME: xcloak
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    deploy:
+      resources:
+        limits:
+          memory: 384m
 
   prometheus:
     image: prom/prometheus:v2.52.0
@@ -61,6 +75,10 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   minio:
     image: minio/minio:RELEASE.2024-05-28T17-19-04Z
@@ -75,6 +93,10 @@ services:
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   grafana:
     image: grafana/grafana:11.0.0
@@ -89,10 +111,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: xcloak
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/xcloak-overview.json
-      # SMTP for the alerting contact point in grafana/provisioning/alerting/
-      # contactpoints.yaml — without this, the 3 alert rules already in
-      # rules.yml evaluate and show red in Grafana's UI but notify nobody.
-      # Reuses the same mail account as the backend's own alert emails.
       GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
       GF_SMTP_HOST: ${GF_SMTP_HOST:-smtp.gmail.com:587}
       GF_SMTP_USER: ${GF_SMTP_USER:-}
@@ -103,6 +121,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
 volumes:
   zookeeper_data:
