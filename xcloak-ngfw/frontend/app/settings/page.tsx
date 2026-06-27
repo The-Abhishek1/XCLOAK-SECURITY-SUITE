@@ -5,6 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
 import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI } from '@/lib/api';
 import api from '@/lib/api';
+import { useUser } from '@/context/UserContext';
 import { timeAgo } from '@/lib/utils';
 import {
   Users, UserCog, Shield, Server, ScrollText,
@@ -40,6 +41,8 @@ interface AuditPage {
 }
 
 export default function SettingsPage() {
+  const { profile: authProfile } = useUser();
+  const currentUsername = authProfile?.username || '';
   const [tab, setTab]     = useState<Tab>('users');
   const [toast, setToast] = useState<string | null>(null);
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
@@ -114,8 +117,6 @@ export default function SettingsPage() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [exportStatus, setExportStatus] = useState<any>(null);
 
-  const currentUsername = typeof window !== 'undefined'
-    ? localStorage.getItem('username') || 'admin' : 'admin';
 
   // ── Loaders ──────────────────────────────────────────────────
   const loadUsers = useCallback(async () => {
