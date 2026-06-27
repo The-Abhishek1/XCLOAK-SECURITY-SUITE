@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ShieldCheck, Eye, EyeOff, Lock, User, AlertCircle, Mail, UserPlus, KeyRound, ArrowLeft, Building2 } from 'lucide-react';
+import { ShieldCheck, Eye, EyeOff, Lock, User, AlertCircle, Mail, UserPlus, KeyRound, ArrowLeft, Building2, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { Sun, Moon } from 'lucide-react';
+import { ssoAPI } from '@/lib/api';
 
 type Tab = 'login' | 'register' | 'forgot';
 
@@ -17,8 +18,11 @@ export default function LoginPage() {
   const [error, setError]        = useState(searchParams.get('sso_error') || '');
   const [success, setSuccess]    = useState('');
   const [loading, setLoading]    = useState(false);
-  const [showSSO, setShowSSO]    = useState(false);
-  const [ssoOrg, setSsoOrg]      = useState('');
+  const [showSSO, setShowSSO]       = useState(false);
+  const [ssoOrg, setSsoOrg]         = useState('');
+  const [ssoEmail, setSsoEmail]     = useState('');
+  const [ssoDiscovering, setSsoDiscovering] = useState(false);
+  const [ssoDiscovered, setSsoDiscovered]   = useState<{ slug: string; tenant_name: string; button_label: string } | null>(null);
 
   // Login form
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -38,8 +42,23 @@ export default function LoginPage() {
 
   const startSSO = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ssoOrg) return;
-    window.location.href = `/api/auth/oidc/start?tenant=${encodeURIComponent(ssoOrg)}`;
+    const slug = ssoDiscovered?.slug || ssoOrg;
+    if (!slug) return;
+    window.location.href = `/api/auth/oidc/start?tenant=${encodeURIComponent(slug)}`;
+  };
+
+  const discoverSSO = async () => {
+    if (!ssoEmail.includes('@')) return;
+    setSsoDiscovering(true);
+    setSsoDiscovered(null);
+    setError('');
+    try {
+      const r = await ssoAPI.discover(ssoEmail);
+      setSsoDiscovered(r.data);
+    } catch {
+      setSsoDiscovered(null);
+      setError('No SSO configured for this email domain. Enter your organization slug below.');
+    } finally { setSsoDiscovering(false); }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -276,16 +295,61 @@ export default function LoginPage() {
               {/* SSO */}
               {tab === 'login' && showSSO && (
                 <form onSubmit={startSSO} className="space-y-4">
-                  <Field label="Organization">
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
-                      <input value={ssoOrg} onChange={e => setSsoOrg(e.target.value)}
-                        placeholder="your-org-slug" required autoFocus className="g-input pl-9" />
+                  {ssoDiscovered ? (
+                    <div className="text-center space-y-3">
+                      <div className="rounded-xl p-4"
+                        style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                        <Building2 className="h-6 w-6 mx-auto mb-2" style={{ color: 'var(--accent)' }} />
+                        <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                          {ssoDiscovered.tenant_name}
+                        </p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                          SSO configured · organization found
+                        </p>
+                      </div>
+                      <button type="submit" className="g-btn g-btn-primary w-full justify-center py-2.5 text-sm font-semibold">
+                        {ssoDiscovered.button_label}
+                      </button>
+                      <button type="button" onClick={() => { setSsoDiscovered(null); setSsoEmail(''); setError(''); }}
+                        className="w-full text-xs flex items-center justify-center gap-1"
+                        style={{ color: 'var(--text-3)' }}>
+                        <ArrowLeft className="h-3 w-3" /> Use a different email or org
+                      </button>
                     </div>
-                  </Field>
-                  {error && <ErrMsg msg={error} />}
-                  <SubmitBtn loading={false} label="Continue" />
-                  <button type="button" onClick={() => { setShowSSO(false); setError(''); }}
+                  ) : (
+                    <>
+                      <Field label="Work email">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+                            <input type="email" value={ssoEmail}
+                              onChange={e => { setSsoEmail(e.target.value); setSsoDiscovered(null); }}
+                              onBlur={() => ssoEmail.includes('@') && discoverSSO()}
+                              placeholder="you@yourcompany.com" className="g-input pl-9 w-full"
+                              autoFocus />
+                          </div>
+                          <button type="button" onClick={discoverSSO}
+                            disabled={ssoDiscovering || !ssoEmail.includes('@')}
+                            className="g-btn g-btn-ghost text-xs px-3 shrink-0">
+                            {ssoDiscovering ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Detect'}
+                          </button>
+                        </div>
+                        <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                          We&apos;ll auto-detect your organization from your email domain.
+                        </p>
+                      </Field>
+                      <Field label="Or enter organization slug manually">
+                        <div className="relative">
+                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+                          <input value={ssoOrg} onChange={e => setSsoOrg(e.target.value)}
+                            placeholder="your-org-slug" className="g-input pl-9 w-full" />
+                        </div>
+                      </Field>
+                      {error && <ErrMsg msg={error} />}
+                      <SubmitBtn loading={false} label="Continue with SSO" />
+                    </>
+                  )}
+                  <button type="button" onClick={() => { setShowSSO(false); setError(''); setSsoDiscovered(null); setSsoEmail(''); }}
                     className="w-full text-xs flex items-center justify-center gap-1"
                     style={{ color: 'var(--text-3)' }}>
                     <ArrowLeft className="h-3 w-3" /> Back to password sign-in

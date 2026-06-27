@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/navigation';
@@ -11,8 +11,10 @@ import {
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
-  Building2, Crosshair, Activity, SearchCode,
+  Building2, Crosshair, Activity, SearchCode, UserCircle2,
 } from 'lucide-react';
+import api from '@/lib/api';
+import { UserProfile } from '@/types';
 
 const NAV = [
   { group: 'OVERVIEW', items: [
@@ -58,21 +60,52 @@ const NAV = [
   ]},
 ];
 
+function UserBadge({ profile }: { profile: UserProfile | null }) {
+  if (!profile) return null;
+  return (
+    <div className="px-3 py-2.5 rounded-xl mb-1"
+      style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+          style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+          <UserCircle2 className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>
+            {profile.username}
+          </p>
+          <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
+            {profile.tenant_name}
+            {profile.is_platform_admin && (
+              <span className="ml-1.5 text-[9px] font-bold uppercase px-1 rounded"
+                style={{ background: 'rgba(251,191,36,0.15)', color: 'var(--yellow)' }}>
+                platform
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NavContent({
   pathname,
   onNavigate,
   toggle,
   logout,
   theme,
+  profile,
 }: {
   pathname: string | null;
   onNavigate?: () => void;
   toggle: () => void;
   logout: () => void;
   theme: string;
+  profile: UserProfile | null;
 }) {
   return (
-    <>
+<>
       <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5">
         {NAV.map(section => (
           <div key={section.group}>
@@ -111,6 +144,7 @@ function NavContent({
 
       <div className="px-2.5 pb-4 space-y-0.5 shrink-0"
         style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+        <UserBadge profile={profile} />
         <button onClick={toggle}
           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all"
           style={{ color: 'var(--text-2)' }}
@@ -151,6 +185,13 @@ export function Sidebar() {
   const router   = useRouter();
   const { theme, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profile, setProfile]       = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    api.get('/auth/profile')
+      .then(r => setProfile(r.data))
+      .catch(() => null);
+  }, []);
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -181,6 +222,7 @@ export function Sidebar() {
           toggle={toggle}
           logout={logout}
           theme={theme}
+          profile={profile}
         />
       </aside>
 
@@ -238,6 +280,7 @@ export function Sidebar() {
             toggle={toggle}
             logout={logout}
             theme={theme}
+            profile={profile}
           />
         </aside>
       </div>

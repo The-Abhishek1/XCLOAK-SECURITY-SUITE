@@ -313,6 +313,13 @@ export const platformAPI = {
   getReleases:      ()                                                                            => api.get('/platform/agent-releases'),
   publishRelease:   (data: { platform: string; version: string; sha256: string; download_url: string }) =>
     api.post('/platform/agent-releases', data),
+  getTenantDomains: (id: number)                       => api.get(`/platform/tenants/${id}/domains`),
+  addTenantDomain:  (id: number, domain: string)       => api.post(`/platform/tenants/${id}/domains`, { domain }),
+  deleteTenantDomain: (tenantID: number, domainID: number) => api.delete(`/platform/tenants/${tenantID}/domains/${domainID}`),
+};
+
+export const ssoAPI = {
+  discover: (email: string) => api.get(`/auth/sso-discover?email=${encodeURIComponent(email)}`),
 };
 
 export default api;

@@ -30,6 +30,7 @@ func SetupRoutes(router *gin.Engine) {
 	// configured identity provider.
 	router.GET("/api/auth/oidc/start", middleware.RateLimitAuth(), api.StartOIDCLoginHandler)
 	router.GET("/api/auth/oidc/callback", api.OIDCCallbackHandler)
+	router.GET("/api/auth/sso-discover", api.SSODiscover)
 
 	// ── Audit ─────────────────────────────────────────────────────
 	router.GET("/api/audit/logs", middleware.RequireAuth(), api.GetAuditLogs)
@@ -212,6 +213,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.CreateTenantHandler)
 	router.GET("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantsHandler)
 	router.PATCH("/api/platform/tenants/:id/toggle", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.ToggleTenantActiveHandler)
+	router.GET("/api/platform/tenants/:id/domains", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantDomains)
+	router.POST("/api/platform/tenants/:id/domains", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.AddTenantDomain)
+	router.DELETE("/api/platform/tenants/:id/domains/:did", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.DeleteTenantDomain)
 	router.POST("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.PublishAgentRelease)
 	router.GET("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAgentReleases)
 	router.GET("/api/agent-releases/:platform", middleware.RequireAgentAuth(), api.GetLatestAgentRelease)

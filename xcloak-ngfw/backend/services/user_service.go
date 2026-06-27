@@ -192,6 +192,28 @@ http://localhost:3000/reset-password?token=%s
 	return nil
 }
 
+// InviteUserDirectly creates a user account without sending an email — used
+// by OIDC JIT provisioning where the user authenticates via IdP and doesn't
+// need a password-reset link to claim their account.
+func InviteUserDirectly(username, email, role string, tenantID int) error {
+	placeholder := make([]byte, 32)
+	rand.Read(placeholder)
+	hash, err := auth.HashPassword(hex.EncodeToString(placeholder))
+	if err != nil {
+		return err
+	}
+	_, err = database.DB.Exec(`
+		INSERT INTO users (username, email, password_hash, role, tenant_id, is_active)
+		VALUES ($1, $2, $3, $4, $5, TRUE)
+		ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username || '_' || floor(random()*9000+1000)::text
+	`, username, email, hash, role, tenantID)
+	if err != nil {
+		return err
+	}
+	LogEvent("JIT_PROVISION", "JIT provisioned "+email+" as "+role, fmt.Sprintf("tenant_id:%d", tenantID))
+	return nil
+}
+
 // RequestPasswordReset generates a reset token and sends an email.
 // Always returns success message even if email not found (prevents user enumeration).
 func RequestPasswordReset(email string) error {
@@ -277,20 +299,30 @@ func ResetPassword(token, newPassword string) error {
 	return nil
 }
 
-// GetUserProfile returns profile info for the current user.
+// GetUserProfile returns profile info for the current user including their
+// tenant name and slug — the frontend needs both to show the org context in
+// the sidebar and to build the SSO test-login URL.
 func GetUserProfile(userID int) (map[string]interface{}, error) {
 	var username, email, role string
 	var isActive, isPlatformAdmin bool
 	var lastLogin *time.Time
 	var createdAt *time.Time
 	var totpEnabled bool
+	var tenantID int
+	var tenantName, tenantSlug string
 
 	err := database.DB.QueryRow(`
-		SELECT username, COALESCE(email,''), role, is_active,
-		       last_login, created_at,
-		       COALESCE(totp_enabled, FALSE), is_platform_admin
-		FROM users WHERE id=$1
-	`, userID).Scan(&username, &email, &role, &isActive, &lastLogin, &createdAt, &totpEnabled, &isPlatformAdmin)
+		SELECT u.username, COALESCE(u.email,''), u.role, u.is_active,
+		       u.last_login, u.created_at,
+		       COALESCE(u.totp_enabled, FALSE), u.is_platform_admin,
+		       u.tenant_id, t.name, t.slug
+		FROM users u
+		JOIN tenants t ON t.id = u.tenant_id
+		WHERE u.id=$1
+	`, userID).Scan(
+		&username, &email, &role, &isActive, &lastLogin, &createdAt,
+		&totpEnabled, &isPlatformAdmin, &tenantID, &tenantName, &tenantSlug,
+	)
 
 	if err != nil {
 		return nil, err
@@ -306,6 +338,9 @@ func GetUserProfile(userID int) (map[string]interface{}, error) {
 		"created_at":        createdAt,
 		"totp_enabled":      totpEnabled,
 		"is_platform_admin": isPlatformAdmin,
+		"tenant_id":         tenantID,
+		"tenant_name":       tenantName,
+		"tenant_slug":       tenantSlug,
 	}, nil
 }
 

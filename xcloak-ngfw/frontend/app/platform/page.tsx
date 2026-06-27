@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import api, { platformAPI } from '@/lib/api';
-import { AgentRelease } from '@/types';
+import { AgentRelease, TenantDomain } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload } from 'lucide-react';
+import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload, Globe, ChevronRight, ChevronDown } from 'lucide-react';
 
 interface Tenant {
   id: number;
@@ -22,12 +22,88 @@ const PLATFORMS = [
   'darwin_amd64', 'darwin_arm64',
 ];
 
+function DomainsPanel({ tenantID }: { tenantID: number }) {
+  const [domains, setDomains]   = useState<TenantDomain[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [newDomain, setNewDomain] = useState('');
+  const [adding, setAdding]     = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [err, setErr]           = useState('');
+
+  useEffect(() => {
+    platformAPI.getTenantDomains(tenantID)
+      .then(r => setDomains(r.data || []))
+      .finally(() => setLoading(false));
+  }, [tenantID]);
+
+  const add = async () => {
+    if (!newDomain.trim()) return;
+    setAdding(true); setErr('');
+    try {
+      await platformAPI.addTenantDomain(tenantID, newDomain.trim().toLowerCase());
+      const r = await platformAPI.getTenantDomains(tenantID);
+      setDomains(r.data || []);
+      setNewDomain('');
+    } catch (e: any) {
+      setErr(e?.response?.data?.error || 'Failed to add domain');
+    } finally { setAdding(false); }
+  };
+
+  const del = async (domainID: number) => {
+    setDeleting(domainID);
+    try {
+      await platformAPI.deleteTenantDomain(tenantID, domainID);
+      setDomains(d => d.filter(x => x.id !== domainID));
+    } finally { setDeleting(null); }
+  };
+
+  if (loading) return <div className="px-4 py-2 text-[11px] animate-pulse" style={{ color: 'var(--text-3)' }}>Loading domains…</div>;
+
+  return (
+    <div className="px-4 pb-3 pt-1">
+      <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: 'var(--text-3)' }}>
+        Email Domains → SSO Auto-Routing
+      </p>
+      <div className="flex gap-2 mb-2">
+        <input value={newDomain} onChange={e => setNewDomain(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          placeholder="acme.com" className="g-input text-xs mono flex-1"
+          style={{ maxWidth: 200 }} />
+        <button onClick={add} disabled={adding || !newDomain.trim()} className="g-btn g-btn-primary text-xs px-3">
+          {adding ? '…' : <Plus className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+      {err && <p className="text-[10px] mb-1" style={{ color: 'var(--red)' }}>{err}</p>}
+      {domains.length === 0 ? (
+        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+          No domains — users must enter the org slug to use SSO.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {domains.map(d => (
+            <div key={d.id} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px]"
+              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
+              <Globe className="h-3 w-3" />
+              <span className="mono">{d.domain}</span>
+              <button onClick={() => del(d.id)} disabled={deleting === d.id}
+                className="opacity-50 hover:opacity-100 transition-opacity">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PlatformPage() {
   const [tenants, setTenants]     = useState<Tenant[]>([]);
   const [releases, setReleases]   = useState<AgentRelease[]>([]);
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState<boolean | null>(null);
+  const [expandedTenant, setExpandedTenant] = useState<number | null>(null);
   const [showNew, setShowNew]     = useState(false);
   const [showRelease, setShowRelease] = useState(false);
   const [form, setForm]           = useState({ name: '', slug: '', admin_username: '', admin_email: '' });
@@ -150,8 +226,8 @@ export default function PlatformPage() {
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-3)' }}>Tenants</p>
         <div className="g-table">
-          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 160px 90px 90px 140px 100px' }}>
-            <span>Name</span><span>Slug</span><span>Users</span><span>Status</span><span>Created</span><span></span>
+          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '24px 1fr 160px 90px 90px 140px 100px' }}>
+            <span></span><span>Name</span><span>Slug</span><span>Users</span><span>Status</span><span>Created</span><span></span>
           </div>
 
           {loading ? (
@@ -162,28 +238,41 @@ export default function PlatformPage() {
               <p className="text-sm" style={{ color: 'var(--text-2)' }}>No tenants yet.</p>
             </div>
           ) : tenants.map(t => (
-            <div key={t.id} className="g-tr grid gap-3 items-center px-4"
-              style={{ gridTemplateColumns: '1fr 160px 90px 90px 140px 100px' }}>
-              <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{t.name}</span>
-              <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{t.slug}</span>
-              <span className="text-xs" style={{ color: 'var(--text-2)' }}>{t.user_count ?? 0}</span>
-              <span className="text-[11px] font-semibold" style={{ color: t.is_active ? 'var(--green)' : 'var(--red)' }}>
-                {t.is_active ? 'Active' : 'Suspended'}
-              </span>
-              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(t.created_at)}</span>
-              <button
-                title={t.is_active ? 'Suspend tenant' : 'Reactivate tenant'}
-                onClick={() => toggleTenant(t)}
-                disabled={toggling === t.id}
-                className="g-btn text-xs"
-                style={{
-                  background: t.is_active ? 'var(--red-bg)' : 'rgba(52,211,153,0.15)',
-                  color: t.is_active ? 'var(--red)' : 'var(--green)',
-                  border: t.is_active ? '1px solid var(--red-border)' : '1px solid rgba(52,211,153,0.3)',
-                }}>
-                {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
-                {t.is_active ? 'Suspend' : 'Reactivate'}
-              </button>
+            <div key={t.id}>
+              <div className="g-tr grid gap-3 items-center px-4"
+                style={{ gridTemplateColumns: '24px 1fr 160px 90px 90px 140px 100px' }}>
+                <button onClick={() => setExpandedTenant(expandedTenant === t.id ? null : t.id)}
+                  style={{ color: 'var(--text-3)' }}>
+                  {expandedTenant === t.id
+                    ? <ChevronDown className="h-3.5 w-3.5" />
+                    : <ChevronRight className="h-3.5 w-3.5" />}
+                </button>
+                <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{t.name}</span>
+                <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{t.slug}</span>
+                <span className="text-xs" style={{ color: 'var(--text-2)' }}>{t.user_count ?? 0}</span>
+                <span className="text-[11px] font-semibold" style={{ color: t.is_active ? 'var(--green)' : 'var(--red)' }}>
+                  {t.is_active ? 'Active' : 'Suspended'}
+                </span>
+                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(t.created_at)}</span>
+                <button
+                  title={t.is_active ? 'Suspend tenant' : 'Reactivate tenant'}
+                  onClick={() => toggleTenant(t)}
+                  disabled={toggling === t.id}
+                  className="g-btn text-xs"
+                  style={{
+                    background: t.is_active ? 'var(--red-bg)' : 'rgba(52,211,153,0.15)',
+                    color: t.is_active ? 'var(--red)' : 'var(--green)',
+                    border: t.is_active ? '1px solid var(--red-border)' : '1px solid rgba(52,211,153,0.3)',
+                  }}>
+                  {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
+                  {t.is_active ? 'Suspend' : 'Reactivate'}
+                </button>
+              </div>
+              {expandedTenant === t.id && (
+                <div style={{ borderTop: '1px solid var(--border)', background: 'var(--glass-bg)' }}>
+                  <DomainsPanel tenantID={t.id} />
+                </div>
+              )}
             </div>
           ))}
         </div>

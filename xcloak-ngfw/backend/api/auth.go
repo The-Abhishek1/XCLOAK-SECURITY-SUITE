@@ -8,6 +8,7 @@ import (
 
 	"xcloak-ngfw/auth"
 	"xcloak-ngfw/database"
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -156,6 +157,47 @@ func GetProfile(c *gin.Context) {
 	}
 
 	c.JSON(200, profile)
+}
+
+// SSODiscover — GET /api/auth/sso-discover?email=user@acme.com
+// Unauthenticated — used by the login page to auto-detect SSO when the user
+// types their email. Extracts the domain, looks it up in tenant_domains, and
+// returns the slug and (optional) button label so the login page can skip the
+// slug-entry step and go straight to the IdP redirect.
+func SSODiscover(c *gin.Context) {
+	email := c.Query("email")
+	domain := ""
+	for i := len(email) - 1; i >= 0; i-- {
+		if email[i] == '@' {
+			domain = email[i+1:]
+			break
+		}
+	}
+	if domain == "" {
+		c.JSON(400, gin.H{"error": "invalid email"})
+		return
+	}
+
+	tenant, err := repositories.GetTenantByDomain(domain)
+	if err != nil || !tenant.IsActive {
+		c.JSON(404, gin.H{"error": "no SSO mapping found for this email domain"})
+		return
+	}
+
+	label, ssoEnabled := services.GetOIDCPublicConfig(tenant.ID)
+	if !ssoEnabled {
+		c.JSON(404, gin.H{"error": "SSO not configured for this organization"})
+		return
+	}
+
+	if label == "" {
+		label = "Sign in with " + tenant.Name
+	}
+	c.JSON(200, gin.H{
+		"slug":         tenant.Slug,
+		"tenant_name":  tenant.Name,
+		"button_label": label,
+	})
 }
 
 // UpdateProfile — PATCH /api/auth/profile

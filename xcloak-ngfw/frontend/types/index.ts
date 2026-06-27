@@ -440,3 +440,25 @@ export interface AgentRelease {
   created_by: string;
   created_at: string;
 }
+
+export interface TenantDomain {
+  id: number;
+  tenant_id: number;
+  domain: string;
+  created_at: string;
+}
+
+export interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  is_platform_admin: boolean;
+  totp_enabled: boolean;
+  tenant_id: number;
+  tenant_name: string;
+  tenant_slug: string;
+  last_login: string | null;
+  created_at: string | null;
+}

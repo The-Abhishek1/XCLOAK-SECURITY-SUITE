@@ -67,7 +67,7 @@ export default function SettingsPage() {
   // ── SSO (OIDC) ───────────────────────────────────────────────
   const [ssoLoading, setSsoLoading] = useState(false);
   const [ssoSaving, setSsoSaving]   = useState(false);
-  const [ssoForm, setSsoForm]       = useState({ enabled: false, issuer_url: '', client_id: '', client_secret: '', button_label: '' });
+  const [ssoForm, setSsoForm]       = useState({ enabled: false, issuer_url: '', client_id: '', client_secret: '', button_label: '', jit_provisioning: false, default_role: 'analyst' });
   const [showSsoSecret, setShowSsoSecret] = useState(false);
   const [ssoConfigured, setSsoConfigured] = useState(false);
 
@@ -157,6 +157,8 @@ export default function SettingsPage() {
           // rather than show the placeholder bullets as if they were real.
           client_secret: secret === '••••••••' ? '' : secret,
           button_label: row.config?.button_label || '',
+          jit_provisioning: row.config?.jit_provisioning || false,
+          default_role: row.config?.default_role || 'analyst',
         });
         setSsoConfigured(true);
       } else {
@@ -175,6 +177,8 @@ export default function SettingsPage() {
           client_id: ssoForm.client_id,
           client_secret: ssoForm.client_secret,
           button_label: ssoForm.button_label,
+          jit_provisioning: ssoForm.jit_provisioning,
+          default_role: ssoForm.default_role,
         },
       });
       notify('SSO settings saved');
@@ -641,67 +645,107 @@ export default function SettingsPage() {
 
         {/* ══════════ SSO ══════════ */}
         {tab === 'sso' && (
-          <div className="g-card p-5 space-y-4 max-w-lg">
-            {ssoLoading ? (
-              <div className="py-12 text-center animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Single Sign-On (OIDC)</p>
-                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                      Let users in this organization sign in via your identity provider
-                      (Okta, Azure AD, Google Workspace, Auth0, Keycloak, etc.)
-                    </p>
-                  </div>
-                  <button onClick={() => setSsoForm(f => ({ ...f, enabled: !f.enabled }))}>
-                    {ssoForm.enabled
-                      ? <ToggleRight className="h-6 w-6" style={{ color: 'var(--accent)' }} />
-                      : <ToggleLeft  className="h-6 w-6" style={{ color: 'var(--text-3)' }} />}
-                  </button>
-                </div>
-
-                <div>
-                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Issuer URL</label>
-                  <input value={ssoForm.issuer_url} onChange={e => setSsoForm(f => ({ ...f, issuer_url: e.target.value }))}
-                    placeholder="https://your-tenant.okta.com" className="g-input w-full text-xs mono" />
-                </div>
-                <div>
-                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Client ID</label>
-                  <input value={ssoForm.client_id} onChange={e => setSsoForm(f => ({ ...f, client_id: e.target.value }))}
-                    placeholder="Client ID from your IdP app registration" className="g-input w-full text-xs mono" />
-                </div>
-                <div>
-                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Client Secret</label>
-                  <div className="relative">
-                    <input type={showSsoSecret ? 'text' : 'password'}
-                      value={ssoForm.client_secret} onChange={e => setSsoForm(f => ({ ...f, client_secret: e.target.value }))}
-                      placeholder={ssoConfigured ? 'Leave blank to keep current secret' : 'Client secret from your IdP'}
-                      className="g-input w-full pr-8 text-xs mono" />
-                    <button className="absolute right-2 top-1/2 -translate-y-1/2"
-                      onClick={() => setShowSsoSecret(s => !s)} style={{ color: 'var(--text-3)' }}>
-                      {showSsoSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          <div className="space-y-4 max-w-lg">
+            <div className="g-card p-5 space-y-4">
+              {ssoLoading ? (
+                <div className="py-12 text-center animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Single Sign-On (OIDC)</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        Okta, Azure AD, Google Workspace, Auth0, Keycloak, or any OIDC-compliant IdP.
+                      </p>
+                    </div>
+                    <button onClick={() => setSsoForm(f => ({ ...f, enabled: !f.enabled }))}>
+                      {ssoForm.enabled
+                        ? <ToggleRight className="h-6 w-6" style={{ color: 'var(--accent)' }} />
+                        : <ToggleLeft  className="h-6 w-6" style={{ color: 'var(--text-3)' }} />}
                     </button>
                   </div>
-                </div>
-                <div>
-                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Button Label (optional)</label>
-                  <input value={ssoForm.button_label} onChange={e => setSsoForm(f => ({ ...f, button_label: e.target.value }))}
-                    placeholder="Sign in with Acme Corp" className="g-input w-full text-xs" />
-                </div>
 
-                <div className="rounded-lg px-3 py-2.5 text-[11px]" style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                  Register this callback URL with your identity provider:
-                  <div className="mono mt-1 break-all" style={{ color: 'var(--accent)' }}>
-                    {(process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL || 'http://localhost:8080') + '/api/auth/oidc/callback'}
+                  <div>
+                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Issuer URL</label>
+                    <input value={ssoForm.issuer_url} onChange={e => setSsoForm(f => ({ ...f, issuer_url: e.target.value }))}
+                      placeholder="https://your-tenant.okta.com" className="g-input w-full text-xs mono" />
                   </div>
-                </div>
+                  <div>
+                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Client ID</label>
+                    <input value={ssoForm.client_id} onChange={e => setSsoForm(f => ({ ...f, client_id: e.target.value }))}
+                      placeholder="Client ID from your IdP app registration" className="g-input w-full text-xs mono" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Client Secret</label>
+                    <div className="relative">
+                      <input type={showSsoSecret ? 'text' : 'password'}
+                        value={ssoForm.client_secret} onChange={e => setSsoForm(f => ({ ...f, client_secret: e.target.value }))}
+                        placeholder={ssoConfigured ? 'Leave blank to keep current secret' : 'Client secret from your IdP'}
+                        className="g-input w-full pr-8 text-xs mono" />
+                      <button className="absolute right-2 top-1/2 -translate-y-1/2"
+                        onClick={() => setShowSsoSecret(s => !s)} style={{ color: 'var(--text-3)' }}>
+                        {showSsoSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Button Label (optional)</label>
+                    <input value={ssoForm.button_label} onChange={e => setSsoForm(f => ({ ...f, button_label: e.target.value }))}
+                      placeholder="Sign in with Acme Corp" className="g-input w-full text-xs" />
+                  </div>
 
-                <button onClick={saveSSO} disabled={ssoSaving} className="g-btn g-btn-primary text-xs w-full justify-center">
-                  {ssoSaving ? 'Saving…' : 'Save SSO Settings'}
-                </button>
-              </>
-            )}
+                  {/* JIT provisioning */}
+                  <div className="rounded-xl p-3 space-y-2"
+                    style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold" style={{ color: 'var(--text-1)' }}>JIT Provisioning</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                          Auto-create accounts on first SSO login (no pre-invite needed).
+                        </p>
+                      </div>
+                      <button onClick={() => setSsoForm(f => ({ ...f, jit_provisioning: !f.jit_provisioning }))}>
+                        {ssoForm.jit_provisioning
+                          ? <ToggleRight className="h-5 w-5" style={{ color: 'var(--accent)' }} />
+                          : <ToggleLeft  className="h-5 w-5" style={{ color: 'var(--text-3)' }} />}
+                      </button>
+                    </div>
+                    {ssoForm.jit_provisioning && (
+                      <div>
+                        <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Default role for JIT users</label>
+                        <select value={ssoForm.default_role}
+                          onChange={e => setSsoForm(f => ({ ...f, default_role: e.target.value }))}
+                          className="g-select w-full text-xs">
+                          <option value="viewer">Viewer</option>
+                          <option value="analyst">Analyst</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Callback URL */}
+                  <div className="rounded-lg px-3 py-2.5 text-[11px]" style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                    Register this callback URL with your identity provider:
+                    <div className="mono mt-1 break-all" style={{ color: 'var(--accent)' }}>
+                      {(process.env.NEXT_PUBLIC_BACKEND_PUBLIC_URL || 'http://localhost:8080') + '/api/auth/oidc/callback'}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={saveSSO} disabled={ssoSaving} className="g-btn g-btn-primary text-xs flex-1 justify-center">
+                      {ssoSaving ? 'Saving…' : 'Save SSO Settings'}
+                    </button>
+                    {ssoConfigured && ssoForm.enabled && (
+                      <a href="/login?sso_test=1" target="_blank" rel="noopener noreferrer"
+                        className="g-btn g-btn-ghost text-xs px-4">
+                        Test Login
+                      </a>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
 

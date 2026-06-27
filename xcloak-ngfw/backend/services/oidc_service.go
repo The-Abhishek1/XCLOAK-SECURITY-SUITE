@@ -25,10 +25,12 @@ import (
 // row (name='oidc') — same per-tenant storage every other integration
 // (webhook/Slack/email) already uses, not a new table.
 type OIDCConfig struct {
-	IssuerURL    string `json:"issuer_url"`
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	ButtonLabel  string `json:"button_label"`
+	IssuerURL       string `json:"issuer_url"`
+	ClientID        string `json:"client_id"`
+	ClientSecret    string `json:"client_secret"`
+	ButtonLabel     string `json:"button_label"`
+	JITProvisioning bool   `json:"jit_provisioning"`
+	DefaultRole     string `json:"default_role"`
 }
 
 func backendPublicURL() string {
@@ -213,8 +215,46 @@ func CompleteOIDCLogin(ctx context.Context, code, stateStr string) (string, erro
 	}
 
 	user, err := repositories.GetUserByEmailAndTenant(idClaims.Email, claims.TenantID)
-	if err != nil || !user.IsActive {
-		return "", errors.New("no account found for this email in this organization")
+	if err != nil {
+		if !cfg.JITProvisioning {
+			return "", errors.New("no account found for this email in this organization")
+		}
+		// JIT: auto-provision a new user with the configured default role.
+		role := cfg.DefaultRole
+		if role == "" {
+			role = "analyst"
+		}
+		// Derive a username from the email local part; replace non-alphanum with _.
+		local := idClaims.Email
+		if at := len(idClaims.Email); at > 0 {
+			for i, c := range idClaims.Email {
+				if c == '@' {
+					local = idClaims.Email[:i]
+					break
+				}
+			}
+		}
+		username := ""
+		for _, c := range local {
+			if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+				username += string(c)
+			} else {
+				username += "_"
+			}
+		}
+		if username == "" {
+			username = "sso_user"
+		}
+		if err := InviteUserDirectly(username, idClaims.Email, role, claims.TenantID); err != nil {
+			return "", fmt.Errorf("JIT provisioning failed: %w", err)
+		}
+		user, err = repositories.GetUserByEmailAndTenant(idClaims.Email, claims.TenantID)
+		if err != nil {
+			return "", errors.New("JIT provisioning succeeded but could not load new account")
+		}
+	}
+	if !user.IsActive {
+		return "", errors.New("your account in this organization has been deactivated")
 	}
 
 	token, err := auth.GenerateJWT(user.ID, user.Username, user.Role, user.TenantID, user.IsPlatformAdmin)
@@ -226,4 +266,15 @@ func CompleteOIDCLogin(ctx context.Context, code, stateStr string) (string, erro
 	LogEvent("LOGIN_SSO", "SSO login via OIDC", user.Username)
 
 	return token, nil
+}
+
+// GetOIDCPublicConfig returns the non-secret parts of a tenant's OIDC config
+// (button_label, whether it's enabled) for use by the frontend discovery
+// endpoint. Never returns the client_secret.
+func GetOIDCPublicConfig(tenantID int) (buttonLabel string, enabled bool) {
+	cfg, _ := loadOIDCConfig(tenantID)
+	if cfg == nil {
+		return "", false
+	}
+	return cfg.ButtonLabel, true
 }
