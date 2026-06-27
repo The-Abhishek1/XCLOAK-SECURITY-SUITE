@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api, { platformAPI } from '@/lib/api';
+import { platformAPI } from '@/lib/api';
+import { useUser } from '@/context/UserContext';
 import { AgentRelease, TenantDomain } from '@/types';
 import { timeAgo } from '@/lib/utils';
 import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload, Globe, ChevronRight, ChevronDown } from 'lucide-react';
@@ -98,11 +99,12 @@ function DomainsPanel({ tenantID }: { tenantID: number }) {
 }
 
 export default function PlatformPage() {
+  const { profile } = useUser();
+  const isPlatformAdmin = profile?.is_platform_admin ?? null;
   const [tenants, setTenants]     = useState<Tenant[]>([]);
   const [releases, setReleases]   = useState<AgentRelease[]>([]);
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState<boolean | null>(null);
   const [expandedTenant, setExpandedTenant] = useState<number | null>(null);
   const [showNew, setShowNew]     = useState(false);
   const [showRelease, setShowRelease] = useState(false);
@@ -125,12 +127,6 @@ export default function PlatformPage() {
       if (tRes.status === 'fulfilled') setTenants(tRes.value.data || []);
       if (rRes.status === 'fulfilled') setReleases(rRes.value.data || []);
     } finally { setLoading(false); setRefreshing(false); }
-  }, []);
-
-  useEffect(() => {
-    api.get('/auth/profile')
-      .then(r => setIsPlatformAdmin(!!r.data?.is_platform_admin))
-      .catch(() => setIsPlatformAdmin(false));
   }, []);
 
   useEffect(() => {
