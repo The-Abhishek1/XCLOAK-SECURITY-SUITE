@@ -16,7 +16,16 @@ const (
 	registerRetryWait = 5 * time.Second
 )
 
+// Version is set at build time via -ldflags "-X main.Version=1.2.3"
+// (build_windows.sh already passed this flag, but nothing declared the
+// variable it was meant to land in, so it silently did nothing). Defaults
+// to "dev" for unflagged builds. Propagated into package agent so
+// self-reported heartbeats and the self-update checker can read it.
+var Version = "dev"
+
 func main() {
+
+	agent.CurrentVersion = Version
 
 	// Seed the global RNG used for collection jitter.
 	rand.Seed(time.Now().UnixNano()) //nolint:staticcheck
@@ -76,6 +85,14 @@ startLoops:
 	// Each collector runs on its own schedule with random jitter on startup
 	// so they don't all hit the server simultaneously.
 	agent.StartCollectors(agentID)
+
+	// ── Self-update checker ─────────────────────────────────────
+	// Opt out via XCLOAK_DISABLE_SELF_UPDATE=true.
+	agent.StartSelfUpdateChecker()
+
+	// ── Firewall hit-count reporter ──────────────────────────────
+	// Parses iptables XCLOAK chain counters every 60s and ships to backend.
+	agent.StartFirewallStatsCollector()
 
 	// ── Task poll loop ─────────────────────────────────────────
 	// Server-dispatched tasks (isolate host, kill process, FIM scan, etc.)

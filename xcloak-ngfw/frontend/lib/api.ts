@@ -201,11 +201,16 @@ export const yaraAPI = {
 };
 
 export const firewallAPI = {
-  getAll:   ()                      => api.get('/firewall/rules'),
-  getById:  (id: number)            => api.get(`/firewall/rules/${id}`),
-  create:   (data: any)             => api.post('/firewall/rules', data),
-  update:   (id: number, data: any) => api.put(`/firewall/rules/${id}`, data),
-  delete:   (id: number)            => api.delete(`/firewall/rules/${id}`),
+  getAll:      (group?: string)         => api.get('/firewall/rules', { params: group ? { group } : {} }),
+  getById:     (id: number)             => api.get(`/firewall/rules/${id}`),
+  create:      (data: any)              => api.post('/firewall/rules', data),
+  update:      (id: number, data: any)  => api.put(`/firewall/rules/${id}`, data),
+  delete:      (id: number)             => api.delete(`/firewall/rules/${id}`),
+  sync:        (data: any)              => api.post('/firewall/sync', data),
+  getSyncLog:  (agentId?: number)       => api.get('/firewall/sync/log', { params: agentId ? { agent_id: agentId } : {} }),
+  getGroups:   ()                       => api.get('/firewall/groups'),
+  getStats:    ()                       => api.get('/firewall/stats'),
+  getConflicts: ()                      => api.get('/firewall/conflicts'),
 };
 
 export const auditAPI = {

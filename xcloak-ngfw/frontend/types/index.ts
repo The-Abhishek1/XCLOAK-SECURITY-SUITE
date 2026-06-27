@@ -168,13 +168,40 @@ export interface IOC {
 export interface FirewallRule {
   id: number;
   name: string;
+  description: string;
+  group_name: string;
   source_ip: string;
   destination_ip: string;
   protocol: string;
   port: number;
   action: string;
   enabled: boolean;
-  created_at?: string;
+  priority: number;
+  hit_count: number;
+  synced_at: string | null;
+}
+
+export interface FirewallGroup {
+  name: string;
+  total_rules: number;
+  enabled_rules: number;
+  total_hits: number;
+}
+
+export interface FirewallConflict {
+  type: 'duplicate' | 'shadow' | 'contradiction';
+  severity: 'warning' | 'error';
+  description: string;
+  rule_a: number;
+  rule_b: number;
+  rule_a_name: string;
+  rule_b_name: string;
+}
+
+export interface FirewallStats {
+  top_rules: Array<{ id: number; name: string; group_name: string; action: string; hit_count: number }>;
+  total_hits_24h: number;
+  per_agent: Array<{ agent_id: number; hostname: string; hits: number }>;
 }
 
 export interface Playbook {

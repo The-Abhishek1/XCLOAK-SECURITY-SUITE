@@ -22,9 +22,10 @@ import (
 //	}
 func SyncFirewallRules(c *gin.Context) {
 	var body struct {
-		AgentIDs []int  `json:"agent_ids"`
-		Mode     string `json:"mode"`
-		ManageIP string `json:"manage_ip"`
+		AgentIDs  []int  `json:"agent_ids"`
+		Mode      string `json:"mode"`
+		ManageIP  string `json:"manage_ip"`
+		GroupName string `json:"group_name"`
 	}
 	c.ShouldBindJSON(&body)
 
@@ -45,6 +46,7 @@ func SyncFirewallRules(c *gin.Context) {
 		body.ManageIP,
 		syncedBy,
 		tenantIDFromContext(c),
+		body.GroupName,
 	)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})

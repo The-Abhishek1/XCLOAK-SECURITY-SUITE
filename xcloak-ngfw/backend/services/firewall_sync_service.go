@@ -47,12 +47,14 @@ type SyncResult struct {
 // never push their firewall config onto (or wipe, in "replace" mode)
 // another tenant's agents.
 // targetAgentIDs: nil or empty = all online agents in tenantID.
+// groupName: non-empty = only sync rules belonging to that group.
 func SyncFirewallToAgents(
 	targetAgentIDs []int,
 	mode string,         // "replace" | "append"
 	manageIP string,     // XCloak server IP — always whitelisted
 	syncedBy string,
 	tenantID int,
+	groupName ...string, // optional group filter
 ) ([]SyncResult, error) {
 
 	if mode == "" {
@@ -64,9 +66,18 @@ func SyncFirewallToAgents(
 	}
 
 	// Fetch this tenant's enabled firewall rules ordered by priority.
-	dbRules, err := repositories.GetRulesForTenant(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("fetch rules: %w", err)
+	// If a group filter is provided, only pull that group's rules.
+	var (
+		dbRules []models.FirewallRule
+		fetchErr error
+	)
+	if len(groupName) > 0 && groupName[0] != "" {
+		dbRules, fetchErr = repositories.GetRulesForGroup(groupName[0], tenantID)
+	} else {
+		dbRules, fetchErr = repositories.GetRulesForTenant(tenantID)
+	}
+	if fetchErr != nil {
+		return nil, fmt.Errorf("fetch rules: %w", fetchErr)
 	}
 
 	var syncRules []FirewallSyncRule
