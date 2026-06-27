@@ -331,8 +331,7 @@ export default function NetworkMapPage() {
           <div className="g-panel py-14 text-center">
             <Network className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
             <p className="text-sm" style={{ color: 'var(--text-2)' }}>
-              No connections observed in this window — widen the time range or check that agents have the eBPF
-              connect-event collector running.
+              No agents registered yet. Install the xcloak-agent on at least one host to see the network map.
             </p>
           </div>
         ) : (

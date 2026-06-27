@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 
@@ -56,19 +57,35 @@ type AttackPathGraph struct {
 
 const internetNodeID = "internet"
 
-// hostFromAddress strips the trailing ":port" from an "ip:port" connection
-// address — same convention the frontend's network-map already assumes for
-// endpoint_connections.local_address/remote_address.
+// hostFromAddress strips the ":port" from an "ip:port" or "[ipv6]:port"
+// address using net.SplitHostPort. Also strips the interface-scope suffix
+// that ss/ip occasionally produces (e.g. "192.168.1.1%eth0:68").
 func hostFromAddress(addr string) string {
-	idx := strings.LastIndex(addr, ":")
-	if idx < 0 {
+	// Strip scope ID before SplitHostPort ("1.2.3.4%eth0:68" → "1.2.3.4:68").
+	if pct := strings.Index(addr, "%"); pct >= 0 {
+		if colon := strings.LastIndex(addr, ":"); colon > pct {
+			addr = addr[:pct] + addr[colon:]
+		}
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		if idx := strings.LastIndex(addr, ":"); idx >= 0 {
+			return addr[:idx]
+		}
 		return addr
 	}
-	return addr[:idx]
+	return host
 }
 
 func isListenPlaceholder(ip string) bool {
-	return ip == "" || ip == "0.0.0.0" || ip == "::" || ip == "127.0.0.1" || ip == "::1"
+	if ip == "" || ip == "0.0.0.0" || ip == "::" {
+		return true
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	return parsed.IsLoopback()
 }
 
 // BuildAttackPathGraph composes observed network connections, EPSS/KEV

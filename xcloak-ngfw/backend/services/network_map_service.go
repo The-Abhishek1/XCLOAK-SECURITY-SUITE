@@ -143,6 +143,15 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 		return nil, fmt.Errorf("loading connect events: %w", err)
 	}
 
+	// Always supplement with endpoint_connections (the periodic ss-snapshot
+	// collector). This is the primary data source when the eBPF module is not
+	// running (non-root / non-Linux agents). Deduplication is handled by the
+	// edge aggregation map below.
+	epConns, err := repositories.GetEndpointConnectionsByTenant(tenantID, limit)
+	if err == nil {
+		events = append(events, epConns...)
+	}
+
 	alertCounts, err := alertCountsByAgent(tenantID)
 	if err != nil {
 		alertCounts = map[int]int{} // non-fatal
