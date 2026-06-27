@@ -110,7 +110,7 @@ function StatsPanel({ stats }: { stats: LogStats }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-3)' }}>Top Sources</p>
-          {stats.by_source.slice(0, 4).map(s => (
+          {(stats.by_source ?? []).slice(0, 4).map(s => (
             <div key={s.source} className="flex justify-between text-[11px]">
               <span style={{ color: 'var(--text-2)' }} className="truncate max-w-[120px]">{s.source || 'unknown'}</span>
               <span style={{ color: 'var(--text-1)' }}>{s.count.toLocaleString()}</span>
@@ -119,7 +119,7 @@ function StatsPanel({ stats }: { stats: LogStats }) {
         </div>
         <div>
           <p className="text-[10px] uppercase font-bold mb-1" style={{ color: 'var(--text-3)' }}>Top Agents</p>
-          {stats.by_agent.slice(0, 4).map(a => (
+          {(stats.by_agent ?? []).slice(0, 4).map(a => (
             <div key={a.agent_id} className="flex justify-between text-[11px]">
               <span style={{ color: 'var(--text-2)' }} className="truncate max-w-[120px]">{a.hostname}</span>
               <span style={{ color: 'var(--text-1)' }}>{a.count.toLocaleString()}</span>
