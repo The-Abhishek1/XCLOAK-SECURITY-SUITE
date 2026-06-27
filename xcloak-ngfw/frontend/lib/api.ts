@@ -157,6 +157,19 @@ export const threatAPI = {
   runAI:       (agentId: number)               => api.post(`/ai/anomaly/${agentId}`),
 };
 
+export const logSearchAPI = {
+  search:          (params: Record<string, string | number | undefined>) => api.get('/logs/search', { params }),
+  export:          (params: Record<string, string | number | undefined>, format: 'csv' | 'json') =>
+                     api.get('/logs/export', { params: { ...params, format }, responseType: 'blob' }),
+  stats:           ()                      => api.get('/logs/stats'),
+  getSavedSearches: ()                     => api.get('/logs/searches'),
+  saveSearch:      (data: any)             => api.post('/logs/searches', data),
+  deleteSearch:    (id: number)            => api.delete(`/logs/searches/${id}`),
+  runSaved:        (id: number)            => api.post(`/logs/searches/${id}/run`),
+  getRetention:    ()                      => api.get('/logs/retention'),
+  setRetention:    (days: number)          => api.put('/logs/retention', { retention_days: days }),
+};
+
 export const tasksAPI = {
   create:        (data: { agent_id: number; task_type: string; payload: any }) => api.post('/tasks', data),
   getAgentTasks: (agentId: number)  => api.get(`/tasks/agent/${agentId}`),

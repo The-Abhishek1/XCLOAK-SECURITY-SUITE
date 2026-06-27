@@ -11,7 +11,7 @@ import {
   Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
-  Building2, Crosshair, Activity,
+  Building2, Crosshair, Activity, SearchCode,
 } from 'lucide-react';
 
 const NAV = [
@@ -30,6 +30,7 @@ const NAV = [
     { href: '/yara-rules',        label: 'YARA Rules',      icon: Code2 },
     { href: '/threat-detection',  label: 'Behavioral',      icon: Activity },
     { href: '/live-logs',    label: 'Live Logs',    icon: Radio },
+    { href: '/log-search',   label: 'Log Search',   icon: SearchCode },
     { href: '/hunt',         label: 'Threat Hunt',  icon: Search },
     { href: '/correlation',  label: 'Correlation',  icon: GitMerge },
     { href: '/suppression',  label: 'Suppression',  icon: VolumeX },

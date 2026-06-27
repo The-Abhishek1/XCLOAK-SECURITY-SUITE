@@ -243,6 +243,17 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/threat/score/:agent_id", middleware.RequireAuth(), api.ScoreAgentNow)
 	router.POST("/api/threat/findings/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeAnomalyFinding)
 
+	// ── Log search, saved searches, retention ─────────────────────
+	router.GET("/api/logs/search", middleware.RequireAuth(), api.SearchLogsHandler)
+	router.GET("/api/logs/export", middleware.RequireAuth(), api.ExportLogs)
+	router.GET("/api/logs/stats", middleware.RequireAuth(), api.GetLogStats)
+	router.GET("/api/logs/searches", middleware.RequireAuth(), api.GetSavedLogSearches)
+	router.POST("/api/logs/searches", middleware.RequireAuth(), api.SaveLogSearch)
+	router.DELETE("/api/logs/searches/:id", middleware.RequireAuth(), api.DeleteSavedLogSearch)
+	router.POST("/api/logs/searches/:id/run", middleware.RequireAuth(), api.RunSavedLogSearch)
+	router.GET("/api/logs/retention", middleware.RequireAuth(), api.GetRetentionPolicy)
+	router.PUT("/api/logs/retention", middleware.RequireAuth(), middleware.RequireRole("admin"), api.SetRetentionPolicy)
+
 	// ── WebSocket notification stream (registered in main.go) ────
 	// router.GET("/api/notifications/stream", ...) — kept in main.go
 

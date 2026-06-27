@@ -24,6 +24,15 @@ func StartScheduler() {
 			})
 		}
 	}()
+	// Run retention clean-up once at start, then nightly.
+	go func() {
+		ApplyRetentionPolicies()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			ApplyRetentionPolicies()
+		}
+	}()
 	StartBehavioralScorer()
 }
 

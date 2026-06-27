@@ -367,3 +367,39 @@ export interface Notification {
   read: boolean;
   created_at: string;
 }
+
+export interface LogEntry {
+  id: number;
+  agent_id: number;
+  log_source: string;
+  log_message: string;
+  parsed_fields: string; // JSON string
+  collected_at: string;
+}
+
+export interface LogSearchResult {
+  logs: LogEntry[];
+  total: number;
+  page: number;
+  has_more: boolean;
+}
+
+export interface SavedLogSearch {
+  id: number;
+  name: string;
+  query: string;
+  filters: Record<string, string>;
+  time_range: string;
+  created_by: string;
+  run_count: number;
+  last_run_at: string | null;
+  created_at: string;
+}
+
+export interface LogStats {
+  total_logs: number;
+  by_agent: Array<{ hostname: string; agent_id: number; count: number }>;
+  by_source: Array<{ source: string; count: number }>;
+  hourly_volume: Array<{ hour: string; count: number }>;
+  retention_days: number;
+}
