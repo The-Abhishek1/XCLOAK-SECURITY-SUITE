@@ -207,7 +207,7 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<Roo
 
         {/* User badge — hydrated from shared UserContext */}
         {profile && (
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
             style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
             <div className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
               style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>

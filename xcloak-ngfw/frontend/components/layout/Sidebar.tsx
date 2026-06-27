@@ -4,15 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import {
   LayoutDashboard, Cpu, Bell, AlertTriangle, Play,
   Shield, Bug, Settings, ShieldCheck, LogOut,
-  Sun, Moon, Archive, ChevronRight, Network, FileCode, Code2,
+  Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
-  Building2, Crosshair, Activity, SearchCode, UserCircle2,
+  Building2, Crosshair, Activity, SearchCode,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -61,34 +60,6 @@ const NAV = [
   ]},
 ];
 
-function UserBadge({ profile }: { profile: UserProfile | null }) {
-  if (!profile) return null;
-  return (
-    <div className="px-3 py-2.5 rounded-xl mb-1"
-      style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-      <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-          style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
-          <UserCircle2 className="h-4 w-4" style={{ color: 'var(--accent)' }} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>
-            {profile.username}
-          </p>
-          <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
-            {profile.tenant_name}
-            {profile.is_platform_admin && (
-              <span className="ml-1.5 text-[9px] font-bold uppercase px-1 rounded"
-                style={{ background: 'rgba(251,191,36,0.15)', color: 'var(--yellow)' }}>
-                platform
-              </span>
-            )}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -103,17 +74,13 @@ function NavBadge({ count }: { count: number }) {
 function NavContent({
   pathname,
   onNavigate,
-  toggle,
   logout,
-  theme,
   profile,
   badges,
 }: {
   pathname: string | null;
   onNavigate?: () => void;
-  toggle: () => void;
   logout: () => void;
-  theme: string;
   profile: UserProfile | null;
   badges: Record<string, number>;
 }) {
@@ -163,15 +130,6 @@ function NavContent({
 
       <div className="px-2.5 pb-4 space-y-0.5 shrink-0"
         style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-        <UserBadge profile={profile} />
-        <button onClick={toggle}
-          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all"
-          style={{ color: 'var(--text-2)' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-        </button>
         <button onClick={logout}
           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all"
           style={{ color: 'var(--text-2)' }}
@@ -202,7 +160,6 @@ function Logo() {
 export function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const { theme, toggle } = useTheme();
   const { profile } = useUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [badges, setBadges]         = useState<Record<string, number>>({});
@@ -256,9 +213,7 @@ export function Sidebar() {
 
         <NavContent
           pathname={pathname}
-          toggle={toggle}
           logout={logout}
-          theme={theme}
           profile={profile}
           badges={badges}
         />
@@ -315,9 +270,7 @@ export function Sidebar() {
           <NavContent
             pathname={pathname}
             onNavigate={() => setMobileOpen(false)}
-            toggle={toggle}
             logout={logout}
-            theme={theme}
             profile={profile}
             badges={badges}
           />
