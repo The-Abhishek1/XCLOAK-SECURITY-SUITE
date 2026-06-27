@@ -37,7 +37,7 @@ const sigmaSelectCols = `
 	COALESCE(status, 'experimental'),
 	COALESCE(tags,           '[]'::jsonb),
 	COALESCE(falsepositives, '[]'::jsonb),
-	COALESCE(references,     '[]'::jsonb),
+	COALESCE("references",   '[]'::jsonb),
 	keywords,
 	COALESCE(selections, '{}'::jsonb),
 	COALESCE(condition, ''),
@@ -105,7 +105,7 @@ func CreateSigmaRule(rule models.SigmaRule, tenantID int) error {
 			title, description, severity,
 			mitre_tactic, mitre_technique, mitre_name,
 			logsource_cat, logsource_prod, logsource_svc,
-			status, tags, falsepositives, references,
+			status, tags, falsepositives, "references",
 			keywords, selections, condition, enabled, tenant_id
 		)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
@@ -140,7 +140,7 @@ func UpdateSigmaRule(id string, rule models.SigmaRule, tenantID int) error {
 			status         = $10,
 			tags           = $11,
 			falsepositives = $12,
-			references     = $13,
+			"references"   = $13,
 			keywords       = $14,
 			selections     = $15,
 			condition      = $16,

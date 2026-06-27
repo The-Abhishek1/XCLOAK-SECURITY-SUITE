@@ -7,7 +7,7 @@ ALTER TABLE sigma_rules
     ADD COLUMN IF NOT EXISTS status         TEXT     NOT NULL DEFAULT 'experimental',
     ADD COLUMN IF NOT EXISTS tags           JSONB    NOT NULL DEFAULT '[]',
     ADD COLUMN IF NOT EXISTS falsepositives JSONB    NOT NULL DEFAULT '[]',
-    ADD COLUMN IF NOT EXISTS references     JSONB    NOT NULL DEFAULT '[]';
+    ADD COLUMN IF NOT EXISTS "references"   JSONB    NOT NULL DEFAULT '[]';
 
 -- Track every rule match for analytics (hit counts, last-fired, top agents)
 CREATE TABLE IF NOT EXISTS sigma_rule_hits (
