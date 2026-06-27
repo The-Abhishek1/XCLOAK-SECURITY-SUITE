@@ -77,7 +77,8 @@ function LogRow({ log, agentName }: { log: LogEntry; agentName?: string }) {
 // Stats mini-bar
 // ─────────────────────────────────────────────────────────────────────────────
 function StatsPanel({ stats }: { stats: LogStats }) {
-  const max = Math.max(...stats.hourly_volume.map(h => h.count), 1);
+  const volume = stats.hourly_volume ?? [];
+  const max = Math.max(...volume.map(h => h.count), 1);
   return (
     <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-2 mb-3">
@@ -91,9 +92,9 @@ function StatsPanel({ stats }: { stats: LogStats }) {
       </div>
 
       {/* Hourly sparkline */}
-      {stats.hourly_volume.length > 0 && (
+      {volume.length > 0 && (
         <div className="flex items-end gap-0.5 h-10 mb-3">
-          {stats.hourly_volume.map((h, i) => (
+          {volume.map((h, i) => (
             <div key={i} title={`${h.count} logs`}
               className="flex-1 rounded-t-sm transition-all"
               style={{
