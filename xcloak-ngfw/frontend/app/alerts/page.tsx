@@ -7,7 +7,7 @@ import { alertsAPI, aiAPI, agentsAPI } from '@/lib/api';
 import { Alert, Agent } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu } from 'lucide-react';
+import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check } from 'lucide-react';
 import api from '@/lib/api';
 
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
@@ -41,6 +41,8 @@ export default function AlertsPage() {
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acking, setAcking]       = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulking, setBulking]     = useState(false);
 
   // Detail drawer
   const [selected, setSelected]   = useState<Alert | null>(null);
@@ -110,6 +112,37 @@ export default function AlertsPage() {
     } finally {
       setTriaging(false);
     }
+  };
+
+  const toggleSelect = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(a => a.id)));
+    }
+  };
+
+  const bulkAck = async (action: 'acknowledge' | 'resolve') => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulking(true);
+    try {
+      if (action === 'acknowledge') await alertsAPI.bulkAcknowledge(ids);
+      else await Promise.all(ids.map(id => alertsAPI.resolve(id)));
+      setSelectedIds(new Set());
+      load(page, severity, agentId, statusFilter);
+      notify(`${ids.length} alert${ids.length !== 1 ? 's' : ''} ${action === 'acknowledge' ? 'acknowledged' : 'resolved'}`);
+    } catch { notify('Bulk action failed'); }
+    finally { setBulking(false); }
   };
 
   const alerts   = result?.alerts || [];
@@ -197,10 +230,43 @@ export default function AlertsPage() {
           )}
         </div>
 
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+            style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+            <span className="text-xs font-medium" style={{ color: 'var(--accent)' }}>
+              {selectedIds.size} selected
+            </span>
+            <button onClick={() => bulkAck('acknowledge')} disabled={bulking}
+              className="g-btn g-btn-ghost text-xs">
+              {bulking ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Acknowledge All'}
+            </button>
+            <button onClick={() => bulkAck('resolve')} disabled={bulking}
+              className="g-btn text-xs"
+              style={{ background: 'rgba(52,211,153,0.1)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)' }}>
+              Resolve All
+            </button>
+            <button onClick={() => setSelectedIds(new Set())}
+              className="ml-auto" style={{ color: 'var(--text-3)' }}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         <div className="g-table">
-          <div className="g-thead grid gap-3 px-4"
-            style={{ gridTemplateColumns: '70px 1fr 100px 90px 100px 80px 24px' }}>
+          <div className="g-thead grid gap-3 px-4 items-center"
+            style={{ gridTemplateColumns: '20px 70px 1fr 100px 90px 100px 80px 24px' }}>
+            <button onClick={toggleAll}
+              className="flex h-4 w-4 items-center justify-center rounded"
+              style={{
+                background: selectedIds.size > 0 && selectedIds.size === filtered.length ? 'var(--accent-glow)' : 'transparent',
+                border: `1px solid ${selectedIds.size > 0 ? 'var(--accent)' : 'var(--border-md)'}`,
+              }}>
+              {selectedIds.size > 0 && selectedIds.size === filtered.length && (
+                <Check className="h-2.5 w-2.5" style={{ color: 'var(--accent)' }} />
+              )}
+            </button>
             <span>Agent</span><span>Rule / Message</span>
             <span>MITRE</span><span>Tactic</span>
             <span>Severity</span><span>Time</span><span></span>
@@ -219,10 +285,18 @@ export default function AlertsPage() {
             <div key={a.id}
               className="g-tr grid gap-3 items-center px-4 cursor-pointer"
               style={{
-                gridTemplateColumns: '70px 1fr 100px 90px 90px 100px 24px',
+                gridTemplateColumns: '20px 70px 1fr 100px 90px 90px 100px 24px',
                 opacity: a.status === 'acknowledged' ? 0.6 : 1,
               }}
               onClick={() => openAlert(a)}>
+              <button onClick={e => toggleSelect(a.id, e)}
+                className="flex h-4 w-4 items-center justify-center rounded shrink-0"
+                style={{
+                  background: selectedIds.has(a.id) ? 'var(--accent-glow)' : 'transparent',
+                  border: `1px solid ${selectedIds.has(a.id) ? 'var(--accent)' : 'var(--border-md)'}`,
+                }}>
+                {selectedIds.has(a.id) && <Check className="h-2.5 w-2.5" style={{ color: 'var(--accent)' }} />}
+              </button>
               <Link href={`/agents/${a.agent_id}`}
                 onClick={e => e.stopPropagation()}
                 className="mono text-xs truncate hover:underline"

@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { tasksAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { ShieldCheck, CheckCircle2, XCircle, X, AlertTriangle } from 'lucide-react';
-import api from '@/lib/api';
+import { useUser } from '@/context/UserContext';
 
 interface PendingTask {
   id: number;
@@ -17,10 +17,10 @@ interface PendingTask {
 }
 
 export default function SoarApprovalsPage() {
+  const { profile } = useUser();
   const [tasks, setTasks]       = useState<PendingTask[]>([]);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [role, setRole]         = useState<string | null>(null);
   const [acting, setActing]     = useState<number | null>(null);
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [reason, setReason]     = useState('');
@@ -38,7 +38,6 @@ export default function SoarApprovalsPage() {
 
   useEffect(() => {
     load();
-    api.get('/auth/profile').then(r => setRole(r.data?.role)).catch(() => {});
     const t = setInterval(() => load(), 30000);
     return () => clearInterval(t);
   }, [load]);
@@ -66,7 +65,7 @@ export default function SoarApprovalsPage() {
     } finally { setActing(null); setRejectId(null); setReason(''); }
   };
 
-  const isAdmin = role === 'admin';
+  const isAdmin = profile?.role === 'admin';
 
   const describePayload = (raw: string) => {
     try {

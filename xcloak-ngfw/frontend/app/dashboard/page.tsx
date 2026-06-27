@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { dashboardAPI, alertsAPI, incidentsAPI, agentsAPI, playbooksAPI } from '@/lib/api';
 import api from '@/lib/api';
@@ -444,7 +445,11 @@ export default function DashboardPage() {
                   <p className="text-xs" style={{ color: 'var(--text-3)' }}>No alerts. All clear.</p>
                 </div>
               ) : alerts.slice(0, 8).map(a => (
-                <div key={a.id} className="flex items-center gap-3 px-4 py-2.5">
+                <Link key={a.id} href="/alerts"
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors"
+                  style={{ display: 'flex' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}>
                   <span className="h-1.5 w-1.5 rounded-full shrink-0"
                     style={{ background: SEV_COLORS[a.severity] || 'var(--text-3)' }} />
                   <div className="flex-1 min-w-0">
@@ -455,7 +460,7 @@ export default function DashboardPage() {
                     <span className={sevClass(a.severity)}>{a.severity}</span>
                     <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -473,7 +478,11 @@ export default function DashboardPage() {
             </div>
             <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
               {incidents.filter(i => i.status === 'open' || i.status === 'investigating').slice(0, 5).map(inc => (
-                <div key={inc.id} className="flex items-center gap-3 px-4 py-3">
+                <Link key={inc.id} href="/incidents"
+                  className="flex items-center gap-3 px-4 py-3 transition-colors"
+                  style={{ display: 'flex' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}>
                   <CircleDot className="h-3.5 w-3.5 shrink-0"
                     style={{ color: SEV_COLORS[inc.severity] || 'var(--text-3)' }} />
                   <div className="flex-1 min-w-0">
@@ -486,7 +495,7 @@ export default function DashboardPage() {
                     <span className={sevClass(inc.severity)}>{inc.severity}</span>
                     <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{timeAgo(inc.created_at)}</p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
