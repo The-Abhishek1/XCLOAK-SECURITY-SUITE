@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS agent_releases;
+ALTER TABLE agents DROP COLUMN IF EXISTS goroutines;
+ALTER TABLE agents DROP COLUMN IF EXISTS mem_alloc_mb;
+ALTER TABLE agents DROP COLUMN IF EXISTS uptime_seconds;
+ALTER TABLE agents DROP COLUMN IF EXISTS version;

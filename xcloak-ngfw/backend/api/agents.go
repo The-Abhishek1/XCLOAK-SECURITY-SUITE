@@ -125,7 +125,7 @@ func Heartbeat(c *gin.Context) {
 		return
 	}
 
-	if err := services.Heartbeat(req.AgentID); err != nil {
+	if err := services.Heartbeat(req); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

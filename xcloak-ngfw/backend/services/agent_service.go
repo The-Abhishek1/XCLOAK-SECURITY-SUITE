@@ -50,8 +50,8 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 	return repositories.GetAgentByID(id, tenantID)
 }
 
-func Heartbeat(agentID int) error {
-	return repositories.UpdateAgentHeartbeat(agentID)
+func Heartbeat(req models.HeartbeatRequest) error {
+	return repositories.UpdateAgentHeartbeat(req.AgentID, req.Version, req.UptimeSeconds, req.MemAllocMB, req.Goroutines)
 }
 
 // generateToken produces a cryptographically random 32-byte hex token (64 chars).

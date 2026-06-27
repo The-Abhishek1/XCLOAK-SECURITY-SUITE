@@ -84,7 +84,8 @@ func GetAgentByToken(token string) (*models.Agent, error) {
 // user-facing API paths that have a real tenant context from the request.
 func GetAgents(tenantID int) ([]models.Agent, error) {
 	return queryAgents(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
+		       version, uptime_seconds, mem_alloc_mb, goroutines
 		FROM agents
 		WHERE tenant_id = $1
 		ORDER BY id
@@ -97,7 +98,8 @@ func GetAgents(tenantID int) ([]models.Agent, error) {
 // user-facing API responses, which must use GetAgents(tenantID) instead.
 func GetAllAgents() ([]models.Agent, error) {
 	return queryAgents(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
+		       version, uptime_seconds, mem_alloc_mb, goroutines
 		FROM agents
 		ORDER BY id
 	`)
@@ -128,6 +130,10 @@ func queryAgents(query string, args ...interface{}) ([]models.Agent, error) {
 			&agent.LastSeen,
 			&agent.CreatedAt,
 			&agent.TenantID,
+			&agent.Version,
+			&agent.UptimeSeconds,
+			&agent.MemAllocMB,
+			&agent.Goroutines,
 		)
 
 		if err != nil {
@@ -148,7 +154,8 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 	var agent models.Agent
 
 	err := database.DB.QueryRow(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
+		       version, uptime_seconds, mem_alloc_mb, goroutines
 		FROM agents
 		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID).Scan(
@@ -161,6 +168,10 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 		&agent.LastSeen,
 		&agent.CreatedAt,
 		&agent.TenantID,
+		&agent.Version,
+		&agent.UptimeSeconds,
+		&agent.MemAllocMB,
+		&agent.Goroutines,
 	)
 
 	if err != nil {
@@ -170,13 +181,14 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 	return &agent, nil
 }
 
-func UpdateAgentHeartbeat(agentID int) error {
+func UpdateAgentHeartbeat(agentID int, version string, uptimeSeconds int64, memAllocMB, goroutines int) error {
 
 	_, err := database.DB.Exec(`
 		UPDATE agents
-		SET last_seen = NOW(), status = 'online'
+		SET last_seen = NOW(), status = 'online',
+		    version = $2, uptime_seconds = $3, mem_alloc_mb = $4, goroutines = $5
 		WHERE id = $1
-	`, agentID)
+	`, agentID, version, uptimeSeconds, memAllocMB, goroutines)
 
 	return err
 }

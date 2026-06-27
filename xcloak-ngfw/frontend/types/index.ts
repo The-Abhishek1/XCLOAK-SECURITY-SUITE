@@ -430,3 +430,13 @@ export interface LogStats {
   hourly_volume: Array<{ hour: string; count: number }>;
   retention_days: number;
 }
+
+export interface AgentRelease {
+  id: number;
+  platform: string;
+  version: string;
+  sha256: string;
+  download_url: string;
+  created_by: string;
+  created_at: string;
+}

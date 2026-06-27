@@ -306,10 +306,13 @@ export const customRolesAPI = {
 };
 
 export const platformAPI = {
-  getTenants:    ()                                                                            => api.get('/platform/tenants'),
-  createTenant:  (name: string, slug: string, adminUsername: string, adminEmail: string)        =>
+  getTenants:       ()                                                                            => api.get('/platform/tenants'),
+  createTenant:     (name: string, slug: string, adminUsername: string, adminEmail: string)        =>
     api.post('/platform/tenants', { name, slug, admin_username: adminUsername, admin_email: adminEmail }),
-  toggleTenant:  (id: number, active: boolean)                                                  => api.patch(`/platform/tenants/${id}/toggle`, { is_active: active }),
+  toggleTenant:     (id: number, active: boolean)                                                  => api.patch(`/platform/tenants/${id}/toggle`, { is_active: active }),
+  getReleases:      ()                                                                            => api.get('/platform/agent-releases'),
+  publishRelease:   (data: { platform: string; version: string; sha256: string; download_url: string }) =>
+    api.post('/platform/agent-releases', data),
 };
 
 export default api;

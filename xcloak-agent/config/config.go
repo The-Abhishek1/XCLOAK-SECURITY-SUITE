@@ -32,6 +32,13 @@ func CACertPath() string {
 	return os.Getenv("XCLOAK_CA_CERT_PATH")
 }
 
+// DisableSelfUpdate opts an agent out of the periodic self-update checker
+// entirely — e.g. for a host where binary updates must go through a
+// separate change-control process instead of being pulled automatically.
+func DisableSelfUpdate() bool {
+	return os.Getenv("XCLOAK_DISABLE_SELF_UPDATE") == "true"
+}
+
 // InsecureSkipVerify disables TLS certificate verification. Off by default;
 // named loudly so it isn't reached for casually — only for development
 // against a self-signed cert with no CA bundle handy.

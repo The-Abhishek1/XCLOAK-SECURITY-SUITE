@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import api, { platformAPI } from '@/lib/api';
+import { AgentRelease } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload } from 'lucide-react';
 
 interface Tenant {
   id: number;
@@ -15,24 +16,38 @@ interface Tenant {
   user_count?: number;
 }
 
+const PLATFORMS = [
+  'linux_amd64', 'linux_arm64',
+  'windows_amd64', 'windows_arm64',
+  'darwin_amd64', 'darwin_arm64',
+];
+
 export default function PlatformPage() {
-  const [tenants, setTenants]   = useState<Tenant[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [tenants, setTenants]     = useState<Tenant[]>([]);
+  const [releases, setReleases]   = useState<AgentRelease[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState<boolean | null>(null);
-  const [showNew, setShowNew]   = useState(false);
-  const [form, setForm]         = useState({ name: '', slug: '', admin_username: '', admin_email: '' });
-  const [creating, setCreating] = useState(false);
-  const [toast, setToast]       = useState<string | null>(null);
-  const [toggling, setToggling] = useState<number | null>(null);
+  const [showNew, setShowNew]     = useState(false);
+  const [showRelease, setShowRelease] = useState(false);
+  const [form, setForm]           = useState({ name: '', slug: '', admin_username: '', admin_email: '' });
+  const [relForm, setRelForm]     = useState({ platform: 'linux_amd64', version: '', sha256: '', download_url: '' });
+  const [creating, setCreating]   = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [toast, setToast]         = useState<string | null>(null);
+  const [toggling, setToggling]   = useState<number | null>(null);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 4000); };
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
     try {
-      const r = await platformAPI.getTenants();
-      setTenants(r.data || []);
+      const [tRes, rRes] = await Promise.allSettled([
+        platformAPI.getTenants(),
+        platformAPI.getReleases(),
+      ]);
+      if (tRes.status === 'fulfilled') setTenants(tRes.value.data || []);
+      if (rRes.status === 'fulfilled') setReleases(rRes.value.data || []);
     } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -76,6 +91,23 @@ export default function PlatformPage() {
     } finally { setToggling(null); }
   };
 
+  const publishRelease = async () => {
+    if (!relForm.version || !relForm.sha256 || !relForm.download_url) {
+      notify('Version, SHA256, and download URL are required');
+      return;
+    }
+    setPublishing(true);
+    try {
+      await platformAPI.publishRelease(relForm);
+      notify(`Published ${relForm.platform} v${relForm.version}`);
+      setShowRelease(false);
+      setRelForm({ platform: 'linux_amd64', version: '', sha256: '', download_url: '' });
+      load();
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to publish release');
+    } finally { setPublishing(false); }
+  };
+
   if (isPlatformAdmin === null) {
     return (
       <RootLayout title="Platform" subtitle="Tenant provisioning">
@@ -99,55 +131,100 @@ export default function PlatformPage() {
   }
 
   return (
-    <RootLayout title="Platform" subtitle={`${tenants.length} tenant(s)`}
+    <RootLayout title="Platform" subtitle={`${tenants.length} tenant(s) · ${releases.length} release(s)`}
       onRefresh={() => load(true)} refreshing={refreshing}
       actions={
-        <button onClick={() => setShowNew(true)} className="g-btn g-btn-primary text-xs">
-          <Plus className="h-3.5 w-3.5" /> New Tenant
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowRelease(true)} className="g-btn g-btn-ghost text-xs">
+            <Upload className="h-3.5 w-3.5" /> Publish Agent Release
+          </button>
+          <button onClick={() => setShowNew(true)} className="g-btn g-btn-primary text-xs">
+            <Plus className="h-3.5 w-3.5" /> New Tenant
+          </button>
+        </div>
       }>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
 
-      <div className="g-table">
-        <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 160px 90px 90px 140px 100px' }}>
-          <span>Name</span><span>Slug</span><span>Users</span><span>Status</span><span>Created</span><span></span>
-        </div>
+      {/* ── Tenants ─────────────────────────────────────────── */}
+      <div className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-3)' }}>Tenants</p>
+        <div className="g-table">
+          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 160px 90px 90px 140px 100px' }}>
+            <span>Name</span><span>Slug</span><span>Users</span><span>Status</span><span>Created</span><span></span>
+          </div>
 
-        {loading ? (
-          <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
-        ) : tenants.length === 0 ? (
-          <div className="py-16 text-center">
-            <Building2 className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
-            <p className="text-sm" style={{ color: 'var(--text-2)' }}>No tenants yet.</p>
-          </div>
-        ) : tenants.map(t => (
-          <div key={t.id} className="g-tr grid gap-3 items-center px-4"
-            style={{ gridTemplateColumns: '1fr 160px 90px 90px 140px 100px' }}>
-            <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{t.name}</span>
-            <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{t.slug}</span>
-            <span className="text-xs" style={{ color: 'var(--text-2)' }}>{t.user_count ?? 0}</span>
-            <span className="text-[11px] font-semibold" style={{ color: t.is_active ? 'var(--green)' : 'var(--red)' }}>
-              {t.is_active ? 'Active' : 'Suspended'}
-            </span>
-            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(t.created_at)}</span>
-            <button
-              title={t.is_active ? 'Suspend tenant' : 'Reactivate tenant'}
-              onClick={() => toggleTenant(t)}
-              disabled={toggling === t.id}
-              className="g-btn text-xs"
-              style={{
-                background: t.is_active ? 'var(--red-bg)' : 'rgba(52,211,153,0.15)',
-                color: t.is_active ? 'var(--red)' : 'var(--green)',
-                border: t.is_active ? '1px solid var(--red-border)' : '1px solid rgba(52,211,153,0.3)',
-              }}>
-              {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
-              {t.is_active ? 'Suspend' : 'Reactivate'}
-            </button>
-          </div>
-        ))}
+          {loading ? (
+            <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+          ) : tenants.length === 0 ? (
+            <div className="py-16 text-center">
+              <Building2 className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-2)' }}>No tenants yet.</p>
+            </div>
+          ) : tenants.map(t => (
+            <div key={t.id} className="g-tr grid gap-3 items-center px-4"
+              style={{ gridTemplateColumns: '1fr 160px 90px 90px 140px 100px' }}>
+              <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{t.name}</span>
+              <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{t.slug}</span>
+              <span className="text-xs" style={{ color: 'var(--text-2)' }}>{t.user_count ?? 0}</span>
+              <span className="text-[11px] font-semibold" style={{ color: t.is_active ? 'var(--green)' : 'var(--red)' }}>
+                {t.is_active ? 'Active' : 'Suspended'}
+              </span>
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(t.created_at)}</span>
+              <button
+                title={t.is_active ? 'Suspend tenant' : 'Reactivate tenant'}
+                onClick={() => toggleTenant(t)}
+                disabled={toggling === t.id}
+                className="g-btn text-xs"
+                style={{
+                  background: t.is_active ? 'var(--red-bg)' : 'rgba(52,211,153,0.15)',
+                  color: t.is_active ? 'var(--red)' : 'var(--green)',
+                  border: t.is_active ? '1px solid var(--red-border)' : '1px solid rgba(52,211,153,0.3)',
+                }}>
+                {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
+                {t.is_active ? 'Suspend' : 'Reactivate'}
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
+      {/* ── Agent Releases ────────────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-3)' }}>Agent Releases</p>
+        <div className="g-table">
+          <div className="g-thead grid gap-3 px-4"
+            style={{ gridTemplateColumns: '140px 90px 1fr 80px 130px' }}>
+            <span>Platform</span><span>Version</span><span>Download URL</span><span>By</span><span>Published</span>
+          </div>
+
+          {releases.length === 0 ? (
+            <div className="py-12 text-center">
+              <Package className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-2)' }}>No releases published yet.</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                Agents poll for updates every 6 hours — publish a release to trigger self-update.
+              </p>
+            </div>
+          ) : releases.map(r => (
+            <div key={r.id} className="g-tr grid gap-3 items-center px-4"
+              style={{ gridTemplateColumns: '140px 90px 1fr 80px 130px' }}>
+              <span className="mono text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>{r.platform}</span>
+              <span className="mono text-[11px]" style={{ color: 'var(--text-1)' }}>v{r.version}</span>
+              <a href={r.download_url} target="_blank" rel="noopener noreferrer"
+                className="text-[11px] truncate hover:underline"
+                style={{ color: 'var(--text-3)' }}
+                title={r.download_url}>
+                {r.download_url}
+              </a>
+              <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>{r.created_by}</span>
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(r.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── New Tenant modal ───────────────────────────────────── */}
       {showNew && (
         <div className="g-modal-backdrop" onClick={() => setShowNew(false)}>
           <div className="g-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
@@ -185,6 +262,73 @@ export default function PlatformPage() {
               <button onClick={() => setShowNew(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
               <button onClick={createTenant} disabled={creating} className="g-btn g-btn-primary flex-1 justify-center">
                 {creating ? 'Creating…' : 'Create Tenant'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Publish Release modal ──────────────────────────────── */}
+      {showRelease && (
+        <div className="g-modal-backdrop" onClick={() => setShowRelease(false)}>
+          <div className="g-modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Publish Agent Release</h2>
+              </div>
+              <button onClick={() => setShowRelease(false)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="rounded-xl p-3 text-[11px]"
+                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--text-2)' }}>
+                Agents poll <span className="mono">/api/agent-releases/:platform</span> every 6 hours.
+                When a newer version is available they download it, verify the SHA-256, and re-exec in place (Linux)
+                or stage for manual apply (Windows/macOS). Publishing overwrites the current release for the platform.
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Platform</label>
+                  <select value={relForm.platform}
+                    onChange={e => setRelForm(f => ({ ...f, platform: e.target.value }))}
+                    className="g-select w-full">
+                    {PLATFORMS.map(p => <option key={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Version</label>
+                  <input value={relForm.version}
+                    onChange={e => setRelForm(f => ({ ...f, version: e.target.value }))}
+                    placeholder="1.2.3" className="g-input w-full mono" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Download URL</label>
+                <input value={relForm.download_url}
+                  onChange={e => setRelForm(f => ({ ...f, download_url: e.target.value }))}
+                  placeholder="https://releases.example.com/xcloak-agent-linux-amd64-1.2.3"
+                  className="g-input w-full mono text-[11px]" />
+              </div>
+
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>SHA-256 checksum</label>
+                <input value={relForm.sha256}
+                  onChange={e => setRelForm(f => ({ ...f, sha256: e.target.value }))}
+                  placeholder="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  className="g-input w-full mono text-[10px]" />
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                  Run <span className="mono">sha256sum ./xcloak-agent</span> to get this.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setShowRelease(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={publishRelease}
+                disabled={publishing || !relForm.version || !relForm.sha256 || !relForm.download_url}
+                className="g-btn g-btn-primary flex-1 justify-center">
+                {publishing ? 'Publishing…' : `Publish ${relForm.platform} v${relForm.version || '?'}`}
               </button>
             </div>
           </div>
