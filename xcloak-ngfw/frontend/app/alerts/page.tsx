@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { alertsAPI, aiAPI } from '@/lib/api';
-import { Alert } from '@/types';
+import { alertsAPI, aiAPI, agentsAPI } from '@/lib/api';
+import { Alert, Agent } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
-import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity } from 'lucide-react';
+import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu } from 'lucide-react';
 import api from '@/lib/api';
 
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
@@ -33,9 +33,13 @@ export default function AlertsPage() {
   const [result, setResult]       = useState<PagedResult | null>(null);
   const [page, setPage]           = useState(1);
   const [severity, setSeverity]   = useState('');
+  const [statusFilter, setStatusFilter] = useState('open');
+  const [agentId, setAgentId]     = useState('');
+  const [agents, setAgents]       = useState<Agent[]>([]);
   const [search, setSearch]       = useState('');
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [acking, setAcking]       = useState<number | null>(null);
 
   // Detail drawer
   const [selected, setSelected]   = useState<Alert | null>(null);
@@ -49,22 +53,40 @@ export default function AlertsPage() {
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
-  const load = useCallback(async (p = page, sev = severity, spin = false) => {
+  const load = useCallback(async (p = page, sev = severity, aid = agentId, st = statusFilter, spin = false) => {
     if (spin) setRefreshing(true);
     setLoading(true);
     try {
-      const res = await alertsAPI.getPaginated(p, PER_PAGE, sev === 'all' ? '' : sev);
+      const res = await alertsAPI.getPaginated(p, PER_PAGE, sev === 'all' ? '' : sev, aid, st === 'all' ? '' : st);
       setResult(res.data);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [page, severity]);
+  }, [page, severity, agentId, statusFilter]);
 
-  useEffect(() => { load(); }, [page, severity]);
+  useEffect(() => { load(page, severity, agentId, statusFilter); }, [page, severity, agentId, statusFilter]);
 
-  const changeSev  = (s: string) => { setSeverity(s); setPage(1); };
-  const changePage = (p: number) => { setPage(p); window.scrollTo(0, 0); };
+  useEffect(() => {
+    agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
+  }, []);
+
+  const changeSev    = (s: string) => { setSeverity(s); setPage(1); };
+  const changeAgent  = (id: string) => { setAgentId(id); setPage(1); };
+  const changeStatus = (s: string) => { setStatusFilter(s); setPage(1); };
+  const changePage   = (p: number) => { setPage(p); window.scrollTo(0, 0); };
+
+  const ackAlert = async (id: number, action: 'acknowledge' | 'resolve') => {
+    setAcking(id);
+    try {
+      if (action === 'acknowledge') await alertsAPI.acknowledge(id);
+      else await alertsAPI.resolve(id);
+      notify(action === 'acknowledge' ? 'Alert acknowledged' : 'Alert resolved');
+      load(page, severity, agentId, statusFilter);
+      setSelected(null);
+    } catch { notify('Action failed'); }
+    finally { setAcking(null); }
+  };
 
   const openAlert = (a: Alert) => {
     setSelected(a);
@@ -78,7 +100,7 @@ export default function AlertsPage() {
     try {
       await aiAPI.triageAlert(id);
       // Reload to get updated ai_summary
-      const res = await alertsAPI.getPaginated(page, PER_PAGE, severity);
+      const res = await alertsAPI.getPaginated(page, PER_PAGE, severity, agentId, statusFilter === 'all' ? '' : statusFilter);
       setResult(res.data);
       const updated = res.data?.alerts?.find((a: Alert) => a.id === id);
       if (updated) setSelected(updated);
@@ -100,7 +122,7 @@ export default function AlertsPage() {
 
   return (
     <RootLayout title="Alerts" subtitle={result ? `${result.total} total alerts` : ''}
-      onRefresh={() => load(page, severity, true)} refreshing={refreshing}>
+      onRefresh={() => load(page, severity, agentId, statusFilter, true)} refreshing={refreshing}>
 
       {toast && (
         <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>
@@ -109,6 +131,21 @@ export default function AlertsPage() {
       )}
 
       <div className="space-y-4">
+        {/* Status tabs */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {['open', 'acknowledged', 'resolved', 'all'].map(s => (
+            <button key={s} onClick={() => changeStatus(s)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all"
+              style={{
+                background: statusFilter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                border: `1px solid ${statusFilter === s ? 'var(--accent-border)' : 'var(--border)'}`,
+                color: statusFilter === s ? 'var(--accent)' : 'var(--text-2)',
+              }}>
+              {s}
+            </button>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
@@ -116,6 +153,21 @@ export default function AlertsPage() {
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search rule, message, MITRE…" className="g-input pl-9" />
           </div>
+
+          {/* Agent picker */}
+          {agents.length > 0 && (
+            <div className="relative">
+              <Cpu className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+              <select value={agentId} onChange={e => changeAgent(e.target.value)}
+                className="g-select pl-8 text-xs" style={{ minWidth: 160 }}>
+                <option value="">All Agents</option>
+                {agents.map(a => (
+                  <option key={a.id} value={String(a.id)}>{a.hostname}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex items-center gap-1">
             <Filter className="h-3.5 w-3.5 mr-1" style={{ color: 'var(--text-3)' }} />
             {SEVERITIES.map(s => (
@@ -133,6 +185,15 @@ export default function AlertsPage() {
               </button>
             ))}
           </div>
+
+          {/* Active filter chips */}
+          {(agentId || severity) && (
+            <button onClick={() => { setAgentId(''); setSeverity(''); setPage(1); }}
+              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
+              style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)' }}>
+              <X className="h-3 w-3" /> Clear filters
+            </button>
+          )}
         </div>
 
         {/* Table */}
@@ -156,11 +217,17 @@ export default function AlertsPage() {
           ) : filtered.map(a => (
             <div key={a.id}
               className="g-tr grid gap-3 items-center px-4 cursor-pointer"
-              style={{ gridTemplateColumns: '70px 1fr 100px 90px 90px 100px 24px' }}
+              style={{
+                gridTemplateColumns: '70px 1fr 100px 90px 90px 100px 24px',
+                opacity: a.status === 'acknowledged' ? 0.6 : 1,
+              }}
               onClick={() => openAlert(a)}>
               <span className="mono text-xs" style={{ color: 'var(--text-2)' }}>#{a.agent_id}</span>
               <div className="min-w-0">
-                <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{a.rule_name}</p>
+                <p className="text-xs font-medium truncate" style={{
+                  color: 'var(--text-1)',
+                  textDecoration: a.status === 'resolved' ? 'line-through' : undefined,
+                }}>{a.rule_name}</p>
                 <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{a.log_message}</p>
               </div>
               <span className="mono text-[10px] rounded px-1.5 py-0.5 w-fit"
@@ -197,15 +264,46 @@ export default function AlertsPage() {
             style={{ background: 'var(--bg-1)', borderLeft: '1px solid var(--border)' }}>
 
             {/* Header */}
-            <div className="sticky top-0 flex items-center gap-3 px-5 py-4"
+            <div className="sticky top-0 px-5 py-4"
               style={{ background: 'var(--bg-1)', borderBottom: '1px solid var(--border)', zIndex: 10 }}>
-              <span className={sevClass(selected.severity)}>{selected.severity}</span>
-              <p className="flex-1 text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
-                {selected.rule_name}
-              </p>
-              <button onClick={() => setSelected(null)} style={{ color: 'var(--text-3)' }}>
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-3 mb-3">
+                <span className={sevClass(selected.severity)}>{selected.severity}</span>
+                {selected.status && selected.status !== 'open' && (
+                  <span className="text-[10px] px-2 py-0.5 rounded font-semibold capitalize"
+                    style={{
+                      background: selected.status === 'resolved' ? 'rgba(52,211,153,0.1)' : 'var(--glass-bg)',
+                      color: selected.status === 'resolved' ? 'var(--green)' : 'var(--text-3)',
+                      border: `1px solid ${selected.status === 'resolved' ? 'rgba(52,211,153,0.3)' : 'var(--border)'}`,
+                    }}>
+                    {selected.status}
+                  </span>
+                )}
+                <p className="flex-1 text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>
+                  {selected.rule_name}
+                </p>
+                <button onClick={() => setSelected(null)} style={{ color: 'var(--text-3)' }}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Quick actions */}
+              {selected.status !== 'resolved' && (
+                <div className="flex gap-2">
+                  {selected.status !== 'acknowledged' && (
+                    <button onClick={() => ackAlert(selected.id, 'acknowledge')}
+                      disabled={acking === selected.id}
+                      className="g-btn text-xs flex-1 justify-center"
+                      style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                      {acking === selected.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Acknowledge'}
+                    </button>
+                  )}
+                  <button onClick={() => ackAlert(selected.id, 'resolve')}
+                    disabled={acking === selected.id}
+                    className="g-btn text-xs flex-1 justify-center"
+                    style={{ background: 'rgba(52,211,153,0.1)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)' }}>
+                    {acking === selected.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Mark Resolved'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="p-5 space-y-4">

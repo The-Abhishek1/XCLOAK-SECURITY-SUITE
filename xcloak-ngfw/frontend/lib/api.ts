@@ -77,13 +77,16 @@ export const agentsAPI = {
 
 export const alertsAPI = {
   getAll:    () => api.get('/alerts'),
-  getPaginated: (page = 1, perPage = 50, severity = '', agentId = '') =>
-    api.get('/alerts/paginated', { params: { page, per_page: perPage, severity: severity || undefined, agent_id: agentId || undefined } }),
+  getPaginated: (page = 1, perPage = 50, severity = '', agentId = '', status = '') =>
+    api.get('/alerts/paginated', { params: { page, per_page: perPage, severity: severity || undefined, agent_id: agentId || undefined, status: status || undefined } }),
   getByAgent: async (agentId: number) => {
     const res = await api.get('/alerts');
     const all = res.data || [];
     return { ...res, data: all.filter((a: any) => a.agent_id === agentId) };
   },
+  acknowledge:     (id: number, note = '') => api.post(`/alerts/${id}/acknowledge`, { note }),
+  resolve:         (id: number, note = '') => api.post(`/alerts/${id}/resolve`, { note }),
+  bulkAcknowledge: (ids: number[], note = '') => api.post('/alerts/bulk-acknowledge', { ids, note }),
 };
 
 export const incidentsAPI = {

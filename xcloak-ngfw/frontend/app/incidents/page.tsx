@@ -38,13 +38,18 @@ export default function IncidentsPage() {
   const [total, setTotal]           = useState(0);
   const PER_PAGE = 25;
 
-  const load = useCallback(async (spin = false) => {
+  const load = useCallback(async (p = page, status = filter, spin = false) => {
     if (spin) setRefreshing(true);
-    try { const r = await incidentsAPI.getAll(); setIncidents(r.data || []); }
+    try {
+      const r = await incidentsAPI.getPaginated(p, PER_PAGE, status === 'all' ? '' : status);
+      const data = r.data || {};
+      setIncidents(data.data || []);
+      setTotal(data.total || 0);
+    }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  }, [page, filter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(page, filter); }, [page, filter]);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -91,15 +96,27 @@ export default function IncidentsPage() {
     finally { setAddingNote(false); }
   };
 
-  const filtered = filter === 'all' ? incidents : incidents.filter(i => i.status === filter);
-  const counts   = STATUSES.reduce((a, s) => {
-    a[s] = incidents.filter(i => i.status === s).length;
-    return a;
-  }, {} as Record<string, number>);
+  // With server-side filtering, the entire page matches the filter.
+  // Keep counts state to show per-tab counts (loaded on first mount via all-status).
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    // Load unfiltered totals for count badges in tabs
+    incidentsAPI.getAll().then(r => {
+      const all: Incident[] = r.data || [];
+      const c: Record<string, number> = {};
+      STATUSES.forEach(s => { c[s] = all.filter(i => i.status === s).length; });
+      setStatusCounts(c);
+    }).catch(() => {});
+  }, []);
+
+  const changeFilter = (f: string) => { setFilter(f); setPage(1); };
+
+  const filtered = incidents; // already server-filtered
 
   return (
-    <RootLayout title="Incidents" subtitle={`${incidents.length} total`}
-      onRefresh={() => load(true)} refreshing={refreshing}>
+    <RootLayout title="Incidents" subtitle={total ? `${total} total` : ''}
+      onRefresh={() => load(page, filter, true)} refreshing={refreshing}>
 
       {toast && (
         <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>
@@ -110,17 +127,22 @@ export default function IncidentsPage() {
       <div className="space-y-4">
         {/* Status filter tabs */}
         <div className="flex items-center gap-2 flex-wrap">
-          {['all', ...STATUSES].map(s => (
-            <button key={s} onClick={() => setFilter(s)}
-              className="g-btn text-xs capitalize"
-              style={{
-                background: filter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
-                color:      filter === s ? 'var(--accent)' : 'var(--text-2)',
-                border:     filter === s ? '1px solid var(--accent-border)' : '1px solid var(--border)',
-              }}>
-              {s} ({s === 'all' ? incidents.length : counts[s as keyof typeof counts] || 0})
-            </button>
-          ))}
+          {['all', ...STATUSES].map(s => {
+            const count = s === 'all'
+              ? Object.values(statusCounts).reduce((a, b) => a + b, 0)
+              : (statusCounts[s] || 0);
+            return (
+              <button key={s} onClick={() => changeFilter(s)}
+                className="g-btn text-xs capitalize"
+                style={{
+                  background: filter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                  color:      filter === s ? 'var(--accent)' : 'var(--text-2)',
+                  border:     filter === s ? '1px solid var(--accent-border)' : '1px solid var(--border)',
+                }}>
+                {s}{count > 0 ? ` (${count})` : ''}
+              </button>
+            );
+          })}
         </div>
 
         {/* Table */}
@@ -353,14 +375,14 @@ export default function IncidentsPage() {
             Showing {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} of {total}
           </p>
           <div className="flex items-center gap-2">
-            <button onClick={() => { const p = page - 1; setPage(p); load(true); }}
+            <button onClick={() => setPage(p => p - 1)}
               disabled={page === 1} className="g-btn g-btn-ghost text-xs px-3">
               ← Prev
             </button>
             <span className="text-xs" style={{ color: 'var(--text-2)' }}>
               Page {page} of {Math.ceil(total / PER_PAGE)}
             </span>
-            <button onClick={() => { const p = page + 1; setPage(p); load(true); }}
+            <button onClick={() => setPage(p => p + 1)}
               disabled={page >= Math.ceil(total / PER_PAGE)} className="g-btn g-btn-ghost text-xs px-3">
               Next →
             </button>

@@ -39,6 +39,9 @@ export interface Alert {
   mitre_name?: string;
   ai_summary?: string;
   ai_action?: string;
+  status?: 'open' | 'acknowledged' | 'resolved';
+  acknowledged_by?: string;
+  note?: string;
   created_at: string;
 }
 

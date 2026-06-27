@@ -55,7 +55,7 @@ const NAV = [
   { group: 'SYSTEM', items: [
     { href: '/settings', label: 'Settings', icon: Settings },
   ]},
-  { group: 'PLATFORM', items: [
+  { group: 'PLATFORM', platformOnly: true, items: [
     { href: '/platform', label: 'Tenants', icon: Building2 },
   ]},
 ];
@@ -89,6 +89,16 @@ function UserBadge({ profile }: { profile: UserProfile | null }) {
   );
 }
 
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold"
+      style={{ background: 'var(--red)', color: '#fff', lineHeight: 1 }}>
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 function NavContent({
   pathname,
   onNavigate,
@@ -96,6 +106,7 @@ function NavContent({
   logout,
   theme,
   profile,
+  badges,
 }: {
   pathname: string | null;
   onNavigate?: () => void;
@@ -103,11 +114,14 @@ function NavContent({
   logout: () => void;
   theme: string;
   profile: UserProfile | null;
+  badges: Record<string, number>;
 }) {
+  const visibleNav = NAV.filter(s => !s.platformOnly || profile?.is_platform_admin);
+
   return (
 <>
       <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5">
-        {NAV.map(section => (
+        {visibleNav.map(section => (
           <div key={section.group}>
             <p className="px-3 mb-1.5 text-[9px] font-bold tracking-widest uppercase"
               style={{ color: 'var(--text-3)' }}>
@@ -117,6 +131,7 @@ function NavContent({
               {section.items.map(item => {
                 const Icon   = item.icon;
                 const active = pathname === item.href || pathname?.startsWith(item.href + '/');
+                const badge  = badges[item.href] ?? 0;
                 return (
                   <Link key={item.href} href={item.href}
                     onClick={onNavigate}
@@ -133,7 +148,10 @@ function NavContent({
                       <Icon className="h-4 w-4 shrink-0" />
                       {item.label}
                     </div>
-                    {active && <ChevronRight className="h-3 w-3 opacity-50" />}
+                    <div className="flex items-center gap-1.5">
+                      <NavBadge count={badge} />
+                      {active && <ChevronRight className="h-3 w-3 opacity-50" />}
+                    </div>
                   </Link>
                 );
               })}
@@ -186,11 +204,33 @@ export function Sidebar() {
   const { theme, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profile, setProfile]       = useState<UserProfile | null>(null);
+  const [badges, setBadges]         = useState<Record<string, number>>({});
 
   useEffect(() => {
     api.get('/auth/profile')
       .then(r => setProfile(r.data))
       .catch(() => null);
+
+    const loadBadges = async () => {
+      const [alertRes, approvalRes] = await Promise.allSettled([
+        api.get('/alerts/paginated', { params: { page: 1, per_page: 1, severity: 'critical' } }),
+        api.get('/tasks/pending-approval').catch(() => ({ data: [] })),
+      ]);
+      const next: Record<string, number> = {};
+      if (alertRes.status === 'fulfilled') {
+        const n = alertRes.value.data?.total ?? 0;
+        if (n > 0) next['/alerts'] = n;
+      }
+      if (approvalRes.status === 'fulfilled') {
+        const n = (approvalRes.value.data || []).length;
+        if (n > 0) next['/soar-approvals'] = n;
+      }
+      setBadges(next);
+    };
+
+    loadBadges();
+    const t = setInterval(loadBadges, 60000);
+    return () => clearInterval(t);
   }, []);
 
   const logout = () => {
@@ -223,6 +263,7 @@ export function Sidebar() {
           logout={logout}
           theme={theme}
           profile={profile}
+          badges={badges}
         />
       </aside>
 
@@ -281,6 +322,7 @@ export function Sidebar() {
             logout={logout}
             theme={theme}
             profile={profile}
+            badges={badges}
           />
         </aside>
       </div>

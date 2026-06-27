@@ -168,6 +168,27 @@ export default function AgentsPage() {
                         <span style={{ color: 'var(--text-2)' }}>{v}</span>
                       </div>
                     ))}
+                    {/* Version + risk row */}
+                    {(agent.version || (agent.risk_score !== undefined && agent.risk_score !== null)) && (
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        {agent.version ? (
+                          <span className="mono text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                            v{agent.version}
+                          </span>
+                        ) : <span />}
+                        {agent.risk_score !== undefined && agent.risk_score !== null && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                            style={{
+                              background: agent.risk_score >= 70 ? 'var(--red-bg)' : agent.risk_score >= 40 ? 'rgba(251,146,60,0.12)' : 'rgba(52,211,153,0.1)',
+                              color: agent.risk_score >= 70 ? 'var(--red)' : agent.risk_score >= 40 ? 'var(--orange)' : 'var(--green)',
+                              border: `1px solid ${agent.risk_score >= 70 ? 'var(--red-border)' : agent.risk_score >= 40 ? 'rgba(251,146,60,0.3)' : 'rgba(52,211,153,0.3)'}`,
+                            }}>
+                            Risk {agent.risk_score}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {/* Health score */}
                     {health.has(agent.id) && (() => {
                       const h = health.get(agent.id)!;
