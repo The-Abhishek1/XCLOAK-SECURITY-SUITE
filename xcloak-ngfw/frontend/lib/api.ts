@@ -132,6 +132,7 @@ export const playbooksAPI = {
   createAction:  (data: any)             => api.post('/playbook-actions', data),
   deleteAction:  (id: number)            => api.delete(`/playbook-actions/${id}`),
   getExecutions: ()                      => api.get('/playbook-executions'),
+  getStepResults: (executionId: number) => api.get(`/playbook-executions/${executionId}/steps`),
 };
 
 export const sigmaAPI = {

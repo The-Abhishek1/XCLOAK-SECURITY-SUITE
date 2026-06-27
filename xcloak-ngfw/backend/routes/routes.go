@@ -159,6 +159,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/playbook-actions", middleware.RequireAuth(), middleware.RequirePermission("manage_playbooks"), api.CreatePlaybookAction)
 	router.DELETE("/api/playbook-actions/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_playbooks"), api.DeletePlaybookAction)
 	router.GET("/api/playbook-executions", middleware.RequireAuth(), api.GetPlaybookExecutions)
+	router.GET("/api/playbook-executions/:id/steps", middleware.RequireAuth(), api.GetPlaybookStepResults)
 
 	// ── Suppression ───────────────────────────────────────────────  ← WAS MISSING
 	router.GET("/api/suppression/rules", middleware.RequireAuth(), api.GetSuppressionRules)
@@ -211,6 +212,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.CreateTenantHandler)
 	router.GET("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantsHandler)
 	router.PATCH("/api/platform/tenants/:id/toggle", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.ToggleTenantActiveHandler)
+	router.POST("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.PublishAgentRelease)
+	router.GET("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAgentReleases)
+	router.GET("/api/agent-releases/:platform", middleware.RequireAgentAuth(), api.GetLatestAgentRelease)
 
 	// ── MITRE ─────────────────────────────────────────────────────
 	router.GET("/api/mitre/mappings", middleware.RequireAuth(), api.GetMITREMappings)

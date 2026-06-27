@@ -7,163 +7,90 @@ import (
 	"xcloak-ngfw/models"
 )
 
-// ErrPlaybookActionNotFound is returned by tenant-scoped mutations below
-// when no row matches id+tenantID.
 var ErrPlaybookActionNotFound = errors.New("playbook action not found")
 
-// GetPlaybookActions is used internally by the SOAR engine, where
-// playbookID was already resolved from a tenant-filtered playbook list
-// (GetEnabledPlaybooksForAgent) — no further tenant check needed here.
-func GetPlaybookActions(
-	playbookID int,
-) ([]models.PlaybookAction, error) {
-
+// GetPlaybookActions is used internally by the SOAR engine — playbookID was
+// already resolved from a tenant-filtered playbook, so no extra tenant check.
+func GetPlaybookActions(playbookID int) ([]models.PlaybookAction, error) {
 	rows, err := database.DB.Query(`
 		SELECT
-			id,
-			playbook_id,
-			step_order,
-			action_type,
-			payload,
+			id, playbook_id, step_order, action_type, payload,
+			condition_expr, max_retries, retry_delay_secs, run_parallel, timeout_seconds,
 			created_at
 		FROM playbook_actions
-		WHERE playbook_id=$1
-		ORDER BY step_order
-	`,
-		playbookID,
-	)
-
+		WHERE playbook_id = $1
+		ORDER BY step_order, id
+	`, playbookID)
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	var actions []models.PlaybookAction
-
 	for rows.Next() {
-
-		var action models.PlaybookAction
-
-		// FIX: unchecked Scan error meant a row with a NULL step_order
-		// (column is nullable, no default) silently produced a zero-value
-		// PlaybookAction{} with empty ActionType instead of erroring.
+		var a models.PlaybookAction
 		if err := rows.Scan(
-			&action.ID,
-			&action.PlaybookID,
-			&action.StepOrder,
-			&action.ActionType,
-			&action.Payload,
-			&action.CreatedAt,
+			&a.ID, &a.PlaybookID, &a.StepOrder, &a.ActionType, &a.Payload,
+			&a.ConditionExpr, &a.MaxRetries, &a.RetryDelaySecs, &a.RunParallel, &a.TimeoutSeconds,
+			&a.CreatedAt,
 		); err != nil {
 			continue
 		}
-
-		actions = append(
-			actions,
-			action,
-		)
+		actions = append(actions, a)
 	}
-
 	return actions, nil
 }
 
-func CreatePlaybookAction(
-	action models.PlaybookAction,
-	tenantID int,
-) error {
-
-	_, err := database.DB.Exec(`
-		INSERT INTO playbook_actions
-		(
-			playbook_id,
-			step_order,
-			action_type,
-			payload,
-			tenant_id
-		)
-		VALUES ($1,$2,$3,$4,$5)
-	`,
-		action.PlaybookID,
-		action.StepOrder,
-		action.ActionType,
-		action.Payload,
-		tenantID,
-	)
-
-	return err
-}
-
-// GetPlaybookActionsByPlaybookID is the user-facing path (called with a
-// playbook_id straight from a URL param) — filters by tenant_id directly
-// since playbook_actions carries its own tenant_id column.
-func GetPlaybookActionsByPlaybookID(
-	playbookID string,
-	tenantID int,
-) ([]models.PlaybookAction, error) {
-
+// GetPlaybookActionsByPlaybookID is the user-facing path — filters by tenant_id.
+func GetPlaybookActionsByPlaybookID(playbookID string, tenantID int) ([]models.PlaybookAction, error) {
 	rows, err := database.DB.Query(`
 		SELECT
-			id,
-			playbook_id,
-			step_order,
-			action_type,
-			payload,
+			id, playbook_id, step_order, action_type, payload,
+			condition_expr, max_retries, retry_delay_secs, run_parallel, timeout_seconds,
 			created_at
 		FROM playbook_actions
-		WHERE playbook_id=$1 AND tenant_id=$2
-		ORDER BY step_order
-	`,
-		playbookID,
-		tenantID,
-	)
-
+		WHERE playbook_id = $1 AND tenant_id = $2
+		ORDER BY step_order, id
+	`, playbookID, tenantID)
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	var actions []models.PlaybookAction
-
 	for rows.Next() {
-
-		var action models.PlaybookAction
-
-		err := rows.Scan(
-			&action.ID,
-			&action.PlaybookID,
-			&action.StepOrder,
-			&action.ActionType,
-			&action.Payload,
-			&action.CreatedAt,
-		)
-
-		if err != nil {
+		var a models.PlaybookAction
+		if err := rows.Scan(
+			&a.ID, &a.PlaybookID, &a.StepOrder, &a.ActionType, &a.Payload,
+			&a.ConditionExpr, &a.MaxRetries, &a.RetryDelaySecs, &a.RunParallel, &a.TimeoutSeconds,
+			&a.CreatedAt,
+		); err != nil {
 			continue
 		}
-
-		actions = append(
-			actions,
-			action,
-		)
+		actions = append(actions, a)
 	}
-
 	return actions, nil
 }
 
-func DeletePlaybookAction(
-	id string,
-	tenantID int,
-) error {
-
-	tag, err := database.DB.Exec(`
-		DELETE FROM playbook_actions
-		WHERE id=$1 AND tenant_id=$2
+func CreatePlaybookAction(action models.PlaybookAction, tenantID int) error {
+	_, err := database.DB.Exec(`
+		INSERT INTO playbook_actions
+		(playbook_id, step_order, action_type, payload,
+		 condition_expr, max_retries, retry_delay_secs, run_parallel, timeout_seconds,
+		 tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 	`,
-		id,
+		action.PlaybookID, action.StepOrder, action.ActionType, action.Payload,
+		action.ConditionExpr, action.MaxRetries, action.RetryDelaySecs,
+		action.RunParallel, action.TimeoutSeconds,
 		tenantID,
 	)
+	return err
+}
+
+func DeletePlaybookAction(id string, tenantID int) error {
+	tag, err := database.DB.Exec(
+		`DELETE FROM playbook_actions WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		return err
 	}

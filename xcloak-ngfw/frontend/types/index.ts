@@ -9,6 +9,10 @@ export interface Agent {
   created_at?: string;
   created_At?: string;
   risk_score?: number;
+  version?: string;
+  uptime_seconds?: number;
+  mem_alloc_mb?: number;
+  goroutines?: number;
 }
 
 export interface AgentSummary {
@@ -125,6 +129,11 @@ export interface PlaybookAction {
   step_order: number;
   action_type: string;
   payload: string;
+  condition_expr: string;
+  max_retries: number;
+  retry_delay_secs: number;
+  run_parallel: boolean;
+  timeout_seconds: number;
   created_at: string;
 }
 
@@ -135,7 +144,27 @@ export interface PlaybookExecution {
   alert_rule: string;
   action_type: string;
   status: string;
+  overall_status: string;
+  steps_total: number;
+  steps_ok: number;
+  steps_failed: number;
+  steps_skipped: number;
+  duration_ms: number;
   created_at: string;
+}
+
+export interface PlaybookStepResult {
+  id: number;
+  execution_id: number;
+  step_order: number;
+  action_type: string;
+  condition_expr: string;
+  status: string;
+  output: string;
+  error_detail: string;
+  retries_used: number;
+  started_at: string;
+  finished_at: string | null;
 }
 
 export interface Vulnerability {
