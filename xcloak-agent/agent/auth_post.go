@@ -32,3 +32,21 @@ func authPost(path string, body []byte) (*http.Response, error) {
 
 	return Client().Do(req)
 }
+
+// authGet is authPost's GET counterpart — same bearer-token attachment,
+// for read-only agent->server calls (e.g. checking for a published update).
+func authGet(path string) (*http.Response, error) {
+
+	req, err := http.NewRequest(
+		"GET",
+		config.ServerURL()+path,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+LoadToken())
+
+	return Client().Do(req)
+}

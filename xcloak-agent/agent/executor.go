@@ -10,11 +10,30 @@ import (
 
 const taskTimeout = 5 * time.Minute
 
+// ExecuteTask runs a server-dispatched task and submits its result. Unlike
+// the autonomous collectors (see collector.go's runSafe), this used to have
+// no panic recovery at all — a panic in any runTask branch (kill_process,
+// isolate_host, anything) would crash the entire agent process, not just
+// this task. Both layers below recover: the inner goroutine (where runTask
+// actually executes) reports the panic as a failed result instead of
+// propagating it, and the outer defer is a second line of defense for
+// anything in this function itself.
 func ExecuteTask(task models.AgentTask) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[executor] ExecuteTask panicked for task %d (%s): %v\n", task.ID, task.TaskType, r)
+		}
+	}()
 
 	done := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("[executor] task %d (%s) panicked: %v\n", task.ID, task.TaskType, r)
+				done <- fmt.Sprintf("task failed: panic: %v", r)
+			}
+		}()
 		done <- runTask(task)
 	}()
 

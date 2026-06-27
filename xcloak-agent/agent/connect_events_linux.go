@@ -35,9 +35,15 @@ func StartConnectEventStream(agentID int) {
 
 	fmt.Println("[collector] connect_events: attached, streaming")
 
+	// Wrapped in runSafe (same recover used by the autonomous collectors,
+	// collector.go) — a panic in either loop used to crash the whole agent
+	// process, not just the eBPF pipeline. No restart-after-panic here: a
+	// fresh ebpf.NewCollector() would be needed to genuinely recover, a
+	// different concern from "don't crash the agent" that this collector
+	// doesn't currently need solved.
 	events := make(chan models.ConnectEvent, 256)
-	go connectEventReadLoop(collector, agentID, events)
-	go connectEventBatchAndSend(events)
+	go runSafe("connect-events-read", func() { connectEventReadLoop(collector, agentID, events) })
+	go runSafe("connect-events-send", func() { connectEventBatchAndSend(events) })
 }
 
 func connectEventReadLoop(collector *ebpf.Collector, agentID int, out chan<- models.ConnectEvent) {
