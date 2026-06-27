@@ -87,6 +87,53 @@ export interface SigmaRuleStat {
   last_matched_at: string | null;
 }
 
+export interface AnomalyFinding {
+  id: number;
+  agent_id: number;
+  finding_type: string;
+  description: string;
+  severity: string;
+  score: number;
+  acknowledged: boolean;
+  source: string;
+  raw_context: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentAnomalyScore {
+  id: number;
+  agent_id: number;
+  tenant_id: number;
+  score: number;
+  components: {
+    log_rate: number;
+    login_anomaly: number;
+    off_hours: number;
+    conn_rate: number;
+    detail: string;
+  };
+  scored_at: string;
+}
+
+export interface FleetAnomalySummary {
+  agent_id: number;
+  hostname: string;
+  peak_score: number;
+  avg_score: number;
+  readings: number;
+  last_scored: string;
+}
+
+export interface AgentBaseline {
+  agent_id: number;
+  hour_of_week: number;
+  avg_log_count: number;
+  avg_login_fail: number;
+  avg_conn_count: number;
+  sample_count: number;
+  updated_at: string;
+}
+
 export interface YaraRule {
   id: number;
   name: string;

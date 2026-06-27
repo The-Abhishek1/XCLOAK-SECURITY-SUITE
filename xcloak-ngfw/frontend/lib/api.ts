@@ -147,6 +147,16 @@ export const sigmaAPI = {
   stats:    ()                      => api.get('/sigma/stats'),
 };
 
+export const threatAPI = {
+  scores:      (agentId?: number, hours = 24)  => api.get('/threat/scores', { params: { agent_id: agentId || 0, hours } }),
+  fleet:       ()                               => api.get('/threat/fleet'),
+  baselines:   (agentId: number)               => api.get('/threat/baselines', { params: { agent_id: agentId } }),
+  scoreNow:    (agentId: number)               => api.post(`/threat/score/${agentId}`),
+  acknowledge: (id: number)                    => api.post(`/threat/findings/${id}/acknowledge`),
+  findings:    (agentId?: number)              => api.get('/ai/anomalies', { params: agentId ? { agent_id: agentId } : {} }),
+  runAI:       (agentId: number)               => api.post(`/ai/anomaly/${agentId}`),
+};
+
 export const tasksAPI = {
   create:        (data: { agent_id: number; task_type: string; payload: any }) => api.post('/tasks', data),
   getAgentTasks: (agentId: number)  => api.get(`/tasks/agent/${agentId}`),

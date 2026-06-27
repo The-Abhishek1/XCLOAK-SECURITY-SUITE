@@ -24,6 +24,7 @@ func StartScheduler() {
 			})
 		}
 	}()
+	StartBehavioralScorer()
 }
 
 // scanAgentIDs converts PostgreSQL integer[] text "{1,2}" or JSON "[1,2]" to []int

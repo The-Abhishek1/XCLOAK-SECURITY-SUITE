@@ -21,7 +21,12 @@ func RunAnomalyDetection(agentID int) ([]models.AnomalyFinding, error) {
 	connections, _ := repositories.GetConnectionsByAgent(fmt.Sprintf("%d", agentID))
 	users,       _ := repositories.GetUsersByAgent(fmt.Sprintf("%d", agentID))
 
-	prompt := buildAnomalyPrompt(agentID, processes, connections, users)
+	// Load behavioral baseline so the LLM can compare to expected activity.
+	now := time.Now()
+	hourOfWeek := int(now.Weekday())*24 + now.Hour()
+	baseline := loadBaseline(agentID, hourOfWeek)
+
+	prompt := buildAnomalyPrompt(agentID, processes, connections, users, baseline)
 
 	response, err := CallLLM(prompt)
 	if err != nil {
@@ -49,7 +54,9 @@ func GetAnomalies(agentID string, tenantID int) ([]models.AnomalyFinding, error)
 
 	if agentID != "" {
 		rows, err = database.DB.Query(`
-			SELECT id, agent_id, finding_type, description, severity, raw_context, created_at
+			SELECT id, agent_id, finding_type, description, severity,
+			       COALESCE(score,0), COALESCE(acknowledged,false), COALESCE(source,'ai'),
+			       raw_context, created_at
 			FROM anomaly_findings
 			WHERE agent_id = $1 AND tenant_id = $2
 			ORDER BY created_at DESC
@@ -57,7 +64,9 @@ func GetAnomalies(agentID string, tenantID int) ([]models.AnomalyFinding, error)
 		`, agentID, tenantID)
 	} else {
 		rows, err = database.DB.Query(`
-			SELECT id, agent_id, finding_type, description, severity, raw_context, created_at
+			SELECT id, agent_id, finding_type, description, severity,
+			       COALESCE(score,0), COALESCE(acknowledged,false), COALESCE(source,'ai'),
+			       raw_context, created_at
 			FROM anomaly_findings
 			WHERE tenant_id = $1
 			ORDER BY created_at DESC
@@ -73,7 +82,8 @@ func GetAnomalies(agentID string, tenantID int) ([]models.AnomalyFinding, error)
 	var findings []models.AnomalyFinding
 	for rows.Next() {
 		var f models.AnomalyFinding
-		if err := rows.Scan(&f.ID, &f.AgentID, &f.FindingType, &f.Description, &f.Severity, &f.RawContext, &f.CreatedAt); err == nil {
+		if err := rows.Scan(&f.ID, &f.AgentID, &f.FindingType, &f.Description, &f.Severity,
+			&f.Score, &f.Acknowledged, &f.Source, &f.RawContext, &f.CreatedAt); err == nil {
 			findings = append(findings, f)
 		}
 	}
@@ -81,7 +91,7 @@ func GetAnomalies(agentID string, tenantID int) ([]models.AnomalyFinding, error)
 	return findings, nil
 }
 
-func buildAnomalyPrompt(agentID int, processes []models.Process, connections []models.Connection, users []models.Users) string {
+func buildAnomalyPrompt(agentID int, processes []models.Process, connections []models.Connection, users []models.Users, baseline *models.AgentBaseline) string {
 
 	// Summarise to avoid huge prompts.
 	procNames := make([]string, 0, len(processes))
@@ -107,11 +117,22 @@ func buildAnomalyPrompt(agentID int, processes []models.Process, connections []m
 		userNames = append(userNames, fmt.Sprintf("%s (uid=%d, shell=%s)", u.Username, u.UID, u.Shell))
 	}
 
+	baselineContext := ""
+	if baseline != nil && baseline.SampleCount > 0 {
+		baselineContext = fmt.Sprintf(`
+BEHAVIORAL BASELINE (typical activity for this agent at this hour, based on %d samples):
+- Expected log events/hour: %.0f
+- Expected login failures/hour: %.0f
+- Expected connections/hour: %.0f
+Compare the activity below against these baselines. Flag significant deviations.
+`, baseline.SampleCount, baseline.AvgLogCount, baseline.AvgLoginFail, baseline.AvgConnCount)
+	}
+
 	return fmt.Sprintf(`You are a security expert analyzing Linux endpoint data for behavioural anomalies.
 
 AGENT ID: %d
 TIMESTAMP: %s
-
+%s
 RUNNING PROCESSES (sample):
 %s
 
@@ -142,6 +163,7 @@ Respond ONLY with valid JSON (no markdown, no backticks):
 If no anomalies are found, return: {"findings": []}`,
 		agentID,
 		time.Now().Format("2006-01-02 15:04 UTC"),
+		baselineContext,
 		strings.Join(procNames, ", "),
 		strings.Join(connSummary, "\n"),
 		strings.Join(userNames, "\n"),
@@ -185,9 +207,11 @@ func parseAnomalyJSON(agentID int, raw string) []models.AnomalyFinding {
 }
 
 func saveAnomaly(f models.AnomalyFinding) {
-
+	source := f.Source
+	if source == "" { source = "ai" }
 	database.DB.Exec(`
-		INSERT INTO anomaly_findings (agent_id, finding_type, description, severity, raw_context, tenant_id)
-		VALUES ($1,$2,$3,$4,$5, (SELECT tenant_id FROM agents WHERE id = $1))
-	`, f.AgentID, f.FindingType, f.Description, f.Severity, f.RawContext)
+		INSERT INTO anomaly_findings
+		    (agent_id, finding_type, description, severity, score, source, raw_context, tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7, (SELECT tenant_id FROM agents WHERE id = $1))
+	`, f.AgentID, f.FindingType, f.Description, f.Severity, f.Score, source, f.RawContext)
 }

@@ -236,6 +236,13 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/ai/chat/history", middleware.RequireAuth(), api.GetChatHistoryHandler)
 	router.DELETE("/api/ai/chat/history", middleware.RequireAuth(), api.ClearChatHistoryHandler)
 
+	// ── Behavioral threat detection ───────────────────────────────
+	router.GET("/api/threat/scores", middleware.RequireAuth(), api.GetAnomalyScores)
+	router.GET("/api/threat/fleet", middleware.RequireAuth(), api.GetFleetAnomalySummary)
+	router.GET("/api/threat/baselines", middleware.RequireAuth(), api.GetAgentBaselines)
+	router.POST("/api/threat/score/:agent_id", middleware.RequireAuth(), api.ScoreAgentNow)
+	router.POST("/api/threat/findings/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeAnomalyFinding)
+
 	// ── WebSocket notification stream (registered in main.go) ────
 	// router.GET("/api/notifications/stream", ...) — kept in main.go
 

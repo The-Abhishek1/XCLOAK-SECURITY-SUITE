@@ -39,13 +39,37 @@ type AIChatSession struct {
 	UpdatedAt time.Time         `json:"updated_at"`
 }
 
-// AnomalyFinding is a behavioural anomaly detected by the AI layer.
+// AnomalyFinding is a behavioural anomaly detected by the AI or behavioral engine.
 type AnomalyFinding struct {
-	ID          int             `json:"id"`
-	AgentID     int             `json:"agent_id"`
-	FindingType string          `json:"finding_type"`
-	Description string          `json:"description"`
-	Severity    string          `json:"severity"`
-	RawContext  json.RawMessage `json:"raw_context"`
-	CreatedAt   time.Time       `json:"created_at"`
+	ID           int             `json:"id"`
+	AgentID      int             `json:"agent_id"`
+	FindingType  string          `json:"finding_type"`
+	Description  string          `json:"description"`
+	Severity     string          `json:"severity"`
+	Score        int             `json:"score"`        // 0-100 composite risk score
+	Acknowledged bool            `json:"acknowledged"` // operator dismissed this finding
+	Source       string          `json:"source"`       // "ai" or "behavioral"
+	RawContext   json.RawMessage `json:"raw_context"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+// AgentAnomalyScore is one 5-minute behavioral scoring snapshot.
+type AgentAnomalyScore struct {
+	ID         int             `json:"id"`
+	AgentID    int             `json:"agent_id"`
+	TenantID   int             `json:"tenant_id"`
+	Score      int             `json:"score"`
+	Components json.RawMessage `json:"components"`
+	ScoredAt   time.Time       `json:"scored_at"`
+}
+
+// AgentBaseline is a per-hour-of-week behavioral baseline for one agent.
+type AgentBaseline struct {
+	AgentID      int       `json:"agent_id"`
+	HourOfWeek   int       `json:"hour_of_week"`
+	AvgLogCount  float64   `json:"avg_log_count"`
+	AvgLoginFail float64   `json:"avg_login_fail"`
+	AvgConnCount float64   `json:"avg_conn_count"`
+	SampleCount  int       `json:"sample_count"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
