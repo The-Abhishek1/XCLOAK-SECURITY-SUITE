@@ -10,6 +10,8 @@ import {
   Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2, Upload, CheckCircle,
   ChevronDown, ChevronUp, Clock, Hash,
 } from 'lucide-react';
+import { agentsAPI } from '@/lib/api';
+import { Agent } from '@/types';
 
 interface MatchedString { identifier: string; offset: string; data: string; }
 
@@ -58,6 +60,8 @@ export default function YaraRulesPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [scheduledScan, setScheduledScan] = useState<ScheduledTaskLite | null>(null);
   const [scheduling, setScheduling] = useState(false);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const agentName = (id: number) => agents.find(a => a.id === id)?.hostname || `#${id}`;
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -77,6 +81,9 @@ export default function YaraRulesPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
+  }, []);
 
   const enablePeriodicScan = async () => {
     setScheduling(true);
@@ -269,7 +276,7 @@ export default function YaraRulesPage() {
                   <div className="g-tr grid gap-3 items-center px-4 cursor-pointer"
                     onClick={() => setExpandedId(expanded ? null : m.id)}
                     style={{ gridTemplateColumns: '90px 70px 1fr 1fr 100px 20px' }}>
-                    <span className="text-xs" style={{ color: 'var(--text-2)' }}>#{m.agent_id}</span>
+                    <span className="text-xs mono" style={{ color: 'var(--accent)' }}>{agentName(m.agent_id)}</span>
                     <span className={sevClass(m.severity)}>{m.severity}</span>
                     <span className="mono text-xs font-medium" style={{ color: 'var(--accent)' }}>{m.rule_name}</span>
                     <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{m.file_path}</span>

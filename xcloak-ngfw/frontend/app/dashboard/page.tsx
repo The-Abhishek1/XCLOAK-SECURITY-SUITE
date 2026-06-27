@@ -315,7 +315,7 @@ export default function DashboardPage() {
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{a.hostname}</p>
-                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>Agent #{a.agent_id}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>id:{a.agent_id}</p>
                       </div>
                       <span className="text-xs font-bold tabular-nums" style={{ color: 'var(--orange)' }}>
                         {a.count} alerts

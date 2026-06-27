@@ -566,7 +566,7 @@ export default function AlertsPage() {
                       className="g-btn g-btn-primary w-full justify-center text-xs">
                       {responding
                         ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Dispatching…</>
-                        : <><Zap className="h-3.5 w-3.5" /> Dispatch to Agent #{selected.agent_id}</>}
+                        : <><Zap className="h-3.5 w-3.5" /> Dispatch to {selected.hostname || `Agent #${selected.agent_id}`}</>}
                     </button>
                   </div>
                 </div>

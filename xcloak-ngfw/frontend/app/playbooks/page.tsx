@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { playbooksAPI } from '@/lib/api';
-import { Playbook, PlaybookAction, PlaybookExecution, PlaybookStepResult } from '@/types';
+import { playbooksAPI, agentsAPI } from '@/lib/api';
+import { Playbook, PlaybookAction, PlaybookExecution, PlaybookStepResult, Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
 import {
   Play, Plus, Trash2, Edit2, ChevronDown, ChevronRight, X, Zap,
@@ -44,6 +44,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 export default function PlaybooksPage() {
   const [playbooks, setPlaybooks]   = useState<Playbook[]>([]);
   const [executions, setExecutions] = useState<PlaybookExecution[]>([]);
+  const [agents, setAgents]         = useState<Agent[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded]     = useState<number | null>(null);
@@ -75,6 +76,11 @@ export default function PlaybooksPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
+  }, []);
+
+  const agentName = (id: number) => agents.find(a => a.id === id)?.hostname || `#${id}`;
 
   const loadActions = async (pbId: number) => {
     const r = await playbooksAPI.getActions(pbId);
@@ -318,7 +324,7 @@ export default function PlaybooksPage() {
                         {ex.alert_rule}
                       </span>
                       <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>
-                        agent #{ex.agent_id}
+                        {agentName(ex.agent_id)}
                       </span>
                       {hasSteps ? (
                         <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>

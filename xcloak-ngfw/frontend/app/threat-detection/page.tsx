@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { threatAPI } from '@/lib/api';
-import { AnomalyFinding, AgentAnomalyScore, FleetAnomalySummary } from '@/types';
+import { threatAPI, agentsAPI } from '@/lib/api';
+import { AnomalyFinding, AgentAnomalyScore, FleetAnomalySummary, Agent } from '@/types';
 import { sevClass } from '@/lib/utils';
 import {
   Activity, AlertTriangle, Brain, CheckCircle2, ChevronDown,
@@ -47,6 +47,7 @@ export default function ThreatDetectionPage() {
   const [fleet,      setFleet]      = useState<FleetAnomalySummary[]>([]);
   const [findings,   setFindings]   = useState<AnomalyFinding[]>([]);
   const [scores,     setScores]     = useState<AgentAnomalyScore[]>([]);
+  const [agents,     setAgents]     = useState<Agent[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab,        setTab]        = useState<'fleet' | 'findings' | 'history'>('fleet');
@@ -76,6 +77,9 @@ export default function ThreatDetectionPage() {
   }, [hours]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
+  }, []);
 
   // ── Actions ─────────────────────────────────────────────────────────────
   const runAI = async (agentId: number) => {
@@ -176,7 +180,7 @@ export default function ThreatDetectionPage() {
           onRunAI={runAI} onScoreNow={scoreNow}
           runningAI={runningAI} runningScore={runningScore} />
       ) : tab === 'findings' ? (
-        <FindingsTab findings={findings} onAcknowledge={acknowledge} />
+        <FindingsTab findings={findings} onAcknowledge={acknowledge} agents={agents} />
       ) : (
         <HistoryTab scores={scores} fleet={fleet} hours={hours} setHours={setHours} />
       )}
@@ -315,12 +319,14 @@ function FleetTab({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function FindingsTab({
-  findings, onAcknowledge,
+  findings, onAcknowledge, agents,
 }: {
   findings: AnomalyFinding[];
   onAcknowledge: (id: number) => void;
+  agents: Agent[];
 }) {
   const [showAll, setShowAll] = useState(false);
+  const agentName = (id: number) => agents.find(a => a.id === id)?.hostname || `#${id}`;
   const displayed = showAll ? findings : findings.filter(f => !f.acknowledged);
 
   if (!findings.length) return (
@@ -350,7 +356,7 @@ function FindingsTab({
         {displayed.map(f => (
           <div key={f.id} className={`g-tr grid gap-3 items-start px-4 ${f.acknowledged ? 'opacity-40' : ''}`}
             style={{ gridTemplateColumns: '60px 80px 60px 80px 1fr 80px' }}>
-            <span className="text-xs mono" style={{ color: 'var(--text-3)' }}>#{f.agent_id}</span>
+            <span className="text-xs mono" style={{ color: 'var(--accent)' }}>{agentName(f.agent_id)}</span>
             <span className="text-xs rounded px-1.5 py-0.5 w-fit"
               style={{ background: 'var(--bg-0)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
               {f.finding_type}
