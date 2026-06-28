@@ -599,6 +599,49 @@ export interface InvestigationContext {
   threat_score: number;
 }
 
+export interface PlaybookRecommendation {
+  id: number;
+  alert_id: number;
+  tenant_id: number;
+  playbook_id: number;
+  playbook_name: string;
+  score: number;
+  reason: string;
+  executed: boolean;
+  executed_by: string;
+  executed_at: string | null;
+  created_at: string;
+}
+
+export interface ThreatActor {
+  id: number;
+  name: string;
+  aliases: string[];
+  origin_country: string;
+  motivation: string;
+  sophistication: string;
+  description: string;
+  targeted_sectors: string[];
+  mitre_techniques: string[];
+  is_builtin: boolean;
+  recent_alert_count: number;
+  created_at: string;
+}
+
+export interface NetworkAnomaly {
+  id: number;
+  agent_id: number;
+  hostname: string;
+  anomaly_type: string;
+  dst_ip: string;
+  dst_port: number;
+  proto: string;
+  deviation_score: number;
+  description: string;
+  is_acknowledged: boolean;
+  detected_at: string;
+}
+
 export interface UserRiskProfile {
   id: number;
   tenant_id: number;

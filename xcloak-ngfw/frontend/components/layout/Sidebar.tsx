@@ -13,6 +13,7 @@ import {
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
+  Target, Wifi,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -31,6 +32,8 @@ const NAV = [
     { href: '/ueba',           label: 'UEBA',           icon: Activity },
     { href: '/deception',      label: 'Deception',      icon: Aperture },
     { href: '/hunt-workbench', label: 'Hunt Workbench', icon: Microscope },
+    { href: '/threat-actors',  label: 'Threat Actors',  icon: Target },
+    { href: '/nba',            label: 'Net Behavior',   icon: Wifi },
     { href: '/threat-intel',   label: 'Threat Intel',   icon: Shield },
     { href: '/sigma-rules',       label: 'Sigma Rules',     icon: FileCode },
     { href: '/yara-rules',        label: 'YARA Rules',      icon: Code2 },

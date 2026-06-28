@@ -95,6 +95,8 @@ func main() {
 	services.StartVulnPriorityScheduler()
 	services.StartRiskPostureScheduler()
 	services.StartHuntScheduler()
+	services.StartNBAScheduler()
+	services.StartActorTaggingWorker()
 	go api.StartSessionPurger()
 
 	go func() {

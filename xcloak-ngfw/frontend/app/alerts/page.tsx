@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
 import { alertsAPI, aiAPI, agentsAPI, investigateAPI } from '@/lib/api';
-import { Alert, Agent, InvestigationContext } from '@/types';
+import { Alert, Agent, InvestigationContext, PlaybookRecommendation } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check } from 'lucide-react';
@@ -50,6 +50,9 @@ export default function AlertsPage() {
   const [triaging, setTriaging]   = useState(false);
   const [investigation, setInvestigation] = useState<InvestigationContext | null>(null);
   const [investigating, setInvestigating] = useState(false);
+  const [pbRecs, setPbRecs] = useState<PlaybookRecommendation[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [executingRec, setExecutingRec] = useState<number | null>(null);
   const [responding, setResponding] = useState(false);
   const [responseAction, setResponseAction] = useState('kill_process');
   const [responsePID, setResponsePID] = useState('');
@@ -102,13 +105,36 @@ export default function AlertsPage() {
     finally { setInvestigating(false); }
   };
 
+  const loadPlaybookRecs = async (id: number) => {
+    setLoadingRecs(true);
+    setPbRecs([]);
+    try {
+      const r = await api.get(`/alerts/${id}/playbook-recommendations`);
+      setPbRecs(r.data ?? []);
+    } catch { /* best-effort */ }
+    finally { setLoadingRecs(false); }
+  };
+
+  const executeRec = async (recID: number) => {
+    if (!selected) return;
+    setExecutingRec(recID);
+    try {
+      await api.post(`/alerts/${selected.id}/execute-recommendation`, { recommendation_id: recID });
+      notify('Playbook dispatched');
+      setPbRecs(prev => prev.map(r => r.id === recID ? { ...r, executed: true } : r));
+    } catch { notify('Failed to execute playbook'); }
+    finally { setExecutingRec(null); }
+  };
+
   const openAlert = (a: Alert) => {
     setSelected(a);
     setTriage(null);
     setInvestigation(null);
+    setPbRecs([]);
     // Auto-triage if no AI data yet
     if (!a.ai_summary) runTriage(a.id);
     runInvestigation(a.id);
+    loadPlaybookRecs(a.id);
   };
 
   const runTriage = async (id: number) => {
@@ -622,6 +648,55 @@ export default function AlertsPage() {
                         )}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* ── Playbook Recommendations ────────────── */}
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <div className="px-4 py-3 flex items-center gap-2"
+                    style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                    <Zap className="h-3.5 w-3.5" style={{ color: '#a855f7' }} />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>AI Playbook Recommendations</p>
+                    {pbRecs.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-auto"
+                        style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+                        {pbRecs.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-1.5">
+                    {loadingRecs ? (
+                      <div className="flex items-center justify-center gap-2 py-3">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--text-3)' }} />
+                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>Scoring playbooks…</span>
+                      </div>
+                    ) : pbRecs.length === 0 ? (
+                      <p className="text-[11px] text-center py-2" style={{ color: 'var(--text-3)' }}>
+                        No playbooks match this alert's profile.
+                      </p>
+                    ) : pbRecs.map(rec => (
+                      <div key={rec.id} className="flex items-center gap-2 rounded-lg px-3 py-2"
+                        style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', opacity: rec.executed ? 0.6 : 1 }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-medium truncate" style={{ color: 'var(--text-1)' }}>{rec.playbook_name}</p>
+                          <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{rec.reason}</p>
+                        </div>
+                        <span className="text-[11px] font-bold shrink-0" style={{ color: rec.score >= 70 ? '#22c55e' : '#fbbf24' }}>
+                          {rec.score}%
+                        </span>
+                        {rec.executed ? (
+                          <span className="text-[10px] flex items-center gap-0.5 shrink-0" style={{ color: 'var(--text-3)' }}>
+                            <Check className="h-3 w-3" /> done
+                          </span>
+                        ) : (
+                          <button onClick={() => executeRec(rec.id)} disabled={executingRec === rec.id}
+                            className="g-btn g-btn-ghost text-[10px] shrink-0 flex items-center gap-1">
+                            {executingRec === rec.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                            Run
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
 

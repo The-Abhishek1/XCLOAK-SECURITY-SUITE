@@ -408,4 +408,21 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/hunt/execute", middleware.RequireAuth(), api.ExecuteHunt)
 	router.PATCH("/api/hunt/runs/:id/notes", middleware.RequireAuth(), api.UpdateHuntRunNotes)
 
+	// ── Threat Actor Intelligence ─────────────────────────────────────────────
+	router.GET("/api/threat-actors", middleware.RequireAuth(), api.ListThreatActors)
+	router.POST("/api/threat-actors", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateThreatActor)
+	router.DELETE("/api/threat-actors/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteThreatActor)
+	router.GET("/api/threat-actors/:id/alerts", middleware.RequireAuth(), api.GetActorAlerts)
+	router.GET("/api/alerts/:id/actor-tags", middleware.RequireAuth(), api.GetAlertActorTags)
+
+	// ── Playbook Recommender ──────────────────────────────────────────────────
+	router.GET("/api/alerts/:id/playbook-recommendations", middleware.RequireAuth(), api.GetPlaybookRecommendations)
+	router.POST("/api/alerts/:id/execute-recommendation", middleware.RequireAuth(), api.ExecuteRecommendedPlaybook)
+
+	// ── Network Behavior Analytics ────────────────────────────────────────────
+	router.GET("/api/nba/anomalies", middleware.RequireAuth(), api.GetNetworkAnomalies)
+	router.POST("/api/nba/anomalies/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeNetworkAnomaly)
+	router.GET("/api/nba/baseline/:agent_id", middleware.RequireAuth(), api.GetNetworkBaselineStats)
+	router.POST("/api/nba/analyze", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.TriggerNBAAnalysis)
+
 }
