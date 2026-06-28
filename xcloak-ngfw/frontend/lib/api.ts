@@ -357,4 +357,25 @@ export const scheduledReportsAPI = {
   delete:   (id: number)               => api.delete(`/scheduled-reports/${id}`),
 };
 
+export const uebaAPI = {
+  getUsers:  (params?: Record<string, any>) => api.get('/ueba/users', { params }),
+  getEvents: (params?: Record<string, any>) => api.get('/ueba/events', { params }),
+  analyze:   ()                             => api.post('/ueba/analyze'),
+};
+
+export const sessionsAPI = {
+  getMy:          ()          => api.get('/auth/sessions'),
+  getAll:         ()          => api.get('/sessions'),
+  revoke:         (id: number)=> api.delete(`/sessions/${id}`),
+};
+
+export const securityPolicyAPI = {
+  get:    ()          => api.get('/security-policy'),
+  update: (data: any) => api.put('/security-policy', data),
+};
+
+export const feedSyncAPI = {
+  getLog: (feedID: number) => api.get(`/threat-feeds/${feedID}/sync-log`),
+};
+
 export default api;

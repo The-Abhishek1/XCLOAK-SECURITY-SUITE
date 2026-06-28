@@ -22,6 +22,12 @@ func SyncThreatFeed(feed models.ThreatFeed) (int, error) {
 		return syncMISPFeed(feed)
 	case "taxii":
 		return syncTAXIIFeed(feed)
+	case "urlhaus":
+		return syncURLhausFeed(feed)
+	case "feodo":
+		return syncFeodoFeed(feed)
+	case "malwarebazaar":
+		return syncMalwareBazaarFeed(feed)
 	default:
 		return syncFlatFileFeed(feed)
 	}

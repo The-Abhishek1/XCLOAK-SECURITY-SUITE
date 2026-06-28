@@ -355,4 +355,21 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/scheduled-reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.UpdateScheduledReport)
 	router.DELETE("/api/scheduled-reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.DeleteScheduledReport)
 
+	// ── UEBA (User/Entity Behavior Analytics) ────────────────────────────
+	router.GET("/api/ueba/users", middleware.RequireAuth(), api.GetUEBAUsers)
+	router.GET("/api/ueba/events", middleware.RequireAuth(), api.GetUEBAEvents)
+	router.POST("/api/ueba/analyze", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.TriggerUEBAAnalysis)
+
+	// ── Session Management ────────────────────────────────────────────────
+	router.GET("/api/auth/sessions", middleware.RequireAuth(), api.GetMySessions)
+	router.GET("/api/sessions", middleware.RequireAuth(), middleware.RequirePermission("manage_users"), api.GetAllSessions)
+	router.DELETE("/api/sessions/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_users"), api.RevokeSession)
+
+	// ── Security Policy ───────────────────────────────────────────────────
+	router.GET("/api/security-policy", middleware.RequireAuth(), api.GetSecurityPolicy)
+	router.PUT("/api/security-policy", middleware.RequireAuth(), middleware.RequireRole("admin"), api.UpdateSecurityPolicy)
+
+	// ── Threat feed sync log ──────────────────────────────────────────────
+	router.GET("/api/threat-feeds/:id/sync-log", middleware.RequireAuth(), api.GetFeedSyncLog)
+
 }

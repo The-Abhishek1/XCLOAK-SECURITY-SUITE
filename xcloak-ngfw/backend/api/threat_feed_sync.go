@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
@@ -25,13 +26,24 @@ func SyncThreatFeed(c *gin.Context) {
 	username, _ := c.Get("username")
 	user := fmt.Sprintf("%v", username)
 
+	feedIDInt := 0
+	fmt.Sscanf(id, "%d", &feedIDInt)
+	tenantID := tenantIDFromContext(c)
+
 	count, err := services.SyncThreatFeed(*feed)
+
+	syncStatus := "success"
+	errMsg := ""
 	if err != nil {
-		// Connector feeds (otx/misp/taxii) paginate and may import a real
-		// partial batch before a later page errors — surface that count
-		// rather than discarding it, since those indicators are genuinely
-		// in the IOC table already.
-		services.LogEvent("SYNC_THREAT_FEED_PARTIAL", fmt.Sprintf("%s: %d imported before error: %v", feed.Name, count, err), user)
+		syncStatus = "error"
+		errMsg = fmt.Sprintf("%s: %d imported before error: %v", feed.Name, count, err)
+	}
+	repositories.CreateFeedSyncLog(models.FeedSyncLog{
+		FeedID: feedIDInt, TenantID: tenantID, Status: syncStatus, IOCsAdded: count, ErrorMessage: errMsg,
+	})
+
+	if err != nil {
+		services.LogEvent("SYNC_THREAT_FEED_PARTIAL", errMsg, user)
 		c.JSON(502, gin.H{"error": err.Error(), "count": count})
 		return
 	}

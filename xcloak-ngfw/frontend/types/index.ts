@@ -549,6 +549,66 @@ export interface ExecutiveMetrics {
   total_alerts: number;
 }
 
+export interface UserRiskProfile {
+  id: number;
+  tenant_id: number;
+  username: string;
+  source: 'endpoint' | 'platform';
+  risk_score: number;
+  total_events: number;
+  failed_logins: number;
+  off_hours_events: number;
+  unique_ips: number;
+  privilege_escalations: number;
+  flags: string[];
+  last_seen_ip: string;
+  last_event_at: string | null;
+  analyzed_at: string;
+}
+
+export interface UEBAEvent {
+  id: number;
+  tenant_id: number;
+  username: string;
+  event_type: string;
+  severity: string;
+  description: string;
+  source_ip: string;
+  agent_id?: number;
+  detected_at: string;
+}
+
+export interface UserSession {
+  id: number;
+  tenant_id: number;
+  user_id?: number;
+  username: string;
+  ip_address: string;
+  user_agent: string;
+  created_at: string;
+  last_active_at: string;
+  expires_at: string;
+  revoked: boolean;
+}
+
+export interface TenantSecurityPolicy {
+  tenant_id: number;
+  session_timeout_mins: number;
+  max_concurrent_sessions: number;
+  mfa_required: boolean;
+  updated_at: string;
+}
+
+export interface FeedSyncLog {
+  id: number;
+  feed_id: number;
+  tenant_id: number;
+  status: 'success' | 'error';
+  iocs_added: number;
+  error_message: string;
+  synced_at: string;
+}
+
 export interface AgentRelease {
   id: number;
   platform: string;

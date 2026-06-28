@@ -30,14 +30,13 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	if needs2FA {
-		// Look up user ID for temp token
-		var userID, tenantID int
-		var role string
-		database.DB.QueryRow(
-			`SELECT id, role, tenant_id FROM users WHERE username=$1`, req.Username,
-		).Scan(&userID, &role, &tenantID)
+	var userID, tenantID int
+	var role string
+	database.DB.QueryRow(
+		`SELECT id, role, tenant_id FROM users WHERE username=$1`, req.Username,
+	).Scan(&userID, &role, &tenantID)
 
+	if needs2FA {
 		tempToken, _ := auth.GenerateTempToken(userID, req.Username, role, tenantID)
 		c.JSON(200, gin.H{
 			"needs_2fa":  true,
@@ -45,6 +44,9 @@ func Login(c *gin.Context) {
 		})
 		return
 	}
+
+	// Persist session record (async — never delays the login response).
+	go CreateSessionOnLogin(token, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), userID, tenantID)
 
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }

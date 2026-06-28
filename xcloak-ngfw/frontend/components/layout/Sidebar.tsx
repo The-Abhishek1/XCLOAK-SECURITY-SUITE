@@ -28,6 +28,7 @@ const NAV = [
   { group: 'DETECTION', items: [
     { href: '/alerts',       label: 'Alerts',       icon: Bell },
     { href: '/incidents',    label: 'Incidents',    icon: AlertTriangle },
+    { href: '/ueba',         label: 'UEBA',         icon: Activity },
     { href: '/threat-intel', label: 'Threat Intel', icon: Shield },
     { href: '/sigma-rules',       label: 'Sigma Rules',     icon: FileCode },
     { href: '/yara-rules',        label: 'YARA Rules',      icon: Code2 },

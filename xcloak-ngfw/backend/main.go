@@ -91,6 +91,8 @@ func main() {
 	go services.StartKEVRefreshScheduler()
 	go services.StartSLAChecker()
 	go services.StartScheduledReportRunner()
+	services.StartUEBAAnalyzer()
+	go api.StartSessionPurger()
 
 	go func() {
 		for {

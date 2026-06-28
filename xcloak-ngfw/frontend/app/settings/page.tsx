@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI } from '@/lib/api';
+import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI, sessionsAPI, securityPolicyAPI } from '@/lib/api';
 import api from '@/lib/api';
+import type { UserSession, TenantSecurityPolicy } from '@/types';
 import { useUser } from '@/context/UserContext';
 import { timeAgo } from '@/lib/utils';
 import {
@@ -25,6 +26,8 @@ const TABS = [
   { id: '2fa',          label: '2FA Security',     icon: Lock      },
   { id: 'server',       label: 'Server Info',      icon: Server    },
   { id: 'audit',        label: 'Audit Log',        icon: ScrollText },
+  { id: 'sessions',     label: 'Sessions',         icon: Lock      },
+  { id: 'security',     label: 'Security Policy',  icon: Shield    },
 ] as const;
 type Tab = typeof TABS[number]['id'];
 
@@ -55,6 +58,13 @@ export default function SettingsPage() {
   const [showInvite, setShowInvite]   = useState(false);
   const [inviteForm, setInviteForm]   = useState({ username: '', email: '', role: 'analyst' });
   const [inviting, setInviting]       = useState(false);
+
+  // ── Sessions ──────────────────────────────────────────────────
+  const [sessions, setSessions]         = useState<UserSession[]>([]);
+  const [allSessions, setAllSessions]   = useState<UserSession[]>([]);
+  const [secPolicy, setSecPolicy]       = useState<TenantSecurityPolicy | null>(null);
+  const [policyForm, setPolicyForm]     = useState<Partial<TenantSecurityPolicy>>({});
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   // ── Integrations ─────────────────────────────────────────────
   const [integrations, setIntegrations] = useState<any[]>([]);
@@ -283,6 +293,33 @@ export default function SettingsPage() {
     finally { setEmailLoading(false); }
   }, []);
 
+  const loadSessions = useCallback(async () => {
+    try {
+      const [myR, allR] = await Promise.allSettled([sessionsAPI.getMy(), sessionsAPI.getAll()]);
+      if (myR.status === 'fulfilled') setSessions(myR.value.data.sessions || []);
+      if (allR.status === 'fulfilled') setAllSessions(allR.value.data.sessions || []);
+    } catch {}
+  }, []);
+
+  const loadSecurityPolicy = useCallback(async () => {
+    try {
+      const r = await securityPolicyAPI.get();
+      setSecPolicy(r.data);
+      setPolicyForm(r.data);
+    } catch {}
+  }, []);
+
+  const saveSecurityPolicy = async () => {
+    setSavingPolicy(true);
+    try { await securityPolicyAPI.update(policyForm); await loadSecurityPolicy(); } catch {}
+    setSavingPolicy(false);
+  };
+
+  const revokeSession = async (id: number) => {
+    await sessionsAPI.revoke(id);
+    loadSessions();
+  };
+
   const load2FAStatus = useCallback(async () => {
     try {
       const r = await api.get('/auth/profile');
@@ -313,6 +350,8 @@ export default function SettingsPage() {
     if (tab === 'email')        loadEmailRules();
     if (tab === '2fa')          load2FAStatus();
     if (tab === 'audit')        { loadAudit(1, ''); loadExportStatus(); }
+    if (tab === 'sessions')     { loadSessions(); }
+    if (tab === 'security')     { loadSecurityPolicy(); }
   }, [tab]);
 
   // ── User actions ─────────────────────────────────────────────
@@ -1294,6 +1333,125 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
             )}
           </div>
         )}
+
+        {/* ── Sessions tab ─────────────────────────────────────── */}
+        {tab === 'sessions' && (
+          <div className="space-y-4">
+            <div className="g-card overflow-hidden">
+              <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>My Active Sessions</p>
+              </div>
+              {sessions.length === 0 ? (
+                <p className="p-6 text-xs text-center" style={{ color: 'var(--text-3)' }}>No active sessions tracked yet. Sessions are recorded on new logins.</p>
+              ) : (
+                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {sessions.map(s => (
+                    <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{s.ip_address || 'Unknown IP'}</p>
+                        <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{s.user_agent || 'Unknown client'}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                          Last active {new Date(s.last_active_at).toLocaleString()} · Created {new Date(s.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <button onClick={() => revokeSession(s.id)}
+                        className="text-[11px] px-2 py-1 rounded-lg"
+                        style={{ background: 'rgba(248,81,73,0.1)', color: '#f85149', border: '1px solid rgba(248,81,73,0.3)' }}>
+                        Revoke
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="g-card overflow-hidden">
+              <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>All Tenant Sessions</p>
+              </div>
+              {allSessions.length === 0 ? (
+                <p className="p-6 text-xs text-center" style={{ color: 'var(--text-3)' }}>No sessions found.</p>
+              ) : (
+                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {allSessions.map(s => (
+                    <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{s.username} <span className="font-normal text-[10px]">{s.ip_address}</span></p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                          Active {new Date(s.last_active_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <button onClick={() => revokeSession(s.id)}
+                        className="text-[11px] px-2 py-1 rounded-lg"
+                        style={{ background: 'rgba(248,81,73,0.1)', color: '#f85149', border: '1px solid rgba(248,81,73,0.3)' }}>
+                        Revoke
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Security Policy tab ─────────────────────────────────── */}
+        {tab === 'security' && (
+          <div className="max-w-lg space-y-4">
+            <div className="g-card p-5 space-y-5">
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Tenant Security Policy</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>
+                  Session Timeout (minutes)
+                </label>
+                <input type="number" min={5} max={10080}
+                  value={policyForm.session_timeout_mins ?? 480}
+                  onChange={e => setPolicyForm(f => ({ ...f, session_timeout_mins: +e.target.value }))}
+                  className="g-input w-full" />
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                  Sessions older than this with no activity are flagged expired. Default: 480 (8h).
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>
+                  Max Concurrent Sessions per User
+                </label>
+                <input type="number" min={1} max={100}
+                  value={policyForm.max_concurrent_sessions ?? 10}
+                  onChange={e => setPolicyForm(f => ({ ...f, max_concurrent_sessions: +e.target.value }))}
+                  className="g-input w-full" />
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                  Oldest sessions are revoked when this limit is exceeded. Default: 10.
+                </p>
+              </div>
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox"
+                    checked={policyForm.mfa_required ?? false}
+                    onChange={e => setPolicyForm(f => ({ ...f, mfa_required: e.target.checked }))}
+                    className="w-4 h-4 rounded" />
+                  <div>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Require MFA for all users</p>
+                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                      Users without TOTP enabled will be blocked from login until they set it up.
+                    </p>
+                  </div>
+                </label>
+              </div>
+              <button onClick={saveSecurityPolicy} disabled={savingPolicy}
+                className="g-btn g-btn-primary w-full justify-center">
+                {savingPolicy ? 'Saving…' : 'Save Policy'}
+              </button>
+              {secPolicy && (
+                <p className="text-[10px] text-center" style={{ color: 'var(--text-3)' }}>
+                  Last updated {new Date(secPolicy.updated_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {showInvite && (
