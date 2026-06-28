@@ -383,4 +383,29 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Alert investigation context ───────────────────────────────────────
 	router.GET("/api/alerts/:id/investigate", middleware.RequireAuth(), api.GetAlertInvestigation)
 
+	// ── Deception Technology ──────────────────────────────────────────────
+	router.GET("/api/canary/tokens", middleware.RequireAuth(), api.ListCanaryTokens)
+	router.POST("/api/canary/tokens", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateCanaryToken)
+	router.DELETE("/api/canary/tokens/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteCanaryToken)
+	router.PATCH("/api/canary/tokens/:id/toggle", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.ToggleCanaryToken)
+	router.GET("/api/canary/trips", middleware.RequireAuth(), api.GetCanaryTrips)
+	router.GET("/api/canary/trip/:value", api.TripCanaryToken) // public — embedded in docs/URLs
+	router.GET("/api/honeyports", middleware.RequireAuth(), api.ListHoneyports)
+	router.POST("/api/honeyports", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateHoneyport)
+	router.DELETE("/api/honeyports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteHoneyport)
+
+	// ── Risk Posture Score ────────────────────────────────────────────────
+	router.GET("/api/risk-posture", middleware.RequireAuth(), api.GetRiskPosture)
+	router.GET("/api/risk-posture/history", middleware.RequireAuth(), api.GetRiskPostureHistoryHandler)
+	router.POST("/api/risk-posture/refresh", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.RefreshRiskPosture)
+
+	// ── Hunt Workbench ────────────────────────────────────────────────────
+	router.GET("/api/hunt/templates", middleware.RequireAuth(), api.ListHuntTemplates)
+	router.POST("/api/hunt/templates", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateHuntTemplate)
+	router.DELETE("/api/hunt/templates/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteHuntTemplate)
+	router.GET("/api/hunt/runs", middleware.RequireAuth(), api.ListHuntRuns)
+	router.GET("/api/hunt/runs/:id", middleware.RequireAuth(), api.GetHuntRunDetail)
+	router.POST("/api/hunt/execute", middleware.RequireAuth(), api.ExecuteHunt)
+	router.PATCH("/api/hunt/runs/:id/notes", middleware.RequireAuth(), api.UpdateHuntRunNotes)
+
 }

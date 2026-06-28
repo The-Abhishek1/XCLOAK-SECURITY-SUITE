@@ -12,7 +12,7 @@ import {
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
-  Server, BarChart2, ListChecks, Users,
+  Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -26,10 +26,12 @@ const NAV = [
     { href: '/timeline',    label: 'Timeline',    icon: Clock },
   ]},
   { group: 'DETECTION', items: [
-    { href: '/alerts',       label: 'Alerts',       icon: Bell },
-    { href: '/incidents',    label: 'Incidents',    icon: AlertTriangle },
-    { href: '/ueba',         label: 'UEBA',         icon: Activity },
-    { href: '/threat-intel', label: 'Threat Intel', icon: Shield },
+    { href: '/alerts',         label: 'Alerts',         icon: Bell },
+    { href: '/incidents',      label: 'Incidents',      icon: AlertTriangle },
+    { href: '/ueba',           label: 'UEBA',           icon: Activity },
+    { href: '/deception',      label: 'Deception',      icon: Aperture },
+    { href: '/hunt-workbench', label: 'Hunt Workbench', icon: Microscope },
+    { href: '/threat-intel',   label: 'Threat Intel',   icon: Shield },
     { href: '/sigma-rules',       label: 'Sigma Rules',     icon: FileCode },
     { href: '/yara-rules',        label: 'YARA Rules',      icon: Code2 },
     { href: '/threat-detection',  label: 'Behavioral',      icon: Activity },
@@ -54,9 +56,10 @@ const NAV = [
     { href: '/assets', label: 'Assets (CMDB)', icon: Server },
   ]},
   { group: 'COMPLIANCE', items: [
-    { href: '/compliance',    label: 'Reports',      icon: ClipboardCheck },
-    { href: '/executive',     label: 'Executive',    icon: BarChart2 },
-    { href: '/soc-metrics',   label: 'SOC Metrics',  icon: Users },
+    { href: '/compliance',    label: 'Reports',       icon: ClipboardCheck },
+    { href: '/executive',     label: 'Executive',     icon: BarChart2 },
+    { href: '/soc-metrics',   label: 'SOC Metrics',   icon: Users },
+    { href: '/risk-posture',  label: 'Risk Posture',  icon: Gauge },
   ]},
   { group: 'AI', items: [
     { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },

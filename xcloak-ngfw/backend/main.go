@@ -93,6 +93,8 @@ func main() {
 	go services.StartScheduledReportRunner()
 	services.StartUEBAAnalyzer()
 	services.StartVulnPriorityScheduler()
+	services.StartRiskPostureScheduler()
+	services.StartHuntScheduler()
 	go api.StartSessionPurger()
 
 	go func() {
