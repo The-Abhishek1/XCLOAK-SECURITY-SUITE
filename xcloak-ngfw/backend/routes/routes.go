@@ -425,4 +425,20 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/nba/baseline/:agent_id", middleware.RequireAuth(), api.GetNetworkBaselineStats)
 	router.POST("/api/nba/analyze", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.TriggerNBAAnalysis)
 
+	// ── DFIR ──────────────────────────────────────────────────────────────────
+	router.GET("/api/dfir/collections", middleware.RequireAuth(), api.ListForensicCollections)
+	router.POST("/api/dfir/collections", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.TriggerForensicCollection)
+	router.GET("/api/dfir/collections/:id/artifacts", middleware.RequireAuth(), api.GetCollectionArtifacts)
+	router.GET("/api/dfir/incidents/:incident_id/timeline", middleware.RequireAuth(), api.GetForensicTimeline)
+
+	// ── Alert Clustering ──────────────────────────────────────────────────────
+	router.GET("/api/clusters", middleware.RequireAuth(), api.ListAlertClusters)
+	router.GET("/api/clusters/:id/alerts", middleware.RequireAuth(), api.GetClusterAlerts)
+	router.POST("/api/clusters/:id/suppress", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.SuppressCluster)
+	router.POST("/api/clusters/analyze", middleware.RequireAuth(), api.TriggerClustering)
+
+	// ── Framework Compliance ──────────────────────────────────────────────────
+	router.GET("/api/framework-compliance", middleware.RequireAuth(), api.GetAllFrameworkAssessments)
+	router.GET("/api/framework-compliance/:framework", middleware.RequireAuth(), api.GetFrameworkAssessment)
+
 }

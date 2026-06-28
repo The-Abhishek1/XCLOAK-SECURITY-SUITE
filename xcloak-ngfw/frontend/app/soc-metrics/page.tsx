@@ -126,9 +126,9 @@ export default function SOCMetricsPage() {
                 <TrendingUp className="h-4 w-4" style={{ color: 'var(--accent)' }} />
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Alert Volume — Last 14 Days</p>
               </div>
-              {m.alerts_by_day.length > 0 ? (
+              {(m.alerts_by_day ?? []).length > 0 ? (
                 <>
-                  <MiniBar data={m.alerts_by_day} />
+                  <MiniBar data={m.alerts_by_day ?? []} />
                   <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
                     <span>{m.alerts_by_day[0]?.date}</span>
                     <span>{m.alerts_by_day[m.alerts_by_day.length - 1]?.date}</span>
@@ -142,9 +142,9 @@ export default function SOCMetricsPage() {
                 <AlertTriangle className="h-4 w-4" style={{ color: '#f85149' }} />
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Open Backlog — Last 14 Days</p>
               </div>
-              {m.backlog_trend.length > 0 ? (
+              {(m.backlog_trend ?? []).length > 0 ? (
                 <>
-                  <MiniBar data={m.backlog_trend} color="#f85149" />
+                  <MiniBar data={m.backlog_trend ?? []} color="#f85149" />
                   <div className="flex justify-between text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
                     <span>{m.backlog_trend[0]?.date}</span>
                     <span>{m.backlog_trend[m.backlog_trend.length - 1]?.date}</span>
@@ -160,7 +160,7 @@ export default function SOCMetricsPage() {
               <Users className="h-4 w-4" style={{ color: 'var(--accent)' }} />
               <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Analyst Leaderboard</p>
             </div>
-            {m.analysts.length === 0 ? (
+            {(m.analysts ?? []).length === 0 ? (
               <div className="g-card p-8 text-center">
                 <p className="text-sm" style={{ color: 'var(--text-3)' }}>
                   No analyst activity yet. Metrics populate as analysts acknowledge and resolve alerts.
@@ -168,7 +168,7 @@ export default function SOCMetricsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {m.analysts.map(a => <AnalystCard key={a.username} a={a} />)}
+                {(m.analysts ?? []).map(a => <AnalystCard key={a.username} a={a} />)}
               </div>
             )}
           </div>

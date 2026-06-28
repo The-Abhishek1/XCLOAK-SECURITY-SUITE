@@ -97,6 +97,7 @@ func main() {
 	services.StartHuntScheduler()
 	services.StartNBAScheduler()
 	services.StartActorTaggingWorker()
+	services.StartClusterScheduler()
 	go api.StartSessionPurger()
 
 	go func() {
