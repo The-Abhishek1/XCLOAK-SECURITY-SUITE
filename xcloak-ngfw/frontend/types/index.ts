@@ -549,6 +549,56 @@ export interface ExecutiveMetrics {
   total_alerts: number;
 }
 
+export interface VulnQueueItem {
+  id: number;
+  agent_id: number;
+  hostname: string;
+  cve_id: string;
+  package_name: string;
+  package_version: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  cvss_score: number;
+  epss_score: number;
+  is_kev: boolean;
+  kev_ransomware: boolean;
+  priority_score: number;
+  patch_status: 'open' | 'in_progress' | 'patched' | 'accepted_risk';
+  patch_notes: string;
+  patch_sla_days: number | null;
+  patched_at: string | null;
+  asset_criticality: string;
+  name: string;
+  remediation: string;
+}
+
+export interface AnalystMetrics {
+  username: string;
+  triaged: number;
+  resolved: number;
+  avg_triage_minutes: number;
+  open_backlog: number;
+  last_active: string | null;
+}
+
+export interface SOCMetrics {
+  analysts: AnalystMetrics[];
+  total_open: number;
+  total_acked: number;
+  total_resolved: number;
+  avg_mttr_minutes: number;
+  backlog_trend: Array<{ date: string; count: number }>;
+  alerts_by_day: Array<{ date: string; count: number }>;
+}
+
+export interface InvestigationContext {
+  ioc_hits: Array<{ indicator: string; type: string; severity: string }>;
+  similar_alerts: Array<{ id: number; rule_name: string; severity: string; hostname: string; created_at: string; status: string }>;
+  mitre_context: { tactic: string; technique: string; name: string };
+  suggested_cases: Array<{ id: number; title: string; severity: string; status: string }>;
+  correlated_rules: string[];
+  threat_score: number;
+}
+
 export interface UserRiskProfile {
   id: number;
   tenant_id: number;

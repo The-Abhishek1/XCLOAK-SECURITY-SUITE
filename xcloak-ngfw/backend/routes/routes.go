@@ -372,4 +372,15 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Threat feed sync log ──────────────────────────────────────────────
 	router.GET("/api/threat-feeds/:id/sync-log", middleware.RequireAuth(), api.GetFeedSyncLog)
 
+	// ── Vulnerability priority queue ──────────────────────────────────────
+	router.GET("/api/vulns/priority-queue", middleware.RequireAuth(), api.GetVulnPriorityQueue)
+	router.POST("/api/vulns/refresh-priorities", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.RefreshVulnPriorities)
+	router.PATCH("/api/vulns/:id/patch-status", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UpdateVulnPatchStatus)
+
+	// ── SOC analyst performance ───────────────────────────────────────────
+	router.GET("/api/soc/metrics", middleware.RequireAuth(), api.GetSOCMetrics)
+
+	// ── Alert investigation context ───────────────────────────────────────
+	router.GET("/api/alerts/:id/investigate", middleware.RequireAuth(), api.GetAlertInvestigation)
+
 }

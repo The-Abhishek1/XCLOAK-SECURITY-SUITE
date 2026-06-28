@@ -12,7 +12,7 @@ import {
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
-  Server, BarChart2,
+  Server, BarChart2, ListChecks, Users,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -44,6 +44,7 @@ const NAV = [
     { href: '/playbooks',       label: 'Playbooks',       icon: Play },
     { href: '/soar-approvals',  label: 'Approval Queue',  icon: ShieldCheck },
     { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
+    { href: '/vuln-queue',     label: 'Vuln Queue',       icon: ListChecks },
     { href: '/quarantine',      label: 'Quarantine',      icon: Archive },
     { href: '/firewall',        label: 'Firewall',        icon: Network },
     { href: '/scheduled-tasks',  label: 'Scheduled Tasks', icon: CalendarClock },
@@ -53,8 +54,9 @@ const NAV = [
     { href: '/assets', label: 'Assets (CMDB)', icon: Server },
   ]},
   { group: 'COMPLIANCE', items: [
-    { href: '/compliance',  label: 'Reports',    icon: ClipboardCheck },
-    { href: '/executive',   label: 'Executive',  icon: BarChart2 },
+    { href: '/compliance',    label: 'Reports',      icon: ClipboardCheck },
+    { href: '/executive',     label: 'Executive',    icon: BarChart2 },
+    { href: '/soc-metrics',   label: 'SOC Metrics',  icon: Users },
   ]},
   { group: 'AI', items: [
     { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },

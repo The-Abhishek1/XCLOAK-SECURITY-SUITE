@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { alertsAPI, aiAPI, agentsAPI } from '@/lib/api';
-import { Alert, Agent } from '@/types';
+import { alertsAPI, aiAPI, agentsAPI, investigateAPI } from '@/lib/api';
+import { Alert, Agent, InvestigationContext } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check } from 'lucide-react';
@@ -48,6 +48,8 @@ export default function AlertsPage() {
   const [selected, setSelected]   = useState<Alert | null>(null);
   const [triage, setTriage]       = useState<AITriage | null>(null);
   const [triaging, setTriaging]   = useState(false);
+  const [investigation, setInvestigation] = useState<InvestigationContext | null>(null);
+  const [investigating, setInvestigating] = useState(false);
   const [responding, setResponding] = useState(false);
   const [responseAction, setResponseAction] = useState('kill_process');
   const [responsePID, setResponsePID] = useState('');
@@ -91,11 +93,22 @@ export default function AlertsPage() {
     finally { setAcking(null); }
   };
 
+  const runInvestigation = async (id: number) => {
+    setInvestigating(true);
+    try {
+      const r = await investigateAPI.getContext(id);
+      setInvestigation(r.data);
+    } catch { /* best-effort */ }
+    finally { setInvestigating(false); }
+  };
+
   const openAlert = (a: Alert) => {
     setSelected(a);
     setTriage(null);
+    setInvestigation(null);
     // Auto-triage if no AI data yet
     if (!a.ai_summary) runTriage(a.id);
+    runInvestigation(a.id);
   };
 
   const runTriage = async (id: number) => {
@@ -497,6 +510,120 @@ export default function AlertsPage() {
                     </button>
                   </div>
                 )}
+
+                {/* ── Investigation Context ───────────────── */}
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <div className="px-4 py-3 flex items-center justify-between"
+                    style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap-2">
+                      <Search className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                      <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Investigation Context</p>
+                    </div>
+                    {investigation && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-bold"
+                        style={{
+                          background: investigation.threat_score >= 70 ? 'rgba(248,81,73,0.15)' : investigation.threat_score >= 40 ? 'rgba(251,146,60,0.15)' : 'rgba(34,197,94,0.15)',
+                          color: investigation.threat_score >= 70 ? '#f85149' : investigation.threat_score >= 40 ? '#fb923c' : '#22c55e',
+                        }}>
+                        Threat Score: {investigation.threat_score}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    {investigating ? (
+                      <div className="text-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1" style={{ color: 'var(--accent)' }} />
+                        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Enriching indicators…</p>
+                      </div>
+                    ) : !investigation ? (
+                      <button onClick={() => runInvestigation(selected.id)} className="g-btn g-btn-ghost text-xs w-full justify-center">
+                        <Search className="h-3.5 w-3.5" /> Investigate
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        {/* IOC Hits */}
+                        {investigation.ioc_hits.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#f85149' }}>
+                              IOC Matches ({investigation.ioc_hits.length})
+                            </p>
+                            <div className="space-y-1">
+                              {investigation.ioc_hits.map((hit, i) => (
+                                <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2 text-[11px]"
+                                  style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.2)' }}>
+                                  <span className="mono" style={{ color: 'var(--text-1)' }}>{hit.indicator}</span>
+                                  <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold"
+                                    style={{ background: 'rgba(248,81,73,0.2)', color: '#f85149' }}>
+                                    {hit.type} · {hit.severity}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Similar Alerts */}
+                        {investigation.similar_alerts.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
+                              Similar Alerts (7d)
+                            </p>
+                            <div className="space-y-1">
+                              {investigation.similar_alerts.slice(0, 4).map(a => (
+                                <div key={a.id} className="flex items-center justify-between rounded-lg px-3 py-1.5 text-[11px]"
+                                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                                  <span style={{ color: 'var(--text-2)' }}>{a.hostname || `#${a.id}`}</span>
+                                  <span style={{ color: 'var(--text-3)' }}>{a.status}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Suggested Cases */}
+                        {investigation.suggested_cases.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
+                              Suggested Cases
+                            </p>
+                            <div className="space-y-1">
+                              {investigation.suggested_cases.slice(0, 3).map(c => (
+                                <div key={c.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px]"
+                                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                                  <span className="font-mono" style={{ color: 'var(--accent)' }}>#{c.id}</span>
+                                  <span className="truncate" style={{ color: 'var(--text-2)' }}>{c.title}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Correlated Rules */}
+                        {investigation.correlated_rules.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
+                              Correlated Rules (24h)
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {investigation.correlated_rules.map((r, i) => (
+                                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full"
+                                  style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {investigation.ioc_hits.length === 0 && investigation.similar_alerts.length === 0 && investigation.correlated_rules.length === 0 && (
+                          <p className="text-[11px] text-center py-2" style={{ color: 'var(--text-3)' }}>
+                            No IOC hits, similar alerts, or correlated rules found.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* ── Manual Response Panel ───────────────── */}
                 <div className="rounded-xl overflow-hidden"

@@ -357,6 +357,20 @@ export const scheduledReportsAPI = {
   delete:   (id: number)               => api.delete(`/scheduled-reports/${id}`),
 };
 
+export const vulnQueueAPI = {
+  getQueue:       (params?: Record<string, any>) => api.get('/vulns/priority-queue', { params }),
+  updateStatus:   (id: number, status: string, notes: string) => api.patch(`/vulns/${id}/patch-status`, { status, notes }),
+  refresh:        () => api.post('/vulns/refresh-priorities'),
+};
+
+export const socAPI = {
+  getMetrics: () => api.get('/soc/metrics'),
+};
+
+export const investigateAPI = {
+  getContext: (alertID: number) => api.get(`/alerts/${alertID}/investigate`),
+};
+
 export const uebaAPI = {
   getUsers:  (params?: Record<string, any>) => api.get('/ueba/users', { params }),
   getEvents: (params?: Record<string, any>) => api.get('/ueba/events', { params }),
