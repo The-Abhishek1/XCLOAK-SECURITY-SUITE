@@ -89,6 +89,8 @@ func main() {
 	go services.StartScheduler()
 	go services.StartHealthScheduler()
 	go services.StartKEVRefreshScheduler()
+	go services.StartSLAChecker()
+	go services.StartScheduledReportRunner()
 
 	go func() {
 		for {

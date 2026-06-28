@@ -325,4 +325,36 @@ export const ssoAPI = {
   discover: (email: string) => api.get(`/auth/sso-discover?email=${encodeURIComponent(email)}`),
 };
 
+export const casesAPI = {
+  getAll:       (params?: Record<string, any>)  => api.get('/cases', { params }),
+  getByID:      (id: number)                    => api.get(`/cases/${id}`),
+  create:       (data: any)                     => api.post('/cases', data),
+  update:       (id: number, data: any)         => api.put(`/cases/${id}`, data),
+  delete:       (id: number)                    => api.delete(`/cases/${id}`),
+  addComment:   (id: number, body: string)      => api.post(`/cases/${id}/comments`, { body }),
+  addEvidence:  (id: number, data: any)         => api.post(`/cases/${id}/evidence`, data),
+  linkAlert:    (id: number, alertID: number)   => api.post(`/cases/${id}/alerts`, { alert_id: alertID }),
+  unlinkAlert:  (id: number, alertID: number)   => api.delete(`/cases/${id}/alerts/${alertID}`),
+};
+
+export const assetsAPI = {
+  getAll:   ()                          => api.get('/assets'),
+  getByID:  (id: number)               => api.get(`/assets/${id}`),
+  create:   (data: any)                => api.post('/assets', data),
+  update:   (id: number, data: any)    => api.put(`/assets/${id}`, data),
+  delete:   (id: number)               => api.delete(`/assets/${id}`),
+};
+
+export const executiveAPI = {
+  getMetrics:     ()    => api.get('/executive/metrics'),
+  downloadReport: ()    => api.get('/executive/report/download', { responseType: 'blob' }),
+};
+
+export const scheduledReportsAPI = {
+  getAll:   ()                          => api.get('/scheduled-reports'),
+  create:   (data: any)                => api.post('/scheduled-reports', data),
+  update:   (id: number, data: any)    => api.put(`/scheduled-reports/${id}`, data),
+  delete:   (id: number)               => api.delete(`/scheduled-reports/${id}`),
+};
+
 export default api;

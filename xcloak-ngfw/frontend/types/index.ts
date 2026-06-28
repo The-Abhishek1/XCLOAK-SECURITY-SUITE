@@ -452,6 +452,103 @@ export interface LogStats {
   retention_days: number;
 }
 
+export interface Case {
+  id: number;
+  tenant_id: number;
+  title: string;
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'investigating' | 'contained' | 'eradicated' | 'recovered' | 'closed';
+  phase: 'identification' | 'containment' | 'eradication' | 'recovery' | 'lessons_learned' | 'closed';
+  assigned_to?: number;
+  assigned_to_name: string;
+  sla_hours: number;
+  sla_breach_at?: string;
+  sla_breached: boolean;
+  mitre_tactic: string;
+  mitre_technique: string;
+  rca: string;
+  closed_at?: string;
+  alert_count: number;
+  comment_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseComment {
+  id: number;
+  case_id: number;
+  user_id?: number;
+  username: string;
+  body: string;
+  is_system: boolean;
+  created_at: string;
+}
+
+export interface CaseEvidence {
+  id: number;
+  case_id: number;
+  evidence_type: string;
+  reference_id?: number;
+  title: string;
+  description: string;
+  added_by?: number;
+  added_by_name: string;
+  created_at: string;
+}
+
+export interface Asset {
+  id: number;
+  tenant_id: number;
+  agent_id?: number;
+  name: string;
+  hostname: string;
+  ip_address: string;
+  asset_type: string;
+  owner: string;
+  business_unit: string;
+  criticality: 'critical' | 'high' | 'medium' | 'low';
+  data_classification: 'public' | 'internal' | 'confidential' | 'restricted';
+  environment: 'production' | 'staging' | 'development' | 'test';
+  location: string;
+  tags: string[];
+  notes: string;
+  agent_status?: string;
+  risk_score?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledReport {
+  id: number;
+  tenant_id: number;
+  name: string;
+  report_type: string;
+  schedule: string;
+  recipients: string[];
+  enabled: boolean;
+  last_sent_at?: string;
+  created_by?: number;
+  created_at: string;
+}
+
+export interface ExecutiveMetrics {
+  mttr_hours: number;
+  mttd_hours: number;
+  open_cases: number;
+  critical_cases: number;
+  sla_compliance_rate: number;
+  alert_volume: Array<{ date: string; count: number }>;
+  cases_by_severity: Array<{ label: string; count: number }>;
+  cases_by_phase: Array<{ label: string; count: number }>;
+  top_mitre_tactics: Array<{ label: string; count: number }>;
+  risk_trend: Array<{ date: string; score: number }>;
+  total_assets: number;
+  critical_assets: number;
+  online_agents: number;
+  total_alerts: number;
+}
+
 export interface AgentRelease {
   id: number;
   platform: string;

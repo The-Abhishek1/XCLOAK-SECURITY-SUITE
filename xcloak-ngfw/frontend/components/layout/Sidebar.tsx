@@ -11,7 +11,8 @@ import {
   Archive, ChevronRight, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
-  Building2, Crosshair, Activity, SearchCode,
+  Building2, Crosshair, Activity, SearchCode, FolderOpen,
+  Server, BarChart2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -38,6 +39,7 @@ const NAV = [
     { href: '/suppression',  label: 'Suppression',  icon: VolumeX },
   ]},
   { group: 'RESPONSE', items: [
+    { href: '/cases',           label: 'Cases',           icon: FolderOpen },
     { href: '/playbooks',       label: 'Playbooks',       icon: Play },
     { href: '/soar-approvals',  label: 'Approval Queue',  icon: ShieldCheck },
     { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
@@ -46,8 +48,12 @@ const NAV = [
     { href: '/scheduled-tasks',  label: 'Scheduled Tasks', icon: CalendarClock },
     { href: '/script-runner',    label: 'Script Runner',    icon: TerminalSquare },
   ]},
+  { group: 'INVENTORY', items: [
+    { href: '/assets', label: 'Assets (CMDB)', icon: Server },
+  ]},
   { group: 'COMPLIANCE', items: [
-    { href: '/compliance', label: 'Reports', icon: ClipboardCheck },
+    { href: '/compliance',  label: 'Reports',    icon: ClipboardCheck },
+    { href: '/executive',   label: 'Executive',  icon: BarChart2 },
   ]},
   { group: 'AI', items: [
     { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },

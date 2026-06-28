@@ -3,11 +3,13 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
 
@@ -128,6 +130,15 @@ func Heartbeat(c *gin.Context) {
 	if err := services.Heartbeat(req); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Auto-provision CMDB asset entry for this agent if not yet present.
+	if req.AgentID > 0 {
+		go func(agentID, tenantID int) {
+			if ag, err := repositories.GetAgentByID(strconv.Itoa(agentID), tenantID); err == nil && ag != nil {
+				repositories.EnsureAssetForAgent(agentID, tenantID, ag.Hostname, ag.IPAddress)
+			}
+		}(req.AgentID, tenantIDFromContext(c))
 	}
 
 	c.JSON(200, gin.H{"message": "Heartbeat Received"})

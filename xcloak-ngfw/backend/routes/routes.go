@@ -329,4 +329,30 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/auth/profile", middleware.RequireAuth(), api.GetProfile)
 	router.PATCH("/api/auth/profile", middleware.RequireAuth(), api.UpdateProfile)
 
+	// ── Case Management / IR Lifecycle ────────────────────────────────────
+	router.POST("/api/cases", middleware.RequireAuth(), api.CreateCase)
+	router.GET("/api/cases", middleware.RequireAuth(), api.GetCases)
+	router.GET("/api/cases/:id", middleware.RequireAuth(), api.GetCaseByID)
+	router.PUT("/api/cases/:id", middleware.RequireAuth(), api.UpdateCase)
+	router.DELETE("/api/cases/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_incidents"), api.DeleteCase)
+	router.POST("/api/cases/:id/comments", middleware.RequireAuth(), api.AddCaseComment)
+	router.POST("/api/cases/:id/evidence", middleware.RequireAuth(), api.AddCaseEvidence)
+	router.POST("/api/cases/:id/alerts", middleware.RequireAuth(), api.LinkAlertToCase)
+	router.DELETE("/api/cases/:id/alerts/:alert_id", middleware.RequireAuth(), api.UnlinkAlertFromCase)
+
+	// ── Asset Management (CMDB) ───────────────────────────────────────────
+	router.GET("/api/assets", middleware.RequireAuth(), api.GetAssets)
+	router.POST("/api/assets", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateAsset)
+	router.GET("/api/assets/:id", middleware.RequireAuth(), api.GetAssetByID)
+	router.PUT("/api/assets/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UpdateAsset)
+	router.DELETE("/api/assets/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeleteAsset)
+
+	// ── Executive Dashboard + Scheduled Reports ───────────────────────────
+	router.GET("/api/executive/metrics", middleware.RequireAuth(), api.GetExecutiveMetrics)
+	router.GET("/api/executive/report/download", middleware.RequireAuth(), api.DownloadExecutiveReport)
+	router.GET("/api/scheduled-reports", middleware.RequireAuth(), api.GetScheduledReports)
+	router.POST("/api/scheduled-reports", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.CreateScheduledReport)
+	router.PUT("/api/scheduled-reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.UpdateScheduledReport)
+	router.DELETE("/api/scheduled-reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.DeleteScheduledReport)
+
 }
