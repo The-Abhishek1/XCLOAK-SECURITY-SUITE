@@ -2,10 +2,61 @@ package repositories
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
+
+type IOCPage struct {
+	Data  []models.IOC `json:"data"`
+	Total int          `json:"total"`
+	Page  int          `json:"page"`
+	Limit int          `json:"limit"`
+}
+
+func GetIOCsPaged(tenantID, page, limit int, search, iocType string) (IOCPage, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	where := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	i := 2
+
+	if iocType != "" && iocType != "all" {
+		where += fmt.Sprintf(" AND type = $%d", i)
+		args = append(args, iocType)
+		i++
+	}
+	if search != "" {
+		where += fmt.Sprintf(" AND (indicator ILIKE $%d OR description ILIKE $%d)", i, i)
+		args = append(args, "%"+strings.TrimSpace(search)+"%")
+		i++
+	}
+
+	var total int
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM iocs `+where, args...).Scan(&total); err != nil {
+		return IOCPage{}, err
+	}
+
+	rows, err := queryIOCs(fmt.Sprintf(`
+		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
+		FROM iocs %s
+		ORDER BY id DESC
+		LIMIT $%d OFFSET $%d
+	`, where, i, i+1), append(args, limit, offset)...)
+	if err != nil {
+		return IOCPage{}, err
+	}
+
+	return IOCPage{Data: rows, Total: total, Page: page, Limit: limit}, nil
+}
 
 // ErrIOCNotFound is returned by tenant-scoped mutations below when no row
 // matches id+tenantID — covers both a nonexistent id and a real id

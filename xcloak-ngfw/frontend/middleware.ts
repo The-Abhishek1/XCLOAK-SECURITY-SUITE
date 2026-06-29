@@ -7,15 +7,11 @@ export function middleware(request: NextRequest) {
   const isLoginPage = request.nextUrl.pathname === '/login';
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
 
-  // For API routes, proxy to the backend. Middleware runs per-request on
-  // the Node server (unlike next.config.js's rewrites(), which Next.js
-  // resolves once into a static manifest at build time) — so
-  // BACKEND_INTERNAL_URL is read fresh on every request and a single built
-  // image can be promoted across environments without a rebuild.
+  // API routes are handled by app/api/[...path]/route.ts which proxies to
+  // the backend with full header forwarding. Middleware only handles auth
+  // redirects for page routes below.
   if (isApiRoute) {
-    const backendURL = process.env.BACKEND_INTERNAL_URL || 'http://localhost:8080';
-    const target = new URL(request.nextUrl.pathname + request.nextUrl.search, backendURL);
-    return NextResponse.rewrite(target);
+    return NextResponse.next();
   }
 
   // Redirect logic
@@ -34,7 +30,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-  '/api/:path*',
   '/dashboard/:path*',
   '/agents/:path*',
   '/alerts/:path*',

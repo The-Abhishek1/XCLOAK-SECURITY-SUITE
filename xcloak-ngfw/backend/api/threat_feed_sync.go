@@ -10,6 +10,31 @@ import (
 	"xcloak-ngfw/services"
 )
 
+// UpdateThreatFeed — PUT /api/threat-feeds/:id
+func UpdateThreatFeed(c *gin.Context) {
+	id := c.Param("id")
+	var feed models.ThreatFeed
+	if err := c.ShouldBindJSON(&feed); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if err := repositories.UpdateThreatFeed(id, feed, tenantIDFromContext(c)); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "updated"})
+}
+
+// DeleteThreatFeed — DELETE /api/threat-feeds/:id
+func DeleteThreatFeed(c *gin.Context) {
+	id := c.Param("id")
+	if err := repositories.DeleteThreatFeed(id, tenantIDFromContext(c)); err != nil {
+		c.JSON(404, gin.H{"error": "feed not found"})
+		return
+	}
+	c.JSON(200, gin.H{"message": "deleted"})
+}
+
 // SyncThreatFeed — POST /api/threat-feeds/:id/sync
 // Fetches the feed's source URL, imports indicators as IOCs, and updates
 // last_sync. Returns the count of indicators processed.
@@ -42,16 +67,17 @@ func SyncThreatFeed(c *gin.Context) {
 		FeedID: feedIDInt, TenantID: tenantID, Status: syncStatus, IOCsAdded: count, ErrorMessage: errMsg,
 	})
 
-	if err != nil {
+	if err != nil && count == 0 {
 		services.LogEvent("SYNC_THREAT_FEED_PARTIAL", errMsg, user)
-		c.JSON(502, gin.H{"error": err.Error(), "count": count})
+		c.JSON(422, gin.H{"error": err.Error(), "count": 0})
 		return
 	}
 
 	services.LogEvent("SYNC_THREAT_FEED", feed.Name, user)
 
-	c.JSON(200, gin.H{
-		"message": "Feed Synced",
-		"count":   count,
-	})
+	resp := gin.H{"message": "Feed Synced", "count": count}
+	if err != nil {
+		resp["warning"] = fmt.Sprintf("Partial sync: %d indicators imported, then: %v", count, err)
+	}
+	c.JSON(200, resp)
 }

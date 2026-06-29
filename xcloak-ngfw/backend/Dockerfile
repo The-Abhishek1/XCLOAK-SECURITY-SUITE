@@ -10,10 +10,11 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/xcloak-backend .
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.19
 WORKDIR /app
+RUN addgroup -g 1001 -S appgroup && adduser -S -u 1001 -G appgroup appuser
 COPY --from=builder /out/xcloak-backend /app/xcloak-backend
 
 EXPOSE 8080 8443
-USER nonroot:nonroot
+USER appuser
 ENTRYPOINT ["/app/xcloak-backend"]

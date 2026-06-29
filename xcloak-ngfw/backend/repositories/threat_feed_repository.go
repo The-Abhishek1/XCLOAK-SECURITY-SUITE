@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"fmt"
+
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
@@ -40,6 +42,31 @@ func CreateThreatFeed(
 	)
 
 	return err
+}
+
+func UpdateThreatFeed(id string, feed models.ThreatFeed, tenantID int) error {
+	config := feed.Config
+	if len(config) == 0 {
+		config = []byte("{}")
+	}
+	_, err := database.DB.Exec(`
+		UPDATE threat_feeds
+		SET name=$1, source=$2, enabled=$3, feed_type=$4, config=$5
+		WHERE id=$6 AND tenant_id=$7
+	`, feed.Name, feed.Source, feed.Enabled, feed.FeedType, config, id, tenantID)
+	return err
+}
+
+func DeleteThreatFeed(id string, tenantID int) error {
+	res, err := database.DB.Exec(`DELETE FROM threat_feeds WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("not found")
+	}
+	return nil
 }
 
 // GetThreatFeeds returns feeds belonging to tenantID only. Use this from

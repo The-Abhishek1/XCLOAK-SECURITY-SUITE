@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"strconv"
 	"time"
 
@@ -35,4 +36,32 @@ func GetNetworkMap(c *gin.Context) {
 	}
 
 	c.JSON(200, graph)
+}
+
+// GetIPInfo — GET /api/network-map/ip-info?ip=1.2.3.4
+// Returns threat intelligence enrichment for an external IP. Results are
+// cached in memory for 2 hours to avoid hammering external APIs.
+func GetIPInfo(c *gin.Context) {
+	ip := c.Query("ip")
+	if net.ParseIP(ip) == nil {
+		c.JSON(400, gin.H{"error": "invalid IP address"})
+		return
+	}
+	result, err := services.EnrichIP(ip, tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, result)
+}
+
+// GetPortInfo — GET /api/network-map/port-info?port=3389
+func GetPortInfoHandler(c *gin.Context) {
+	port := c.Query("port")
+	info := services.GetPortInfo(port)
+	if info == nil {
+		c.JSON(200, gin.H{"port": port, "service": "", "sensitivity": "neutral", "note": ""})
+		return
+	}
+	c.JSON(200, gin.H{"port": port, "service": info.Service, "sensitivity": info.Sensitivity, "note": info.Note})
 }

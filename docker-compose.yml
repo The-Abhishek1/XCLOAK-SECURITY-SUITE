@@ -1,4 +1,54 @@
+# Production — all services containerized.
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose down
+#
+# Services & URLs:
+#   Frontend    → http://localhost:3000   (admin / admin1234)
+#   Backend API → http://localhost:8080
+#   Grafana     → http://localhost:3001   (admin / xcloak)
+#   Prometheus  → http://localhost:9090
+#   Kafka UI    → http://localhost:8090
+#   MinIO       → http://localhost:9001   (xcloak-minio / xcloak-minio-secret-dev)
+
 services:
+
+  # ── Infrastructure ────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: xcloak-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-xcloak}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-xcloak}
+      POSTGRES_DB: ${DB_NAME:-ngfw}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-xcloak} -d ${DB_NAME:-ngfw}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  redis:
+    image: redis:7-alpine
+    container_name: xcloak-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 64m
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -11,6 +61,11 @@ services:
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/2181 && exec 3>&-"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     deploy:
       resources:
         limits:
@@ -21,9 +76,8 @@ services:
     container_name: xcloak-kafka
     restart: unless-stopped
     depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
+      zookeeper:
+        condition: service_healthy
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -36,6 +90,12 @@ services:
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
     volumes:
       - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
     deploy:
       resources:
         limits:
@@ -46,7 +106,8 @@ services:
     container_name: xcloak-kafka-ui
     restart: unless-stopped
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - "8090:8080"
     environment:
@@ -58,14 +119,95 @@ services:
         limits:
           memory: 384m
 
+  minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: xcloak-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-xcloak-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-xcloak-minio-secret-dev}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── Application ───────────────────────────────────────────────
+
+  backend:
+    build:
+      context: ./xcloak-ngfw/backend
+      dockerfile: Dockerfile
+    container_name: xcloak-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  seeder:
+    build:
+      context: ./xcloak-ngfw/backend
+      dockerfile: Dockerfile.seed
+    container_name: xcloak-seeder
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file: .env
+
+  frontend:
+    build:
+      context: ./xcloak-ngfw/frontend
+      dockerfile: Dockerfile
+    container_name: xcloak-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8080
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Observability ─────────────────────────────────────────────
+
   prometheus:
     image: prom/prometheus:v2.52.0
     container_name: xcloak-prometheus
     restart: unless-stopped
     ports:
       - "9090:9090"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/metrics_token:/etc/prometheus/metrics_token:ro
@@ -75,24 +217,9 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-
-  minio:
-    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
-    container_name: xcloak-minio
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: xcloak-minio
-      MINIO_ROOT_PASSWORD: da0173e8913a6754cec98aaa250c35d6
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
+    depends_on:
+      backend:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -115,7 +242,7 @@ services:
       GF_SMTP_HOST: ${GF_SMTP_HOST:-smtp.gmail.com:587}
       GF_SMTP_USER: ${GF_SMTP_USER:-}
       GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
-      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-xcloak-alerts@localhost}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-xcloak-alerts@example.com}
       GF_SMTP_FROM_NAME: XCloak Alerting
     volumes:
       - grafana_data:/var/lib/grafana
@@ -127,9 +254,10 @@ services:
           memory: 256m
 
 volumes:
+  postgres_data:
   zookeeper_data:
   zookeeper_log:
   kafka_data:
+  minio_data:
   prometheus_data:
   grafana_data:
-  minio_data:

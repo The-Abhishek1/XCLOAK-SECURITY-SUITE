@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
@@ -52,28 +54,18 @@ func CreateSigmaRule(
 	)
 }
 
-func GetSigmaRules(
-	c *gin.Context,
-) {
+func GetSigmaRules(c *gin.Context) {
+	page, _    := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _   := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	search     := c.Query("search")
+	severity   := c.Query("severity")
 
-	rules, err := services.GetSigmaRules(tenantIDFromContext(c))
-
+	result, err := repositories.GetSigmaRulesPaged(tenantIDFromContext(c), page, limit, search, severity)
 	if err != nil {
-
-		c.JSON(
-			500,
-			gin.H{
-				"error": err.Error(),
-			},
-		)
-
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(
-		200,
-		rules,
-	)
+	c.JSON(200, result)
 }
 
 func GetSigmaRuleByID(

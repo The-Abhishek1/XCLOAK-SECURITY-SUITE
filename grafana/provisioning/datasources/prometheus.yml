@@ -16,7 +16,7 @@ datasources:
     database: ngfw
     user: xcloak
     secureJsonData:
-      password: Shalu@1003
+      password: xcloak
     jsonData:
       sslmode: disable
       postgresVersion: 1600

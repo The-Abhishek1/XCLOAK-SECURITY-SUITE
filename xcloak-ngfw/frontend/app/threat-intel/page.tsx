@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { iocsAPI, sigmaAPI, threatFeedsAPI } from '@/lib/api';
 import api from '@/lib/api';
@@ -8,78 +9,128 @@ import { IOC, SigmaRule, ThreatFeed } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import {
   Shield, Plus, Trash2, ToggleLeft, ToggleRight, X, Edit2,
-  Upload, Rss, FileCode, Search, ChevronDown, ChevronUp, RefreshCw,
+  Upload, Rss, FileCode, Search, RefreshCw, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 const TABS = [
-  { id: 'iocs',   label: 'IOCs',         icon: Shield },
-  { id: 'sigma',  label: 'Sigma Rules',  icon: FileCode },
-  { id: 'feeds',  label: 'Threat Feeds', icon: Rss },
+  { id: 'iocs',  label: 'IOCs',         icon: Shield },
+  { id: 'sigma', label: 'Sigma Rules',  icon: FileCode },
+  { id: 'feeds', label: 'Threat Feeds', icon: Rss },
 ] as const;
 type Tab = typeof TABS[number]['id'];
 
 const IOC_TYPES  = ['ip', 'sha256', 'md5', 'domain', 'url'];
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+const FEED_TYPES = ['flatfile', 'otx', 'misp', 'taxii'] as const;
+const PAGE_SIZE  = 50;
+
 const emptyIOC   = { indicator: '', type: 'ip', severity: 'high', description: '', enabled: true };
-const emptyFeed  = { name: '', source: '', enabled: true };
+const emptyFeed  = { name: '', source: '', feed_type: 'flatfile', enabled: true, config: { api_key: '', collection_id: '', username: '', password: '' } };
 const emptySigma = { title: '', severity: 'high', mitre_tactic: '', mitre_technique: '', mitre_name: '', keywords: '', enabled: true };
 
 export default function ThreatIntelPage() {
-  const [tab, setTab]       = useState<Tab>('iocs');
-  const [iocs, setIocs]     = useState<IOC[]>([]);
-  const [sigma, setSigma]   = useState<SigmaRule[]>([]);
-  const [feeds, setFeeds]   = useState<ThreatFeed[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('iocs');
+
+  // IOC state
+  const [iocs, setIocs]         = useState<IOC[]>([]);
+  const [iocTotal, setIocTotal] = useState(0);
+  const [iocPage, setIocPage]   = useState(1);
   const [typeFilter, setTypeFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [toast, setToast]   = useState<string | null>(null);
+  const [iocSearch, setIocSearch]   = useState('');
+  const [iocLoading, setIocLoading] = useState(false);
+
+  // Sigma state
+  const [sigma, setSigma]           = useState<SigmaRule[]>([]);
+  const [sigmaTotal, setSigmaTotal] = useState(0);
+  const [sigmaPage, setSigmaPage]   = useState(1);
+  const [sigmaSearch, setSigmaSearch] = useState('');
+  const [sigmaLoading, setSigmaLoading] = useState(false);
+
+  // Feeds (no pagination needed — few rows)
+  const [feeds, setFeeds] = useState<ThreatFeed[]>([]);
+
+  // Toast
+  const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
 
   // Modals
-  const [showAddIOC, setShowAddIOC] = useState(false);
+  const [showAddIOC, setShowAddIOC]   = useState(false);
   const [showEditIOC, setShowEditIOC] = useState<IOC | null>(null);
-  const [showBulk, setShowBulk] = useState(false);
-  const [showAddSigma, setShowAddSigma] = useState(false);
+  const [showBulk, setShowBulk]       = useState(false);
+  const [showAddSigma, setShowAddSigma]   = useState(false);
   const [showEditSigma, setShowEditSigma] = useState<SigmaRule | null>(null);
   const [showAddFeed, setShowAddFeed] = useState(false);
-  const [iocForm, setIocForm] = useState({ ...emptyIOC });
+  const [editFeed, setEditFeed]       = useState<ThreatFeed | null>(null);
+
+  const [iocForm, setIocForm]   = useState({ ...emptyIOC });
   const [sigmaForm, setSigmaForm] = useState({ ...emptySigma });
-  const [feedForm, setFeedForm] = useState({ ...emptyFeed });
-  const [bulkForm, setBulkForm] = useState({ type: 'ip', severity: 'high', description: '', indicators: '' });
-  const [saving, setSaving] = useState(false);
+  const [feedForm, setFeedForm]   = useState({ ...emptyFeed });
+  const [editForm, setEditForm]   = useState({ ...emptyFeed });
+  const [bulkForm, setBulkForm]   = useState({ type: 'ip', severity: 'high', description: '', indicators: '' });
+  const [saving, setSaving]       = useState(false);
   const [syncingId, setSyncingId] = useState<number | null>(null);
 
-  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+  // debounce refs
+  const iocDebounce   = useRef<ReturnType<typeof setTimeout>>();
+  const sigmaDebounce = useRef<ReturnType<typeof setTimeout>>();
+  const [debouncedIocSearch, setDebouncedIocSearch]     = useState('');
+  const [debouncedSigmaSearch, setDebouncedSigmaSearch] = useState('');
 
-  const syncFeed = async (feed: ThreatFeed) => {
-    if (feed.id == null) return;
-    setSyncingId(feed.id);
-    try {
-      const res = await threatFeedsAPI.sync(feed.id);
-      notify(`Synced "${feed.name}" — ${res.data?.count ?? 0} indicators processed`);
-      await load();
-    } catch {
-      notify(`Failed to sync "${feed.name}"`);
-    } finally {
-      setSyncingId(null);
-    }
+  useEffect(() => {
+    clearTimeout(iocDebounce.current);
+    iocDebounce.current = setTimeout(() => { setDebouncedIocSearch(iocSearch); setIocPage(1); }, 350);
+  }, [iocSearch]);
+
+  useEffect(() => {
+    clearTimeout(sigmaDebounce.current);
+    sigmaDebounce.current = setTimeout(() => { setDebouncedSigmaSearch(sigmaSearch); setSigmaPage(1); }, 350);
+  }, [sigmaSearch]);
+
+  const notify = (m: string, isError = false) => {
+    setToast({ msg: m, isError });
+    setTimeout(() => setToast(null), isError ? 6000 : 3000);
   };
 
-  const load = useCallback(async () => {
-    const [ir, sr, fr] = await Promise.allSettled([iocsAPI.getAll(), sigmaAPI.getAll(), threatFeedsAPI.getAll()]);
-    if (ir.status === 'fulfilled') setIocs(ir.value.data || []);
-    if (sr.status === 'fulfilled') setSigma(sr.value.data || []);
-    if (fr.status === 'fulfilled') setFeeds(fr.value.data || []);
-    setLoading(false);
+  // ── loaders ──────────────────────────────────────────────────────────────
+
+  const loadIOCs = useCallback(async (page: number, search: string, type: string) => {
+    setIocLoading(true);
+    try {
+      const r = await iocsAPI.getPaged({ page, limit: PAGE_SIZE, search: search || undefined, type: type === 'all' ? undefined : type });
+      setIocs(r.data?.data ?? []);
+      setIocTotal(r.data?.total ?? 0);
+    } catch { setIocs([]); }
+    finally { setIocLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadSigma = useCallback(async (page: number, search: string) => {
+    setSigmaLoading(true);
+    try {
+      const r = await sigmaAPI.getPaged({ page, limit: PAGE_SIZE, search: search || undefined });
+      setSigma(r.data?.data ?? []);
+      setSigmaTotal(r.data?.total ?? 0);
+    } catch { setSigma([]); }
+    finally { setSigmaLoading(false); }
+  }, []);
 
-  // IOC CRUD
+  const loadFeeds = useCallback(async () => {
+    const r = await threatFeedsAPI.getAll();
+    setFeeds(r.data || []);
+  }, []);
+
+  useEffect(() => { loadIOCs(iocPage, debouncedIocSearch, typeFilter); }, [loadIOCs, iocPage, debouncedIocSearch, typeFilter]);
+  useEffect(() => { loadSigma(sigmaPage, debouncedSigmaSearch); }, [loadSigma, sigmaPage, debouncedSigmaSearch]);
+  useEffect(() => { loadFeeds(); }, [loadFeeds]);
+
+  // ── IOC CRUD ──────────────────────────────────────────────────────────────
+
   const addIOC = async () => {
     if (!iocForm.indicator.trim()) return;
     setSaving(true);
-    try { await iocsAPI.create(iocForm); load(); setShowAddIOC(false); setIocForm({ ...emptyIOC }); notify('IOC added'); }
-    finally { setSaving(false); }
+    try {
+      await iocsAPI.create(iocForm);
+      loadIOCs(iocPage, debouncedIocSearch, typeFilter);
+      setShowAddIOC(false); setIocForm({ ...emptyIOC }); notify('IOC added');
+    } finally { setSaving(false); }
   };
 
   const updateIOC = async () => {
@@ -87,12 +138,22 @@ export default function ThreatIntelPage() {
     setSaving(true);
     try {
       await iocsAPI.update(showEditIOC.id, iocForm);
-      load(); setShowEditIOC(null); notify('IOC updated');
+      loadIOCs(iocPage, debouncedIocSearch, typeFilter);
+      setShowEditIOC(null); notify('IOC updated');
     } finally { setSaving(false); }
   };
 
-  const deleteIOC   = async (id: number) => { await iocsAPI.delete(id); setIocs(p => p.filter(i => i.id !== id)); notify('IOC deleted'); };
-  const toggleIOC   = async (ioc: IOC)   => { ioc.enabled ? await iocsAPI.disable(ioc.id) : await iocsAPI.enable(ioc.id); setIocs(p => p.map(i => i.id === ioc.id ? { ...i, enabled: !i.enabled } : i)); };
+  const deleteIOC = async (id: number) => {
+    await iocsAPI.delete(id);
+    setIocs(p => p.filter(i => i.id !== id));
+    setIocTotal(t => t - 1);
+    notify('IOC deleted');
+  };
+
+  const toggleIOC = async (ioc: IOC) => {
+    ioc.enabled ? await iocsAPI.disable(ioc.id) : await iocsAPI.enable(ioc.id);
+    setIocs(p => p.map(i => i.id === ioc.id ? { ...i, enabled: !i.enabled } : i));
+  };
 
   const openEditIOC = (ioc: IOC) => {
     setIocForm({ indicator: ioc.indicator, type: ioc.type, severity: ioc.severity, description: ioc.description, enabled: ioc.enabled });
@@ -102,32 +163,27 @@ export default function ThreatIntelPage() {
   const bulkImport = async () => {
     setSaving(true);
     try {
-      const r = await api.post('/iocs/bulk', {
-        indicators:  bulkForm.indicators,
-        severity:    bulkForm.severity,
-        description: bulkForm.description,
-        source:      'manual',
-      });
+      const r = await api.post('/iocs/bulk', { indicators: bulkForm.indicators, severity: bulkForm.severity, description: bulkForm.description, source: 'manual' });
       const { imported, dupes, skipped } = r.data;
       notify(`Imported ${imported} IOCs (${dupes} already existed, ${skipped} skipped)`);
-      load();
+      loadIOCs(1, debouncedIocSearch, typeFilter);
+      setIocPage(1);
       setShowBulk(false);
       setBulkForm({ type: 'ip', severity: 'high', description: '', indicators: '' });
-    } catch {
-      notify('Bulk import failed');
-    } finally {
-      setSaving(false);
-    }
+    } catch { notify('Bulk import failed', true); }
+    finally { setSaving(false); }
   };
 
-  // Sigma CRUD
+  // ── Sigma CRUD ────────────────────────────────────────────────────────────
+
   const addSigma = async () => {
     if (!sigmaForm.title.trim()) return;
     setSaving(true);
     try {
       const keywords = sigmaForm.keywords.split(',').map(s => s.trim()).filter(Boolean);
       await sigmaAPI.create({ ...sigmaForm, keywords });
-      load(); setShowAddSigma(false); setSigmaForm({ ...emptySigma }); notify('Sigma rule created');
+      loadSigma(sigmaPage, debouncedSigmaSearch);
+      setShowAddSigma(false); setSigmaForm({ ...emptySigma }); notify('Sigma rule created');
     } finally { setSaving(false); }
   };
 
@@ -137,44 +193,98 @@ export default function ThreatIntelPage() {
     try {
       const keywords = sigmaForm.keywords.split(',').map(s => s.trim()).filter(Boolean);
       await sigmaAPI.update(showEditSigma.id, { ...sigmaForm, keywords });
-      load(); setShowEditSigma(null); notify('Rule updated');
+      loadSigma(sigmaPage, debouncedSigmaSearch);
+      setShowEditSigma(null); notify('Rule updated');
     } finally { setSaving(false); }
   };
 
-  const deleteSigma  = async (id: number) => { await sigmaAPI.delete(id); setSigma(p => p.filter(r => r.id !== id)); notify('Rule deleted'); };
-  const toggleSigma  = async (r: SigmaRule) => { r.enabled ? await sigmaAPI.disable(r.id) : await sigmaAPI.enable(r.id); setSigma(p => p.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x)); };
+  const deleteSigma = async (id: number) => {
+    await sigmaAPI.delete(id);
+    setSigma(p => p.filter(r => r.id !== id));
+    setSigmaTotal(t => t - 1);
+    notify('Rule deleted');
+  };
+
+  const toggleSigma = async (r: SigmaRule) => {
+    r.enabled ? await sigmaAPI.disable(r.id) : await sigmaAPI.enable(r.id);
+    setSigma(p => p.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
+  };
 
   const openEditSigma = (r: SigmaRule) => {
     setSigmaForm({ title: r.title, severity: r.severity, mitre_tactic: r.mitre_tactic, mitre_technique: r.mitre_technique, mitre_name: r.mitre_name, keywords: (r.keywords || []).join(', '), enabled: r.enabled });
     setShowEditSigma(r);
   };
 
-  // Feed CRUD
+  // ── Feed CRUD ─────────────────────────────────────────────────────────────
+
+  const syncFeed = async (feed: ThreatFeed) => {
+    if (feed.id == null) return;
+    setSyncingId(feed.id);
+    try {
+      const res = await threatFeedsAPI.sync(feed.id);
+      const count = res.data?.count ?? 0;
+      if (res.data?.warning) {
+        notify(`Partial sync: ${count} indicators imported. ${res.data.warning.split('then: ')[1] ?? ''}`, true);
+      } else {
+        notify(`Synced "${feed.name}" — ${count} indicators imported`);
+      }
+      loadFeeds();
+      // refresh IOC list from cache (fast local DB read)
+      loadIOCs(1, debouncedIocSearch, typeFilter);
+      setIocPage(1);
+    } catch (e: any) {
+      notify(e?.response?.data?.error || `Failed to sync "${feed.name}"`, true);
+    } finally { setSyncingId(null); }
+  };
+
+  const deleteFeed = async (feed: ThreatFeed) => {
+    if (!confirm(`Delete feed "${feed.name}"?`)) return;
+    try { await threatFeedsAPI.delete(feed.id!); loadFeeds(); notify(`Deleted "${feed.name}"`); }
+    catch { notify('Failed to delete feed', true); }
+  };
+
+  const openEditFeed = (f: ThreatFeed) => {
+    let cfg = { api_key: '', collection_id: '', username: '', password: '' };
+    try { const raw = typeof f.config === 'string' ? JSON.parse(f.config) : f.config; cfg = { ...cfg, ...raw }; } catch {}
+    setEditForm({ name: f.name, source: f.source || '', feed_type: f.feed_type || 'flatfile', enabled: f.enabled, config: cfg });
+    setEditFeed(f);
+  };
+
+  const updateFeed = async () => {
+    if (!editFeed) return;
+    setSaving(true);
+    try {
+      await threatFeedsAPI.update(editFeed.id!, editForm);
+      loadFeeds(); setEditFeed(null); notify('Feed updated');
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to update feed', true);
+    } finally { setSaving(false); }
+  };
+
   const addFeed = async () => {
     if (!feedForm.name.trim()) return;
     setSaving(true);
-    try { await threatFeedsAPI.create(feedForm); load(); setShowAddFeed(false); setFeedForm({ ...emptyFeed }); notify('Feed added'); }
-    finally { setSaving(false); }
+    try {
+      await threatFeedsAPI.create(feedForm);
+      loadFeeds(); setShowAddFeed(false); setFeedForm({ ...emptyFeed }); notify('Feed added');
+    } finally { setSaving(false); }
   };
 
-  // Filter
-  const filteredIOCs = iocs.filter(i => {
-    const mf = typeFilter === 'all' || i.type === typeFilter;
-    const ms = !search || i.indicator.toLowerCase().includes(search.toLowerCase()) || i.description.toLowerCase().includes(search.toLowerCase());
-    return mf && ms;
-  });
+  // ── render ────────────────────────────────────────────────────────────────
 
-  const iocsCount = IOC_TYPES.reduce((a, t) => { a[t] = iocs.filter(i => i.type === t).length; return a; }, {} as Record<string, number>);
+  const iocPages   = Math.max(1, Math.ceil(iocTotal / PAGE_SIZE));
+  const sigmaPages = Math.max(1, Math.ceil(sigmaTotal / PAGE_SIZE));
 
   return (
     <RootLayout title="Threat Intelligence"
-      subtitle={`${iocs.filter(i => i.enabled).length} active IOCs · ${sigma.length} sigma rules`}
-      onRefresh={load}>
+      subtitle={`${iocTotal.toLocaleString()} IOCs cached · ${sigmaTotal} sigma rules`}
+      onRefresh={() => { loadIOCs(iocPage, debouncedIocSearch, typeFilter); loadSigma(sigmaPage, debouncedSigmaSearch); loadFeeds(); }}>
 
-      {toast && <Toast msg={toast} />}
+      {toast && <Toast msg={toast.msg} isError={toast.isError} />}
 
       <div className="space-y-4">
-        {/* Tab bar */}
+
+        {/* Tab bar + actions */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--glass-bg)', backdropFilter: 'var(--blur-sm)', border: '1px solid var(--border)' }}>
             {TABS.map(t => {
@@ -193,24 +303,23 @@ export default function ThreatIntelPage() {
             })}
           </div>
 
-          {/* Tab actions */}
           {tab === 'iocs' && (
             <div className="flex gap-2">
-              <button onClick={() => setShowBulk(true)} className="g-btn g-btn-ghost text-xs">
+              <button type="button" onClick={() => setShowBulk(true)} className="g-btn g-btn-ghost text-xs">
                 <Upload className="h-3.5 w-3.5" /> Bulk Import
               </button>
-              <button onClick={() => { setIocForm({ ...emptyIOC }); setShowAddIOC(true); }} className="g-btn g-btn-primary text-xs">
+              <button type="button" onClick={() => { setIocForm({ ...emptyIOC }); setShowAddIOC(true); }} className="g-btn g-btn-primary text-xs">
                 <Plus className="h-3.5 w-3.5" /> Add IOC
               </button>
             </div>
           )}
           {tab === 'sigma' && (
-            <button onClick={() => { setSigmaForm({ ...emptySigma }); setShowAddSigma(true); }} className="g-btn g-btn-primary text-xs">
+            <button type="button" onClick={() => { setSigmaForm({ ...emptySigma }); setShowAddSigma(true); }} className="g-btn g-btn-primary text-xs">
               <Plus className="h-3.5 w-3.5" /> New Rule
             </button>
           )}
           {tab === 'feeds' && (
-            <button onClick={() => setShowAddFeed(true)} className="g-btn g-btn-primary text-xs">
+            <button type="button" onClick={() => setShowAddFeed(true)} className="g-btn g-btn-primary text-xs">
               <Plus className="h-3.5 w-3.5" /> Add Feed
             </button>
           )}
@@ -220,9 +329,9 @@ export default function ThreatIntelPage() {
         {tab === 'iocs' && (
           <>
             <div className="flex flex-wrap gap-2 items-center">
-              {/* Type filter pills */}
               {['all', ...IOC_TYPES].map(t => (
-                <button key={t} onClick={() => setTypeFilter(t)}
+                <button type="button" key={t}
+                  onClick={() => { setTypeFilter(t); setIocPage(1); }}
                   className="g-btn text-[11px] uppercase"
                   style={{
                     background: typeFilter === t ? 'var(--accent-glow)' : 'var(--glass-bg)',
@@ -231,12 +340,12 @@ export default function ThreatIntelPage() {
                     backdropFilter: 'var(--blur-sm)',
                     padding: '4px 10px',
                   }}>
-                  {t === 'all' ? `All (${iocs.length})` : `${t} (${iocsCount[t] || 0})`}
+                  {t === 'all' ? `All (${iocTotal.toLocaleString()})` : t}
                 </button>
               ))}
               <div className="relative ml-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
-                <input value={search} onChange={e => setSearch(e.target.value)}
+                <input value={iocSearch} onChange={e => setIocSearch(e.target.value)}
                   placeholder="Search indicator, description…" className="g-input pl-9" style={{ width: 250, height: 34 }} />
               </div>
             </div>
@@ -246,86 +355,112 @@ export default function ThreatIntelPage() {
                 <span>Indicator</span><span>Type</span><span>Severity</span><span>Description</span>
                 <span>Added</span><span>Status</span><span className="text-right">Actions</span>
               </div>
-              {loading ? <LoadingRow /> : filteredIOCs.length === 0 ? <EmptyRow icon={<Shield />} msg="No IOCs. Add one to start matching threats." /> :
-                filteredIOCs.map(ioc => (
-                  <div key={ioc.id} className={`g-tr grid gap-3 items-center px-4 ${!ioc.enabled ? 'opacity-40' : ''}`}
-                    style={{ gridTemplateColumns: '1fr 70px 80px 1fr 80px 80px 60px' }}>
-                    <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{ioc.indicator}</span>
-                    <span className="mono text-[10px] rounded px-1.5 py-0.5 uppercase inline-block w-fit"
-                      style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>{ioc.type}</span>
-                    <span className={sevClass(ioc.severity)}>{ioc.severity}</span>
-                    <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{ioc.description}</span>
-                    <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(ioc.created_at)}</span>
-                    <button onClick={() => toggleIOC(ioc)} className="flex items-center gap-1 text-[10px]"
-                      style={{ color: ioc.enabled ? 'var(--green)' : 'var(--text-3)' }}>
-                      {ioc.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-                      {ioc.enabled ? 'On' : 'Off'}
-                    </button>
-                    <div className="flex items-center justify-end gap-1">
-                      <ActionBtn icon={<Edit2 className="h-3.5 w-3.5" />} onClick={() => openEditIOC(ioc)} />
-                      <ActionBtn icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteIOC(ioc.id)} danger />
+              {iocLoading
+                ? <LoadingRow />
+                : iocs.length === 0
+                  ? <EmptyRow icon={<Shield />} msg={iocSearch || typeFilter !== 'all' ? 'No IOCs match your filter.' : 'No IOCs yet. Add one or sync a feed.'} />
+                  : iocs.map(ioc => (
+                    <div key={ioc.id} className={`g-tr grid gap-3 items-center px-4 ${!ioc.enabled ? 'opacity-40' : ''}`}
+                      style={{ gridTemplateColumns: '1fr 70px 80px 1fr 80px 80px 60px' }}>
+                      <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{ioc.indicator}</span>
+                      <span className="mono text-[10px] rounded px-1.5 py-0.5 uppercase inline-block w-fit"
+                        style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>{ioc.type}</span>
+                      <span className={sevClass(ioc.severity)}>{ioc.severity}</span>
+                      <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{ioc.description}</span>
+                      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(ioc.created_at)}</span>
+                      <button type="button" onClick={() => toggleIOC(ioc)} className="flex items-center gap-1 text-[10px]"
+                        style={{ color: ioc.enabled ? 'var(--green)' : 'var(--text-3)' }}>
+                        {ioc.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                        {ioc.enabled ? 'On' : 'Off'}
+                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <ActionBtn icon={<Edit2 className="h-3.5 w-3.5" />} onClick={() => openEditIOC(ioc)} />
+                        <ActionBtn icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteIOC(ioc.id)} danger />
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))
               }
             </div>
+
+            <Pager page={iocPage} total={iocTotal} totalPages={iocPages} onChange={p => setIocPage(p)} />
           </>
         )}
 
         {/* ── SIGMA TAB ── */}
         {tab === 'sigma' && (
-          <div className="g-table">
-            <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 100px 80px 80px 80px 60px' }}>
-              <span>Title</span><span>MITRE</span><span>Severity</span><span>Keywords</span><span>Status</span><span className="text-right">Actions</span>
+          <>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+                <input value={sigmaSearch} onChange={e => setSigmaSearch(e.target.value)}
+                  placeholder="Search rules…" className="g-input pl-9" style={{ height: 34 }} />
+              </div>
             </div>
-            {loading ? <LoadingRow /> : sigma.length === 0 ? <EmptyRow icon={<FileCode />} msg="No Sigma rules. Create one." /> :
-              sigma.map(r => (
-                <div key={r.id} className={`g-tr grid gap-3 items-center px-4 ${!r.enabled ? 'opacity-40' : ''}`}
-                  style={{ gridTemplateColumns: '1fr 100px 80px 80px 80px 60px' }}>
-                  <div>
-                    <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{r.title}</p>
-                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{r.mitre_name}</p>
-                  </div>
-                  <span className="mono text-[10px] rounded px-1.5 py-0.5"
-                    style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-                    {r.mitre_technique || '—'}
-                  </span>
-                  <span className={sevClass(r.severity)}>{r.severity}</span>
-                  <span className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
-                    {(r.keywords || []).slice(0, 2).join(', ')}{(r.keywords || []).length > 2 ? '…' : ''}
-                  </span>
-                  <button onClick={() => toggleSigma(r)} className="flex items-center gap-1 text-[10px]"
-                    style={{ color: r.enabled ? 'var(--green)' : 'var(--text-3)' }}>
-                    {r.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-                    {r.enabled ? 'On' : 'Off'}
-                  </button>
-                  <div className="flex items-center justify-end gap-1">
-                    <ActionBtn icon={<Edit2 className="h-3.5 w-3.5" />} onClick={() => openEditSigma(r)} />
-                    <ActionBtn icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteSigma(r.id)} danger />
-                  </div>
-                </div>
-              ))
-            }
-          </div>
+
+            <div className="g-table">
+              <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 100px 80px 80px 80px 60px' }}>
+                <span>Title</span><span>MITRE</span><span>Severity</span><span>Keywords</span><span>Status</span><span className="text-right">Actions</span>
+              </div>
+              {sigmaLoading
+                ? <LoadingRow />
+                : sigma.length === 0
+                  ? <EmptyRow icon={<FileCode />} msg={sigmaSearch ? 'No rules match your search.' : 'No Sigma rules. Create one.'} />
+                  : sigma.map(r => (
+                    <div key={r.id} className={`g-tr grid gap-3 items-center px-4 ${!r.enabled ? 'opacity-40' : ''}`}
+                      style={{ gridTemplateColumns: '1fr 100px 80px 80px 80px 60px' }}>
+                      <div>
+                        <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{r.title}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{r.mitre_name}</p>
+                      </div>
+                      <span className="mono text-[10px] rounded px-1.5 py-0.5"
+                        style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                        {r.mitre_technique || '—'}
+                      </span>
+                      <span className={sevClass(r.severity)}>{r.severity}</span>
+                      <span className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
+                        {(r.keywords || []).slice(0, 2).join(', ')}{(r.keywords || []).length > 2 ? '…' : ''}
+                      </span>
+                      <button type="button" onClick={() => toggleSigma(r)} className="flex items-center gap-1 text-[10px]"
+                        style={{ color: r.enabled ? 'var(--green)' : 'var(--text-3)' }}>
+                        {r.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                        {r.enabled ? 'On' : 'Off'}
+                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <ActionBtn icon={<Edit2 className="h-3.5 w-3.5" />} onClick={() => openEditSigma(r)} />
+                        <ActionBtn icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => deleteSigma(r.id)} danger />
+                      </div>
+                    </div>
+                  ))
+              }
+            </div>
+
+            <Pager page={sigmaPage} total={sigmaTotal} totalPages={sigmaPages} onChange={p => setSigmaPage(p)} />
+          </>
         )}
 
         {/* ── FEEDS TAB ── */}
         {tab === 'feeds' && (
           <div className="g-table">
-            <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 80px 100px 100px' }}>
+            <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 1fr 80px 100px 140px' }}>
               <span>Name</span><span>Source</span><span>Status</span><span>Last Sync</span><span className="text-right">Actions</span>
             </div>
             {feeds.length === 0 ? <EmptyRow icon={<Rss />} msg="No threat feeds configured." /> :
               feeds.map((f, i) => (
                 <div key={i} className="g-tr grid gap-3 items-center px-4"
-                  style={{ gridTemplateColumns: '1fr 1fr 80px 100px 100px' }}>
+                  style={{ gridTemplateColumns: '1fr 1fr 80px 100px 140px' }}>
                   <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{f.name}</span>
-                  <span className="mono text-xs truncate" style={{ color: 'var(--text-2)' }}>{f.source}</span>
+                  <span className="mono text-xs truncate" style={{ color: 'var(--text-2)' }}>{f.source || f.feed_type}</span>
                   <span className={f.enabled ? 's-online' : 's-offline'}>{f.enabled ? 'Active' : 'Off'}</span>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{f.last_sync ? timeAgo(f.last_sync) : 'Never'}</span>
-                  <div className="flex justify-end">
-                    <button onClick={() => syncFeed(f)} disabled={syncingId === f.id} className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 8px' }}>
+                  <div className="flex justify-end gap-1">
+                    <button type="button" onClick={() => syncFeed(f)} disabled={syncingId === f.id} className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 8px' }}>
                       <RefreshCw className={`h-3 w-3 ${syncingId === f.id ? 'animate-spin' : ''}`} /> Sync
+                    </button>
+                    <button type="button" onClick={() => openEditFeed(f)} className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 8px' }}>
+                      <Edit2 className="h-3 w-3" />
+                    </button>
+                    <button type="button" onClick={() => deleteFeed(f)} className="g-btn g-btn-ghost text-[11px]" style={{ padding: '3px 8px', color: 'var(--danger)' }}>
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
@@ -337,7 +472,6 @@ export default function ThreatIntelPage() {
 
       {/* ── MODALS ── */}
 
-      {/* Add/Edit IOC */}
       {(showAddIOC || showEditIOC) && (
         <Modal title={showEditIOC ? 'Edit IOC' : 'Add IOC'} onClose={() => { setShowAddIOC(false); setShowEditIOC(null); }}>
           <div className="space-y-3">
@@ -354,7 +488,6 @@ export default function ThreatIntelPage() {
         </Modal>
       )}
 
-      {/* Bulk import */}
       {showBulk && (
         <Modal title="Bulk Import IOCs" onClose={() => setShowBulk(false)}>
           <div className="space-y-3">
@@ -370,7 +503,7 @@ export default function ThreatIntelPage() {
                 Indicators (one per line, or comma/semicolon separated)
               </label>
               <textarea value={bulkForm.indicators} onChange={e => setBulkForm(f => ({ ...f, indicators: e.target.value }))}
-                rows={8} placeholder={"1.2.3.4\nevil.com\nhxxps://malware[.]example/payload\nabc123def456...64hexchars\n8.8.8.8/24"}
+                rows={8} placeholder={"1.2.3.4\nevil.com\nhxxps://malware[.]example/payload"}
                 className="g-input resize-none font-mono text-xs" />
               <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
                 {bulkForm.indicators.split(/[\n,;]+/).filter(s => s.trim()).length} indicators
@@ -382,7 +515,6 @@ export default function ThreatIntelPage() {
         </Modal>
       )}
 
-      {/* Add/Edit Sigma Rule */}
       {(showAddSigma || showEditSigma) && (
         <Modal title={showEditSigma ? 'Edit Sigma Rule' : 'New Sigma Rule'} onClose={() => { setShowAddSigma(false); setShowEditSigma(null); }} wide>
           <div className="space-y-3">
@@ -403,29 +535,115 @@ export default function ThreatIntelPage() {
         </Modal>
       )}
 
-      {/* Add Feed */}
       {showAddFeed && (
         <Modal title="Add Threat Feed" onClose={() => setShowAddFeed(false)}>
-          <div className="space-y-3">
-            <MInput label="Name *" value={feedForm.name} onChange={v => setFeedForm(f => ({ ...f, name: v }))} placeholder="Feed name" />
-            <MInput label="Source" value={feedForm.source} onChange={v => setFeedForm(f => ({ ...f, source: v }))} placeholder="manual / https://…" mono />
-          </div>
+          <FeedFields form={feedForm} setForm={setFeedForm} />
           <ModalActions onCancel={() => setShowAddFeed(false)} onConfirm={addFeed} saving={saving}
             disabled={!feedForm.name.trim()} label="Add Feed" />
+        </Modal>
+      )}
+
+      {editFeed && (
+        <Modal title={`Edit Feed — ${editFeed.name}`} onClose={() => setEditFeed(null)}>
+          <FeedFields form={editForm} setForm={setEditForm} />
+          <ModalActions onCancel={() => setEditFeed(null)} onConfirm={updateFeed} saving={saving}
+            disabled={!editForm.name.trim()} label="Save Changes" />
         </Modal>
       )}
     </RootLayout>
   );
 }
 
-// ── Shared components ─────────────────────────────────────
+// ── Pagination control ────────────────────────────────────────────────────────
+
+function Pager({ page, total, totalPages, onChange }: { page: number; total: number; totalPages: number; onChange: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+
+  const pages: number[] = [];
+  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+  const end   = Math.min(totalPages, start + 4);
+  for (let p = start; p <= end; p++) pages.push(p);
+
+  return (
+    <div className="flex items-center justify-between px-1 pt-1">
+      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+        {((page - 1) * 50 + 1).toLocaleString()}–{Math.min(page * 50, total).toLocaleString()} of {total.toLocaleString()}
+      </p>
+      <div className="flex items-center gap-1">
+        <button type="button" disabled={page === 1} onClick={() => onChange(page - 1)}
+          className="p-1.5 rounded-lg disabled:opacity-30 transition-colors"
+          style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        {pages.map(p => (
+          <button type="button" key={p} onClick={() => onChange(p)}
+            className="min-w-[28px] h-7 px-1.5 rounded-lg text-xs transition-colors"
+            style={{
+              background: p === page ? 'var(--accent-glow)' : 'transparent',
+              border: `1px solid ${p === page ? 'var(--accent-border)' : 'var(--border)'}`,
+              color: p === page ? 'var(--accent)' : 'var(--text-2)',
+              fontWeight: p === page ? 600 : 400,
+            }}>
+            {p}
+          </button>
+        ))}
+        {end < totalPages && (
+          <>
+            <span className="text-xs px-1" style={{ color: 'var(--text-3)' }}>…</span>
+            <button type="button" onClick={() => onChange(totalPages)}
+              className="min-w-[28px] h-7 px-1.5 rounded-lg text-xs"
+              style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+              {totalPages}
+            </button>
+          </>
+        )}
+        <button type="button" disabled={page === totalPages} onClick={() => onChange(page + 1)}
+          className="p-1.5 rounded-lg disabled:opacity-30 transition-colors"
+          style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Feed form (shared between Add/Edit modals) ────────────────────────────────
+
+function FeedFields({ form, setForm }: { form: any; setForm: (fn: (f: any) => any) => void }) {
+  return (
+    <div className="space-y-3">
+      <MInput label="Name *" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Feed name" />
+      <MSelect label="Feed Type" value={form.feed_type} onChange={v => setForm(f => ({ ...f, feed_type: v }))} options={['flatfile', 'otx', 'misp', 'taxii']} capitalize />
+      {form.feed_type === 'flatfile' && (
+        <MInput label="URL / Path" value={form.source} onChange={v => setForm(f => ({ ...f, source: v }))} placeholder="https://… or /path/to/feed.txt" mono />
+      )}
+      {(form.feed_type === 'otx' || form.feed_type === 'misp') && (
+        <MInput label="API Key *" value={form.config.api_key} onChange={v => setForm(f => ({ ...f, config: { ...f.config, api_key: v } }))} placeholder={form.feed_type === 'otx' ? 'AlienVault OTX API key' : 'MISP API key'} mono />
+      )}
+      {form.feed_type === 'misp' && (
+        <MInput label="MISP URL *" value={form.source} onChange={v => setForm(f => ({ ...f, source: v }))} placeholder="https://misp.example.com" mono />
+      )}
+      {form.feed_type === 'taxii' && (
+        <>
+          <MInput label="TAXII URL *" value={form.source} onChange={v => setForm(f => ({ ...f, source: v }))} placeholder="https://…/taxii2/" mono />
+          <MInput label="Collection ID" value={form.config.collection_id} onChange={v => setForm(f => ({ ...f, config: { ...f.config, collection_id: v } }))} placeholder="collection-uuid" mono />
+          <MInput label="Username" value={form.config.username} onChange={v => setForm(f => ({ ...f, config: { ...f.config, username: v } }))} placeholder="optional" />
+          <MInput label="Password" value={form.config.password} onChange={v => setForm(f => ({ ...f, config: { ...f.config, password: v } }))} placeholder="optional" />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Shared components ─────────────────────────────────────────────────────────
+
 function Modal({ title, children, onClose, wide }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
     <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="g-modal" style={{ maxWidth: wide ? 560 : 480 }}>
         <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</h2>
-          <button onClick={onClose} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -436,8 +654,8 @@ function Modal({ title, children, onClose, wide }: { title: string; children: Re
 function ModalActions({ onCancel, onConfirm, saving, disabled, label }: any) {
   return (
     <div className="flex gap-3 mt-5">
-      <button onClick={onCancel} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
-      <button onClick={onConfirm} disabled={saving || disabled} className="g-btn g-btn-primary flex-1 justify-center">
+      <button type="button" onClick={onCancel} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+      <button type="button" onClick={onConfirm} disabled={saving || disabled} className="g-btn g-btn-primary flex-1 justify-center">
         {saving ? 'Saving…' : label}
       </button>
     </div>
@@ -467,7 +685,7 @@ function MSelect({ label, value, onChange, options, capitalize }: { label: strin
 
 function ActionBtn({ icon, onClick, danger }: { icon: React.ReactNode; onClick: () => void; danger?: boolean }) {
   return (
-    <button onClick={onClick} className="p-1 rounded transition-colors"
+    <button type="button" onClick={onClick} className="p-1 rounded transition-colors"
       style={{ color: 'var(--text-3)' }}
       onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = danger ? 'var(--red)' : 'var(--accent)'}
       onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
@@ -489,6 +707,19 @@ function EmptyRow({ icon, msg }: { icon: React.ReactNode; msg: string }) {
   );
 }
 
-function Toast({ msg }: { msg: string }) {
-  return <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 220 }}>{msg}</div>;
+function Toast({ msg, isError }: { msg: string; isError?: boolean }) {
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed bottom-5 right-5 px-4 py-3 text-sm rounded-xl shadow-lg"
+      style={{
+        zIndex: 99999, minWidth: 260, maxWidth: 400,
+        background: isError ? 'var(--red, #ef4444)' : 'var(--glass-bg, rgba(30,30,40,0.95))',
+        color: isError ? '#fff' : 'var(--text-1)',
+        border: '1px solid ' + (isError ? 'rgba(255,255,255,0.2)' : 'var(--border)'),
+        backdropFilter: 'blur(12px)', wordBreak: 'break-word',
+      }}>
+      {msg}
+    </div>,
+    document.body
+  );
 }

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
@@ -38,19 +40,17 @@ func CreateIOC(c *gin.Context) {
 }
 
 func GetIOCs(c *gin.Context) {
+	page, _  := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	search   := c.Query("search")
+	iocType  := c.Query("type")
 
-	iocs, err := services.GetIOCs(tenantIDFromContext(c))
-
+	result, err := repositories.GetIOCsPaged(tenantIDFromContext(c), page, limit, search, iocType)
 	if err != nil {
-
-		c.JSON(500, gin.H{
-			"error": err.Error(),
-		})
-
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(200, iocs)
+	c.JSON(200, result)
 }
 
 func GetIOCByID(c *gin.Context) {

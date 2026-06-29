@@ -28,15 +28,17 @@ type NetworkMapNode struct {
 }
 
 type NetworkMapEdge struct {
-	Source   string    `json:"source"`
-	Target   string    `json:"target"`
-	Protocol string    `json:"protocol"`
-	Port     string    `json:"port"`
-	Service  string    `json:"service,omitempty"` // human name for port, e.g. "HTTPS"
-	Process  string    `json:"process"`
-	Count    int       `json:"count"`
-	LastSeen time.Time `json:"last_seen"`
-	EdgeType string    `json:"edge_type"` // "internal" | "external"
+	Source          string    `json:"source"`
+	Target          string    `json:"target"`
+	Protocol        string    `json:"protocol"`
+	Port            string    `json:"port"`
+	Service         string    `json:"service,omitempty"`          // human name, e.g. "HTTPS"
+	PortSensitivity string    `json:"port_sensitivity,omitempty"` // safe|neutral|sensitive|critical
+	PortNote        string    `json:"port_note,omitempty"`        // reason string
+	Process         string    `json:"process"`
+	Count           int       `json:"count"`
+	LastSeen        time.Time `json:"last_seen"`
+	EdgeType        string    `json:"edge_type"` // "internal" | "external"
 }
 
 type NetworkMapSummary struct {
@@ -57,29 +59,13 @@ type NetworkMapGraph struct {
 
 const maxNetworkMapEdges = 500
 
-// wellKnownPorts maps port numbers to human-readable service names.
-var wellKnownPorts = map[string]string{
-	"20": "FTP-data", "21": "FTP", "22": "SSH", "23": "Telnet",
-	"25": "SMTP", "53": "DNS", "67": "DHCP", "68": "DHCP",
-	"80": "HTTP", "110": "POP3", "123": "NTP", "143": "IMAP",
-	"161": "SNMP", "179": "BGP", "443": "HTTPS", "465": "SMTPS",
-	"514": "Syslog", "587": "SMTP-TLS", "636": "LDAPS",
-	"993": "IMAPS", "995": "POP3S",
-	"1433": "MSSQL", "1521": "Oracle", "2181": "Zookeeper",
-	"2375": "Docker", "2376": "Docker-TLS", "3000": "Dev-HTTP",
-	"3306": "MySQL", "3389": "RDP", "4369": "EPMD",
-	"5432": "Postgres", "5601": "Kibana", "5672": "AMQP",
-	"6379": "Redis", "6443": "K8s-API", "8080": "HTTP-alt",
-	"8443": "HTTPS-alt", "8888": "Jupyter", "9000": "MinIO",
-	"9090": "Prometheus", "9092": "Kafka", "9200": "Elasticsearch",
-	"9300": "ES-transport", "27017": "MongoDB",
-}
-
-func portService(port string) string {
-	if s, ok := wellKnownPorts[port]; ok {
-		return s
+// portEdgeInfo returns the service name, sensitivity, and note for a port.
+// Uses the shared portInfoMap from ip_enrich.go; falls back to empty strings.
+func portEdgeInfo(port string) (service, sensitivity, note string) {
+	if info := GetPortInfo(port); info != nil {
+		return info.Service, info.Sensitivity, info.Note
 	}
-	return ""
+	return "", "", ""
 }
 
 // alertCountsByAgent returns a map of agent_id → unacked alert count for a tenant.
@@ -248,14 +234,17 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 		if !ok {
 			agg = &edgeAgg{}
 			edgeAggs[key] = agg
+			svc, sensitivity, note := portEdgeInfo(port)
 			edgeMeta[key] = NetworkMapEdge{
-				Source:   srcID,
-				Target:   dstID,
-				Protocol: ev.Protocol,
-				Port:     port,
-				Service:  portService(port),
-				Process:  ev.Comm,
-				EdgeType: edgeType,
+				Source:          srcID,
+				Target:          dstID,
+				Protocol:        ev.Protocol,
+				Port:            port,
+				Service:         svc,
+				PortSensitivity: sensitivity,
+				PortNote:        note,
+				Process:         ev.Comm,
+				EdgeType:        edgeType,
 			}
 		}
 		agg.count++

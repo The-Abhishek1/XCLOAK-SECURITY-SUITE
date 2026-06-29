@@ -41,7 +41,7 @@ func syncOTXFeed(feed models.ThreatFeed) (int, error) {
 
 	const otxMaxPages = 50
 	url := "https://otx.alienvault.com/api/v1/pulses/subscribed?limit=50"
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 45 * time.Second}
 	imported := 0
 
 	// Record progress even if a later page errors out (timeout, rate limit,

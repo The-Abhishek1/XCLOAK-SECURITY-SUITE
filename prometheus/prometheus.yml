@@ -3,10 +3,9 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  # host.docker.internal resolves via extra_hosts: host-gateway in docker-compose
   - job_name: 'xcloak-backend'
     static_configs:
-      - targets: ['host.docker.internal:8080']
+      - targets: ['backend:8080']
     metrics_path: /metrics
     scrape_interval: 15s
     authorization:
