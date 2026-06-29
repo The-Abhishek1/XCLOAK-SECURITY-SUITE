@@ -165,6 +165,12 @@ func main() {
 	// ── Container / Kubernetes Security Detector ───────────────────
 	services.StartContainerSecurityScheduler()
 
+	// ── Active Directory Attack Detector (Kerberoasting, DCSync, PtH) ──────
+	services.StartADAttackScheduler()
+
+	// ── Supply Chain Attack Detector (curl|bash, dep confusion, typosquat) ──
+	services.StartSupplyChainScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),

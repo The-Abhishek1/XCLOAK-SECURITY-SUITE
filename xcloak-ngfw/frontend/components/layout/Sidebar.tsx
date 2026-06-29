@@ -14,7 +14,7 @@ import {
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
-  Cloud, Mail, Container,
+  Cloud, Mail, Container, ShieldOff, Package,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -35,6 +35,8 @@ const NAV = [
     { href: '/cloud-security',     label: 'Cloud Security',   icon: Cloud },
     { href: '/email-security',     label: 'Email Security',   icon: Mail },
     { href: '/container-security', label: 'Containers / K8s', icon: Container },
+    { href: '/ad-attacks',         label: 'AD Attacks',       icon: ShieldOff },
+    { href: '/supply-chain',       label: 'Supply Chain',     icon: Package },
     { href: '/deception',      label: 'Deception',      icon: Aperture },
     { href: '/hunt-workbench', label: 'Hunt Workbench', icon: Microscope },
     { href: '/threat-actors',  label: 'Threat Actors',  icon: Target },

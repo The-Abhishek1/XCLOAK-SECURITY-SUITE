@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -9,6 +10,88 @@ import (
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
+
+// alertIPRE extracts IPv4 addresses from alert log messages for threat intel lookup.
+var alertIPRE = regexp.MustCompile(`\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b`)
+
+// enrichAlertWithThreatIntel looks up any src_ip found in the alert message
+// against the tenant's IOC table (and the platform IOC table, tenant_id=0).
+// If a match is found it appends a "[TI: ...]" annotation to the log message.
+func enrichAlertWithThreatIntel(alert *models.Alert) {
+	if alert.LogMessage == "" {
+		return
+	}
+	// Only run on messages that contain an IP to avoid noise
+	matches := alertIPRE.FindAllString(alert.LogMessage, 5)
+	if len(matches) == 0 {
+		return
+	}
+
+	tid := alert.TenantID
+	if tid == 0 {
+		tid = resolveAlertTenant(alert.AgentID)
+	}
+
+	for _, ip := range matches {
+		if net.ParseIP(ip) == nil {
+			continue
+		}
+		if isPrivateAlertIP(ip) {
+			continue
+		}
+		var severity, description string
+		err := database.DB.QueryRow(`
+			SELECT severity, coalesce(description,'')
+			FROM iocs
+			WHERE indicator = $1
+			  AND type = 'ip'
+			  AND enabled = true
+			  AND (tenant_id = $2 OR tenant_id = 0)
+			ORDER BY tenant_id DESC
+			LIMIT 1
+		`, ip, tid).Scan(&severity, &description)
+		if err != nil {
+			continue
+		}
+		note := fmt.Sprintf(" [TI: ip=%s severity=%s %s]", ip, severity, description)
+		if !strings.Contains(alert.LogMessage, "[TI:") {
+			alert.LogMessage += note
+		}
+		// Escalate alert severity if TI says critical/high and current is lower
+		if severityRank(severity) > severityRank(alert.Severity) {
+			alert.Severity = severity
+		}
+	}
+}
+
+func severityRank(s string) int {
+	switch strings.ToLower(s) {
+	case "critical":
+		return 4
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	}
+	return 0
+}
+
+func isPrivateAlertIP(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return true
+	}
+	private := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"}
+	for _, cidr := range private {
+		_, network, _ := net.ParseCIDR(cidr)
+		if network != nil && network.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
 
 // userRE extracts a username from common syslog / Windows event patterns.
 var userRE = regexp.MustCompile(
@@ -58,6 +141,10 @@ func CreateAlert(alert models.Alert) error {
 			alert.LogMessage = EnrichAlertMessage(alert.LogMessage, username, tid)
 		}
 	}
+
+	// Threat intel enrichment — auto-annotate any public IP in the alert message
+	// with IOC context from the iocs table. Also escalates severity on TI match.
+	enrichAlertWithThreatIntel(&alert)
 
 	err := repositories.CreateAlert(alert)
 	if err != nil {
