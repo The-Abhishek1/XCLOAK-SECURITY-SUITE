@@ -94,6 +94,19 @@ type ParsedFields struct {
 	HTTPStatus string `json:"http_status,omitempty"` // 200 403 500 …
 	HTTPHost   string `json:"http_host,omitempty"`   // Host header / vhost
 
+	// Cloud — from AWS CloudTrail, Azure Activity Log, GCP Audit Log
+	CloudProvider  string `json:"cloud_provider,omitempty"`  // aws | azure | gcp
+	CloudEventName string `json:"cloud_event_name,omitempty"` // e.g. AttachRolePolicy
+	CloudUser      string `json:"cloud_user,omitempty"`       // IAM user / principal
+	CloudRegion    string `json:"cloud_region,omitempty"`     // us-east-1 / eastus / …
+	CloudResource  string `json:"cloud_resource,omitempty"`   // ARN / resource ID
+
+	// Email — from email gateway logs (Proofpoint, O365, Mimecast, Postfix)
+	EmailFrom    string `json:"email_from,omitempty"`
+	EmailTo      string `json:"email_to,omitempty"`
+	EmailSubject string `json:"email_subject,omitempty"`
+	EmailResult  string `json:"email_result,omitempty"` // delivered | blocked | quarantined
+
 	// Freeform key=value extras that don't fit above
 	Extra map[string]string `json:"extra,omitempty"`
 
@@ -598,8 +611,67 @@ func parseJSON(message string) *ParsedFields {
 	f.JA3Hash  = firstNonEmpty(f.JA3Hash,  str("ja3_hash", "ja3hash", "ja3"))
 	f.JA3SHash = firstNonEmpty(f.JA3SHash, str("ja3s_hash", "ja3shash", "ja3s"))
 
+	// HTTP access log fields embedded in JSON (Nginx JSON log format)
+	f.HTTPMethod = str("http_method", "method", "request_method", "verb")
+	f.URLPath    = str("url_path", "url", "request", "uri", "path")
+	f.UserAgent  = str("user_agent", "http_user_agent", "agent")
+	f.HTTPStatus = str("http_status", "status", "status_code", "response_code")
+	f.HTTPHost   = str("http_host", "host", "vhost")
+
+	// AWS CloudTrail — {"eventVersion":"1.08","eventName":"...","eventSource":"..."}
+	if evName := str("eventName"); evName != "" {
+		f.CloudProvider  = "aws"
+		f.CloudEventName = evName
+		f.CloudRegion    = str("awsRegion")
+		if ui, ok := raw["userIdentity"].(map[string]any); ok {
+			if un, ok := ui["userName"].(string); ok { f.CloudUser = un } else
+			if arn, ok := ui["arn"].(string); ok { f.CloudUser = arn }
+		}
+		if f.SrcIP == "" { f.SrcIP = str("sourceIPAddress") }
+		if f.CloudResource == "" {
+			if rr, ok := raw["resources"].([]any); ok && len(rr) > 0 {
+				if rm, ok := rr[0].(map[string]any); ok {
+					if arn, ok := rm["ARN"].(string); ok { f.CloudResource = arn }
+				}
+			}
+		}
+	}
+
+	// Azure Activity Log — {"operationName":{"value":"..."},"callerIpAddress":"...","caller":"..."}
+	if opObj, ok := raw["operationName"].(map[string]any); ok {
+		if opVal, ok := opObj["value"].(string); ok && opVal != "" {
+			f.CloudProvider  = "azure"
+			f.CloudEventName = opVal
+			f.CloudUser      = str("caller")
+			if f.SrcIP == "" { f.SrcIP = str("callerIpAddress") }
+			if sub, ok := raw["subscriptionId"].(string); ok { f.CloudResource = sub }
+		}
+	}
+
+	// GCP Audit Log — {"protoPayload":{"@type":"...AuditLog","methodName":"...","authenticationInfo":{...}}}
+	if pp, ok := raw["protoPayload"].(map[string]any); ok {
+		if mn, ok := pp["methodName"].(string); ok && mn != "" {
+			f.CloudProvider  = "gcp"
+			f.CloudEventName = mn
+			if ai, ok := pp["authenticationInfo"].(map[string]any); ok {
+				f.CloudUser = fmt.Sprintf("%v", ai["principalEmail"])
+			}
+			if rm, ok := pp["requestMetadata"].(map[string]any); ok {
+				if f.SrcIP == "" { f.SrcIP = fmt.Sprintf("%v", rm["callerIp"]) }
+			}
+		}
+	}
+
+	// Email gateway JSON (O365 Unified Audit, Proofpoint SIEM API)
+	if msgFrom := str("SenderAddress", "sender", "from", "mail_from"); msgFrom != "" {
+		f.EmailFrom    = msgFrom
+		f.EmailTo      = str("RecipientAddress", "recipient", "to", "mail_to")
+		f.EmailSubject = str("Subject", "subject", "mail_subject")
+		f.EmailResult  = str("DeliveryAction", "action", "verdict", "disposition")
+	}
+
 	if f.Timestamp == "" && f.Hostname == "" && f.User == "" &&
-		f.SrcIP == "" && f.EventID == "" {
+		f.SrcIP == "" && f.EventID == "" && f.CloudEventName == "" && f.EmailFrom == "" {
 		return nil
 	}
 	return f

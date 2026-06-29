@@ -156,6 +156,15 @@ func main() {
 	// ── Insider Threat Score Engine ─────────────────────────────────
 	services.StartInsiderThreatScheduler()
 
+	// ── Cloud Security Detector (AWS CloudTrail / Azure / GCP) ──────────────
+	services.StartCloudSecurityScheduler()
+
+	// ── Email Security Detector (phishing, BEC, lookalike domains) ────────
+	services.StartEmailSecurityScheduler()
+
+	// ── Container / Kubernetes Security Detector ───────────────────
+	services.StartContainerSecurityScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),
