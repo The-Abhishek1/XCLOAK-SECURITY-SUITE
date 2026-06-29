@@ -160,6 +160,22 @@ func FireTestWebhook(name string, tenantID int) {
 		},
 	}
 	deliverToAllForTenant("critical_alert", payload, tenantID)
+
+	// For enterprise integration tests, fire a synthetic alert so the
+	// per-integration deliver* functions are exercised end-to-end.
+	switch name {
+	case "pagerduty", "teams", "jira", "servicenow":
+		testAlert := models.Alert{
+			TenantID:       tenantID,
+			AgentID:        0,
+			RuleName:       "XCloak Integration Test",
+			Severity:       "critical",
+			LogMessage:     "This is a test alert from XCloak Security Suite",
+			MitreTechnique: "T0000",
+			Fingerprint:    "test-" + name,
+		}
+		FireEnterpriseIntegrations(testAlert)
+	}
 }
 
 func deliverWebhook(eventType string, payload WebhookPayload, tenantID int) {
@@ -303,17 +319,29 @@ func logDelivery(integration, eventType string, payload []byte, code int, succes
 	`, integration, eventType, payload, code, success, errMsg, tenantID)
 }
 
+// knownIntegrations is the canonical list of supported integrations in the
+// order they appear in the Settings UI. GetIntegrations always returns all of
+// them — DB rows are merged in; unconfigured integrations get empty defaults.
+var knownIntegrations = []string{
+	"slack", "webhook", "email",
+	"pagerduty", "teams", "jira", "servicenow",
+	"ldap", "oidc",
+}
+
 // GetIntegrations returns tenantID's integrations config.
+// Every integration in knownIntegrations is always present in the result,
+// even if it has never been configured (no DB row yet).
 func GetIntegrations(tenantID int) ([]map[string]any, error) {
 	rows, err := database.DB.Query(`
-		SELECT name, enabled, config, updated_at FROM integrations WHERE tenant_id=$1 ORDER BY name
+		SELECT name, enabled, config, updated_at FROM integrations WHERE tenant_id=$1
 	`, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var result []map[string]any
+	// Build a map of what's in the DB.
+	dbRows := map[string]map[string]any{}
 	for rows.Next() {
 		var name, updatedAt string
 		var enabled bool
@@ -325,12 +353,41 @@ func GetIntegrations(tenantID int) ([]map[string]any, error) {
 				cfg = map[string]any{}
 			}
 			mergeIntegrationSecrets(tenantID, name, cfg)
-			result = append(result, map[string]any{
+			dbRows[name] = map[string]any{
 				"name":       name,
 				"enabled":    enabled,
 				"config":     cfg,
 				"updated_at": updatedAt,
+			}
+		}
+	}
+
+	// Return all known integrations in canonical order, filling defaults for
+	// any that have no DB row yet so the UI always renders every card.
+	result := make([]map[string]any, 0, len(knownIntegrations))
+	for _, name := range knownIntegrations {
+		if row, ok := dbRows[name]; ok {
+			result = append(result, row)
+		} else {
+			result = append(result, map[string]any{
+				"name":       name,
+				"enabled":    false,
+				"config":     map[string]any{},
+				"updated_at": "",
 			})
+		}
+	}
+	// Append any DB rows for integrations not in knownIntegrations (future ones).
+	for name, row := range dbRows {
+		known := false
+		for _, k := range knownIntegrations {
+			if k == name {
+				known = true
+				break
+			}
+		}
+		if !known {
+			result = append(result, row)
 		}
 	}
 	return result, nil

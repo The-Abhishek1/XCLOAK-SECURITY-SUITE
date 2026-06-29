@@ -55,7 +55,12 @@ var (
 
 // BuildInvestigationContext generates enrichment data for an alert.
 func BuildInvestigationContext(alertID, tenantID int) (InvestigationContext, error) {
-	var ctx InvestigationContext
+	ctx := InvestigationContext{
+		IOCHits:         []IOCHit{},
+		SimilarAlerts:   []SimilarAlert{},
+		SuggestedCases:  []SuggestedCase{},
+		CorrelatedRules: []string{},
+	}
 
 	// Load alert basics
 	var logMsg, ruleName, severity, mitreTactic, mitreTechnique, mitreName string

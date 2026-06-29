@@ -13,7 +13,7 @@ import {
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
-  Target, Wifi,
+  Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -35,12 +35,15 @@ const NAV = [
     { href: '/threat-actors',  label: 'Threat Actors',  icon: Target },
     { href: '/nba',            label: 'Net Behavior',   icon: Wifi },
     { href: '/threat-intel',   label: 'Threat Intel',   icon: Shield },
-    { href: '/sigma-rules',       label: 'Sigma Rules',     icon: FileCode },
+    { href: '/sigma-rules',        label: 'Sigma Rules',     icon: FileCode },
     { href: '/yara-rules',        label: 'YARA Rules',      icon: Code2 },
+    { href: '/ja3-fingerprints',  label: 'JA3 Fingerprints', icon: Fingerprint },
     { href: '/threat-detection',  label: 'Behavioral',      icon: Activity },
     { href: '/live-logs',    label: 'Live Logs',    icon: Radio },
     { href: '/log-search',   label: 'Log Search',   icon: SearchCode },
+    { href: '/log-sources',  label: 'Log Sources',  icon: PlugZap },
     { href: '/hunt',         label: 'Threat Hunt',  icon: Search },
+    { href: '/clusters',     label: 'Alert Clusters', icon: Layers },
     { href: '/correlation',  label: 'Correlation',  icon: GitMerge },
     { href: '/suppression',  label: 'Suppression',  icon: VolumeX },
   ]},
@@ -53,13 +56,15 @@ const NAV = [
     { href: '/quarantine',      label: 'Quarantine',      icon: Archive },
     { href: '/firewall',        label: 'Firewall',        icon: Network },
     { href: '/scheduled-tasks',  label: 'Scheduled Tasks', icon: CalendarClock },
+    { href: '/dfir',             label: 'DFIR',             icon: HardDrive },
     { href: '/script-runner',    label: 'Script Runner',    icon: TerminalSquare },
   ]},
   { group: 'INVENTORY', items: [
     { href: '/assets', label: 'Assets (CMDB)', icon: Server },
   ]},
   { group: 'COMPLIANCE', items: [
-    { href: '/compliance',    label: 'Reports',       icon: ClipboardCheck },
+    { href: '/compliance',          label: 'Reports',           icon: ClipboardCheck },
+    { href: '/framework-compliance', label: 'Frameworks',         icon: ScrollText },
     { href: '/executive',     label: 'Executive',     icon: BarChart2 },
     { href: '/soc-metrics',   label: 'SOC Metrics',   icon: Users },
     { href: '/risk-posture',  label: 'Risk Posture',  icon: Gauge },

@@ -108,12 +108,17 @@ export const attackPathAPI = {
 };
 
 export const networkMapAPI = {
-  get: (sinceMinutes = 60, limit = 5000) =>
+  get:        (sinceMinutes = 60, limit = 5000) =>
     api.get('/network-map', { params: { since_minutes: sinceMinutes, limit } }),
+  getIPInfo:  (ip: string) => api.get('/network-map/ip-info', { params: { ip } }),
+  getPortInfo:(port: string) => api.get('/network-map/port-info', { params: { port } }),
 };
 
 export const iocsAPI = {
-  getAll:     ()                         => api.get('/iocs'),
+  // unwraps the paginated envelope so existing callers still get an array
+  getAll:     ()                         => api.get('/iocs').then(r => ({ ...r, data: r.data?.data ?? r.data ?? [] })),
+  getPaged:   (params: { page?: number; limit?: number; search?: string; type?: string }) =>
+    api.get('/iocs', { params }),
   getById:    (id: number)               => api.get(`/iocs/${id}`),
   create:     (data: any)                => api.post('/iocs', data),
   update:     (id: number, data: any)    => api.put(`/iocs/${id}`, data),
@@ -139,7 +144,10 @@ export const playbooksAPI = {
 };
 
 export const sigmaAPI = {
-  getAll:   ()                      => api.get('/sigma/rules'),
+  // unwraps the paginated envelope so existing callers still get an array
+  getAll:   ()                      => api.get('/sigma/rules').then(r => ({ ...r, data: Array.isArray(r.data?.data) ? r.data.data : [] })),
+  getPaged: (params: { page?: number; limit?: number; search?: string; severity?: string }) =>
+    api.get('/sigma/rules', { params }),
   create:   (data: any)             => api.post('/sigma/rules', data),
   update:   (id: number, data: any) => api.put(`/sigma/rules/${id}`, data),
   delete:   (id: number)            => api.delete(`/sigma/rules/${id}`),
@@ -148,6 +156,13 @@ export const sigmaAPI = {
   test:     (data: { message: string }) => api.post('/sigma/rules/test', data),
   import:   (form: FormData)        => api.post('/sigma/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   stats:    ()                      => api.get('/sigma/stats'),
+};
+
+export const logSourcesAPI = {
+  getAll:  ()                   => api.get('/log-sources'),
+  create:  (data: any)          => api.post('/log-sources', data),
+  update:  (id: number, data: any) => api.put(`/log-sources/${id}`, data),
+  remove:  (id: number)         => api.delete(`/log-sources/${id}`),
 };
 
 export const threatAPI = {
@@ -188,9 +203,11 @@ export const quarantineAPI = {
 };
 
 export const threatFeedsAPI = {
-  getAll:  ()           => api.get('/threat-feeds').catch(() => ({ data: [] })),
-  create:  (data: any)  => api.post('/threat-feeds', data),
-  sync:    (id: number) => api.post(`/threat-feeds/${id}/sync`),
+  getAll:  ()                    => api.get('/threat-feeds').catch(() => ({ data: [] })),
+  create:  (data: any)           => api.post('/threat-feeds', data),
+  update:  (id: number, data: any) => api.put(`/threat-feeds/${id}`, data),
+  delete:  (id: number)          => api.delete(`/threat-feeds/${id}`),
+  sync:    (id: number)          => api.post(`/threat-feeds/${id}/sync`),
 };
 
 export const yaraAPI = {

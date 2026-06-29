@@ -59,6 +59,14 @@ type ParsedFields struct {
 	CEFName       string `json:"cef_name,omitempty"`
 	CEFSeverity   string `json:"cef_severity,omitempty"`
 
+	// Transfer volume (bytes) — from CEF out/in, LEEF bytesOut/bytesIn, JSON bytes_sent/bytes_recv
+	BytesSent int64 `json:"bytes_sent,omitempty"`
+	BytesRecv int64 `json:"bytes_recv,omitempty"`
+
+	// TLS fingerprints — from Zeek (ja3=), Suricata (json ja3.hash), Palo Alto (ja3hash=)
+	JA3Hash  string `json:"ja3_hash,omitempty"`
+	JA3SHash string `json:"ja3s_hash,omitempty"`
+
 	// Windows process-creation fields (EventID 4688 / Sysmon EventID 1)
 	// These map to the standard Sigma field names used in community rules.
 	Image              string `json:"image,omitempty"`               // full executable path
@@ -106,6 +114,13 @@ func NormalizeLog(source, message string) ParsedFields {
 	// ── 2. CEF (ArcSight Common Event Format) ────────────────────
 	if strings.HasPrefix(message, "CEF:") {
 		if f := parseCEF(message); f != nil {
+			return *f
+		}
+	}
+
+	// ── 2b. LEEF (IBM QRadar Log Event Extended Format) ──────────
+	if strings.HasPrefix(message, "LEEF:") {
+		if f := parseLEEF(message); f != nil {
 			return *f
 		}
 	}
@@ -383,12 +398,112 @@ func parseCEF(message string) *ParsedFields {
 	if v, ok := ext["duser"];  ok { if f.User == "" { f.User = v } }
 	if v, ok := ext["sproc"];  ok { f.Process = v }
 	if v, ok := ext["rt"];     ok { f.Timestamp = v }
+	if v, ok := ext["out"];      ok { f.BytesSent = parseBytes(v) }
+	if v, ok := ext["in"];       ok { f.BytesRecv = parseBytes(v) }
+	if v, ok := ext["ja3hash"];  ok { f.JA3Hash  = v }
+	if v, ok := ext["ja3shash"]; ok { f.JA3SHash = v }
 	if v, ok := ext["msg"];    ok {
 		if f.Extra == nil { f.Extra = make(map[string]string) }
 		f.Extra["msg"] = v
 	}
 
 	return f
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parser 2b — LEEF (IBM QRadar format)
+//
+// LEEF:2.0|Vendor|Product|Version|EventID|\tsep=\tkey\tvalue...
+// LEEF:1.0|Vendor|Product|Version|EventID|key=value key=value...
+// ─────────────────────────────────────────────────────────────────────────────
+
+func parseLEEF(message string) *ParsedFields {
+	// Strip the "LEEF:X.Y|" prefix and split the pipe-separated header.
+	rest := message[5:] // skip "LEEF:"
+	parts := strings.SplitN(rest, "|", 6)
+	if len(parts) < 6 {
+		return nil
+	}
+	// parts: version, vendor, product, prodVersion, eventID, extension
+	version := parts[0]
+	vendor := parts[1]
+	product := parts[2]
+	eventID := parts[4]
+	ext := parts[5]
+
+	f := &ParsedFields{
+		Format:        "leef",
+		DeviceVendor:  vendor,
+		DeviceProduct: product,
+		CEFName:       eventID,
+	}
+
+	// LEEF 2.0 uses a custom delimiter declared as "sep=<char>\t"
+	var kv map[string]string
+	if version == "2.0" && strings.HasPrefix(ext, "sep=") {
+		lines := strings.SplitN(ext, "\t", 2)
+		sep := "\t"
+		if len(lines) == 2 {
+			sep = strings.TrimPrefix(lines[0], "sep=")
+			ext = lines[1]
+		}
+		kv = splitLEEFPairs(ext, sep)
+	} else {
+		kv = parseKVPairs(ext)
+	}
+
+	if v, ok := kv["src"];       ok { f.SrcIP    = v }
+	if v, ok := kv["dst"];       ok { f.DstIP    = v }
+	if v, ok := kv["srcPort"];   ok { f.SrcPort  = v }
+	if v, ok := kv["dstPort"];   ok { f.DstPort  = v }
+	if v, ok := kv["proto"];     ok { f.Proto    = v }
+	if v, ok := kv["usrName"];   ok { f.User     = v }
+	if v, ok := kv["identSrc"];  ok { if f.SrcIP == "" { f.SrcIP = v } }
+	if v, ok := kv["identDst"];  ok { if f.DstIP == "" { f.DstIP = v } }
+	if v, ok := kv["devTime"];   ok { f.Timestamp = v }
+	if v, ok := kv["bytesOut"];  ok { f.BytesSent = parseBytes(v) }
+	if v, ok := kv["bytesIn"];   ok { f.BytesRecv = parseBytes(v) }
+
+	return f
+}
+
+func parseBytes(s string) int64 {
+	var n int64
+	fmt.Sscan(s, &n)
+	return n
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// ja3RE matches JA3/JA3S hashes in raw syslog/Zeek/Palo Alto messages.
+// Zeek: ja3=<32hex>  Palo Alto: ja3hash=<32hex>
+var ja3RE = regexp.MustCompile(`(?i)\bja3s?(?:hash)?[=:]\s*([a-f0-9]{32})\b`)
+
+// ExtractJA3FromMessage returns the first JA3 MD5 hex found in a raw log line.
+func ExtractJA3FromMessage(msg string) string {
+	m := ja3RE.FindStringSubmatch(msg)
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.ToLower(m[1])
+}
+
+func splitLEEFPairs(ext, sep string) map[string]string {
+	out := make(map[string]string)
+	for _, pair := range strings.Split(ext, sep) {
+		k, v, ok := strings.Cut(pair, "=")
+		if ok {
+			out[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return out
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -441,6 +556,21 @@ func parseJSON(message string) *ParsedFields {
 	f.OriginalFileName = str("OriginalFileName", "original_file_name")
 	f.ServiceName      = str("ServiceName", "service_name")
 	f.Channel          = str("Channel", "channel", "log_name")
+	if bs := str("bytes_sent", "bytes_out", "bytesSent", "out", "sentBytes"); bs != "" {
+		f.BytesSent = parseBytes(bs)
+	}
+	if br := str("bytes_recv", "bytes_in", "bytesRecv", "in", "receivedBytes"); br != "" {
+		f.BytesRecv = parseBytes(br)
+	}
+	// Suricata: {"ja3": {"hash": "..."}} or {"ja3s": {"hash": "..."}}
+	if ja3, ok := raw["ja3"].(map[string]any); ok {
+		if h, ok := ja3["hash"].(string); ok { f.JA3Hash = h }
+	}
+	if ja3s, ok := raw["ja3s"].(map[string]any); ok {
+		if h, ok := ja3s["hash"].(string); ok { f.JA3SHash = h }
+	}
+	f.JA3Hash  = firstNonEmpty(f.JA3Hash,  str("ja3_hash", "ja3hash", "ja3"))
+	f.JA3SHash = firstNonEmpty(f.JA3SHash, str("ja3s_hash", "ja3shash", "ja3s"))
 
 	if f.Timestamp == "" && f.Hostname == "" && f.User == "" &&
 		f.SrcIP == "" && f.EventID == "" {

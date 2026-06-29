@@ -10,19 +10,6 @@ const nextConfig = {
   // so it can't support "build once, configure BACKEND_INTERNAL_URL per
   // environment at deploy time." Middleware runs per-request on the Node
   // server and reads process.env fresh every time, which is what that needs.
-  // Add headers to handle CORS
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
-      },
-    ]
-  },
   images: {
     domains: ['localhost'],
   },

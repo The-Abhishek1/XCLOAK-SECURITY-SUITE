@@ -568,13 +568,13 @@ export default function AlertsPage() {
                     ) : (
                       <div className="space-y-3">
                         {/* IOC Hits */}
-                        {investigation.ioc_hits.length > 0 && (
+                        {(investigation.ioc_hits?.length ?? 0) > 0 && (
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#f85149' }}>
-                              IOC Matches ({investigation.ioc_hits.length})
+                              IOC Matches ({investigation.ioc_hits?.length ?? 0})
                             </p>
                             <div className="space-y-1">
-                              {investigation.ioc_hits.map((hit, i) => (
+                              {(investigation.ioc_hits ?? []).map((hit, i) => (
                                 <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2 text-[11px]"
                                   style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.2)' }}>
                                   <span className="mono" style={{ color: 'var(--text-1)' }}>{hit.indicator}</span>
@@ -589,13 +589,13 @@ export default function AlertsPage() {
                         )}
 
                         {/* Similar Alerts */}
-                        {investigation.similar_alerts.length > 0 && (
+                        {(investigation.similar_alerts?.length ?? 0) > 0 && (
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
                               Similar Alerts (7d)
                             </p>
                             <div className="space-y-1">
-                              {investigation.similar_alerts.slice(0, 4).map(a => (
+                              {(investigation.similar_alerts ?? []).slice(0, 4).map(a => (
                                 <div key={a.id} className="flex items-center justify-between rounded-lg px-3 py-1.5 text-[11px]"
                                   style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
                                   <span style={{ color: 'var(--text-2)' }}>{a.hostname || `#${a.id}`}</span>
@@ -607,13 +607,13 @@ export default function AlertsPage() {
                         )}
 
                         {/* Suggested Cases */}
-                        {investigation.suggested_cases.length > 0 && (
+                        {(investigation.suggested_cases?.length ?? 0) > 0 && (
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
                               Suggested Cases
                             </p>
                             <div className="space-y-1">
-                              {investigation.suggested_cases.slice(0, 3).map(c => (
+                              {(investigation.suggested_cases ?? []).slice(0, 3).map(c => (
                                 <div key={c.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px]"
                                   style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
                                   <span className="font-mono" style={{ color: 'var(--accent)' }}>#{c.id}</span>

@@ -107,6 +107,46 @@ func main() {
 		}
 	}()
 
+	// ── Syslog receiver (UDP + TCP) ───────────────────────────────
+	// Listens on SYSLOG_UDP_ADDR / SYSLOG_TCP_ADDR (default :514).
+	// Non-fatal — bind errors are logged but don't stop the API.
+	if os.Getenv("SYSLOG_ENABLED") != "false" {
+		services.StartSyslogReceiver()
+	}
+
+	// ── C2 Beacon Detector ────────────────────────────────────────
+	services.StartBeaconScheduler()
+
+	// ── DNS Security ──────────────────────────────────────────────
+	services.StartDNSSecurityScheduler()
+
+	// ── Port Scan + Lateral Movement Detector ─────────────────────
+	services.StartPortScanScheduler()
+
+	// ── Data Exfiltration Detector ────────────────────────────────
+	services.StartExfilScheduler()
+
+	// ── TLS/JA3 Fingerprint Detector ──────────────────────────────
+	services.StartJA3Scheduler()
+
+	// ── AD/LDAP Identity Cache Refresh ────────────────────────────
+	services.StartLDAPCacheRefresh()
+
+	// ── Credential Attack Detector (brute force, spray, stuffing) ─
+	services.StartCredentialAttackScheduler()
+
+	// ── Privilege Escalation Detector ─────────────────────────────
+	services.StartPrivEscScheduler()
+
+	// ── Ransomware Behavior Detector ───────────────────────────────
+	services.StartRansomwareScheduler()
+
+	// ── Living-off-the-Land / Suspicious Process Detector ──────────
+	services.StartLotLScheduler()
+
+	// ── Impossible Travel Detector ─────────────────────────────────
+	services.StartImpossibleTravelScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),

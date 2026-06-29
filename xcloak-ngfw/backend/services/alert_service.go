@@ -2,11 +2,38 @@ package services
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
+
+// userRE extracts a username from common syslog / Windows event patterns.
+var userRE = regexp.MustCompile(
+	`(?i)(?:for user |for |user[=: ]+|username[=: ]+|sAMAccountName=|account[=: ]+)([a-zA-Z0-9._\-]{2,64})\b`,
+)
+
+func extractUsernameFromLog(msg string) string {
+	m := userRE.FindStringSubmatch(msg)
+	if len(m) < 2 {
+		return ""
+	}
+	u := m[1]
+	// Ignore common noise words that get matched accidentally
+	noise := map[string]bool{"root": false, "system": true, "null": true, "none": true, "n/a": true, "unknown": true}
+	if noise[strings.ToLower(u)] {
+		return ""
+	}
+	return u
+}
+
+func resolveAlertTenant(agentID int) int {
+	var tid int
+	database.DB.QueryRow(`SELECT tenant_id FROM agents WHERE id=$1`, agentID).Scan(&tid)
+	return tid
+}
 
 // CreateAlert persists an alert then fires the full pipeline:
 //  1. Suppression check — drop silently if rule matches
@@ -19,6 +46,18 @@ import (
 //  8. Risk score recalculation
 //  9. AI triage (async, critical/high only)
 func CreateAlert(alert models.Alert) error {
+
+	// LDAP identity enrichment — runs synchronously before save so the
+	// enriched message is persisted to the DB and appears in all UIs.
+	if username := extractUsernameFromLog(alert.LogMessage); username != "" {
+		tid := alert.TenantID
+		if tid == 0 {
+			tid = resolveAlertTenant(alert.AgentID)
+		}
+		if tid > 0 {
+			alert.LogMessage = EnrichAlertMessage(alert.LogMessage, username, tid)
+		}
+	}
 
 	err := repositories.CreateAlert(alert)
 	if err != nil {
@@ -51,6 +90,12 @@ func CreateAlert(alert models.Alert) error {
 	go func() {
 		defer func() { recover() }()
 		FireAlertWebhook(alert)
+	}()
+
+	// Enterprise integrations: PagerDuty, Teams, Jira, ServiceNow.
+	go func() {
+		defer func() { recover() }()
+		FireEnterpriseIntegrations(alert)
 	}()
 
 	go func() {

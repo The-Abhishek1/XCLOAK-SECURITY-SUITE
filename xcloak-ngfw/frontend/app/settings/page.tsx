@@ -517,10 +517,15 @@ export default function SettingsPage() {
                           <div>
                             <p className="text-sm font-semibold capitalize" style={{ color: 'var(--text-1)' }}>{int.name}</p>
                             <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                              {int.name === 'slack' ? 'Slack webhook notifications'
-                                : int.name === 'webhook' ? 'Generic HTTP webhook'
-                                : int.name === 'email' ? 'SMTP email alerts'
-                                : 'PagerDuty incident routing'}
+                              {int.name === 'slack'       ? 'Slack webhook notifications'
+                                : int.name === 'webhook'     ? 'Generic HTTP webhook'
+                                : int.name === 'email'       ? 'SMTP email alerts'
+                                : int.name === 'pagerduty'   ? 'PagerDuty incident routing'
+                                : int.name === 'teams'       ? 'Microsoft Teams Adaptive Card alerts'
+                                : int.name === 'jira'        ? 'Jira Cloud — auto-create security tickets'
+                                : int.name === 'servicenow'  ? 'ServiceNow — create incidents via Table API'
+                                : int.name === 'ldap'        ? 'Active Directory / LDAP identity enrichment'
+                                : int.name}
                             </p>
                           </div>
                           <button onClick={() => setForm({ enabled: !form.enabled })}>
@@ -581,7 +586,103 @@ export default function SettingsPage() {
                                 <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Integration Key</label>
                                 <input value={form.config.integration_key || ''}
                                   onChange={e => setConfig({ integration_key: e.target.value })}
-                                  placeholder="PagerDuty key" className="g-input w-full text-xs mono" />
+                                  placeholder="PagerDuty Events API v2 key" className="g-input w-full text-xs mono" />
+                              </div>
+                            )}
+                            {int.name === 'teams' && (
+                              <div>
+                                <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Incoming Webhook URL</label>
+                                <input value={form.config.webhook_url || ''}
+                                  onChange={e => setConfig({ webhook_url: e.target.value })}
+                                  placeholder="https://outlook.office.com/webhook/…" className="g-input w-full text-xs mono" />
+                              </div>
+                            )}
+                            {int.name === 'jira' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Jira Base URL</label>
+                                  <input value={form.config.url || ''}
+                                    onChange={e => setConfig({ url: e.target.value })}
+                                    placeholder="https://your-org.atlassian.net" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Email</label>
+                                    <input value={form.config.email || ''}
+                                      onChange={e => setConfig({ email: e.target.value })}
+                                      placeholder="you@org.com" className="g-input w-full text-xs" />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>API Token</label>
+                                    <input type="password" value={form.config.api_token || ''}
+                                      onChange={e => setConfig({ api_token: e.target.value })}
+                                      placeholder="Jira API token" className="g-input w-full text-xs mono" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Project Key</label>
+                                  <input value={form.config.project_key || ''}
+                                    onChange={e => setConfig({ project_key: e.target.value })}
+                                    placeholder="SEC" className="g-input w-full text-xs mono" />
+                                </div>
+                              </div>
+                            )}
+                            {int.name === 'servicenow' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Instance URL</label>
+                                  <input value={form.config.instance_url || ''}
+                                    onChange={e => setConfig({ instance_url: e.target.value })}
+                                    placeholder="https://your-instance.service-now.com" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Username</label>
+                                    <input value={form.config.username || ''}
+                                      onChange={e => setConfig({ username: e.target.value })}
+                                      placeholder="admin" className="g-input w-full text-xs mono" />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Password</label>
+                                    <input type="password" value={form.config.password || ''}
+                                      onChange={e => setConfig({ password: e.target.value })}
+                                      placeholder="ServiceNow password" className="g-input w-full text-xs mono" />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {int.name === 'ldap' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>LDAP URL</label>
+                                  <input value={form.config.url || ''}
+                                    onChange={e => setConfig({ url: e.target.value })}
+                                    placeholder="ldap://dc.corp.example.com:389" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Bind DN</label>
+                                  <input value={form.config.bind_dn || ''}
+                                    onChange={e => setConfig({ bind_dn: e.target.value })}
+                                    placeholder="CN=svc-xcloak,OU=Service,DC=corp,DC=com" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Bind Password</label>
+                                  <input type="password" value={form.config.bind_password || ''}
+                                    onChange={e => setConfig({ bind_password: e.target.value })}
+                                    placeholder="Service account password" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Base DN</label>
+                                  <input value={form.config.base_dn || ''}
+                                    onChange={e => setConfig({ base_dn: e.target.value })}
+                                    placeholder="DC=corp,DC=example,DC=com" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>User Filter <span style={{ color: 'var(--text-3)', fontWeight: 'normal' }}>(optional)</span></label>
+                                  <input value={form.config.user_filter || ''}
+                                    onChange={e => setConfig({ user_filter: e.target.value })}
+                                    placeholder="(sAMAccountName=%s)" className="g-input w-full text-xs mono" />
+                                </div>
                               </div>
                             )}
                             <div className="flex gap-2">

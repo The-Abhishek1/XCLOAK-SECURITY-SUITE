@@ -100,6 +100,8 @@ func SetupRoutes(router *gin.Engine) {
 
 	// ── Fleet-wide network map ───────────────────────────────────
 	router.GET("/api/network-map", middleware.RequireAuth(), api.GetNetworkMap)
+	router.GET("/api/network-map/ip-info", middleware.RequireAuth(), api.GetIPInfo)
+	router.GET("/api/network-map/port-info", middleware.RequireAuth(), api.GetPortInfoHandler)
 
 	// ── Incidents ────────────────────────────────────────────────
 	router.GET("/api/incidents", middleware.RequireAuth(), api.GetIncidents)
@@ -136,6 +138,8 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Threat feeds ──────────────────────────────────────────────
 	router.POST("/api/threat-feeds", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.CreateThreatFeed)
 	router.GET("/api/threat-feeds", middleware.RequireAuth(), api.GetThreatFeeds)
+	router.PUT("/api/threat-feeds/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.UpdateThreatFeed)
+	router.DELETE("/api/threat-feeds/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.DeleteThreatFeed)
 	router.POST("/api/threat-feeds/:id/sync", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.SyncThreatFeed)
 
 	// ── YARA ──────────────────────────────────────────────────────
@@ -440,5 +444,24 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Framework Compliance ──────────────────────────────────────────────────
 	router.GET("/api/framework-compliance", middleware.RequireAuth(), api.GetAllFrameworkAssessments)
 	router.GET("/api/framework-compliance/:framework", middleware.RequireAuth(), api.GetFrameworkAssessment)
+
+	// ── JA3/TLS Fingerprint Blocklist ────────────────────────────────────────
+	router.GET("/api/ja3/fingerprints", middleware.RequireAuth(), api.GetJA3Fingerprints)
+	router.POST("/api/ja3/fingerprints", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateJA3Fingerprint)
+	router.DELETE("/api/ja3/fingerprints/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteJA3Fingerprint)
+
+	// ── AD/LDAP Identity Cache ────────────────────────────────────────────────
+	router.GET("/api/identity", middleware.RequireAuth(), api.GetIdentityCache)
+
+	// ── Universal Log Ingest (syslog/CEF/LEEF/JSON via HTTP) ─────────────────
+	// X-Api-Key authenticated — no user JWT needed. Accepts logs from any device
+	// that can POST (firewalls, cloud pipelines, log shippers, etc.).
+	router.POST("/api/ingest", api.RequireLogSourceAuth(), api.IngestLogs)
+
+	// ── Log Sources management (user-facing CRUD) ─────────────────────────────
+	router.GET("/api/log-sources", middleware.RequireAuth(), api.GetLogSources)
+	router.POST("/api/log-sources", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateLogSource)
+	router.PUT("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UpdateLogSource)
+	router.DELETE("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeleteLogSource)
 
 }

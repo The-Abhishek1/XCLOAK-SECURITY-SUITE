@@ -352,10 +352,37 @@ export interface NetworkMapEdge {
   protocol: string;
   port: string;
   service?: string;
+  port_sensitivity?: 'safe' | 'neutral' | 'sensitive' | 'critical';
+  port_note?: string;
   process: string;
   count: number;
   last_seen: string;
   edge_type: 'internal' | 'external';
+}
+
+export interface IPEnrichment {
+  ip: string;
+  is_private: boolean;
+  country?: string;
+  country_code?: string;
+  region?: string;
+  city?: string;
+  org?: string;
+  asn?: string;
+  is_proxy: boolean;
+  is_hosting: boolean;
+  is_ioc: boolean;
+  ioc_severity?: string;
+  ioc_description?: string;
+  abuse_score?: number;
+  abuse_reports?: number;
+  abuse_categories?: string[];
+  vt_malicious?: number;
+  vt_suspicious?: number;
+  vt_total?: number;
+  threat_level: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  threat_tags: string[];
+  sources: string[];
 }
 
 export interface NetworkMapSummary {
@@ -402,7 +429,10 @@ export interface ThreatFeed {
   name: string;
   source: string;
   enabled: boolean;
+  feed_type: string;
+  config: Record<string, string> | string;
   last_sync?: string | null;
+  tenant_id?: number;
   created_at?: string;
 }
 

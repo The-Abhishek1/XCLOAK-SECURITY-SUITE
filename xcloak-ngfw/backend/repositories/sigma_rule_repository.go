@@ -3,11 +3,66 @@ package repositories
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
+
+type SigmaPage struct {
+	Data  []models.SigmaRule `json:"data"`
+	Total int                `json:"total"`
+	Page  int                `json:"page"`
+	Limit int                `json:"limit"`
+}
+
+func GetSigmaRulesPaged(tenantID, page, limit int, search, severity string) (SigmaPage, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	where := "WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	i := 2
+
+	if severity != "" && severity != "all" {
+		where += fmt.Sprintf(" AND severity = $%d", i)
+		args = append(args, severity)
+		i++
+	}
+	if search != "" {
+		where += fmt.Sprintf(" AND (title ILIKE $%d OR description ILIKE $%d)", i, i)
+		args = append(args, "%"+strings.TrimSpace(search)+"%")
+		i++
+	}
+
+	var total int
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM sigma_rules `+where, args...).Scan(&total); err != nil {
+		return SigmaPage{}, err
+	}
+
+	rows, err := database.DB.Query(fmt.Sprintf(`
+		SELECT `+sigmaSelectCols+`
+		FROM sigma_rules %s
+		ORDER BY id DESC
+		LIMIT $%d OFFSET $%d
+	`, where, i, i+1), append(args, limit, offset)...)
+	if err != nil {
+		return SigmaPage{}, err
+	}
+	defer rows.Close()
+	data, err := collectSigmaRules(rows)
+	if err != nil {
+		return SigmaPage{}, err
+	}
+	return SigmaPage{Data: data, Total: total, Page: page, Limit: limit}, nil
+}
 
 var ErrSigmaRuleNotFound = errors.New("sigma rule not found")
 
@@ -313,7 +368,7 @@ func collectSigmaRules(rows interface {
 	Scan(dest ...interface{}) error
 	Close() error
 }) ([]models.SigmaRule, error) {
-	var rules []models.SigmaRule
+	rules := []models.SigmaRule{}
 	for rows.Next() {
 		rule, err := scanSigmaRule(rows)
 		if err != nil {

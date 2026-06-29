@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
 
@@ -72,5 +73,22 @@ func DetectThreats(log models.Log) {
 
 		MapMITRE(&alert)
 		CreateAlert(alert)
+	}
+
+	// 4. DNS security — domain-level analysis on DNS server logs that arrive
+	//    via syslog or HTTP ingest. Only triggers if the log looks like DNS.
+	if IsDNSLog(log.LogSource, log.LogMessage) {
+		if domain := ExtractDNSDomain(log.LogMessage); domain != "" {
+			agentID := log.AgentID
+			go func() {
+				var tenantID int
+				database.DB.QueryRow(
+					`SELECT tenant_id FROM agents WHERE id=$1`, agentID,
+				).Scan(&tenantID)
+				if tenantID > 0 {
+					AnalyzeDNSLogEntry(agentID, tenantID, domain)
+				}
+			}()
+		}
 	}
 }
