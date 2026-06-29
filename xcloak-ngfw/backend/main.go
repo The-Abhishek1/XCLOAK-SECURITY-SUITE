@@ -171,6 +171,15 @@ func main() {
 	// ── Supply Chain Attack Detector (curl|bash, dep confusion, typosquat) ──
 	services.StartSupplyChainScheduler()
 
+	// Process Injection + LSASS Credential Dump Detector
+	services.StartProcessInjectionScheduler()
+
+	// Defense Evasion Detector (log clear, AMSI bypass, UAC bypass, AV kill)
+	services.StartDefenseEvasionScheduler()
+
+	// OT / ICS Security Detector (Modbus, DNP3, SCADA, PLC)
+	services.StartOTICSScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),
