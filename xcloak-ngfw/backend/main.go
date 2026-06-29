@@ -147,6 +147,15 @@ func main() {
 	// ── Impossible Travel Detector ─────────────────────────────────
 	services.StartImpossibleTravelScheduler()
 
+	// ── Web Application Attack Detector ────────────────────────────
+	services.StartWebAttackScheduler()
+
+	// ── Persistence Detector ────────────────────────────────────────
+	services.StartPersistenceScheduler()
+
+	// ── Insider Threat Score Engine ─────────────────────────────────
+	services.StartInsiderThreatScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),

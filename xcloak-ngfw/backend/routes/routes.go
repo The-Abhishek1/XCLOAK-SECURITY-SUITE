@@ -453,6 +453,10 @@ func SetupRoutes(router *gin.Engine) {
 	// ── AD/LDAP Identity Cache ────────────────────────────────────────────────
 	router.GET("/api/identity", middleware.RequireAuth(), api.GetIdentityCache)
 
+	// ── Insider Threat Scores ─────────────────────────────────────────────────
+	router.GET("/api/insider-threat", middleware.RequireAuth(), api.GetInsiderThreatScores)
+	router.GET("/api/insider-threat/summary", middleware.RequireAuth(), api.GetInsiderThreatSummary)
+
 	// ── Universal Log Ingest (syslog/CEF/LEEF/JSON via HTTP) ─────────────────
 	// X-Api-Key authenticated — no user JWT needed. Accepts logs from any device
 	// that can POST (firewalls, cloud pipelines, log shippers, etc.).

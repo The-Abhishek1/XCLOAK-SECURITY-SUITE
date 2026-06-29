@@ -13,7 +13,7 @@ import {
   GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
-  Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint,
+  Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -30,6 +30,7 @@ const NAV = [
     { href: '/alerts',         label: 'Alerts',         icon: Bell },
     { href: '/incidents',      label: 'Incidents',      icon: AlertTriangle },
     { href: '/ueba',           label: 'UEBA',           icon: Activity },
+    { href: '/insider-threat', label: 'Insider Threat', icon: UserX },
     { href: '/deception',      label: 'Deception',      icon: Aperture },
     { href: '/hunt-workbench', label: 'Hunt Workbench', icon: Microscope },
     { href: '/threat-actors',  label: 'Threat Actors',  icon: Target },

@@ -83,6 +83,17 @@ type ParsedFields struct {
 	ServiceType string `json:"service_type,omitempty"`
 	StartType   string `json:"start_type,omitempty"`
 
+	// Windows registry (Sysmon EventID 13 / EventID 4657)
+	RegistryKey   string `json:"registry_key,omitempty"`
+	RegistryValue string `json:"registry_value,omitempty"`
+
+	// HTTP — from Apache/Nginx access logs, WAF logs, proxy logs
+	HTTPMethod string `json:"http_method,omitempty"` // GET POST PUT DELETE …
+	URLPath    string `json:"url_path,omitempty"`    // /path?query
+	UserAgent  string `json:"user_agent,omitempty"`  // raw User-Agent string
+	HTTPStatus string `json:"http_status,omitempty"` // 200 403 500 …
+	HTTPHost   string `json:"http_host,omitempty"`   // Host header / vhost
+
 	// Freeform key=value extras that don't fit above
 	Extra map[string]string `json:"extra,omitempty"`
 
@@ -130,6 +141,11 @@ func NormalizeLog(source, message string) ParsedFields {
 		if f := parseJSON(message); f != nil {
 			return *f
 		}
+	}
+
+	// ── 3b. Apache/Nginx combined access log ─────────────────────
+	if f := parseHTTPAccessLog(message); f != nil {
+		return *f
 	}
 
 	// ── 4. Syslog RFC3164 / RFC5424 ──────────────────────────────
@@ -324,6 +340,16 @@ func parseWindowsEvent(message string) *ParsedFields {
 			f.ServiceType = val
 		case "start type", "starttype":
 			f.StartType = val
+		case "task name", "taskname":
+			if f.ServiceName == "" { f.ServiceName = val } // reuse ServiceName for task name
+		case "object name", "objectname":
+			if strings.Contains(strings.ToLower(val), "\\registry\\") ||
+				strings.Contains(strings.ToLower(val), "hklm\\") ||
+				strings.Contains(strings.ToLower(val), "hkcu\\") {
+				f.RegistryKey = val
+			}
+		case "value name", "valuename":
+			f.RegistryValue = val
 		case "level":
 			f.Severity = strings.ToLower(val)
 		}
@@ -734,12 +760,61 @@ func GetFieldValue(f ParsedFields, fieldName string) (string, bool) {
 		val = f.CEFSeverity
 	case "format":
 		val = f.Format
+	// ── HTTP ──────────────────────────────────────────────────────────────
+	case "http_method", "httpmethod":
+		val = f.HTTPMethod
+	case "url_path", "urlpath", "request":
+		val = f.URLPath
+	case "user_agent", "useragent":
+		val = f.UserAgent
+	case "http_status", "httpstatus", "status":
+		val = f.HTTPStatus
+	case "http_host", "httphost":
+		val = f.HTTPHost
+	// ── Registry ──────────────────────────────────────────────────────────
+	case "registry_key", "registrykey":
+		val = f.RegistryKey
+	case "registry_value", "registryvalue":
+		val = f.RegistryValue
 	default:
 		if f.Extra != nil {
 			val = f.Extra[fieldName]
 		}
 	}
 	return val, val != ""
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HTTP Access Log parser — Apache combined / Nginx default / W3C extended
+//
+// Combined log format:
+//   10.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /index.html HTTP/1.1" 200 2326 "http://ref/" "Mozilla/5.0"
+// Common log format (no referer/UA):
+//   10.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /index.html HTTP/1.1" 200 2326
+// ─────────────────────────────────────────────────────────────────────────────
+
+var httpAccessLogRE = regexp.MustCompile(
+	`^(\S+)\s+\S+\s+(\S+)\s+\[([^\]]+)\]\s+"(\S+)\s+(\S+)\s+\S+"\s+(\d{3})\s+\S+` +
+		`(?:\s+"([^"]*)"\s+"([^"]*)")?`,
+)
+
+func parseHTTPAccessLog(message string) *ParsedFields {
+	m := httpAccessLogRE.FindStringSubmatch(message)
+	if len(m) < 7 {
+		return nil
+	}
+	f := &ParsedFields{Format: "http_access"}
+	f.SrcIP = m[1]
+	if m[2] != "-" {
+		f.User = m[2]
+	}
+	f.HTTPMethod = m[4]
+	f.URLPath = m[5]
+	f.HTTPStatus = m[6]
+	if len(m) > 8 {
+		f.UserAgent = m[8]
+	}
+	return f
 }
 
 
