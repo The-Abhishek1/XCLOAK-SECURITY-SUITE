@@ -91,6 +91,7 @@ func DetectExfilForTenant(tenantID int) {
 	detectVolumeFlood(tenantID, "10 minutes", exfilBurst10m,         exfilBurst10m*2)
 	detectCloudStorage(tenantID)
 	detectOffHoursTransfer(tenantID)
+	DetectDLPForTenant(tenantID)
 }
 
 // detectVolumeFlood finds agents sending large byte volumes to a single
