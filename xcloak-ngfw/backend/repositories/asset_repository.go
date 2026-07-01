@@ -26,7 +26,7 @@ func CreateAsset(a models.Asset) (models.Asset, error) {
 func GetAssets(tenantID int) ([]models.Asset, error) {
 	rows, err := database.DB.Query(`
 		SELECT a.id, a.tenant_id, a.agent_id, a.name, a.hostname, a.ip_address,
-		       a.asset_type, a.owner, a.business_unit, a.criticality,
+		       a.asset_type, a.platform_category, a.owner, a.business_unit, a.criticality,
 		       a.data_classification, a.environment, a.location,
 		       COALESCE(a.tags,'[]'::jsonb), COALESCE(a.notes,''),
 		       COALESCE(ag.status,''), COALESCE(rs.risk_score,0),
@@ -51,7 +51,7 @@ func GetAssetByID(id, tenantID int) (models.Asset, error) {
 	var tagsJSON []byte
 	err := database.DB.QueryRow(`
 		SELECT a.id, a.tenant_id, a.agent_id, a.name, a.hostname, a.ip_address,
-		       a.asset_type, a.owner, a.business_unit, a.criticality,
+		       a.asset_type, a.platform_category, a.owner, a.business_unit, a.criticality,
 		       a.data_classification, a.environment, a.location,
 		       COALESCE(a.tags,'[]'::jsonb), COALESCE(a.notes,''),
 		       COALESCE(ag.status,''), COALESCE(rs.risk_score,0),
@@ -62,7 +62,7 @@ func GetAssetByID(id, tenantID int) (models.Asset, error) {
 		WHERE a.id=$1 AND a.tenant_id=$2
 	`, id, tenantID).Scan(
 		&a.ID, &a.TenantID, &a.AgentID, &a.Name, &a.Hostname, &a.IPAddress,
-		&a.AssetType, &a.Owner, &a.BusinessUnit, &a.Criticality,
+		&a.AssetType, &a.PlatformCategory, &a.Owner, &a.BusinessUnit, &a.Criticality,
 		&a.DataClassification, &a.Environment, &a.Location,
 		&tagsJSON, &a.Notes, &a.AgentStatus, &a.RiskScore,
 		&a.CreatedAt, &a.UpdatedAt,
@@ -126,7 +126,7 @@ func scanAssets(rows interface {
 		var tagsJSON []byte
 		if err := rows.Scan(
 			&a.ID, &a.TenantID, &a.AgentID, &a.Name, &a.Hostname, &a.IPAddress,
-			&a.AssetType, &a.Owner, &a.BusinessUnit, &a.Criticality,
+			&a.AssetType, &a.PlatformCategory, &a.Owner, &a.BusinessUnit, &a.Criticality,
 			&a.DataClassification, &a.Environment, &a.Location,
 			&tagsJSON, &a.Notes, &a.AgentStatus, &a.RiskScore,
 			&a.CreatedAt, &a.UpdatedAt,

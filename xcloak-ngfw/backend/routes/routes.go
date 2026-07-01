@@ -61,7 +61,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/health", middleware.RequireAuth(), api.GetAgentHealthScores)
 	router.POST("/api/agents/health/refresh", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.RefreshAgentHealth)
 
-	router.GET("/api/agents", middleware.RequireAuth(), api.GetAgents)
+	router.GET("/api/agents", middleware.RequireAuth(), api.GetAgentsByPlatform)
+	router.GET("/api/assets/platform-summary", middleware.RequireAuth(), api.GetPlatformSummary)
 
 	// ── Agents — :id wildcard routes ─────────────────────────────
 	router.GET("/api/agents/:id", middleware.RequireAuth(), api.GetAgentByID)

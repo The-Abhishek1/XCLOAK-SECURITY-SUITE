@@ -85,11 +85,22 @@ func GetAgentByToken(token string) (*models.Agent, error) {
 func GetAgents(tenantID int) ([]models.Agent, error) {
 	return queryAgents(`
 		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines
+		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
 		FROM agents
 		WHERE tenant_id = $1
 		ORDER BY id
 	`, tenantID)
+}
+
+// GetAgentsByPlatform returns agents filtered by platform_category.
+func GetAgentsByPlatform(tenantID int, platform string) ([]models.Agent, error) {
+	return queryAgents(`
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
+		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
+		FROM agents
+		WHERE tenant_id = $1 AND platform_category = $2
+		ORDER BY id
+	`, tenantID, platform)
 }
 
 // GetAllAgents returns every agent across every tenant. For internal
@@ -99,7 +110,7 @@ func GetAgents(tenantID int) ([]models.Agent, error) {
 func GetAllAgents() ([]models.Agent, error) {
 	return queryAgents(`
 		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines
+		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
 		FROM agents
 		ORDER BY id
 	`)
@@ -134,6 +145,7 @@ func queryAgents(query string, args ...interface{}) ([]models.Agent, error) {
 			&agent.UptimeSeconds,
 			&agent.MemAllocMB,
 			&agent.Goroutines,
+			&agent.PlatformCategory,
 		)
 
 		if err != nil {
@@ -155,7 +167,7 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 
 	err := database.DB.QueryRow(`
 		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines
+		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
 		FROM agents
 		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID).Scan(
@@ -172,6 +184,7 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 		&agent.UptimeSeconds,
 		&agent.MemAllocMB,
 		&agent.Goroutines,
+		&agent.PlatformCategory,
 	)
 
 	if err != nil {
@@ -192,3 +205,4 @@ func UpdateAgentHeartbeat(agentID int, version string, uptimeSeconds int64, memA
 
 	return err
 }
+

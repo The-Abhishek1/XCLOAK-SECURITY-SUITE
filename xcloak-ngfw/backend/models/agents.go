@@ -20,4 +20,8 @@ type Agent struct {
 	UptimeSeconds int64  `json:"uptime_seconds"`
 	MemAllocMB    int    `json:"mem_alloc_mb"`
 	Goroutines    int    `json:"goroutines"`
+
+	// Derived from agents.os via ClassifyOS(); updated on registration +
+	// heartbeat. Values: windows|linux|macos|ios|android|network|web|cloud|iot|other
+	PlatformCategory string `json:"platform_category"`
 }

@@ -10,6 +10,7 @@ type Asset struct {
 	Hostname           string    `json:"hostname"`
 	IPAddress          string    `json:"ip_address"`
 	AssetType          string    `json:"asset_type"`
+	PlatformCategory   string    `json:"platform_category"`
 	Owner              string    `json:"owner"`
 	BusinessUnit       string    `json:"business_unit"`
 	Criticality        string    `json:"criticality"`

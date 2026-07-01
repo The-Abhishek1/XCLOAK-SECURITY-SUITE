@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
@@ -26,6 +27,9 @@ func RegisterAgent(agent models.Agent, tenantID int) (int, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
+
+	// Classify immediately so platform_category is set before the first query.
+	UpdateAgentPlatform(agentID, agent.OS)
 
 	LogEvent("REGISTER_AGENT", agent.Hostname, "system")
 
@@ -51,7 +55,22 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 }
 
 func Heartbeat(req models.HeartbeatRequest) error {
-	return repositories.UpdateAgentHeartbeat(req.AgentID, req.Version, req.UptimeSeconds, req.MemAllocMB, req.Goroutines)
+	if err := repositories.UpdateAgentHeartbeat(req.AgentID, req.Version, req.UptimeSeconds, req.MemAllocMB, req.Goroutines); err != nil {
+		return err
+	}
+	// Re-classify if this agent's category is still 'other'. This catches
+	// agents whose OS string was empty at registration time.
+	if req.AgentID > 0 {
+		var os, cat string
+		database.DB.QueryRow(
+			`SELECT COALESCE(os,''), platform_category FROM agents WHERE id=$1`,
+			req.AgentID,
+		).Scan(&os, &cat)
+		if cat == "other" && os != "" {
+			UpdateAgentPlatform(req.AgentID, os)
+		}
+	}
+	return nil
 }
 
 // generateToken produces a cryptographically random 32-byte hex token (64 chars).
