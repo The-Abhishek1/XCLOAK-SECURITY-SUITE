@@ -393,6 +393,10 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/vulns/refresh-priorities", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.RefreshVulnPriorities)
 	router.PATCH("/api/vulns/:id/patch-status", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UpdateVulnPatchStatus)
 
+	// ── Scanner XML import (Nessus / Qualys / Tenable.sc) ────────────────
+	router.POST("/api/vulns/import", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ImportVulnScan)
+	router.GET("/api/vulns/imports", middleware.RequireAuth(), api.ListVulnImports)
+
 	// ── SOC analyst performance ───────────────────────────────────────────
 	router.GET("/api/soc/metrics", middleware.RequireAuth(), api.GetSOCMetrics)
 
