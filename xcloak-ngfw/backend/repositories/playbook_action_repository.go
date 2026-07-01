@@ -16,7 +16,10 @@ func GetPlaybookActions(playbookID int) ([]models.PlaybookAction, error) {
 		SELECT
 			id, playbook_id, step_order, action_type, payload,
 			condition_expr, max_retries, retry_delay_secs, run_parallel, timeout_seconds,
-			created_at
+			created_at,
+			COALESCE(step_name,''), COALESCE(goto_on_success,''),
+			COALESCE(goto_on_failure,''), COALESCE(stop_on_failure,FALSE),
+			COALESCE(loop_over,'')
 		FROM playbook_actions
 		WHERE playbook_id = $1
 		ORDER BY step_order, id
@@ -33,6 +36,7 @@ func GetPlaybookActions(playbookID int) ([]models.PlaybookAction, error) {
 			&a.ID, &a.PlaybookID, &a.StepOrder, &a.ActionType, &a.Payload,
 			&a.ConditionExpr, &a.MaxRetries, &a.RetryDelaySecs, &a.RunParallel, &a.TimeoutSeconds,
 			&a.CreatedAt,
+			&a.StepName, &a.GotoOnSuccess, &a.GotoOnFailure, &a.StopOnFailure, &a.LoopOver,
 		); err != nil {
 			continue
 		}
@@ -47,7 +51,10 @@ func GetPlaybookActionsByPlaybookID(playbookID string, tenantID int) ([]models.P
 		SELECT
 			id, playbook_id, step_order, action_type, payload,
 			condition_expr, max_retries, retry_delay_secs, run_parallel, timeout_seconds,
-			created_at
+			created_at,
+			COALESCE(step_name,''), COALESCE(goto_on_success,''),
+			COALESCE(goto_on_failure,''), COALESCE(stop_on_failure,FALSE),
+			COALESCE(loop_over,'')
 		FROM playbook_actions
 		WHERE playbook_id = $1 AND tenant_id = $2
 		ORDER BY step_order, id
@@ -64,6 +71,7 @@ func GetPlaybookActionsByPlaybookID(playbookID string, tenantID int) ([]models.P
 			&a.ID, &a.PlaybookID, &a.StepOrder, &a.ActionType, &a.Payload,
 			&a.ConditionExpr, &a.MaxRetries, &a.RetryDelaySecs, &a.RunParallel, &a.TimeoutSeconds,
 			&a.CreatedAt,
+			&a.StepName, &a.GotoOnSuccess, &a.GotoOnFailure, &a.StopOnFailure, &a.LoopOver,
 		); err != nil {
 			continue
 		}
@@ -77,13 +85,16 @@ func CreatePlaybookAction(action models.PlaybookAction, tenantID int) error {
 		INSERT INTO playbook_actions
 		(playbook_id, step_order, action_type, payload,
 		 condition_expr, max_retries, retry_delay_secs, run_parallel, timeout_seconds,
-		 tenant_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		 tenant_id,
+		 step_name, goto_on_success, goto_on_failure, stop_on_failure, loop_over)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 	`,
 		action.PlaybookID, action.StepOrder, action.ActionType, action.Payload,
 		action.ConditionExpr, action.MaxRetries, action.RetryDelaySecs,
 		action.RunParallel, action.TimeoutSeconds,
 		tenantID,
+		action.StepName, action.GotoOnSuccess, action.GotoOnFailure,
+		action.StopOnFailure, action.LoopOver,
 	)
 	return err
 }

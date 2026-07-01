@@ -73,11 +73,13 @@ func CreatePlaybookStepResult(r models.PlaybookStepResult) error {
 	_, err := database.DB.Exec(`
 		INSERT INTO playbook_step_results
 		(execution_id, step_order, action_type, condition_expr, status,
-		 output, error_detail, retries_used, started_at, finished_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		 output, error_detail, retries_used, started_at, finished_at,
+		 step_name, loop_item, goto_taken)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 	`,
 		r.ExecutionID, r.StepOrder, r.ActionType, r.ConditionExpr, r.Status,
 		r.Output, r.ErrorDetail, r.RetriesUsed, r.StartedAt, r.FinishedAt,
+		r.StepName, r.LoopItem, r.GotoTaken,
 	)
 	return err
 }

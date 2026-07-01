@@ -14,4 +14,7 @@ type PlaybookStepResult struct {
 	RetriesUsed   int        `json:"retries_used"`
 	StartedAt     time.Time  `json:"started_at"`
 	FinishedAt    *time.Time `json:"finished_at"`
+	StepName      string     `json:"step_name,omitempty"`
+	LoopItem      string     `json:"loop_item,omitempty"`
+	GotoTaken     string     `json:"goto_taken,omitempty"`
 }

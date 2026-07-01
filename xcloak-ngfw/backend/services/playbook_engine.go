@@ -15,6 +15,12 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
+// sentinel goto values that terminate execution
+const (
+	gotoEnd  = "end"
+	gotoStop = "stop"
+)
+
 // TriggerTypes supported:
 //
 //	alert_critical        — fires on any alert with severity "critical"
@@ -82,7 +88,20 @@ func matchesTrigger(triggerType string, alert models.Alert) bool {
 
 // runPlaybookActions executes all steps for playbook against alert with full
 // support for: condition guards, template variables, parallel step groups,
-// per-step retry, and step-level result capture.
+// per-step retry, step-level result capture, goto branching, loop-over, and
+// stop-on-failure.
+//
+// Execution model:
+//   - Steps are ordered by step_order; equal step_order values run in the same
+//     "group" (parallel if run_parallel=true, sequential otherwise).
+//   - After each group, if any step fired a goto target the executor jumps to
+//     the first group that contains a step with matching step_name.
+//   - "end" or "stop" as a goto target terminates the playbook immediately.
+//   - step_name output context: after a named step executes, its JSON output is
+//     parsed and merged into ctx as steps.STEP_NAME.KEY so downstream
+//     conditions can reference it (e.g. steps.enrich.verdict == "malicious").
+//   - loop_over: if set to a ctx key holding a comma-separated list, the step
+//     runs once per item with {{item}} substituted in payload/condition.
 func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 	startTime := time.Now()
 
@@ -107,9 +126,11 @@ func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 
 	ctx := buildAlertContext(alert)
 	groups := groupByStepOrder(actions)
+	nameIndex := buildStepNameIndex(groups) // step_name → group index
 
 	var mu sync.Mutex
 	var totalSteps, okSteps, failedSteps, skippedSteps int
+	aborted := false
 
 	addResult := func(status string) {
 		mu.Lock()
@@ -125,7 +146,11 @@ func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 		}
 	}
 
-	for _, group := range groups {
+	groupIdx := 0
+	for groupIdx < len(groups) {
+		group := groups[groupIdx]
+		gotoTarget := ""
+
 		var parallel, sequential []models.PlaybookAction
 		for _, a := range group {
 			if a.RunParallel {
@@ -135,28 +160,85 @@ func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 			}
 		}
 
+		// Parallel steps — run concurrently, collect goto signals safely.
 		if len(parallel) > 0 {
 			var wg sync.WaitGroup
+			var gotoMu sync.Mutex
 			for _, a := range parallel {
 				wg.Add(1)
 				go func(action models.PlaybookAction) {
 					defer wg.Done()
-					r := executeStep(action, alert, ctx, execID)
-					addResult(r.Status)
+					rs := executeStepWithLoopAndContext(action, alert, ctx, execID)
+					for _, r := range rs {
+						addResult(r.Status)
+						gotoMu.Lock()
+						if r.GotoTaken != "" && gotoTarget == "" {
+							gotoTarget = r.GotoTaken
+						}
+						gotoMu.Unlock()
+						if action.StopOnFailure && r.Status == "failed" {
+							gotoMu.Lock()
+							aborted = true
+							gotoMu.Unlock()
+						}
+					}
+					propagateStepOutput(action, rs, ctx, &mu)
 				}(a)
 			}
 			wg.Wait()
 		}
 
+		if aborted {
+			break
+		}
+
+		// Sequential steps.
 		for _, a := range sequential {
-			r := executeStep(a, alert, ctx, execID)
-			addResult(r.Status)
+			rs := executeStepWithLoopAndContext(a, alert, ctx, execID)
+			for _, r := range rs {
+				addResult(r.Status)
+				if r.GotoTaken != "" && gotoTarget == "" {
+					gotoTarget = r.GotoTaken
+				}
+				if a.StopOnFailure && r.Status == "failed" {
+					aborted = true
+					break
+				}
+			}
+			propagateStepOutput(a, rs, ctx, &mu)
+			if aborted {
+				break
+			}
+		}
+
+		if aborted {
+			break
+		}
+
+		// Resolve goto routing.
+		switch strings.ToLower(gotoTarget) {
+		case "end", "stop", "":
+			if gotoTarget != "" {
+				goto done
+			}
+			groupIdx++
+		default:
+			if idx, ok := nameIndex[strings.ToLower(gotoTarget)]; ok {
+				fmt.Printf("SOAR: goto %q → group %d\n", gotoTarget, idx)
+				groupIdx = idx
+			} else {
+				fmt.Printf("SOAR: goto %q not found, stopping\n", gotoTarget)
+				goto done
+			}
 		}
 	}
 
+done:
 	durationMs := int(time.Since(startTime).Milliseconds())
 	overallStatus := "completed"
-	if failedSteps > 0 && okSteps == 0 && skippedSteps == 0 {
+	if aborted {
+		overallStatus = "aborted"
+	} else if failedSteps > 0 && okSteps == 0 && skippedSteps == 0 {
 		overallStatus = "failed"
 	} else if failedSteps > 0 {
 		overallStatus = "partial"
@@ -174,9 +256,94 @@ func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 	)
 }
 
+// executeStepWithLoopAndContext expands loop_over and runs executeStep for each
+// item (or once if loop_over is empty). Returns one result per iteration.
+func executeStepWithLoopAndContext(action models.PlaybookAction, alert models.Alert, ctx map[string]string, execID int) []*models.PlaybookStepResult {
+	if action.LoopOver == "" {
+		r := executeStep(action, alert, ctx, execID, "")
+		return []*models.PlaybookStepResult{r}
+	}
+
+	// Expand the loop list from ctx.
+	listVal := ctx[action.LoopOver]
+	if listVal == "" {
+		r := executeStep(action, alert, ctx, execID, "")
+		r.LoopItem = "(empty)"
+		return []*models.PlaybookStepResult{r}
+	}
+
+	items := strings.Split(listVal, ",")
+	results := make([]*models.PlaybookStepResult, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		// Add {{item}} to a copy of ctx for this iteration.
+		iterCtx := make(map[string]string, len(ctx)+1)
+		for k, v := range ctx {
+			iterCtx[k] = v
+		}
+		iterCtx["item"] = item
+		r := executeStep(action, alert, iterCtx, execID, item)
+		results = append(results, r)
+	}
+	return results
+}
+
+// propagateStepOutput merges a named step's JSON output into ctx so that
+// downstream condition expressions can reference steps.STEP_NAME.KEY.
+func propagateStepOutput(action models.PlaybookAction, results []*models.PlaybookStepResult, ctx map[string]string, mu *sync.Mutex) {
+	if action.StepName == "" || len(results) == 0 {
+		return
+	}
+	// Use the last result (or first success).
+	r := results[len(results)-1]
+	for _, res := range results {
+		if res.Status == "success" {
+			r = res
+			break
+		}
+	}
+	if r.Output == "" {
+		return
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(r.Output), &parsed); err != nil {
+		// Not JSON — store the raw string under steps.NAME.output
+		mu.Lock()
+		ctx["steps."+action.StepName+".output"] = r.Output
+		ctx["steps."+action.StepName+".status"] = r.Status
+		mu.Unlock()
+		return
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	prefix := "steps." + action.StepName + "."
+	ctx[prefix+"status"] = r.Status
+	for k, v := range parsed {
+		ctx[prefix+k] = fmt.Sprintf("%v", v)
+	}
+}
+
+// buildStepNameIndex builds a map from lowercase step_name → group index.
+// Groups without any named step are not indexed.
+func buildStepNameIndex(groups [][]models.PlaybookAction) map[string]int {
+	m := make(map[string]int)
+	for i, group := range groups {
+		for _, a := range group {
+			if a.StepName != "" {
+				m[strings.ToLower(a.StepName)] = i
+			}
+		}
+	}
+	return m
+}
+
 // executeStep runs a single action, respecting its condition, retrying on
 // failure, and recording the result to playbook_step_results.
-func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[string]string, execID int) *models.PlaybookStepResult {
+// loopItem is the current loop value when called from a loop_over expansion
+// (empty string for non-loop steps).
+func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[string]string, execID int, loopItem string) *models.PlaybookStepResult {
 	startedAt := time.Now()
 	result := &models.PlaybookStepResult{
 		ExecutionID:   execID,
@@ -184,6 +351,30 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 		ActionType:    action.ActionType,
 		ConditionExpr: action.ConditionExpr,
 		StartedAt:     startedAt,
+		StepName:      action.StepName,
+		LoopItem:      loopItem,
+	}
+
+	// branch action type — pure routing node; no external dispatch.
+	// Evaluates condition and signals a goto via GotoTaken.
+	if action.ActionType == "branch" {
+		finishedAt := time.Now()
+		result.FinishedAt = &finishedAt
+		if evalCondition(action.ConditionExpr, ctx) {
+			result.Status = "success"
+			result.Output = "branch condition true"
+			result.GotoTaken = action.GotoOnSuccess
+		} else {
+			result.Status = "success"
+			result.Output = "branch condition false"
+			result.GotoTaken = action.GotoOnFailure
+		}
+		fmt.Printf("SOAR: branch step %d (%q) → goto %q\n",
+			action.StepOrder, action.ConditionExpr, result.GotoTaken)
+		if execID > 0 {
+			repositories.CreatePlaybookStepResult(*result)
+		}
+		return result
 	}
 
 	if action.ConditionExpr != "" && !evalCondition(action.ConditionExpr, ctx) {
@@ -199,7 +390,7 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 		return result
 	}
 
-	// Render {{alert.field}} templates in the payload before dispatch.
+	// Render {{alert.field}} and {{item}} templates in the payload before dispatch.
 	rendered := action
 	rendered.Payload = renderPayload(action.Payload, ctx)
 
@@ -232,12 +423,15 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 	case lastErr != nil:
 		result.Status = "failed"
 		result.ErrorDetail = lastErr.Error()
+		result.GotoTaken = action.GotoOnFailure
 		fmt.Printf("SOAR: step %d (%s) failed: %v\n", action.StepOrder, action.ActionType, lastErr)
 	case output == "pending_approval":
 		result.Status = "pending_approval"
+		result.GotoTaken = action.GotoOnSuccess
 		fmt.Printf("SOAR: step %d (%s) → pending approval\n", action.StepOrder, action.ActionType)
 	default:
 		result.Status = "success"
+		result.GotoTaken = action.GotoOnSuccess
 		fmt.Printf("SOAR: step %d (%s) ok: %s\n", action.StepOrder, action.ActionType, truncate(output, 120))
 	}
 
