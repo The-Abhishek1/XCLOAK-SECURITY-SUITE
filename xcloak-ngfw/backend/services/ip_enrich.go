@@ -115,10 +115,41 @@ type IPEnrichment struct {
 	VTSuspicious *int `json:"vt_suspicious,omitempty"`
 	VTTotal      *int `json:"vt_total,omitempty"`
 
+	// Greynoise (env: GREYNOISE_KEY) — classifies internet-wide scanning behavior.
+	// Classification: "noise" = mass internet scanner (low signal, suppress alert);
+	// "riot" = known-benign crawler (Google, AWS health checks, etc.);
+	// "malicious" = targeted attacker (escalate alert).
+	GNClassification string   `json:"gn_classification,omitempty"` // noise | riot | malicious | unknown
+	GNName           string   `json:"gn_name,omitempty"`           // actor name if known
+	GNTags           []string `json:"gn_tags,omitempty"`           // attack tags
+	GNLastSeen       string   `json:"gn_last_seen,omitempty"`
+	GNNoise          bool     `json:"gn_noise"`   // true = mass scanner
+	GNRiot           bool     `json:"gn_riot"`    // true = known-benign
+
+	// Shodan (env: SHODAN_KEY) — internet exposure context for the attacker's IP.
+	ShodanPorts    []int             `json:"shodan_ports,omitempty"`
+	ShodanVulns    []string          `json:"shodan_vulns,omitempty"`    // CVE IDs
+	ShodanHostname string            `json:"shodan_hostname,omitempty"`
+	ShodanISP      string            `json:"shodan_isp,omitempty"`
+	ShodanOS       string            `json:"shodan_os,omitempty"`
+	ShodanBanners  []ShodanService   `json:"shodan_banners,omitempty"`
+
 	// Computed
 	ThreatLevel string   `json:"threat_level"` // none | low | medium | high | critical
 	ThreatTags  []string `json:"threat_tags"`
 	Sources     []string `json:"sources"`
+	// IsNoise is true when Greynoise classifies this IP as internet background
+	// noise. Callers can use this to suppress low-severity alerts automatically.
+	IsNoise bool `json:"is_noise"`
+}
+
+// ShodanService is one open port/service banner from Shodan.
+type ShodanService struct {
+	Port    int    `json:"port"`
+	Proto   string `json:"proto"`
+	Product string `json:"product,omitempty"`
+	Version string `json:"version,omitempty"`
+	Banner  string `json:"banner,omitempty"`
 }
 
 type enrichEntry struct {
@@ -205,6 +236,49 @@ func EnrichIP(ip string, tenantID int) (*IPEnrichment, error) {
 		}
 	}
 
+	// 5. Greynoise — internet-wide scanner classification.
+	// "noise" IPs are mass scanners (Shodan bots, vulnerability scanners, etc.)
+	// — they trigger alerts but are not targeted attackers.
+	// "riot" IPs are known-benign (Google, Cloudflare health checks, etc.).
+	// "malicious" IPs are confirmed targeted attackers.
+	if key := os.Getenv("GREYNOISE_KEY"); key != "" {
+		if gn := fetchGreynoise(ip, key); gn != nil {
+			result.GNClassification = gn.Classification
+			result.GNName = gn.Name
+			result.GNTags = gn.Tags
+			result.GNLastSeen = gn.LastSeen
+			result.GNNoise = gn.Noise
+			result.GNRiot = gn.Riot
+			result.Sources = append(result.Sources, "greynoise")
+			result.IsNoise = gn.Noise || gn.Riot
+			if gn.Classification == "malicious" {
+				result.ThreatTags = append(result.ThreatTags, "GN:malicious")
+			} else if gn.Noise {
+				result.ThreatTags = append(result.ThreatTags, "GN:scanner-noise")
+			} else if gn.Riot {
+				result.ThreatTags = append(result.ThreatTags, "GN:known-benign")
+			}
+		}
+	}
+
+	// 6. Shodan — internet exposure context: what ports/services/CVEs are
+	// visible on this IP from the internet. Useful for understanding the
+	// attacker's infrastructure and whether the IP is a VPS/datacenter.
+	if key := os.Getenv("SHODAN_KEY"); key != "" {
+		if sh := fetchShodan(ip, key); sh != nil {
+			result.ShodanPorts = sh.Ports
+			result.ShodanVulns = sh.Vulns
+			result.ShodanHostname = sh.Hostname
+			result.ShodanISP = sh.ISP
+			result.ShodanOS = sh.OS
+			result.ShodanBanners = sh.Banners
+			result.Sources = append(result.Sources, "shodan")
+			if len(sh.Vulns) > 0 {
+				result.ThreatTags = append(result.ThreatTags, fmt.Sprintf("Shodan:%d CVEs", len(sh.Vulns)))
+			}
+		}
+	}
+
 	sort.Strings(result.ThreatTags)
 	result.ThreatLevel = computeThreatLevel(result)
 
@@ -213,6 +287,20 @@ func EnrichIP(ip string, tenantID int) (*IPEnrichment, error) {
 }
 
 func computeThreatLevel(r *IPEnrichment) string {
+	// Known-benign Greynoise RIOT IPs (Cloudflare, Google, AWS health checks)
+	// should never be escalated regardless of other signals.
+	if r.GNRiot {
+		return "none"
+	}
+
+	// Confirmed targeted attacker per Greynoise → at least high.
+	if r.GNClassification == "malicious" {
+		if r.IsIOC && r.IOCSeverity == "critical" {
+			return "critical"
+		}
+		return "high"
+	}
+
 	if r.IsIOC {
 		switch r.IOCSeverity {
 		case "critical":
@@ -225,6 +313,7 @@ func computeThreatLevel(r *IPEnrichment) string {
 			return "low"
 		}
 	}
+
 	if r.AbuseScore != nil {
 		s := *r.AbuseScore
 		switch {
@@ -238,6 +327,7 @@ func computeThreatLevel(r *IPEnrichment) string {
 			return "low"
 		}
 	}
+
 	if r.VTMalicious != nil {
 		switch {
 		case *r.VTMalicious >= 5:
@@ -246,6 +336,12 @@ func computeThreatLevel(r *IPEnrichment) string {
 			return "medium"
 		}
 	}
+
+	// Pure internet background noise — low signal value.
+	if r.GNNoise {
+		return "low"
+	}
+
 	if r.IsProxy {
 		return "low"
 	}
@@ -418,5 +514,168 @@ func fetchVirusTotal(ip, key string) *vtResult {
 		Malicious:  s.Malicious,
 		Suspicious: s.Suspicious,
 		Total:      s.Malicious + s.Suspicious + s.Undetected + s.Harmless,
+	}
+}
+
+// ── Greynoise ─────────────────────────────────────────────────────────────────
+
+type gnResult struct {
+	Noise          bool     `json:"-"`
+	Riot           bool     `json:"-"`
+	Classification string
+	Name           string
+	Tags           []string
+	LastSeen       string
+}
+
+func fetchGreynoise(ip, key string) *gnResult {
+	client := &http.Client{Timeout: 8 * time.Second}
+	req, err := http.NewRequest("GET",
+		fmt.Sprintf("https://api.greynoise.io/v3/community/%s", ip), nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("key", key)
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode == 404 {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	var out struct {
+		IP             string   `json:"ip"`
+		Noise          bool     `json:"noise"`
+		Riot           bool     `json:"riot"`
+		Classification string   `json:"classification"`
+		Name           string   `json:"name"`
+		Link           string   `json:"link"`
+		LastSeen       string   `json:"last_seen"`
+		Message        string   `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil
+	}
+	// "This IP is not in our database" → message will be set, noise/riot false
+	return &gnResult{
+		Noise:          out.Noise,
+		Riot:           out.Riot,
+		Classification: out.Classification,
+		Name:           out.Name,
+		LastSeen:       out.LastSeen,
+	}
+}
+
+// fetchGreynoiseContext calls the full context endpoint (requires paid key).
+// If it fails, fetchGreynoise (community) is used as fallback.
+func fetchGreynoiseContext(ip, key string) *gnResult {
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET",
+		fmt.Sprintf("https://api.greynoise.io/v2/noise/context/%s", ip), nil)
+	if err != nil {
+		return fetchGreynoise(ip, key)
+	}
+	req.Header.Set("key", key)
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		return fetchGreynoise(ip, key) // fall back to community API
+	}
+	defer resp.Body.Close()
+
+	var out struct {
+		Seen           bool     `json:"seen"`
+		Classification string   `json:"classification"`
+		Name           string   `json:"name"`
+		Tags           []string `json:"tags"`
+		LastSeen       string   `json:"last_seen"`
+		Noise          bool     `json:"noise"`
+		Riot           bool     `json:"riot"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fetchGreynoise(ip, key)
+	}
+	return &gnResult{
+		Noise:          out.Noise || out.Seen,
+		Riot:           out.Riot,
+		Classification: out.Classification,
+		Name:           out.Name,
+		Tags:           out.Tags,
+		LastSeen:       out.LastSeen,
+	}
+}
+
+// ── Shodan ────────────────────────────────────────────────────────────────────
+
+type shodanResult struct {
+	Ports    []int
+	Vulns    []string
+	Hostname string
+	ISP      string
+	OS       string
+	Banners  []ShodanService
+}
+
+func fetchShodan(ip, key string) *shodanResult {
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET",
+		fmt.Sprintf("https://api.shodan.io/shodan/host/%s?key=%s", ip, key), nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var out struct {
+		Ports    []int    `json:"ports"`
+		Vulns    []string `json:"vulns"`
+		ISP      string   `json:"isp"`
+		OS       string   `json:"os"`
+		Hostnames []string `json:"hostnames"`
+		Data     []struct {
+			Port    int    `json:"port"`
+			Proto   string `json:"transport"`
+			Product string `json:"product"`
+			Version string `json:"version"`
+			Banner  string `json:"data"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil
+	}
+
+	hostname := ""
+	if len(out.Hostnames) > 0 {
+		hostname = out.Hostnames[0]
+	}
+
+	banners := make([]ShodanService, 0, len(out.Data))
+	for _, d := range out.Data {
+		banner := d.Banner
+		if len(banner) > 200 {
+			banner = banner[:200]
+		}
+		banners = append(banners, ShodanService{
+			Port:    d.Port,
+			Proto:   d.Proto,
+			Product: d.Product,
+			Version: d.Version,
+			Banner:  banner,
+		})
+	}
+
+	return &shodanResult{
+		Ports:    out.Ports,
+		Vulns:    out.Vulns,
+		Hostname: hostname,
+		ISP:      out.ISP,
+		OS:       out.OS,
+		Banners:  banners,
 	}
 }

@@ -108,6 +108,10 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/network-map/ip-info", middleware.RequireAuth(), api.GetIPInfo)
 	router.GET("/api/network-map/port-info", middleware.RequireAuth(), api.GetPortInfoHandler)
 
+	// ── Threat intelligence enrichment ───────────────────────────
+	router.GET("/api/enrich/hash/:hash", middleware.RequireAuth(), api.GetHashEnrichment)
+	router.PATCH("/api/settings/ioc-sharing", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.PatchTenantIOCSharing)
+
 	// ── Incidents ────────────────────────────────────────────────
 	router.GET("/api/incidents", middleware.RequireAuth(), api.GetIncidents)
 	router.GET("/api/incidents/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetIncidentsPaginated)
@@ -136,6 +140,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.PATCH("/api/iocs/:id/enable", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.EnableIOC)
 	router.PATCH("/api/iocs/:id/disable", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DisableIOC)
 	router.POST("/api/iocs/import", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.ImportIOCs)
+	router.PATCH("/api/iocs/:id/shareable", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.PatchIOCShareable)
 
 	// ── File hashes ───────────────────────────────────────────────
 	router.POST("/api/filehashes", middleware.RequireAgentAuth(), api.SaveFileHashes)

@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS ioc_propagations;
+ALTER TABLE tenants DROP COLUMN IF EXISTS ioc_sharing_enabled;
+ALTER TABLE iocs DROP COLUMN IF EXISTS platform_ioc;
+ALTER TABLE iocs DROP COLUMN IF EXISTS shareable;
+ALTER TABLE iocs DROP COLUMN IF EXISTS source;
