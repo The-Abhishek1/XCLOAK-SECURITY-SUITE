@@ -107,6 +107,7 @@ func main() {
 	services.StartActorTaggingWorker()
 	services.StartClusterScheduler()
 	services.StartIOCPropagation()
+	services.StartITDRScheduler()
 	go api.StartSessionPurger()
 
 	go func() {

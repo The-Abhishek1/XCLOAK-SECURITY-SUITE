@@ -457,6 +457,12 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/incidents/:id/remediation/:plan_id/execute", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ExecuteRemediationPlan)
 	router.POST("/api/incidents/:id/remediation/:plan_id/steps/:step_id/execute", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ExecuteRemediationStep)
 
+	// ── ITDR — Identity Threat Detection & Response ──────────────────────────
+	router.GET("/api/itdr/findings", middleware.RequireAuth(), api.ListITDRFindings)
+	router.GET("/api/itdr/findings/:id", middleware.RequireAuth(), api.GetITDRFinding)
+	router.PATCH("/api/itdr/findings/:id/status", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.UpdateITDRFindingStatus)
+	router.GET("/api/itdr/summary", middleware.RequireAuth(), api.GetITDRSummary)
+
 	// ── Alert Clustering ──────────────────────────────────────────────────────
 	router.GET("/api/clusters", middleware.RequireAuth(), api.ListAlertClusters)
 	router.GET("/api/clusters/:id/alerts", middleware.RequireAuth(), api.GetClusterAlerts)
