@@ -60,6 +60,14 @@ func main() {
 		panic(err)
 	}
 
+	// Read replica is optional — log a warning but don't abort startup.
+	if err := database.ConnectReadReplica(); err != nil {
+		log.Println("[DB] read replica unavailable, analytics will use primary:", err)
+	}
+
+	// Circuit breaker monitors primary + replica health in the background.
+	database.StartCircuitBreaker()
+
 	if err := database.Migrate(); err != nil {
 		panic(err)
 	}

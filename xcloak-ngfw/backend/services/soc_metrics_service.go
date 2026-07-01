@@ -31,7 +31,7 @@ func GetSOCMetrics(tenantID int) (SOCMetrics, error) {
 	var m SOCMetrics
 
 	// Per-analyst metrics from acknowledged alerts
-	rows, err := database.DB.Query(`
+	rows, err := database.RDB().Query(`
 		SELECT
 			acknowledged_by,
 			COUNT(*) FILTER (WHERE status != 'open') as triaged,
@@ -63,7 +63,7 @@ func GetSOCMetrics(tenantID int) (SOCMetrics, error) {
 	}
 
 	// Per-analyst open backlog
-	backlog, err := database.DB.Query(`
+	backlog, err := database.RDB().Query(`
 		SELECT acknowledged_by, COUNT(*) FROM alerts
 		WHERE tenant_id=$1 AND status='open' AND acknowledged_by IS NOT NULL AND acknowledged_by != ''
 		GROUP BY acknowledged_by`, tenantID)
@@ -82,15 +82,15 @@ func GetSOCMetrics(tenantID int) (SOCMetrics, error) {
 	}
 
 	// Totals
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status='open'`, tenantID).Scan(&m.TotalOpen)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status IN ('acknowledged','resolved')`, tenantID).Scan(&m.TotalAcked)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status='resolved'`, tenantID).Scan(&m.TotalResolved)
-	database.DB.QueryRow(`
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status='open'`, tenantID).Scan(&m.TotalOpen)
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status IN ('acknowledged','resolved')`, tenantID).Scan(&m.TotalAcked)
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status='resolved'`, tenantID).Scan(&m.TotalResolved)
+	database.RDB().QueryRow(`
 		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (acknowledged_at - created_at))/60), 0)
 		FROM alerts WHERE tenant_id=$1 AND acknowledged_at IS NOT NULL`, tenantID).Scan(&m.AvgMTTR)
 
 	// Daily alert volume (last 14 days)
-	alertRows, err := database.DB.Query(`
+	alertRows, err := database.RDB().Query(`
 		SELECT DATE(created_at) as day, COUNT(*)
 		FROM alerts WHERE tenant_id=$1 AND created_at > NOW() - INTERVAL '14 days'
 		GROUP BY day ORDER BY day`, tenantID)
@@ -106,7 +106,7 @@ func GetSOCMetrics(tenantID int) (SOCMetrics, error) {
 	}
 
 	// Backlog trend by day (open alerts created each day that haven't been resolved)
-	backlogRows, err := database.DB.Query(`
+	backlogRows, err := database.RDB().Query(`
 		SELECT DATE(created_at) as day, COUNT(*)
 		FROM alerts WHERE tenant_id=$1 AND status='open' AND created_at > NOW() - INTERVAL '14 days'
 		GROUP BY day ORDER BY day`, tenantID)

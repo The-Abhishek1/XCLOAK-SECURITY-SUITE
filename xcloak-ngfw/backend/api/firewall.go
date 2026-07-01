@@ -1,14 +1,21 @@
 package api
 
 import (
+	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/services"
 )
+
+// startTime is set when the package is first loaded so DeepHealth can report
+// process uptime.
+var startTime = time.Now()
 
 func CreateRule(c *gin.Context) {
 
@@ -128,10 +135,82 @@ func DeleteRule(c *gin.Context) {
 	})
 }
 
+// Health — GET /api/health
+// Shallow check: returns 200 as long as the process is alive and the circuit
+// is closed. Load balancers use this endpoint; it intentionally avoids slow
+// DB queries so a degraded-but-live backend doesn't flap the LB.
 func Health(c *gin.Context) {
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "healthy",
+	circuit := database.GetCircuitHealth()
+	status := http.StatusOK
+	health := "healthy"
+	if database.IsPrimaryDown() {
+		status = http.StatusServiceUnavailable
+		health = "degraded"
+	}
+	c.JSON(status, gin.H{
+		"status":  health,
 		"service": "xcloak-ngfw",
+		"circuit": circuit,
+	})
+}
+
+// DeepHealth — GET /api/health/deep
+// Executes a real SELECT 1 on both primary and replica, measures latency, and
+// returns pool stats + replication lag. Used by monitoring dashboards, not LBs.
+func DeepHealth(c *gin.Context) {
+	type dbResult struct {
+		Reachable   bool              `json:"reachable"`
+		LatencyMs   float64           `json:"latency_ms"`
+		Pool        database.DBStats  `json:"pool"`
+		ReplicaLag  float64           `json:"replica_lag_seconds,omitempty"`
+	}
+
+	pingLatency := func(db *sql.DB) (bool, float64) {
+		if db == nil {
+			return false, 0
+		}
+		start := time.Now()
+		err := db.Ping()
+		ms := float64(time.Since(start).Microseconds()) / 1000.0
+		return err == nil, ms
+	}
+
+	primaryOK, primaryLatency := pingLatency(database.DB)
+	replicaOK, replicaLatency := pingLatency(database.ReadDB)
+
+	status := http.StatusOK
+	overallHealth := "healthy"
+	if !primaryOK {
+		status = http.StatusServiceUnavailable
+		overallHealth = "degraded"
+	}
+
+	primary := dbResult{
+		Reachable: primaryOK,
+		LatencyMs: primaryLatency,
+		Pool:      database.PrimaryStats(),
+	}
+
+	var replica *dbResult
+	if database.ReadDB != nil {
+		lag := database.ReplicaLagSeconds()
+		replica = &dbResult{
+			Reachable:  replicaOK,
+			LatencyMs:  replicaLatency,
+			Pool:       database.ReplicaStats(),
+			ReplicaLag: lag,
+		}
+		if lag > 30 {
+			overallHealth = "degraded" // replica significantly behind
+		}
+	}
+
+	c.JSON(status, gin.H{
+		"status":  overallHealth,
+		"service": "xcloak-ngfw",
+		"uptime":  time.Since(startTime).String(),
+		"circuit": database.GetCircuitHealth(),
+		"primary": primary,
+		"replica": replica,
 	})
 }

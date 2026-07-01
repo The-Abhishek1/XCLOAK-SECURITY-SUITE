@@ -9,10 +9,15 @@ import (
 
 func SetupRoutes(router *gin.Engine) {
 
-	router.GET(
-		"/api/health",
-		api.Health,
-	)
+	// Health endpoints are exempt from the circuit breaker middleware
+	// (they exist specifically to report circuit state).
+	router.GET("/api/health", api.Health)
+	router.GET("/api/health/deep", api.DeepHealth)
+
+	// DB circuit breaker — returns 503 for all other endpoints when the
+	// primary database is unreachable. Applied globally so it catches any
+	// handler that touches the DB, without requiring per-handler checks.
+	router.Use(middleware.DBCircuit())
 
 	// ── Firewall ──────────────────────────────────────────────────
 	router.POST("/api/firewall/rules", middleware.RequireAuth(), api.CreateRule)

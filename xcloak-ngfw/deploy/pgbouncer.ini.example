@@ -1,0 +1,90 @@
+; PgBouncer configuration template for XCloak NGFW
+;
+; Deploy pgBouncer in front of the primary Postgres to enforce connection
+; limits and prevent the backend process pool from exhausting Postgres
+; connection slots during alert storms. Transaction pooling is the right
+; mode here — XCloak never uses session-level features (SET, LISTEN,
+; advisory locks are handled via the leader_lock mechanism which keeps the
+; connection open for the duration of the lock hold, not per-request).
+;
+; ── Typical topology ────────────────────────────────────────────────────────
+;
+;   backend pods (25 conns each × N replicas)
+;       └─► pgBouncer (:6432)   ← backend DB_HOST points here
+;               └─► Postgres primary (:5432)   max ~50 server conns
+;               └─► Postgres read replica (:5432) ← DB_READ_HOST
+;
+; ── Environment variables the backend reads ─────────────────────────────────
+;
+;   DB_HOST          pgBouncer host (primary pool)
+;   DB_PORT          pgBouncer port (default 6432)
+;   DB_READ_HOST     pgBouncer host for read-replica pool (optional)
+;   DB_READ_PORT     pgBouncer port for read-replica pool (default 6432)
+;   DB_USER          database username
+;   DB_PASSWORD      database password (or Vault path: xcloak/backend#db_password)
+;   DB_NAME          database name
+;   DB_SSLMODE       disable | require | verify-full  (default: disable)
+;
+;   Circuit breaker tuning (optional):
+;   CIRCUIT_FAIL_THRESHOLD   consecutive ping failures before opening (default 3)
+;   CIRCUIT_PROBE_INTERVAL   seconds between probes in open state (default 15)
+;   CIRCUIT_MONITOR_INTERVAL seconds between health checks in closed state (default 30)
+
+[databases]
+; Primary — used for all writes and real-time detection queries.
+xcloak = host=postgres-primary port=5432 dbname=xcloak
+
+; Read replica — analytics, dashboard metrics, compliance reports.
+; Point DB_READ_HOST here. Remove this block if you don't have a replica.
+xcloak_ro = host=postgres-replica port=5432 dbname=xcloak
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+
+; Transaction pooling: a server connection is held only for the duration of
+; a single transaction. Correct for XCloak's usage pattern (no LISTEN, no
+; session-level SET, no prepared statements beyond what lib/pq handles).
+pool_mode = transaction
+
+; Allow the backend pod pool (25 conns × up to 4 pods = 100 client conns)
+; plus headroom for direct operator access.
+max_client_conn = 150
+
+; Limit total server connections to Postgres — prevents overwhelming the DB
+; during a traffic spike. Tune based on Postgres max_connections (default 100).
+default_pool_size = 20
+min_pool_size = 5
+reserve_pool_size = 5
+reserve_pool_timeout = 3
+
+; Timeout for obtaining a server connection from the pool.
+; 5s matches the backend's pgx timeout — don't set shorter than that.
+query_wait_timeout = 5
+
+; Close idle server connections after this many seconds of inactivity.
+; Keeps the replica pool from holding open connections it doesn't need.
+server_idle_timeout = 300
+
+; Auth — use md5 or scram-sha-256 depending on your Postgres pg_hba.conf.
+auth_type = md5
+auth_file = /etc/pgbouncer/userlist.txt
+
+; TLS (recommended for production — set DB_SSLMODE=require on the backend).
+; server_tls_sslmode = require
+; server_tls_ca_file = /etc/pgbouncer/ca.crt
+
+; Logging — reduce noise in production; use 'verbose' only when debugging.
+log_connections = 0
+log_disconnections = 0
+log_pooler_errors = 1
+stats_period = 60
+
+; Admin interface — use `psql -h 127.0.0.1 -p 6432 -U pgbouncer pgbouncer`
+; to run SHOW STATS, SHOW POOLS, RELOAD, etc.
+admin_users = pgbouncer
+stats_users = pgbouncer
+
+; userlist.txt format:
+;   "xcloak_user" "md5<md5(password+username)>"
+; Generate with: echo -n "passwordxcloak_user" | md5sum → prefix with "md5"

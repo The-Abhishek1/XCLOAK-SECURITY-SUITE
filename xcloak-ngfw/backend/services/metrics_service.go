@@ -48,7 +48,7 @@ func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 	m := &DashboardMetrics{}
 
 	// ── Alert trend (last 24h, hourly) ────────────────────────
-	rows, err := database.DB.Query(`
+	rows, err := database.RDB().Query(`
 		SELECT
 			to_char(date_trunc('hour', created_at), 'HH24:MI') AS hour,
 			COALESCE(SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END), 0) AS critical,
@@ -72,7 +72,7 @@ func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 	}
 
 	// ── MTTR ──────────────────────────────────────────────────
-	database.DB.QueryRow(`
+	database.RDB().QueryRow(`
 		SELECT
 			COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))), 0),
 			COUNT(*) FILTER (WHERE resolved_at IS NOT NULL)
@@ -80,7 +80,7 @@ func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 		WHERE resolved_at IS NOT NULL AND tenant_id=$1
 	`, tenantID).Scan(&m.MTTR.AvgSeconds, &m.MTTR.TotalResolved)
 
-	database.DB.QueryRow(`
+	database.RDB().QueryRow(`
 		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))), 0)
 		FROM incidents
 		WHERE resolved_at IS NOT NULL
@@ -90,13 +90,13 @@ func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 	m.MTTR.AvgFormatted = formatDuration(m.MTTR.AvgSeconds)
 
 	// ── Alert velocity (last 1h) ───────────────────────────────
-	database.DB.QueryRow(`
+	database.RDB().QueryRow(`
 		SELECT COUNT(*) FROM alerts
 		WHERE created_at > now() - INTERVAL '1 hour' AND tenant_id=$1
 	`, tenantID).Scan(&m.AlertVelocity)
 
 	// ── Top firing rules (last 7d) ─────────────────────────────
-	ruleRows, err := database.DB.Query(`
+	ruleRows, err := database.RDB().Query(`
 		SELECT rule_name, severity, COUNT(*) as cnt
 		FROM alerts
 		WHERE created_at > now() - INTERVAL '7 days' AND tenant_id=$1
@@ -115,7 +115,7 @@ func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 	}
 
 	// ── Top agents by alert count ──────────────────────────────
-	agentRows, err := database.DB.Query(`
+	agentRows, err := database.RDB().Query(`
 		SELECT a.id, a.hostname, COUNT(al.id) as cnt
 		FROM agents a
 		JOIN alerts al ON al.agent_id = a.id
@@ -136,10 +136,10 @@ func GetDashboardMetrics(tenantID int) (*DashboardMetrics, error) {
 
 	// ── Platform threat score (weighted 0-100) ─────────────────
 	var critAlerts, highAlerts, openIncidents, critVulns int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='critical' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&critAlerts)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='high' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&highAlerts)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM incidents WHERE status IN ('open','investigating') AND tenant_id=$1`, tenantID).Scan(&openIncidents)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM vulnerabilities v JOIN agents a ON a.id=v.agent_id WHERE v.severity='critical' AND a.tenant_id=$1`, tenantID).Scan(&critVulns)
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='critical' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&critAlerts)
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity='high' AND created_at > now() - INTERVAL '24 hours' AND tenant_id=$1`, tenantID).Scan(&highAlerts)
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM incidents WHERE status IN ('open','investigating') AND tenant_id=$1`, tenantID).Scan(&openIncidents)
+	database.RDB().QueryRow(`SELECT COUNT(*) FROM vulnerabilities v JOIN agents a ON a.id=v.agent_id WHERE v.severity='critical' AND a.tenant_id=$1`, tenantID).Scan(&critVulns)
 
 	score := (critAlerts * 5) + (highAlerts * 2) + (openIncidents * 10) + (critVulns * 3)
 	if score > 100 {
