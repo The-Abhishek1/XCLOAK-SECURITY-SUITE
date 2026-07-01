@@ -108,6 +108,7 @@ func main() {
 	services.StartClusterScheduler()
 	services.StartIOCPropagation()
 	services.StartITDRScheduler()
+	services.StartCISScheduler()
 	go api.StartSessionPurger()
 
 	go func() {

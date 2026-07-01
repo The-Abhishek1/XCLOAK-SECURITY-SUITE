@@ -473,6 +473,12 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/framework-compliance", middleware.RequireAuth(), api.GetAllFrameworkAssessments)
 	router.GET("/api/framework-compliance/:framework", middleware.RequireAuth(), api.GetFrameworkAssessment)
 
+	// ── CIS Benchmark Compliance Scanning ────────────────────────────────────
+	router.GET("/api/cis/summary", middleware.RequireAuth(), api.GetCISSummary)
+	router.GET("/api/cis/agents/:id", middleware.RequireAuth(), api.GetAgentCISFindings)
+	router.GET("/api/cis/agents/:id/score", middleware.RequireAuth(), api.GetAgentCISScore)
+	router.POST("/api/cis/agents/:id/scan", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.TriggerCISScan)
+
 	// ── JA3/TLS Fingerprint Blocklist ────────────────────────────────────────
 	router.GET("/api/ja3/fingerprints", middleware.RequireAuth(), api.GetJA3Fingerprints)
 	router.POST("/api/ja3/fingerprints", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateJA3Fingerprint)
