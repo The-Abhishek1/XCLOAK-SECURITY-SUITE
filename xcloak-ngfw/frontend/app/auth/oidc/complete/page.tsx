@@ -3,27 +3,32 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
-import api from '@/lib/api';
 
 export default function OIDCCompletePage() {
   const searchParams = useSearchParams();
-  const token = searchParams.get('token') || '';
+  const code     = searchParams.get('code') || '';
   const ssoError = searchParams.get('error') || '';
   const [error, setError] = useState(ssoError);
 
   useEffect(() => {
-    if (!token) return;
+    if (!code) return;
 
-    localStorage.setItem('token', token);
-    document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`;
-
-    api.get('/auth/profile')
+    // Exchange the one-time code for a session cookie. This request goes
+    // through the Next.js proxy so Set-Cookie lands on the correct origin
+    // (the backend OIDC callback runs on a different port in dev and can't
+    // set an httpOnly cookie on the frontend's origin directly).
+    fetch('/api/auth/oidc/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ code }),
+    })
       .then(r => {
-        localStorage.setItem('username', r.data.username);
+        if (!r.ok) throw new Error('exchange failed');
         window.location.href = '/dashboard';
       })
-      .catch(() => setError('Signed in, but failed to load your profile — try logging in again.'));
-  }, [token]);
+      .catch(() => setError('SSO sign-in succeeded but session setup failed — try logging in again.'));
+  }, [code]);
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-0)' }}>
@@ -37,7 +42,7 @@ export default function OIDCCompletePage() {
             <h1 className="text-xl font-bold" style={{ color: 'var(--text-1)' }}>XCloak Security Suite</h1>
           </div>
 
-          {error || !token ? (
+          {error || !code ? (
             <div className="space-y-3 text-center">
               <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-left"
                 style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', color: 'var(--red)' }}>

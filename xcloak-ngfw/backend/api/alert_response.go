@@ -36,14 +36,20 @@ func DispatchAlertResponse(c *gin.Context) {
 
 	// Allowed action types for manual response
 	allowed := map[string]bool{
-		"kill_process":        true,
-		"isolate_host":        true,
-		"quarantine_file":     true,
-		"collect_processes":   true,
-		"collect_connections": true,
-		"collect_file_hashes": true,
-		"fim_scan":            true,
-		"vulnerability_scan":  true,
+		"kill_process":          true,
+		"kill_process_tree":     true,
+		"isolate_host":          true,
+		"quarantine_file":       true,
+		"delete_dropped_file":   true,
+		"delete_registry_key":   true,
+		"delete_scheduled_task": true,
+		"collect_processes":     true,
+		"collect_connections":   true,
+		"collect_file_hashes":   true,
+		"process_snapshot":      true,
+		"memory_dump":           true,
+		"fim_scan":              true,
+		"vulnerability_scan":    true,
 	}
 	if !allowed[body.ActionType] {
 		c.JSON(400, gin.H{"error": "action_type not permitted: " + body.ActionType})

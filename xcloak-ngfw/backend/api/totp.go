@@ -244,5 +244,6 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	services.LogEvent("LOGIN_2FA", "2FA login completed", username)
-	c.JSON(200, gin.H{"token": token})
+	setAuthCookie(c, token)
+	c.JSON(200, gin.H{"ok": true})
 }

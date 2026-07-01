@@ -37,10 +37,7 @@ func ReceiveFile(c *gin.Context) {
 		return
 	}
 
-	os.MkdirAll(
-		"uploads",
-		0755,
-	)
+	os.MkdirAll("uploads", 0750)
 
 	storedPath := filepath.Join(
 		"uploads",

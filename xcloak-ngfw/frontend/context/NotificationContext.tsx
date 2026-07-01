@@ -47,16 +47,27 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     });
   }, []);
 
-  const connectWS = useCallback(() => {
+  const connectWS = useCallback(async () => {
     if (!mountedRef.current) return;
 
-    const token = typeof window !== 'undefined'
-      ? localStorage.getItem('token') || ''
-      : '';
-    if (!token) return;
+    // Fetch a short-lived single-use ticket via the proxy (carries the
+    // httpOnly session cookie). The WS connection goes direct to the backend
+    // port and can't carry the cookie, so we use the ticket instead.
+    let ticket = '';
+    try {
+      const r = await fetch('/api/ws/ticket', { method: 'POST', credentials: 'include' });
+      if (!r.ok) return; // not authenticated
+      const data = await r.json();
+      ticket = data.ticket;
+    } catch {
+      return;
+    }
+    if (!mountedRef.current) return;
 
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const host     = window.location.hostname;
     const ws = new WebSocket(
-      `ws://localhost:8080/api/notifications/stream?token=${encodeURIComponent(token)}`
+      `${protocol}://${host}:8080/api/notifications/stream?ticket=${encodeURIComponent(ticket)}`
     );
     wsRef.current = ws;
 

@@ -15,7 +15,14 @@ import (
 // Revokes the current JWT so it can't be reused even within its 8h window.
 func Logout(c *gin.Context) {
 	tokenString := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	// Also accept the httpOnly session cookie.
 	if tokenString == "" {
+		if cookie, err := c.Request.Cookie("token"); err == nil {
+			tokenString = cookie.Value
+		}
+	}
+	if tokenString == "" {
+		clearAuthCookies(c)
 		c.JSON(200, gin.H{"message": "logged out"})
 		return
 	}
@@ -35,6 +42,7 @@ func Logout(c *gin.Context) {
 	}
 
 	services.RevokeToken(tokenString, expiry)
+	clearAuthCookies(c)
 
 	username, _ := c.Get("username")
 	services.LogEvent("LOGOUT", "user logged out", func() string {

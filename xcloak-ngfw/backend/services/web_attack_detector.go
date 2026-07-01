@@ -192,7 +192,7 @@ func detectWebAttacks(tenantID int) {
 					MitreTactic:    "Initial Access",
 					MitreTechnique: sig.mitre,
 					MitreName:      sig.mitreNm,
-					Fingerprint:    fmt.Sprintf("web-%s-%s-%s", categories[ci], srcIP, agentID),
+					Fingerprint:    fmt.Sprintf("web-%s-%s-%d", categories[ci], srcIP, agentID),
 				})
 				break
 			}

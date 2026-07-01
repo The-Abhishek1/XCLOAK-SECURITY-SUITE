@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+
+	"xcloak-ngfw/database"
 )
 
 // tenantIDFromContext reads the tenant_id set by RequireAuth/RequireAgentAuth.
@@ -30,6 +32,16 @@ func usernameFromContext(c *gin.Context) string {
 		return s
 	}
 	return fmt.Sprintf("user-%d", userIDFromContext(c))
+}
+
+// agentBelongsToTenant confirms that agentID is owned by tenantID. Used by
+// EDR response endpoints to prevent cross-tenant task dispatch.
+func agentBelongsToTenant(agentID, tenantID int) bool {
+	var count int
+	database.DB.QueryRow(
+		`SELECT COUNT(*) FROM agents WHERE id=$1 AND tenant_id=$2`, agentID, tenantID,
+	).Scan(&count)
+	return count > 0
 }
 
 func tenantIDFromContext(c *gin.Context) int {

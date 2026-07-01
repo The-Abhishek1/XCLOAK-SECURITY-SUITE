@@ -15,11 +15,18 @@ func RequireAuth() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 
-		// 1. Try Authorization header (all normal API calls).
+		// 1. Try Authorization header (API keys, programmatic clients).
 		tokenString := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
 
-		// 2. Fall back to ?token= query param for WebSocket / EventSource,
-		//    since browsers cannot set custom headers on WS or EventSource.
+		// 2. Try the httpOnly session cookie (browser sessions).
+		if tokenString == "" {
+			if cookie, err := c.Request.Cookie("token"); err == nil {
+				tokenString = cookie.Value
+			}
+		}
+
+		// 3. Fall back to ?token= query param — kept for backward compatibility
+		//    with non-browser clients that can't set headers or cookies.
 		if tokenString == "" {
 			tokenString = c.Query("token")
 		}

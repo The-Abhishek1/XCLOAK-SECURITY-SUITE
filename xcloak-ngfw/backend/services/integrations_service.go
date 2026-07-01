@@ -12,6 +12,9 @@ package services
 //   teams      — Microsoft Teams Incoming Webhook
 //   jira       — Jira Cloud REST API (issue creation)
 //   servicenow — ServiceNow REST API (incident creation)
+//   opsgenie   — OpsGenie Alert API v2
+//   datadog    — Datadog Events API v1
+//   splunk     — Splunk HTTP Event Collector (HEC)
 
 import (
 	"bytes"
@@ -32,6 +35,9 @@ func init() {
 	integrationSecretFields["teams"] = []string{"webhook_url"}
 	integrationSecretFields["jira"] = []string{"api_token"}
 	integrationSecretFields["servicenow"] = []string{"password"}
+	integrationSecretFields["opsgenie"] = []string{"api_key"}
+	integrationSecretFields["datadog"] = []string{"api_key"}
+	integrationSecretFields["splunk"] = []string{"token"}
 }
 
 // FireEnterpriseIntegrations delivers alert notifications to all configured
@@ -50,6 +56,9 @@ func FireEnterpriseIntegrations(alert models.Alert) {
 	go deliverTeams(alert)
 	go deliverJira(alert)
 	go deliverServiceNow(alert)
+	go deliverOpsGenie(alert)
+	go deliverDatadog(alert)
+	go deliverSplunkHEC(alert)
 }
 
 // ── PagerDuty ─────────────────────────────────────────────────────────────────
@@ -321,6 +330,164 @@ func deliverServiceNow(alert models.Alert) {
 
 	success := resp.StatusCode >= 200 && resp.StatusCode < 300
 	logDelivery("servicenow", "alert.created", body, resp.StatusCode, success, "", alert.TenantID)
+}
+
+// ── OpsGenie ──────────────────────────────────────────────────────────────────
+
+func deliverOpsGenie(alert models.Alert) {
+	cfg, ok := loadIntegrationConfig("opsgenie", alert.TenantID)
+	if !ok {
+		return
+	}
+
+	apiKey, _ := cfg["api_key"].(string)
+	if secrets.Enabled() {
+		if v, ok2 := secrets.GetKV(integrationVaultPath(alert.TenantID, "opsgenie"), "api_key"); ok2 {
+			apiKey = v
+		}
+	}
+	if apiKey == "" {
+		return
+	}
+
+	priority := map[string]string{
+		"critical": "P1",
+		"high":     "P2",
+		"medium":   "P3",
+		"low":      "P4",
+	}[alert.Severity]
+	if priority == "" {
+		priority = "P3"
+	}
+
+	responders := []map[string]string{}
+	if team, _ := cfg["team"].(string); team != "" {
+		responders = []map[string]string{{"name": team, "type": "team"}}
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"message": truncateStr(
+			fmt.Sprintf("[XCloak] %s — %s", strings.ToUpper(alert.Severity), alert.RuleName), 130),
+		"alias": alert.Fingerprint,
+		"description": fmt.Sprintf(
+			"Rule: %s\nSeverity: %s\nAgent ID: %d\nMITRE: %s\n\nLog:\n%s",
+			alert.RuleName, alert.Severity, alert.AgentID,
+			alert.MitreTechnique, truncateStr(alert.LogMessage, 1000)),
+		"priority":   priority,
+		"source":     "xcloak-ngfw",
+		"tags":       []string{"xcloak", "security", alert.Severity},
+		"responders": responders,
+	})
+
+	deliverIntegration("opsgenie", "alert.created", "https://api.opsgenie.com/v2/alerts",
+		body, map[string]string{
+			"Content-Type":  "application/json",
+			"Authorization": "GenieKey " + apiKey,
+		}, alert.TenantID)
+}
+
+// ── Datadog ───────────────────────────────────────────────────────────────────
+
+func deliverDatadog(alert models.Alert) {
+	cfg, ok := loadIntegrationConfig("datadog", alert.TenantID)
+	if !ok {
+		return
+	}
+
+	apiKey, _ := cfg["api_key"].(string)
+	if secrets.Enabled() {
+		if v, ok2 := secrets.GetKV(integrationVaultPath(alert.TenantID, "datadog"), "api_key"); ok2 {
+			apiKey = v
+		}
+	}
+	if apiKey == "" {
+		return
+	}
+
+	site, _ := cfg["site"].(string)
+	if site == "" {
+		site = "datadoghq.com"
+	}
+
+	alertType := map[string]string{
+		"critical": "error",
+		"high":     "error",
+		"medium":   "warning",
+		"low":      "info",
+	}[alert.Severity]
+	if alertType == "" {
+		alertType = "warning"
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"title": fmt.Sprintf("[XCloak] %s: %s", strings.ToUpper(alert.Severity), alert.RuleName),
+		"text": "%%% \n**Rule:** " + alert.RuleName +
+			"\n**Severity:** " + alert.Severity +
+			"\n**Agent:** " + fmt.Sprintf("%d", alert.AgentID) +
+			"\n**MITRE:** " + alert.MitreTechnique +
+			"\n\n```\n" + truncateStr(alert.LogMessage, 500) + "\n```\n %%%",
+		"priority":         "normal",
+		"alert_type":       alertType,
+		"source_type_name": "XCLOAK",
+		"tags": []string{
+			"platform:xcloak",
+			"severity:" + alert.Severity,
+			fmt.Sprintf("agent_id:%d", alert.AgentID),
+		},
+	})
+
+	deliverIntegration("datadog", "alert.created",
+		fmt.Sprintf("https://api.%s/api/v1/events", site),
+		body, map[string]string{
+			"Content-Type": "application/json",
+			"DD-API-KEY":   apiKey,
+		}, alert.TenantID)
+}
+
+// ── Splunk HEC ────────────────────────────────────────────────────────────────
+
+func deliverSplunkHEC(alert models.Alert) {
+	cfg, ok := loadIntegrationConfig("splunk", alert.TenantID)
+	if !ok {
+		return
+	}
+
+	hecURL, _ := cfg["url"].(string)
+	token, _ := cfg["token"].(string)
+	if secrets.Enabled() {
+		if v, ok2 := secrets.GetKV(integrationVaultPath(alert.TenantID, "splunk"), "token"); ok2 {
+			token = v
+		}
+	}
+	if hecURL == "" || token == "" {
+		return
+	}
+
+	payload := map[string]any{
+		"time":       time.Now().Unix(),
+		"source":     "xcloak",
+		"sourcetype": "xcloak:alert",
+		"event": map[string]any{
+			"severity":        alert.Severity,
+			"rule_name":       alert.RuleName,
+			"agent_id":        alert.AgentID,
+			"mitre_technique": alert.MitreTechnique,
+			"mitre_tactic":    alert.MitreTactic,
+			"fingerprint":     alert.Fingerprint,
+			"message":         truncateStr(alert.LogMessage, 1000),
+		},
+	}
+	if index, _ := cfg["index"].(string); index != "" {
+		payload["index"] = index
+	}
+
+	body, _ := json.Marshal(payload)
+	url := strings.TrimRight(hecURL, "/") + "/services/collector/event"
+	deliverIntegration("splunk", "alert.created", url,
+		body, map[string]string{
+			"Content-Type":  "application/json",
+			"Authorization": "Splunk " + token,
+		}, alert.TenantID)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

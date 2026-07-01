@@ -220,11 +220,8 @@ func main() {
 
 	routes.SetupRoutes(router)
 
-	// Real-time notification WebSocket (separate from log stream).
-	router.GET("/api/notifications/stream",
-		middleware.RequireAuth(),
-		api.NotificationsWS,
-	)
+	// Real-time notification WebSocket — auth via ?ticket= (see IssueWSTicket).
+	router.GET("/api/notifications/stream", api.NotificationsWS)
 
 	// Prometheus metrics scrape endpoint — static bearer token (METRICS_TOKEN).
 	router.GET("/metrics", middleware.RequireMetricsAuth(), api.MetricsHandler())

@@ -100,9 +100,8 @@ export default function CompliancePage() {
   };
 
   const downloadExport = (urlFn: () => string) => {
-    const token = localStorage.getItem('token') || '';
     const a = document.createElement('a');
-    a.href = urlFn() + (token ? `?token=${token}` : '');
+    a.href = urlFn(); // session cookie sent automatically for same-origin requests
     a.download = '';
     a.click();
   };

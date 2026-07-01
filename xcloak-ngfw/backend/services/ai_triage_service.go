@@ -43,18 +43,11 @@ func SummarizeIncident(incidentID int, tenantID int) (*models.AIIncidentSummary,
 		return nil, err
 	}
 
-	// FIX: GetIncidentEvents takes a string, not an int
 	events, _ := repositories.GetIncidentEvents(fmt.Sprintf("%d", incidentID))
-	alerts, _ := repositories.GetAllAlerts()
-
-	var agentAlerts []models.Alert
-	for _, a := range alerts {
-		if a.AgentID == incident.AgentID {
-			agentAlerts = append(agentAlerts, a)
-			if len(agentAlerts) >= 10 {
-				break
-			}
-		}
+	allAgentAlerts, _ := repositories.GetAlertsByAgentID(incident.AgentID)
+	agentAlerts := allAgentAlerts
+	if len(agentAlerts) > 10 {
+		agentAlerts = agentAlerts[:10]
 	}
 
 	prompt := buildIncidentPrompt(*incident, events, agentAlerts)

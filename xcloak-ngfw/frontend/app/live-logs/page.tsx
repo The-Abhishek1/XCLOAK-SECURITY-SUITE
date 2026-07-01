@@ -215,13 +215,25 @@ export default function LiveLogsPage() {
     });
   }, []);
 
-  const connect = useCallback((id: number) => {
+  const connect = useCallback(async (id: number) => {
     if (wsRef.current) wsRef.current.close();
 
-    const token    = localStorage.getItem('token') || '';
+    // Obtain a short-lived single-use ticket via the proxy (carries the
+    // httpOnly session cookie). WS goes direct to the backend port.
+    let ticket = '';
+    try {
+      const r = await fetch('/api/ws/ticket', { method: 'POST', credentials: 'include' });
+      if (!r.ok) { setConnected(false); return; }
+      const data = await r.json();
+      ticket = data.ticket;
+    } catch {
+      setConnected(false);
+      return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host     = window.location.hostname;
-    const url      = `${protocol}://${host}:8080/api/agents/${id}/logs/stream?token=${encodeURIComponent(token)}`;
+    const url      = `${protocol}://${host}:8080/api/agents/${id}/logs/stream?ticket=${encodeURIComponent(ticket)}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;

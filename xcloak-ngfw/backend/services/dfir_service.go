@@ -15,13 +15,21 @@ import (
 
 // defaultArtifactTypes is the standard forensic collection suite.
 var defaultArtifactTypes = []string{
-	"collect_processes",
+	"process_snapshot",    // rich: parent tree, cmdline, hashes, modules, open files
+	"collect_processes",   // lightweight snapshot (lower agent overhead)
 	"collect_connections",
 	"collect_services",
 	"collect_packages",
 	"collect_users",
 	"collect_auth_logs",
 	"collect_file_hashes",
+}
+
+// quickArtifactTypes is a faster subset for high-urgency collections.
+var quickArtifactTypes = []string{
+	"process_snapshot",
+	"collect_connections",
+	"collect_auth_logs",
 }
 
 // TriggerForensicCollection creates a collection record and queues artifact

@@ -64,12 +64,21 @@ type AgentAnomalyScore struct {
 }
 
 // AgentBaseline is a per-hour-of-week behavioral baseline for one agent.
+// Each metric stores both an EWMA mean and an EWMA variance so the scorer can
+// compute true z-scores that adapt to each agent's individual noise level.
 type AgentBaseline struct {
 	AgentID      int       `json:"agent_id"`
 	HourOfWeek   int       `json:"hour_of_week"`
 	AvgLogCount  float64   `json:"avg_log_count"`
+	VarLogCount  float64   `json:"var_log_count"`
 	AvgLoginFail float64   `json:"avg_login_fail"`
+	VarLoginFail float64   `json:"var_login_fail"`
 	AvgConnCount float64   `json:"avg_conn_count"`
+	VarConnCount float64   `json:"var_conn_count"`
+	AvgProcCount float64   `json:"avg_proc_count"`
+	VarProcCount float64   `json:"var_proc_count"`
+	AvgPrivEsc   float64   `json:"avg_priv_esc"`
+	VarPrivEsc   float64   `json:"var_priv_esc"`
 	SampleCount  int       `json:"sample_count"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

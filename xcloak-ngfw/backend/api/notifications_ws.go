@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/services"
 )
 
 // notifHub manages all connected browser WebSocket clients.
@@ -86,9 +87,20 @@ var notifUpgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-// NotificationsWS — GET /api/notifications/stream
+// NotificationsWS — GET /api/notifications/stream?ticket=<uuid>
 // Browser connects here to receive real-time alert pushes.
+// Auth: same ticket scheme as LiveLogsWS — see that handler for rationale.
 func NotificationsWS(c *gin.Context) {
+
+	ticket := c.Query("ticket")
+	if ticket == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing ws ticket"})
+		return
+	}
+	if _, err := services.ConsumeWSTicket(ticket); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired ws ticket"})
+		return
+	}
 
 	conn, err := notifUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

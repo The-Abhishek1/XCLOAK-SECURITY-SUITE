@@ -48,7 +48,8 @@ func Login(c *gin.Context) {
 	// Persist session record (async — never delays the login response).
 	go CreateSessionOnLogin(token, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), userID, tenantID)
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	setAuthCookie(c, token)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // Register — POST /api/auth/register

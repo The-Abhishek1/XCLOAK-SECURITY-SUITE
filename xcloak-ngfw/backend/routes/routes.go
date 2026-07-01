@@ -78,7 +78,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/:id/fim/baseline", middleware.RequireAuth(), api.GetFIMBaseline)
 	router.POST("/api/agents/:id/fim/baseline/accept", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.AcceptFIMBaseline)
 	router.GET("/api/agents/:id/fim/alerts", middleware.RequireAuth(), api.GetFIMAlerts)
-	router.GET("/api/agents/:id/logs/stream", middleware.RequireAuth(), api.LiveLogsWS) // WS — was wrongly named LiveLogsSSE
+	router.GET("/api/agents/:id/logs/stream", api.LiveLogsWS) // WS — auth via ?ticket= (see IssueWSTicket)
 
 	// ── Dashboard ─────────────────────────────────────────────────
 	router.GET("/api/dashboard/overview", middleware.RequireAuth(), api.DashboardOverview)
@@ -329,6 +329,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/auth/login/2fa", api.CompleteTOTPLogin)
 	router.POST("/api/auth/forgot-password", api.ForgotPassword)
 	router.POST("/api/auth/reset-password", api.ResetPassword)
+	router.POST("/api/auth/oidc/exchange", api.OIDCTokenExchange)
+	router.POST("/api/ws/ticket", middleware.RequireAuth(), api.IssueWSTicket)
 	router.POST("/api/auth/change-password", middleware.RequireAuth(), api.ChangePassword)
 	router.GET("/api/auth/profile", middleware.RequireAuth(), api.GetProfile)
 	router.PATCH("/api/auth/profile", middleware.RequireAuth(), api.UpdateProfile)
@@ -434,6 +436,16 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/dfir/collections", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.TriggerForensicCollection)
 	router.GET("/api/dfir/collections/:id/artifacts", middleware.RequireAuth(), api.GetCollectionArtifacts)
 	router.GET("/api/dfir/incidents/:incident_id/timeline", middleware.RequireAuth(), api.GetForensicTimeline)
+
+	// ── EDR Response depth ────────────────────────────────────────────────────
+	router.POST("/api/agents/:id/memory-dump", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.DispatchMemoryDump)
+	router.POST("/api/agents/:id/process-snapshot", middleware.RequireAuth(), api.DispatchProcessSnapshot)
+	router.POST("/api/agents/:id/kill-tree", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DispatchKillTree)
+	router.GET("/api/incidents/:id/remediation", middleware.RequireAuth(), api.ListRemediationPlans)
+	router.POST("/api/incidents/:id/remediation", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateRemediationPlan)
+	router.GET("/api/incidents/:id/remediation/:plan_id", middleware.RequireAuth(), api.GetRemediationPlan)
+	router.POST("/api/incidents/:id/remediation/:plan_id/execute", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ExecuteRemediationPlan)
+	router.POST("/api/incidents/:id/remediation/:plan_id/steps/:step_id/execute", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ExecuteRemediationStep)
 
 	// ── Alert Clustering ──────────────────────────────────────────────────────
 	router.GET("/api/clusters", middleware.RequireAuth(), api.ListAlertClusters)

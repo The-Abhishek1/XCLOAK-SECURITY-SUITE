@@ -524,6 +524,9 @@ export default function SettingsPage() {
                                 : int.name === 'teams'       ? 'Microsoft Teams Adaptive Card alerts'
                                 : int.name === 'jira'        ? 'Jira Cloud — auto-create security tickets'
                                 : int.name === 'servicenow'  ? 'ServiceNow — create incidents via Table API'
+                                : int.name === 'opsgenie'    ? 'OpsGenie — alert routing and on-call management'
+                                : int.name === 'datadog'     ? 'Datadog — forward security events to your observability stack'
+                                : int.name === 'splunk'      ? 'Splunk HEC — stream alerts into your Splunk SIEM'
                                 : int.name === 'ldap'        ? 'Active Directory / LDAP identity enrichment'
                                 : int.name}
                             </p>
@@ -648,6 +651,65 @@ export default function SettingsPage() {
                                       onChange={e => setConfig({ password: e.target.value })}
                                       placeholder="ServiceNow password" className="g-input w-full text-xs mono" />
                                   </div>
+                                </div>
+                              </div>
+                            )}
+                            {int.name === 'opsgenie' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>API Key</label>
+                                  <input type="password" value={form.config.api_key || ''}
+                                    onChange={e => setConfig({ api_key: e.target.value })}
+                                    placeholder="OpsGenie API key" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Responder Team <span style={{ color: 'var(--text-3)', fontWeight: 'normal' }}>(optional)</span></label>
+                                  <input value={form.config.team || ''}
+                                    onChange={e => setConfig({ team: e.target.value })}
+                                    placeholder="noc-team" className="g-input w-full text-xs mono" />
+                                </div>
+                              </div>
+                            )}
+                            {int.name === 'datadog' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>API Key</label>
+                                  <input type="password" value={form.config.api_key || ''}
+                                    onChange={e => setConfig({ api_key: e.target.value })}
+                                    placeholder="Datadog API key" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Site</label>
+                                  <select value={form.config.site || 'datadoghq.com'}
+                                    onChange={e => setConfig({ site: e.target.value })}
+                                    className="g-input w-full text-xs">
+                                    <option value="datadoghq.com">US (datadoghq.com)</option>
+                                    <option value="datadoghq.eu">EU (datadoghq.eu)</option>
+                                    <option value="us3.datadoghq.com">US3 (us3.datadoghq.com)</option>
+                                    <option value="us5.datadoghq.com">US5 (us5.datadoghq.com)</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                            {int.name === 'splunk' && (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>HEC URL</label>
+                                  <input value={form.config.url || ''}
+                                    onChange={e => setConfig({ url: e.target.value })}
+                                    placeholder="https://splunk.example.com:8088" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>HEC Token</label>
+                                  <input type="password" value={form.config.token || ''}
+                                    onChange={e => setConfig({ token: e.target.value })}
+                                    placeholder="Splunk HEC token" className="g-input w-full text-xs mono" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Index <span style={{ color: 'var(--text-3)', fontWeight: 'normal' }}>(optional)</span></label>
+                                  <input value={form.config.index || ''}
+                                    onChange={e => setConfig({ index: e.target.value })}
+                                    placeholder="security" className="g-input w-full text-xs mono" />
                                 </div>
                               </div>
                             )}

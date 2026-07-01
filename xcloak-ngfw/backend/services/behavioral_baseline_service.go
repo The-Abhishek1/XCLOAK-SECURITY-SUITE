@@ -35,20 +35,30 @@ type agentWindowMetrics struct {
 	LogCount   int
 	LoginFails int
 	ConnCount  int
+	ProcCount  int // distinct process-create / execve events in the window
+	PrivEsc    int // sudo/su/privilege-escalation events
 }
 
 func runBehavioralScoring() {
-	// Collect activity for every agent that sent logs in the last 5 minutes.
 	rows, err := database.DB.Query(`
 		SELECT
 			l.agent_id,
 			a.tenant_id,
-			COUNT(*)                                                                           AS log_count,
+			COUNT(*)                                                                    AS log_count,
 			COUNT(*) FILTER (WHERE l.log_message ILIKE '%failed password%'
 			                    OR  l.log_message ILIKE '%authentication failure%'
-			                    OR  l.log_message ILIKE '%invalid user%')                     AS login_fails,
+			                    OR  l.log_message ILIKE '%invalid user%')               AS login_fails,
 			COUNT(*) FILTER (WHERE l.log_message ILIKE '%connect%'
-			                    OR  l.log_message ILIKE '%established%')                      AS conn_count
+			                    OR  l.log_message ILIKE '%established%')                AS conn_count,
+			COUNT(*) FILTER (WHERE l.parsed_fields->>'event_type' = 'process_create'
+			                    OR  l.log_message ILIKE '%execve%'
+			                    OR  l.log_message ILIKE '%process start%'
+			                    OR  (l.parsed_fields->>'event_id') = '4688')            AS proc_count,
+			COUNT(*) FILTER (WHERE l.log_message ILIKE '%sudo:%'
+			                    OR  l.log_message ILIKE '%: su:%'
+			                    OR  l.log_message ILIKE '%privilege%'
+			                    OR  (l.parsed_fields->>'event_id') IN
+			                        ('4672','4673','4674','4697','7045'))               AS priv_esc
 		FROM logs l
 		JOIN agents a ON a.id = l.agent_id
 		WHERE l.created_at > NOW() - INTERVAL '5 minutes'
@@ -62,7 +72,9 @@ func runBehavioralScoring() {
 	var metrics []agentWindowMetrics
 	for rows.Next() {
 		var m agentWindowMetrics
-		if err := rows.Scan(&m.AgentID, &m.TenantID, &m.LogCount, &m.LoginFails, &m.ConnCount); err == nil {
+		if err := rows.Scan(&m.AgentID, &m.TenantID,
+			&m.LogCount, &m.LoginFails, &m.ConnCount,
+			&m.ProcCount, &m.PrivEsc); err == nil {
 			metrics = append(metrics, m)
 		}
 	}
@@ -85,83 +97,149 @@ func runBehavioralScoring() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EWMA variance helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ewmaAlpha = 0.15
+
+// ewmaUpdate advances the EWMA mean and variance by one observation using the
+// Welford-EWMA formula. This keeps variance adaptive at the same rate as the
+// mean, so quieter agents get tighter thresholds and noisier ones looser ones.
+func ewmaUpdate(mean, variance, obs float64) (newMean, newVariance float64) {
+	diff := obs - mean
+	newMean = mean + ewmaAlpha*diff
+	newVariance = (1-ewmaAlpha) * (variance + ewmaAlpha*diff*diff)
+	return
+}
+
+// metricZScore computes a z-score for one observed value against its baseline.
+// The minimum sigma is set to max(10% of mean, 1) to avoid explosive scores
+// when a normally silent metric receives its first non-zero reading.
+func metricZScore(obs, mean, variance float64) float64 {
+	sigma := math.Sqrt(variance)
+	minSigma := math.Max(math.Abs(mean)*0.10, 1.0)
+	if sigma < minSigma {
+		sigma = minSigma
+	}
+	return (obs - mean) / sigma
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Scoring
 // ─────────────────────────────────────────────────────────────────────────────
 
 type scoreComponents struct {
 	LogRateScore  int    `json:"log_rate"`
 	LoginScore    int    `json:"login_anomaly"`
-	OffHoursScore int    `json:"off_hours"`
 	ConnScore     int    `json:"conn_rate"`
+	ProcScore     int    `json:"proc_rate"`
+	PrivEscScore  int    `json:"priv_esc"`
+	OffHoursScore int    `json:"off_hours"`
 	Detail        string `json:"detail"`
 }
 
-// computeScore converts 5-minute window metrics + baseline into a 0-100 score.
+// computeScore converts 5-minute window metrics + baseline into a 0–100 risk
+// score. All metric components now use true EWMA z-scores, so the thresholds
+// automatically tighten for quiet agents and loosen for chatty ones.
 //
-// Log rate (0-40): how far the current 5-min count deviates from the hourly
-// baseline per-hour (baseline is stored as hourly average; we compare 5-min).
+// Budget:
 //
-// Login failures (0-30): absolute count, since any login failure spike is suspicious.
-//
-// Off-hours (0-20): activity above baseline during hours 0-6 and 22-23.
-//
-// Connection rate (0-10): deviates above baseline.
+//	Log rate          (0-35): z > 2 → significant; z > 4 → saturates
+//	Login failures    (0-25): z > 1 + raw-count floor
+//	Connection rate   (0-15): z > 2 → significant
+//	Process spawns    (0-10): z > 2 → significant
+//	Privilege escalation (0-10): 4 pts per event above baseline, raw floor of 2 pts/event
+//	Off-hours bonus   (0-5):  any above-baseline activity during 22:00–06:00
 func computeScore(m agentWindowMetrics, b *models.AgentBaseline, now time.Time) (int, scoreComponents) {
 	var c scoreComponents
 
-	// Convert hourly baseline to 5-minute expected count.
-	expectedLogs := b.AvgLogCount / 12.0 // 12 five-minute windows per hour
+	// Convert 5-min observed values to hourly scale for comparison with the
+	// hourly baseline means.
+	obsLogs := float64(m.LogCount) * 12
+	obsLogins := float64(m.LoginFails) * 12
+	obsConns := float64(m.ConnCount) * 12
+	obsProcs := float64(m.ProcCount) * 12
+	obsPriv := float64(m.PrivEsc) * 12
 
-	// Log rate: Z-score relative to expected, scaled to 0-40.
-	if expectedLogs > 0 {
-		deviation := float64(m.LogCount) - expectedLogs
-		zScore := deviation / math.Max(expectedLogs*0.3, 1)
-		c.LogRateScore = clampInt(int(zScore*15), 0, 40)
+	// Log rate (0-35)
+	if b.SampleCount > 0 {
+		z := metricZScore(obsLogs, b.AvgLogCount, b.VarLogCount)
+		if z > 1 {
+			c.LogRateScore = clampInt(int(z*8), 0, 35)
+		}
 	} else if m.LogCount > 10 {
-		c.LogRateScore = 20 // no baseline yet, moderate score for any activity
+		c.LogRateScore = 15 // no baseline yet — moderate score for any activity
 	}
 
-	// Login failures: direct count (0-30).
-	// 0 fails → 0, 1 fail → 8, 3 fails → 20, 5+ fails → 30.
-	fails := float64(m.LoginFails)
-	expectedFails := b.AvgLoginFail / 12.0
-	failDelta := math.Max(fails-expectedFails, 0)
-	c.LoginScore = clampInt(int(failDelta*6), 0, 30)
+	// Login failures (0-25): z-score plus an absolute floor so even 1 extra
+	// failure above baseline registers on a normally clean agent.
+	if b.SampleCount > 0 {
+		z := metricZScore(obsLogins, b.AvgLoginFail, b.VarLoginFail)
+		if z > 0.5 {
+			c.LoginScore = clampInt(int(z*8)+m.LoginFails*2, 0, 25)
+		}
+	} else {
+		c.LoginScore = clampInt(m.LoginFails*4, 0, 25)
+	}
 
-	// Off-hours bonus (0-20): any significant activity between 22:00 and 06:00.
+	// Connection rate (0-15)
+	if b.SampleCount > 0 {
+		z := metricZScore(obsConns, b.AvgConnCount, b.VarConnCount)
+		if z > 2 {
+			c.ConnScore = clampInt(int((z-2)*5), 0, 15)
+		}
+	}
+
+	// Process spawn rate (0-10)
+	if b.SampleCount > 0 {
+		z := metricZScore(obsProcs, b.AvgProcCount, b.VarProcCount)
+		if z > 2 {
+			c.ProcScore = clampInt(int((z-2)*4), 0, 10)
+		}
+	}
+
+	// Privilege escalation (0-10): each event above baseline adds 4 pts;
+	// any event at all adds at least 2 pts (even if within baseline).
+	if m.PrivEsc > 0 {
+		if b.SampleCount > 0 {
+			z := metricZScore(obsPriv, b.AvgPrivEsc, b.VarPrivEsc)
+			c.PrivEscScore = clampInt(int(z*4)+m.PrivEsc*2, 0, 10)
+		} else {
+			c.PrivEscScore = clampInt(m.PrivEsc*3, 0, 10)
+		}
+	}
+
+	// Off-hours bonus (0-5): significant activity between 22:00 and 06:00.
 	hour := now.Hour()
 	if (hour >= 22 || hour < 6) && m.LogCount > 5 {
-		offHoursExpected := b.AvgLogCount / 12.0
-		if offHoursExpected < 2 && m.LogCount > 5 {
-			c.OffHoursScore = 20
-		} else if m.LogCount > int(offHoursExpected*2) {
-			c.OffHoursScore = 10
+		expected := b.AvgLogCount / 12.0
+		if expected < 2 || float64(m.LogCount) > expected*2 {
+			c.OffHoursScore = 5
 		}
 	}
 
-	// Connection rate (0-10).
-	if b.AvgConnCount > 0 {
-		expectedConns := b.AvgConnCount / 12.0
-		if float64(m.ConnCount) > expectedConns*2 {
-			c.ConnScore = clampInt(int((float64(m.ConnCount)/expectedConns-1)*5), 0, 10)
-		}
-	}
+	total := c.LogRateScore + c.LoginScore + c.ConnScore +
+		c.ProcScore + c.PrivEscScore + c.OffHoursScore
 
-	total := c.LogRateScore + c.LoginScore + c.OffHoursScore + c.ConnScore
-
-	// Build human-readable detail.
+	// Build human-readable detail string.
 	var parts []string
 	if c.LogRateScore >= 15 {
-		parts = append(parts, fmt.Sprintf("log rate %dx above baseline", m.LogCount/max(int(b.AvgLogCount/12), 1)))
+		parts = append(parts, fmt.Sprintf("log rate spike (%d events/5 min)", m.LogCount))
 	}
-	if c.LoginScore >= 10 {
+	if c.LoginScore >= 8 {
 		parts = append(parts, fmt.Sprintf("%d login failure(s)", m.LoginFails))
+	}
+	if c.ConnScore >= 5 {
+		parts = append(parts, "connection rate above baseline")
+	}
+	if c.ProcScore >= 4 {
+		parts = append(parts, fmt.Sprintf("process spawn spike (%d procs/5 min)", m.ProcCount))
+	}
+	if c.PrivEscScore > 0 {
+		parts = append(parts, fmt.Sprintf("%d privilege escalation event(s)", m.PrivEsc))
 	}
 	if c.OffHoursScore > 0 {
 		parts = append(parts, "off-hours activity")
-	}
-	if c.ConnScore > 0 {
-		parts = append(parts, "unusual connection rate")
 	}
 	c.Detail = strings.Join(parts, "; ")
 
@@ -169,65 +247,100 @@ func computeScore(m agentWindowMetrics, b *models.AgentBaseline, now time.Time) 
 }
 
 func clampInt(v, lo, hi int) int {
-	if v < lo { return lo }
-	if v > hi { return hi }
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
 	return v
-}
-
-func max(a, b int) int {
-	if a > b { return a }
-	return b
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Baseline loading / updating
 // ─────────────────────────────────────────────────────────────────────────────
 
-// loadBaseline returns the stored baseline for (agentID, hourOfWeek), or an
-// empty baseline struct if no data exists yet.
 func loadBaseline(agentID, hourOfWeek int) *models.AgentBaseline {
 	b := &models.AgentBaseline{AgentID: agentID, HourOfWeek: hourOfWeek}
 	database.DB.QueryRow(`
-		SELECT avg_log_count, avg_login_fail, avg_conn_count, sample_count
+		SELECT avg_log_count,  var_log_count,
+		       avg_login_fail, var_login_fail,
+		       avg_conn_count, var_conn_count,
+		       avg_proc_count, var_proc_count,
+		       avg_priv_esc,   var_priv_esc,
+		       sample_count
 		FROM agent_behavior_baselines
 		WHERE agent_id = $1 AND hour_of_week = $2
-	`, agentID, hourOfWeek).Scan(&b.AvgLogCount, &b.AvgLoginFail, &b.AvgConnCount, &b.SampleCount)
+	`, agentID, hourOfWeek).Scan(
+		&b.AvgLogCount, &b.VarLogCount,
+		&b.AvgLoginFail, &b.VarLoginFail,
+		&b.AvgConnCount, &b.VarConnCount,
+		&b.AvgProcCount, &b.VarProcCount,
+		&b.AvgPrivEsc, &b.VarPrivEsc,
+		&b.SampleCount,
+	)
 	return b
 }
 
-// updateBaseline upserts the baseline using an exponential moving average
-// (α=0.15) so it adapts to slowly changing normal behavior.
+// updateBaseline upserts the baseline using EWMA (α=0.15) for both mean and
+// variance, so the baseline adapts to slowly changing normal behaviour while
+// giving accurate z-scores that reflect each agent's individual noise level.
 func updateBaseline(agentID, tenantID, hourOfWeek int, m agentWindowMetrics, b *models.AgentBaseline) {
-	const alpha = 0.15
-	const alphaC = 1.0 - alpha
-
-	// Convert 5-minute observed values to hourly estimates.
+	// Convert 5-min observed values to hourly scale.
 	obsLogs := float64(m.LogCount) * 12
 	obsLogins := float64(m.LoginFails) * 12
 	obsConns := float64(m.ConnCount) * 12
+	obsProcs := float64(m.ProcCount) * 12
+	obsPriv := float64(m.PrivEsc) * 12
 
-	var newAvgLogs, newAvgLogins, newAvgConns float64
+	var (
+		newAvgLogs, newVarLogs     float64
+		newAvgLogins, newVarLogins float64
+		newAvgConns, newVarConns   float64
+		newAvgProcs, newVarProcs   float64
+		newAvgPriv, newVarPriv     float64
+	)
+
 	if b.SampleCount == 0 {
-		newAvgLogs = obsLogs
-		newAvgLogins = obsLogins
-		newAvgConns = obsConns
+		// First observation — seed mean from data, variance starts at 0.
+		newAvgLogs, newVarLogs = obsLogs, 0
+		newAvgLogins, newVarLogins = obsLogins, 0
+		newAvgConns, newVarConns = obsConns, 0
+		newAvgProcs, newVarProcs = obsProcs, 0
+		newAvgPriv, newVarPriv = obsPriv, 0
 	} else {
-		newAvgLogs   = alphaC*b.AvgLogCount  + alpha*obsLogs
-		newAvgLogins = alphaC*b.AvgLoginFail + alpha*obsLogins
-		newAvgConns  = alphaC*b.AvgConnCount + alpha*obsConns
+		newAvgLogs, newVarLogs = ewmaUpdate(b.AvgLogCount, b.VarLogCount, obsLogs)
+		newAvgLogins, newVarLogins = ewmaUpdate(b.AvgLoginFail, b.VarLoginFail, obsLogins)
+		newAvgConns, newVarConns = ewmaUpdate(b.AvgConnCount, b.VarConnCount, obsConns)
+		newAvgProcs, newVarProcs = ewmaUpdate(b.AvgProcCount, b.VarProcCount, obsProcs)
+		newAvgPriv, newVarPriv = ewmaUpdate(b.AvgPrivEsc, b.VarPrivEsc, obsPriv)
 	}
 
 	database.DB.Exec(`
 		INSERT INTO agent_behavior_baselines
-		    (agent_id, tenant_id, hour_of_week, avg_log_count, avg_login_fail, avg_conn_count, sample_count, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,1,NOW())
+		    (agent_id, tenant_id, hour_of_week,
+		     avg_log_count,  var_log_count,
+		     avg_login_fail, var_login_fail,
+		     avg_conn_count, var_conn_count,
+		     avg_proc_count, var_proc_count,
+		     avg_priv_esc,   var_priv_esc,
+		     sample_count, updated_at)
+		VALUES ($1,$2,$3, $4,$5, $6,$7, $8,$9, $10,$11, $12,$13, 1, NOW())
 		ON CONFLICT (agent_id, hour_of_week) DO UPDATE SET
-		    avg_log_count  = $4,
-		    avg_login_fail = $5,
-		    avg_conn_count = $6,
+		    avg_log_count  = $4,  var_log_count  = $5,
+		    avg_login_fail = $6,  var_login_fail = $7,
+		    avg_conn_count = $8,  var_conn_count = $9,
+		    avg_proc_count = $10, var_proc_count = $11,
+		    avg_priv_esc   = $12, var_priv_esc   = $13,
 		    sample_count   = agent_behavior_baselines.sample_count + 1,
 		    updated_at     = NOW()
-	`, agentID, tenantID, hourOfWeek, newAvgLogs, newAvgLogins, newAvgConns)
+	`, agentID, tenantID, hourOfWeek,
+		newAvgLogs, newVarLogs,
+		newAvgLogins, newVarLogins,
+		newAvgConns, newVarConns,
+		newAvgProcs, newVarProcs,
+		newAvgPriv, newVarPriv,
+	)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,7 +380,6 @@ func fireBehavioralAlert(agentID, tenantID, score int, c scoreComponents) {
 		VALUES ($1,'behavioral',$2,$3,$4,'behavioral',$5,$6,false)
 	`, agentID, description, severity, score, ctx, tenantID)
 
-	// Also fire a standard alert so it appears in the alerts feed.
 	alert := models.Alert{
 		AgentID:     agentID,
 		RuleName:    "Behavioral Anomaly",
@@ -282,16 +394,16 @@ func fireBehavioralAlert(agentID, tenantID, score int, c scoreComponents) {
 // Public API surface
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GetAnomalyScores returns recent score snapshots for an agent (or all agents
-// for a tenant if agentID == 0).
 func GetAnomalyScores(agentID, tenantID int, hours int) ([]models.AgentAnomalyScore, error) {
-	var rows interface {
-		Next() bool
-		Scan(dest ...interface{}) error
-		Close() error
-		Err() error
-	}
-	var err error
+	var (
+		rows interface {
+			Next() bool
+			Scan(dest ...interface{}) error
+			Close() error
+			Err() error
+		}
+		err error
+	)
 
 	if agentID > 0 {
 		rows, err = database.DB.Query(`
@@ -327,14 +439,19 @@ func GetAnomalyScores(agentID, tenantID int, hours int) ([]models.AgentAnomalySc
 	return scores, nil
 }
 
-// GetAgentBaselines returns all baselines for a given agent.
 func GetAgentBaselines(agentID, tenantID int) ([]models.AgentBaseline, error) {
 	rows, err := database.DB.Query(`
-		SELECT agent_id, hour_of_week, avg_log_count, avg_login_fail, avg_conn_count, sample_count, updated_at
+		SELECT agent_id, hour_of_week,
+		       avg_log_count,  var_log_count,
+		       avg_login_fail, var_login_fail,
+		       avg_conn_count, var_conn_count,
+		       avg_proc_count, var_proc_count,
+		       avg_priv_esc,   var_priv_esc,
+		       sample_count, updated_at
 		FROM agent_behavior_baselines
 		WHERE agent_id = $1
 		  AND tenant_id = (SELECT tenant_id FROM agents WHERE id = $1)
-		  AND $2 = $2   -- tenantID bound so Postgres uses the index but doesn't re-filter
+		  AND $2 = $2
 		ORDER BY hour_of_week
 	`, agentID, tenantID)
 	if err != nil {
@@ -345,16 +462,22 @@ func GetAgentBaselines(agentID, tenantID int) ([]models.AgentBaseline, error) {
 	var baselines []models.AgentBaseline
 	for rows.Next() {
 		var b models.AgentBaseline
-		if err := rows.Scan(&b.AgentID, &b.HourOfWeek, &b.AvgLogCount, &b.AvgLoginFail, &b.AvgConnCount, &b.SampleCount, &b.UpdatedAt); err == nil {
+		if err := rows.Scan(
+			&b.AgentID, &b.HourOfWeek,
+			&b.AvgLogCount, &b.VarLogCount,
+			&b.AvgLoginFail, &b.VarLoginFail,
+			&b.AvgConnCount, &b.VarConnCount,
+			&b.AvgProcCount, &b.VarProcCount,
+			&b.AvgPrivEsc, &b.VarPrivEsc,
+			&b.SampleCount, &b.UpdatedAt,
+		); err == nil {
 			baselines = append(baselines, b)
 		}
 	}
 	return baselines, nil
 }
 
-// ScoreAgentNow runs an immediate on-demand score for a single agent.
 func ScoreAgentNow(agentID, tenantID int) (int, error) {
-	// Fetch last 5 minutes for this specific agent.
 	var m agentWindowMetrics
 	m.AgentID = agentID
 	m.TenantID = tenantID
@@ -366,11 +489,19 @@ func ScoreAgentNow(agentID, tenantID int) (int, error) {
 			                    OR  log_message ILIKE '%authentication failure%'
 			                    OR  log_message ILIKE '%invalid user%'),
 			COUNT(*) FILTER (WHERE log_message ILIKE '%connect%'
-			                    OR  log_message ILIKE '%established%')
+			                    OR  log_message ILIKE '%established%'),
+			COUNT(*) FILTER (WHERE parsed_fields->>'event_type' = 'process_create'
+			                    OR  log_message ILIKE '%execve%'
+			                    OR  log_message ILIKE '%process start%'
+			                    OR  (parsed_fields->>'event_id') = '4688'),
+			COUNT(*) FILTER (WHERE log_message ILIKE '%sudo:%'
+			                    OR  log_message ILIKE '%: su:%'
+			                    OR  log_message ILIKE '%privilege%'
+			                    OR  (parsed_fields->>'event_id') IN ('4672','4673','4674','4697','7045'))
 		FROM logs
 		WHERE agent_id = $1
 		  AND created_at > NOW() - INTERVAL '5 minutes'
-	`, agentID).Scan(&m.LogCount, &m.LoginFails, &m.ConnCount)
+	`, agentID).Scan(&m.LogCount, &m.LoginFails, &m.ConnCount, &m.ProcCount, &m.PrivEsc)
 	if err != nil {
 		return 0, err
 	}
@@ -389,7 +520,6 @@ func ScoreAgentNow(agentID, tenantID int) (int, error) {
 	return score, nil
 }
 
-// AcknowledgeAnomalyFinding marks a finding as reviewed by an operator.
 func AcknowledgeAnomalyFinding(id, tenantID int) error {
 	tag, err := database.DB.Exec(`
 		UPDATE anomaly_findings
@@ -406,17 +536,15 @@ func AcknowledgeAnomalyFinding(id, tenantID int) error {
 	return nil
 }
 
-// GetFleetAnomalySummary returns the highest recent score per agent for the
-// tenant, used to populate the fleet heatmap on the frontend.
 func GetFleetAnomalySummary(tenantID int) ([]map[string]interface{}, error) {
 	rows, err := database.DB.Query(`
 		SELECT
 			s.agent_id,
 			a.hostname,
-			MAX(s.score)              AS peak_score,
-			AVG(s.score)              AS avg_score,
-			COUNT(*)                  AS reading_count,
-			MAX(s.scored_at)          AS last_scored
+			MAX(s.score)     AS peak_score,
+			AVG(s.score)     AS avg_score,
+			COUNT(*)         AS reading_count,
+			MAX(s.scored_at) AS last_scored
 		FROM agent_anomaly_scores s
 		JOIN agents a ON a.id = s.agent_id
 		WHERE s.tenant_id = $1

@@ -37,7 +37,8 @@ export default function LoginPage() {
   const [totpCode, setTotpCode]   = useState('');
 
   useEffect(() => {
-    if (localStorage.getItem('token')) router.push('/dashboard');
+    const loggedIn = document.cookie.split(';').some(c => c.trim().startsWith('logged_in='));
+    if (loggedIn) router.push('/dashboard');
   }, [router]);
 
   const startSSO = (e: React.FormEvent) => {
@@ -79,10 +80,7 @@ export default function LoginPage() {
         return;
       }
 
-      if (!data.token) throw new Error('No token received');
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('username', loginForm.username);
-      document.cookie = `token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+      if (!data.ok) throw new Error('Login failed');
       window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.message);
@@ -102,9 +100,6 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid code');
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('username', loginForm.username);
-      document.cookie = `token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
       window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.message);

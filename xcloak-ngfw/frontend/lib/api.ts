@@ -6,11 +6,8 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// Session cookie is sent automatically by the browser (withCredentials: true
+// above). No Authorization header needed — the backend reads the httpOnly cookie.
 
 const OPTIONAL_PATTERNS = [
   /\/agents\/\d+$/,
@@ -28,20 +25,15 @@ const OPTIONAL_PATTERNS = [
 ];
 
 api.interceptors.response.use(
-  response => {
-    if (response.config.url === '/auth/login' && response.data?.token) {
-      document.cookie = `token=${response.data.token}; path=/; max-age=86400; SameSite=Lax`;
-    }
-    return response;
-  },
+  response => response,
   error => {
     const url = error.config?.url || '';
     const isOptional = OPTIONAL_PATTERNS.some(p => p.test(url));
 
     if (error.response?.status === 401 && !isOptional) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('username');
-      document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      // Clear the JS-readable presence flag (the httpOnly token cookie is
+      // cleared by the backend on an explicit logout call).
+      document.cookie = 'logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
@@ -286,10 +278,6 @@ export const fimAPI = {
 export const mitreAPI = {
   getMappings: () => api.get('/mitre/mappings'),
 };
-
-// Live log SSE URL — use directly with EventSource
-export const liveLogURL = (agentId: number, token: string) =>
-  `/api/agents/${agentId}/logs/stream?token=${token}`;
 
 
 export const integrationsAPI = {

@@ -10,7 +10,7 @@ import (
 func lockKey(name string) int64 {
 	h := fnv.New64a()
 	h.Write([]byte(name))
-	return int64(h.Sum64())
+	return int64(h.Sum64()) //nolint:gosec // G115: FNV hash used as Postgres advisory lock ID; sign wrapping is harmless
 }
 
 // WithSingletonLock runs fn only if this process wins a Postgres

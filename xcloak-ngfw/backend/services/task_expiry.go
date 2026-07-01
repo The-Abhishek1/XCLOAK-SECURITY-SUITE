@@ -19,10 +19,15 @@ const (
 // incident.
 var destructiveTasks = []string{
 	"kill_process",
+	"kill_process_tree",
 	"isolate_host",
 	"quarantine_file",
+	"delete_dropped_file",
+	"delete_registry_key",
+	"delete_scheduled_task",
 	"apply_firewall_rules",
 	"execute_script",
+	"memory_dump",
 }
 
 // IsDestructiveTask reports whether a task type is in destructiveTasks —

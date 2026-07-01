@@ -11,13 +11,9 @@ func CalculateRiskScore(
 
 	score := 0
 
-	alerts, _ := repositories.GetAllAlerts()
+	alerts, _ := repositories.GetAlertsByAgentID(agentID)
 
 	for _, alert := range alerts {
-
-		if alert.AgentID != agentID {
-			continue
-		}
 
 		switch alert.Severity {
 
@@ -58,13 +54,9 @@ func CalculateRiskScore(
 		}
 	}
 
-	incidents, _ := repositories.GetAllIncidents()
+	incidents, _ := repositories.GetIncidentsByAgentID(agentID)
 
 	for _, incident := range incidents {
-
-		if incident.AgentID != agentID {
-			continue
-		}
 
 		switch incident.Severity {
 

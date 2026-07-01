@@ -162,6 +162,7 @@ func callOllama(prompt string) (string, error) {
 	body, _ := json.Marshal(payload)
 
 	// Build request safely — check error before passing to client.Do
+	//nolint:gosec // G704: baseURL is set via OLLAMA_BASE_URL env var (admin-controlled config, not user input)
 	req, err := http.NewRequest("POST", baseURL+"/api/generate", bytes.NewBuffer(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to build Ollama request: %w", err)

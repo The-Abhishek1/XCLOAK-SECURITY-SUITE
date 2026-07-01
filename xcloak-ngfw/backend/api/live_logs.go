@@ -28,10 +28,16 @@ type wsLogEntry struct {
 	ParsedFields string `json:"parsed_fields,omitempty"`
 }
 
-// LiveLogsWS — GET /api/agents/:id/logs/stream
+// LiveLogsWS — GET /api/agents/:id/logs/stream?ticket=<uuid>
 // WebSocket endpoint for live log streaming.
 // Sends last 50 historical logs on connect, then streams new entries every 2s.
 // Automatically dispatches a collect_auth_logs task if endpoint_logs is empty.
+//
+// Auth: caller must first POST /api/ws/ticket (via the Next.js proxy, so the
+// httpOnly session cookie is included) to obtain a short-lived single-use
+// ticket, then pass it as ?ticket= on this URL. We can't use the session
+// cookie here because WS connections bypass the proxy and go directly to the
+// backend port, putting them on a different origin from the cookie.
 func LiveLogsWS(c *gin.Context) {
 
 	agentID := c.Param("id")
@@ -41,9 +47,24 @@ func LiveLogsWS(c *gin.Context) {
 		return
 	}
 
-	// Verify the agent belongs to the caller's tenant before upgrading to a
-	// WebSocket and streaming its live logs — every query below filters
-	// only by agent_id, with no tenant check otherwise.
+	// Validate the single-use ticket and populate auth context so the normal
+	// tenant-scoped helpers (agentOwnedBy404, etc.) work unchanged.
+	ticket := c.Query("ticket")
+	if ticket == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing ws ticket"})
+		return
+	}
+	claims, err := services.ConsumeWSTicket(ticket)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired ws ticket"})
+		return
+	}
+	c.Set("tenant_id", claims.TenantID)
+	c.Set("user_id",   claims.UserID)
+	c.Set("username",  claims.Username)
+	c.Set("role",      claims.Role)
+
+	// Verify the agent belongs to the caller's tenant before upgrading.
 	if !agentOwnedBy404(c, agentID) {
 		return
 	}

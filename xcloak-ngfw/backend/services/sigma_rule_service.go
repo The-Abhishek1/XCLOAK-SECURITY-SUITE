@@ -95,22 +95,6 @@ func DisableSigmaRule(
 	return err
 }
 
-// GetEnabledSigmaRulesForAgent returns enabled rules for the tenant that
-// owns agentID — used by the detection engine, which has no per-request
-// tenant context of its own. Cached per-tenant (see sigma_cache.go) since
-// this is called on every ingested log line.
-func GetEnabledSigmaRulesForAgent(agentID int) (
-	[]models.SigmaRule,
-	error,
-) {
-
-	tenantID, err := repositories.GetTenantIDByAgentID(agentID)
-	if err != nil {
-		return nil, err
-	}
-	return getEnabledSigmaRulesCached(tenantID)
-}
-
 // GetEnabledSigmaRules returns enabled rules for tenantID — used by the rule
 // tester, which has a real per-request tenant context from the caller's JWT.
 func GetEnabledSigmaRules(tenantID int) (

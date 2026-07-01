@@ -105,7 +105,7 @@ export default function AgentDetailPage() {
           if (processes === null) { const r = await agentsAPI.getProcesses(agentId); setProcesses(r.data || []); }
           break;
         case 'auditd':
-          if (auditEvents === null) { const r = await fetch(`/api/agents/${agentId}/audit-events?limit=500`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }); setAuditEvents(await r.json() || []); }
+          if (auditEvents === null) { const r = await fetch(`/api/agents/${agentId}/audit-events?limit=500`); setAuditEvents(await r.json() || []); }
           break;
         case 'connections':
           if (connections === null) { const r = await agentsAPI.getConnections(agentId); setConnections(r.data || []); }

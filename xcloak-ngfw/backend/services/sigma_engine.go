@@ -23,7 +23,12 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 
 func EvaluateRules(log models.Log) {
-	rules, err := GetEnabledSigmaRulesForAgent(log.AgentID)
+	tenantID, err := repositories.GetTenantIDByAgentID(log.AgentID)
+	if err != nil {
+		return
+	}
+
+	entry, err := getSigmaCacheEntry(tenantID)
 	if err != nil {
 		return
 	}
@@ -35,8 +40,14 @@ func EvaluateRules(log models.Log) {
 		json.Unmarshal([]byte(log.ParsedFields), &pf)
 	}
 
-	for _, rule := range rules {
-		if !ruleMatchesLogsource(rule, pf) {
+	// Pre-filter rules by logsource product using the cache's bucket index.
+	// This skips rules whose product is incompatible with this log's format
+	// (e.g. Windows-only rules on a Linux syslog line) without any extra DB
+	// query. The service-level check still runs per-rule below.
+	candidates := getRulesForFormat(entry, pf.Format)
+
+	for _, rule := range candidates {
+		if !ruleMatchesLogsourceService(rule, pf) {
 			continue
 		}
 		if !matchSigmaRuleWithFields(rule, messageLower, pf) {
@@ -59,10 +70,7 @@ func EvaluateRules(log models.Log) {
 		CorrelateAlert(alert)
 
 		// Record the hit asynchronously — must not block the ingestion pipeline.
-		go func(ruleID, agentID int) {
-			tenantID, _ := repositories.GetTenantIDByAgentID(agentID)
-			repositories.RecordSigmaHit(ruleID, agentID, tenantID)
-		}(rule.ID, log.AgentID)
+		go repositories.RecordSigmaHit(rule.ID, log.AgentID, tenantID)
 	}
 }
 
@@ -72,6 +80,9 @@ func EvaluateRules(log models.Log) {
 
 // ruleMatchesLogsource returns false only when the rule has an explicit product
 // or service constraint that is incompatible with the log's parsed format.
+// Used by the rule-tester API which evaluates a single rule against a message.
+// EvaluateRules uses getRulesForFormat + ruleMatchesLogsourceService instead
+// so it can skip the product check (already handled by bucket pre-filtering).
 func ruleMatchesLogsource(rule models.SigmaRule, pf ParsedFields) bool {
 	if rule.LogsourceProduct == "" && rule.LogsourceCategory == "" && rule.LogsourceService == "" {
 		return true // unconstrained — applies to everything
@@ -104,6 +115,17 @@ func ruleMatchesLogsource(rule models.SigmaRule, pf ParsedFields) bool {
 	}
 
 	return true
+}
+
+// ruleMatchesLogsourceService is the service-level half of ruleMatchesLogsource.
+// Called in EvaluateRules after product-level pre-filtering via getRulesForFormat,
+// so only the process-name check (which depends on per-log data) remains.
+func ruleMatchesLogsourceService(rule models.SigmaRule, pf ParsedFields) bool {
+	svc := strings.ToLower(rule.LogsourceService)
+	if svc == "" || pf.Process == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(pf.Process), svc)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -48,6 +48,7 @@ func Init() error {
 	token := os.Getenv("VAULT_TOKEN")
 	if token == "" {
 		if path := os.Getenv("VAULT_TOKEN_FILE"); path != "" {
+			//nolint:gosec // G703: path comes from VAULT_TOKEN_FILE env var (admin-controlled, not user input)
 			b, err := os.ReadFile(path)
 			if err != nil {
 				return fmt.Errorf("reading VAULT_TOKEN_FILE: %w", err)

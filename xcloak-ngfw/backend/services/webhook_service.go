@@ -164,7 +164,7 @@ func FireTestWebhook(name string, tenantID int) {
 	// For enterprise integration tests, fire a synthetic alert so the
 	// per-integration deliver* functions are exercised end-to-end.
 	switch name {
-	case "pagerduty", "teams", "jira", "servicenow":
+	case "pagerduty", "teams", "jira", "servicenow", "opsgenie", "datadog", "splunk":
 		testAlert := models.Alert{
 			TenantID:       tenantID,
 			AgentID:        0,
@@ -325,6 +325,7 @@ func logDelivery(integration, eventType string, payload []byte, code int, succes
 var knownIntegrations = []string{
 	"slack", "webhook", "email",
 	"pagerduty", "teams", "jira", "servicenow",
+	"opsgenie", "datadog", "splunk",
 	"ldap", "oidc",
 }
 

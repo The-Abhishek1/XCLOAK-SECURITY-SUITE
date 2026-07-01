@@ -78,3 +78,65 @@ func TestRequireAuth_AcceptsValidAccessToken(t *testing.T) {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
 }
+
+// ── httpOnly cookie auth path ─────────────────────────────────────────────────
+
+func runRequireAuthWithCookie(cookieValue string) *httptest.ResponseRecorder {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/protected", RequireAuth(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	if cookieValue != "" {
+		req.AddCookie(&http.Cookie{Name: "token", Value: cookieValue})
+	}
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestRequireAuth_AcceptsValidTokenCookie(t *testing.T) {
+	tokenStr, err := auth.GenerateJWT(2, "bob", "analyst", 1, false)
+	if err != nil {
+		t.Fatalf("GenerateJWT: %v", err)
+	}
+
+	w := runRequireAuthWithCookie(tokenStr)
+	if w.Code != http.StatusOK {
+		t.Errorf("cookie auth: status = %d, want 200", w.Code)
+	}
+}
+
+func TestRequireAuth_RejectsInvalidTokenCookie(t *testing.T) {
+	w := runRequireAuthWithCookie("not-a-real-jwt")
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("invalid cookie token: status = %d, want 401", w.Code)
+	}
+}
+
+func TestRequireAuth_AuthHeaderWinsCookieLoses(t *testing.T) {
+	// Authorization header is checked before the cookie — a valid header token
+	// plus an invalid cookie must still succeed (header wins, cookie never tried).
+	validToken, err := auth.GenerateJWT(3, "charlie", "admin", 1, false)
+	if err != nil {
+		t.Fatalf("GenerateJWT: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/protected", RequireAuth(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	req.AddCookie(&http.Cookie{Name: "token", Value: "invalid-garbage"})
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("header+bad-cookie: status = %d, want 200 (header should win)", w.Code)
+	}
+}

@@ -219,9 +219,11 @@ export function Sidebar() {
   }, []);
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    // Ask the backend to revoke the token and expire the httpOnly cookie.
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    // Clear the JS-readable presence flag immediately so the UI reflects
+    // the logged-out state before the redirect completes.
+    document.cookie = 'logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     router.push('/login');
   };
 

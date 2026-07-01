@@ -3,7 +3,7 @@ package services
 import (
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: SHA1 is mandated by the TOTP/HOTP specs (RFC 6238/RFC 4226)
 	"encoding/base32"
 	"encoding/binary"
 	"fmt"
@@ -89,7 +89,7 @@ func ValidateTOTP(secret, code string) bool {
 func generateTOTP(key []byte, counter int64) string {
 	// HOTP spec: RFC 4226
 	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(counter))
+	binary.BigEndian.PutUint64(buf, uint64(counter)) //nolint:gosec // G115: TOTP counter is always ≥0; RFC 4226 mandates uint64 encoding
 
 	mac := hmac.New(sha1.New, key)
 	mac.Write(buf)
