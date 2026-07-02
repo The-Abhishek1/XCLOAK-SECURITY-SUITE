@@ -192,6 +192,9 @@ func main() {
 	// OT / ICS Security Detector (Modbus, DNP3, SCADA, PLC)
 	services.StartOTICSScheduler()
 
+	// ── MDM compliance + command delivery ─────────────────────────
+	services.StartMDMScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),

@@ -507,4 +507,27 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UpdateLogSource)
 	router.DELETE("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeleteLogSource)
 
+	// ── MDM — Mobile Device Management ───────────────────────────────────────
+	// Devices
+	router.POST("/api/mdm/devices", middleware.RequireAuth(), api.EnrollMDMDevice)
+	router.GET("/api/mdm/devices", middleware.RequireAuth(), api.ListMDMDevices)
+	router.GET("/api/mdm/devices/:id", middleware.RequireAuth(), api.GetMDMDevice)
+	router.DELETE("/api/mdm/devices/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UnenrollMDMDevice)
+	router.POST("/api/mdm/devices/:id/block", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.BlockMDMDevice)
+	// Compliance
+	router.GET("/api/mdm/devices/:id/compliance", middleware.RequireAuth(), api.GetMDMDeviceCompliance)
+	router.GET("/api/mdm/compliance/summary", middleware.RequireAuth(), api.GetMDMComplianceSummary)
+	router.POST("/api/mdm/compliance/run", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.TriggerMDMCompliance)
+	// Policies
+	router.GET("/api/mdm/policies", middleware.RequireAuth(), api.ListMDMPolicies)
+	router.POST("/api/mdm/policies", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateMDMPolicy)
+	// Commands
+	router.POST("/api/mdm/devices/:id/commands", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.QueueMDMCommand)
+	router.GET("/api/mdm/devices/:id/commands", middleware.RequireAuth(), api.ListMDMCommands)
+	router.POST("/api/mdm/commands/:id/acknowledge", middleware.RequireAgentAuth(), api.AcknowledgeMDMCommand)
+	// Profiles
+	router.GET("/api/mdm/profiles", middleware.RequireAuth(), api.ListMDMProfiles)
+	router.POST("/api/mdm/profiles", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateMDMProfile)
+	router.POST("/api/mdm/profiles/:id/deploy", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeployMDMProfile)
+
 }
