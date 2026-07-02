@@ -151,6 +151,26 @@ ingress:
 # the single-node defaults below).
 # ──────────────────────────────────────────────────────────────────────────
 
+pgbouncer:
+  enabled: true
+  # When enabled, the backend's DB_HOST is set to the pgbouncer Service
+  # instead of pointing directly at the postgresql pod.
+  image:
+    repository: bitnami/pgbouncer
+    tag: "1.23.1"
+    pullPolicy: IfNotPresent
+  pool:
+    mode: transaction
+    maxClientConn: 150
+    defaultPoolSize: 20
+    minPoolSize: 5
+    reservePoolSize: 5
+    queryWaitTimeout: 5
+    serverIdleTimeout: 300
+  resources:
+    requests: { cpu: 50m, memory: 32Mi }
+    limits:   { cpu: 200m, memory: 64Mi }
+
 postgresql:
   enabled: true
   auth:

@@ -10,7 +10,18 @@ data:
   FRONTEND_URL: {{ include "xcloak.frontendURL" . | quote }}
   BACKEND_PUBLIC_URL: {{ include "xcloak.backendPublicURL" . | quote }}
 
+  {{- if .Values.pgbouncer.enabled }}
+  {{- /* Route backend through PgBouncer; PgBouncer connects to Postgres itself. */}}
+  DB_HOST: {{ printf "%s-pgbouncer" (include "xcloak.fullname" .) | quote }}
+  DB_PORT: "6432"
   {{- if .Values.postgresql.enabled }}
+  DB_USER: {{ .Values.postgresql.auth.username | quote }}
+  DB_NAME: {{ .Values.postgresql.auth.database | quote }}
+  {{- else }}
+  DB_USER: {{ .Values.postgresqlExternal.username | quote }}
+  DB_NAME: {{ .Values.postgresqlExternal.database | quote }}
+  {{- end }}
+  {{- else if .Values.postgresql.enabled }}
   DB_HOST: {{ include "xcloak.postgresql.host" . | quote }}
   DB_PORT: "5432"
   DB_USER: {{ .Values.postgresql.auth.username | quote }}

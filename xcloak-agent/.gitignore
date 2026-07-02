@@ -1,5 +1,12 @@
+# Secrets
 .env
-.env
-tmp/
 agent.token
-.env
+
+# Build artifacts
+tmp/
+dist/
+*.exe
+*.out
+
+# eBPF compiled objects
+*.o

@@ -1,0 +1,37 @@
+{{- if .Values.pgbouncer.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xcloak.fullname" . }}-pgbouncer
+  labels:
+    {{- include "xcloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgbouncer
+data:
+  pgbouncer.ini: |
+    [databases]
+    {{- if .Values.postgresql.enabled }}
+    {{ .Values.postgresql.auth.database }} = host={{ include "xcloak.fullname" . }}-postgresql port=5432 dbname={{ .Values.postgresql.auth.database }}
+    {{- else }}
+    {{ .Values.postgresqlExternal.database }} = host={{ .Values.postgresqlExternal.host }} port={{ .Values.postgresqlExternal.port }} dbname={{ .Values.postgresqlExternal.database }}
+    {{- end }}
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    pool_mode = {{ .Values.pgbouncer.pool.mode }}
+    max_client_conn = {{ .Values.pgbouncer.pool.maxClientConn }}
+    default_pool_size = {{ .Values.pgbouncer.pool.defaultPoolSize }}
+    min_pool_size = {{ .Values.pgbouncer.pool.minPoolSize }}
+    reserve_pool_size = {{ .Values.pgbouncer.pool.reservePoolSize }}
+    reserve_pool_timeout = 3
+    query_wait_timeout = {{ .Values.pgbouncer.pool.queryWaitTimeout }}
+    server_idle_timeout = {{ .Values.pgbouncer.pool.serverIdleTimeout }}
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    log_connections = 0
+    log_disconnections = 0
+    log_pooler_errors = 1
+    stats_period = 60
+    admin_users = pgbouncer
+    stats_users = pgbouncer
+{{- end }}

@@ -526,8 +526,10 @@ func SetRetentionDays(tenantID, days int) error {
 	return err
 }
 
-// ApplyRetentionPolicies deletes logs older than each tenant's retention window.
-// Called from StartScheduler periodically.
+// ApplyRetentionPolicies deletes time-series rows older than each tenant's
+// configured retention window. Uses a batched DELETE loop (1 000 rows at a
+// time) to avoid long table locks during large purges.
+// Called from StartScheduler nightly.
 func ApplyRetentionPolicies() {
 	rows, err := database.DB.Query(`
 		SELECT tenant_id, retention_days FROM log_retention_policies
@@ -539,12 +541,75 @@ func ApplyRetentionPolicies() {
 
 	for rows.Next() {
 		var tenantID, days int
-		if rows.Scan(&tenantID, &days) == nil {
-			database.DB.Exec(`
-				DELETE FROM endpoint_logs
-				WHERE agent_id IN (SELECT id FROM agents WHERE tenant_id=$1)
-				  AND collected_at < NOW() - ($2 * INTERVAL '1 day')
-			`, tenantID, days)
+		if rows.Scan(&tenantID, &days) != nil {
+			continue
+		}
+		applyRetentionForTenant(tenantID, days)
+	}
+}
+
+// applyRetentionForTenant purges all time-series tables for one tenant.
+// Each table is purged in 1 000-row batches to cap lock duration.
+func applyRetentionForTenant(tenantID, days int) {
+	const batchSize = 1000
+
+	// endpoint_logs — joined via agents (no direct tenant_id column).
+	deleteInBatches(batchSize, func() (int64, error) {
+		r, err := database.DB.Exec(`
+			DELETE FROM endpoint_logs
+			WHERE ctid IN (
+				SELECT l.ctid FROM endpoint_logs l
+				JOIN agents a ON a.id = l.agent_id
+				WHERE a.tenant_id = $1
+				  AND l.collected_at < NOW() - ($2 * INTERVAL '1 day')
+				LIMIT $3
+			)
+		`, tenantID, days, batchSize)
+		if err != nil {
+			return 0, err
+		}
+		return r.RowsAffected()
+	})
+
+	// Tables with a direct tenant_id column.
+	type directTable struct {
+		name    string
+		timeCol string
+	}
+	tables := []directTable{
+		{"network_connections", "created_at"},
+		{"network_anomalies", "detected_at"},
+		{"audit_events", "created_at"},
+		{"behavioral_findings", "scored_at"},
+		{"sigma_matches", "matched_at"},
+		{"mdm_commands", "queued_at"},
+	}
+	for _, t := range tables {
+		tbl, col := t.name, t.timeCol
+		deleteInBatches(batchSize, func() (int64, error) {
+			r, err := database.DB.Exec(
+				`DELETE FROM `+tbl+` WHERE ctid IN (`+
+					`SELECT ctid FROM `+tbl+
+					` WHERE tenant_id = $1`+
+					` AND `+col+` < NOW() - ($2 * INTERVAL '1 day')`+
+					` LIMIT $3)`,
+				tenantID, days, batchSize,
+			)
+			if err != nil {
+				return 0, err
+			}
+			return r.RowsAffected()
+		})
+	}
+}
+
+// deleteInBatches calls del() repeatedly until it deletes fewer than
+// batchSize rows, indicating the backlog is clear. Stops on error.
+func deleteInBatches(batchSize int, del func() (int64, error)) {
+	for {
+		n, err := del()
+		if err != nil || n < int64(batchSize) {
+			return
 		}
 	}
 }

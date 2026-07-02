@@ -142,6 +142,47 @@ services:
         limits:
           memory: 256m
 
+  # PgBouncer connection pooler — sits between the backend and Postgres.
+  # The backend's DB_HOST points here (port 6432) instead of directly at
+  # postgres:5432. Transaction pooling mode: a server connection is held only
+  # for the duration of a single transaction, allowing many more concurrent
+  # backend goroutines than Postgres can handle with per-connection limits.
+  pgbouncer:
+    image: bitnami/pgbouncer:1.23.1
+    container_name: xcloak-pgbouncer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: "5432"
+      POSTGRESQL_USERNAME: ${DB_USER:-xcloak}
+      POSTGRESQL_PASSWORD: ${DB_PASSWORD:-xcloak}
+      POSTGRESQL_DATABASE: ${DB_NAME:-ngfw}
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: "150"
+      PGBOUNCER_DEFAULT_POOL_SIZE: "20"
+      PGBOUNCER_MIN_POOL_SIZE: "5"
+      PGBOUNCER_RESERVE_POOL_SIZE: "5"
+      PGBOUNCER_RESERVE_POOL_TIMEOUT: "3"
+      PGBOUNCER_QUERY_WAIT_TIMEOUT: "5"
+      PGBOUNCER_SERVER_IDLE_TIMEOUT: "300"
+      PGBOUNCER_AUTH_TYPE: md5
+      PGBOUNCER_LOG_CONNECTIONS: "0"
+      PGBOUNCER_LOG_DISCONNECTIONS: "0"
+    ports:
+      - "6432:6432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${DB_USER:-xcloak}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 32m
+
   # ── Application ───────────────────────────────────────────────
 
   backend:
@@ -151,11 +192,15 @@ services:
     container_name: xcloak-backend
     restart: unless-stopped
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
     env_file: .env
+    environment:
+      # Route all DB traffic through PgBouncer.
+      DB_HOST: pgbouncer
+      DB_PORT: "6432"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

@@ -116,6 +116,29 @@ func TestRequireAuth_RejectsInvalidTokenCookie(t *testing.T) {
 	}
 }
 
+func TestRequireAuth_RejectsQueryParamToken(t *testing.T) {
+	// ?token= query param must no longer be accepted — callers must use
+	// Authorization header or httpOnly cookie.
+	validToken, err := auth.GenerateJWT(5, "eve", "analyst", 1, false)
+	if err != nil {
+		t.Fatalf("GenerateJWT: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/protected", RequireAuth(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected?token="+validToken, nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("?token= query param should be rejected, got %d (want 401)", w.Code)
+	}
+}
+
 func TestRequireAuth_AuthHeaderWinsCookieLoses(t *testing.T) {
 	// Authorization header is checked before the cookie — a valid header token
 	// plus an invalid cookie must still succeed (header wins, cookie never tried).

@@ -1,8 +1,36 @@
+# ── Secrets & local config ────────────────────────────────────────────────────
 .env
+*.env
 prometheus/metrics_token
 backups/
-# Build artifacts
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
 **/tmp/main
 **/tmp/build-errors.log
 tmp/
-*.env
+
+# ── Compiled binaries — never commit ─────────────────────────────────────────
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# eBPF compiled objects
+*.o
+# Go build output
+dist/
+**/dist/
+*.out
+
+# ── Agent runtime files ───────────────────────────────────────────────────────
+**/agent.token
+
+# ── OS noise ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo

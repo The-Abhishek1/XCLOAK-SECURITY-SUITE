@@ -25,12 +25,6 @@ func RequireAuth() gin.HandlerFunc {
 			}
 		}
 
-		// 3. Fall back to ?token= query param — kept for backward compatibility
-		//    with non-browser clients that can't set headers or cookies.
-		if tokenString == "" {
-			tokenString = c.Query("token")
-		}
-
 		if tokenString == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 			c.Abort()
@@ -59,7 +53,7 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 3. Check blacklist (revoked on logout).
+		// 3. Check revocation list (revoked on logout).
 		if services.IsRevoked(tokenString) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked — please log in again"})
 			c.Abort()
