@@ -537,11 +537,48 @@ func SetRetentionDays(tenantID, days int) error {
 // EnsureNextMonthPartition creates the endpoint_logs partition for next month
 // if it doesn't already exist. Called monthly from StartScheduler so inserts
 // never fall through to the default/legacy partition.
+//
+// This function is intentionally self-contained: it checks whether
+// endpoint_logs is a partitioned table (relkind='p') before acting, so it
+// is a no-op when migration 52 hasn't been applied yet. It does not rely on
+// the create_endpoint_logs_partition PL/pgSQL function to avoid a failure
+// dependency on that function existing.
 func EnsureNextMonthPartition() {
-	nextMonth := time.Now().AddDate(0, 1, 0)
-	_, err := database.DB.Exec(`SELECT create_endpoint_logs_partition($1)`, nextMonth)
+	// No-op when endpoint_logs hasn't been converted to a partitioned table.
+	var relkind string
+	if err := database.DB.QueryRow(
+		`SELECT relkind FROM pg_class
+		 WHERE relname='endpoint_logs' AND relnamespace='public'::regnamespace`,
+	).Scan(&relkind); err != nil || relkind != "p" {
+		return
+	}
+
+	next := time.Now().AddDate(0, 1, 0)
+	start := time.Date(next.Year(), next.Month(), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	partName := fmt.Sprintf("endpoint_logs_%s", start.Format("2006_01"))
+
+	// Check whether this month's partition already exists.
+	var exists bool
+	database.DB.QueryRow(
+		`SELECT EXISTS(
+			SELECT 1 FROM pg_class
+			WHERE relname=$1 AND relnamespace='public'::regnamespace
+		)`, partName,
+	).Scan(&exists)
+	if exists {
+		return
+	}
+
+	_, err := database.DB.Exec(fmt.Sprintf(
+		`CREATE TABLE %s PARTITION OF endpoint_logs
+		 FOR VALUES FROM ('%s') TO ('%s')`,
+		partName, start.Format("2006-01-02"), end.Format("2006-01-02"),
+	))
 	if err != nil {
-		slog.Warn("partition maintenance failed", "err", err)
+		slog.Warn("partition maintenance failed", "partition", partName, "err", err)
+	} else {
+		slog.Info("created endpoint_logs partition", "partition", partName)
 	}
 }
 

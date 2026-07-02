@@ -47,12 +47,20 @@ func Migrate() error {
 		// force version." Force the version to clear the dirty flag and retry.
 		var dirtyErr migrate.ErrDirty
 		if errors.As(err, &dirtyErr) {
-			slog.Warn("dirty migration state detected — forcing version and retrying",
-				"version", dirtyErr.Version)
-			if ferr := m.Force(dirtyErr.Version); ferr != nil {
-				return fmt.Errorf("forcing migration version %d: %w", dirtyErr.Version, ferr)
+			slog.Warn("dirty migration state detected — rewinding and retrying",
+				"dirty_version", dirtyErr.Version)
+			// Force to version-1 so the dirty migration is re-run from scratch.
+			// All XCloak migrations are idempotent (CREATE IF NOT EXISTS guards),
+			// so re-running is safe even if the migration partially applied before
+			// being interrupted.
+			prev := dirtyErr.Version - 1
+			if prev < 0 {
+				prev = 0
 			}
-			// Retry the up migration now that dirty is cleared.
+			if ferr := m.Force(prev); ferr != nil {
+				return fmt.Errorf("forcing migration version %d: %w", prev, ferr)
+			}
+			// Re-run from the forced version.
 			if rerr := m.Up(); rerr != nil && !errors.Is(rerr, migrate.ErrNoChange) {
 				return fmt.Errorf("applying migrations after force: %w", rerr)
 			}
