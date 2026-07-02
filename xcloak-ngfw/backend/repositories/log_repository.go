@@ -5,6 +5,10 @@ import (
 	"xcloak-ngfw/models"
 )
 
+// PostSaveHook is called after a successful SaveLogs commit.
+// Injected from main.go to avoid the repositories → services import cycle.
+var PostSaveHook func(logs []models.Log)
+
 // SaveLogs inserts log lines with their normalised parsed_fields JSON.
 // The parsed_fields column is populated by the normalizer in log_service.go
 // before this function is called.
@@ -27,10 +31,11 @@ func SaveLogs(logs []models.Log) error {
 		}
 		_, err := tx.Exec(`
 			INSERT INTO endpoint_logs
-			  (agent_id, log_source, log_message, parsed_fields)
-			VALUES ($1, $2, $3, $4::jsonb)
+			  (agent_id, tenant_id, log_source, log_message, parsed_fields)
+			VALUES ($1, $2, $3, $4, $5::jsonb)
 		`,
 			log.AgentID,
+			log.TenantID,
 			log.LogSource,
 			log.LogMessage,
 			pf,
@@ -40,7 +45,15 @@ func SaveLogs(logs []models.Log) error {
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Non-blocking ES indexing after the Postgres commit succeeds.
+	if PostSaveHook != nil {
+		go PostSaveHook(logs)
+	}
+	return nil
 }
 
 // SearchLogs does a field-level search against parsed_fields JSONB.

@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,11 +17,20 @@ import (
 	"xcloak-agent/config"
 )
 
+// AgentReleasePublicKey is the ed25519 public key (base64url, no padding)
+// used to verify agent release signatures. Set at build time via:
+//
+//	go build -ldflags "-X xcloak-agent/agent.AgentReleasePublicKey=<pubkey>"
+//
+// When empty, signature verification is skipped (development builds only).
+var AgentReleasePublicKey string
+
 const selfUpdateCheckInterval = 6 * time.Hour
 
 type agentRelease struct {
 	Version     string `json:"version"`
 	SHA256      string `json:"sha256"`
+	Signature   string `json:"signature"`    // base64url ed25519 over SHA-256 of binary
 	DownloadURL string `json:"download_url"`
 }
 
@@ -81,12 +92,26 @@ func applyUpdate(rel agentRelease) error {
 	}
 	defer os.Remove(tmpPath) // no-op once replaceAndRestart successfully renames it away
 
-	sum, err := fileSHA256(tmpPath)
+	content, err := os.ReadFile(tmpPath)
 	if err != nil {
-		return fmt.Errorf("hash downloaded binary: %w", err)
+		return fmt.Errorf("read downloaded binary: %w", err)
 	}
+
+	// ── SHA-256 integrity check ───────────────────────────────────────────
+	sum := sha256Hex(content)
 	if !strings.EqualFold(sum, rel.SHA256) {
-		return fmt.Errorf("checksum mismatch (got %s, server published %s) — refusing to apply", sum, rel.SHA256)
+		return fmt.Errorf("checksum mismatch (got %s, expected %s) — refusing to apply", sum, rel.SHA256)
+	}
+
+	// ── ed25519 signature verification ────────────────────────────────────
+	if AgentReleasePublicKey != "" {
+		if rel.Signature == "" {
+			return fmt.Errorf("server provided no signature but this binary was built with signing required")
+		}
+		if err := verifyReleaseSignature(content, rel.Signature, AgentReleasePublicKey); err != nil {
+			return fmt.Errorf("signature verification failed: %w", err)
+		}
+		fmt.Println("[self-update] signature verified OK")
 	}
 
 	if err := os.Chmod(tmpPath, 0755); err != nil {
@@ -94,6 +119,30 @@ func applyUpdate(rel agentRelease) error {
 	}
 
 	return replaceAndRestart(tmpPath, rel.Version)
+}
+
+func sha256Hex(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
+func verifyReleaseSignature(content []byte, sigB64, pubKeyB64 string) error {
+	pubKeyBytes, err := base64.RawURLEncoding.DecodeString(pubKeyB64)
+	if err != nil {
+		return fmt.Errorf("embedded public key: invalid base64url: %w", err)
+	}
+	if len(pubKeyBytes) != ed25519.PublicKeySize {
+		return fmt.Errorf("embedded public key: expected 32 bytes, got %d", len(pubKeyBytes))
+	}
+	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
+	if err != nil {
+		return fmt.Errorf("release signature: invalid base64url: %w", err)
+	}
+	digest := sha256.Sum256(content)
+	if !ed25519.Verify(pubKeyBytes, digest[:], sigBytes) {
+		return fmt.Errorf("ed25519 signature does not match binary content")
+	}
+	return nil
 }
 
 func downloadToTemp(url string) (string, error) {
@@ -126,18 +175,13 @@ func downloadToTemp(url string) (string, error) {
 	return tmp.Name(), nil
 }
 
+// fileSHA256 is retained for use by copyExecutableFile callers.
 func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return sha256Hex(data), nil
 }
 
 // copyExecutableFile is used by self_update_linux.go to keep a backup of

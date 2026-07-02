@@ -33,6 +33,17 @@ func StartScheduler() {
 			ApplyRetentionPolicies()
 		}
 	}()
+	// Ensure the next-month endpoint_logs partition exists.
+	// CREATE FUNCTION is idempotent so daily cadence is safe.
+	go func() {
+		EnsureNextMonthPartition()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			EnsureNextMonthPartition()
+		}
+	}()
+
 	StartBehavioralScorer()
 	StartProcessNoveltyDetector()
 }

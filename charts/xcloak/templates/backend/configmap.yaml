@@ -40,9 +40,14 @@ data:
   REDIS_ADDR: "{{ .Values.redisExternal.host }}:{{ .Values.redisExternal.port }}"
   {{- end }}
 
-  {{- if .Values.kafkaExternal.enabled }}
+  {{- if .Values.kafka.enabled }}
   KAFKA_ENABLED: "true"
-  KAFKA_BROKER: {{ .Values.kafkaExternal.brokers | quote }}
+  KAFKA_BROKERS: {{ printf "%s-kafka-headless:9092,%s-kafka-headless:9092,%s-kafka-headless:9092"
+    (include "xcloak.fullname" .) (include "xcloak.fullname" .) (include "xcloak.fullname" .) | quote }}
+  KAFKA_REQUIRE_ALL_ACKS: "true"
+  {{- else if .Values.kafkaExternal.enabled }}
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKERS: {{ .Values.kafkaExternal.brokers | quote }}
   {{- else }}
   KAFKA_ENABLED: "false"
   {{- end }}

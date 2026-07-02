@@ -15,7 +15,7 @@ import (
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/logger"
 	"xcloak-ngfw/middleware"
-	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 	"xcloak-ngfw/routes"
 	"xcloak-ngfw/secrets"
 	"xcloak-ngfw/services"
@@ -91,10 +91,20 @@ func main() {
 	defer services.CloseKafka()
 	go services.StartIOCMatchConsumer()
 
-	// Wire WebSocket alert broadcaster (avoids import cycle: services ↔ api).
-	services.RegisterBroadcastFn(func(alert models.Alert) {
-		api.BroadcastAlert(alert)
-	})
+	// Wire WebSocket broadcaster through Redis pub/sub so all API replicas
+	// deliver alerts to their own connected clients (multi-replica safety).
+	// RegisterLocalBroadcastFn injects the in-process hub callback; the
+	// broadcastFn registered here publishes to Redis (falls back to local
+	// when Redis is unavailable).
+	// ── Elasticsearch integration ─────────────────────────────────────────
+	services.InitElasticsearch()
+	repositories.PostSaveHook = services.IndexLogsToES
+
+	// Wire WebSocket broadcaster through Redis pub/sub so all API replicas
+	// deliver alerts to their own connected clients (multi-replica safety).
+	services.RegisterLocalBroadcastFn(api.BroadcastRaw)
+	services.RegisterBroadcastFn(services.PublishAlertBroadcast)
+	services.StartWSBroadcastSubscriber()
 
 	// Start background scheduler for recurring agent tasks.
 	go services.StartScheduler()

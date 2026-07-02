@@ -3,8 +3,9 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,19 +41,38 @@ var (
 
 // InitKafka reads env vars and opens writers for all topics.
 // Call once from main.go after env is loaded.
+//
+// Production hardening:
+//   KAFKA_BROKERS — comma-separated broker list (3 for HA; single allowed)
+//   KAFKA_REQUIRE_ALL_ACKS=true — use RequireAll (wait for min.insync.replicas)
+//     instead of RequireOne; set alongside min.insync.replicas=2 on the broker
 func InitKafka() {
-	broker := os.Getenv("KAFKA_BROKER")
-	if broker == "" {
-		broker = "localhost:9092"
-	}
-
-	// Check if Kafka is enabled
 	if os.Getenv("KAFKA_ENABLED") != "true" {
-		fmt.Println("[Kafka] KAFKA_ENABLED != true — event bus disabled")
+		slog.Info("Kafka: disabled (KAFKA_ENABLED != true)")
 		return
 	}
 
-	kafkaBrokers = []string{broker}
+	// Support comma-separated broker list for 3-node clusters.
+	brokersEnv := os.Getenv("KAFKA_BROKERS")
+	if brokersEnv == "" {
+		brokersEnv = os.Getenv("KAFKA_BROKER") // backwards compat
+	}
+	if brokersEnv == "" {
+		brokersEnv = "localhost:9092"
+	}
+	for _, b := range strings.Split(brokersEnv, ",") {
+		if b = strings.TrimSpace(b); b != "" {
+			kafkaBrokers = append(kafkaBrokers, b)
+		}
+	}
+
+	// RequireAll blocks until all in-sync replicas have acknowledged.
+	// Required when min.insync.replicas=2 is set on the cluster.
+	acks := kafka.RequireOne
+	if os.Getenv("KAFKA_REQUIRE_ALL_ACKS") == "true" {
+		acks = kafka.RequireAll
+	}
+
 	kafkaEnabled = true
 
 	topics := []string{
@@ -68,13 +88,18 @@ func InitKafka() {
 			Addr:                   kafka.TCP(kafkaBrokers...),
 			Topic:                  topic,
 			Balancer:               &kafka.LeastBytes{},
-			WriteTimeout:           5 * time.Second,
-			RequiredAcks:           kafka.RequireOne,
+			WriteTimeout:           10 * time.Second,
+			RequiredAcks:           acks,
 			AllowAutoTopicCreation: true,
+			// Async batching: improves throughput for high-volume topics.
+			// Batch size and flush interval are intentionally conservative;
+			// tune KAFKA_BATCH_BYTES and KAFKA_BATCH_TIMEOUT for the cluster.
+			BatchSize:    100,
+			BatchTimeout: 10 * time.Millisecond,
 		}
 	}
 
-	fmt.Printf("[Kafka] Connected to %s — topics: %v\n", broker, topics)
+	slog.Info("Kafka: connected", "brokers", kafkaBrokers, "acks", acks)
 }
 
 // CloseKafka flushes and closes all writers. Call from main defer.
@@ -83,7 +108,7 @@ func CloseKafka() {
 	defer kafkaMu.Unlock()
 	for topic, w := range kafkaWriters {
 		if err := w.Close(); err != nil {
-			fmt.Printf("[Kafka] Close error on %s: %v\n", topic, err)
+			slog.Warn("kafka: close error", "topic", topic, "err", err)
 		}
 	}
 }
@@ -129,7 +154,7 @@ func publish(topic, eventType string, payload any) {
 			Value: data,
 		})
 		if err != nil {
-			fmt.Printf("[Kafka] Write error topic=%s event=%s: %v\n", topic, eventType, err)
+			slog.Warn("kafka: write error", "topic", topic, "event_type", eventType, "err", err)
 		}
 	}()
 }

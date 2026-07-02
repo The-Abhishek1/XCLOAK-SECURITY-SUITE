@@ -41,8 +41,21 @@ type NotifPayload struct {
 }
 
 // BroadcastAlert is called by alert_service.go when a new alert is created.
-// Non-blocking — drops if client send buffer is full.
+// It publishes to Redis so all replicas deliver the alert to their local clients.
+// With Redis unavailable it falls back to local-only delivery.
 func BroadcastAlert(alert models.Alert) {
+	services.PublishAlertBroadcast(alert)
+}
+
+// BroadcastRaw delivers an already-marshalled payload to all WebSocket clients
+// connected to THIS replica. Registered with services.RegisterLocalBroadcastFn
+// so the Redis subscriber loop can call back into the hub without an import cycle.
+func BroadcastRaw(data []byte) {
+	// Wrap raw alert JSON into our NotifPayload envelope.
+	var alert models.Alert
+	if err := json.Unmarshal(data, &alert); err != nil {
+		return
+	}
 	payload := NotifPayload{
 		Type:      "alert",
 		ID:        alert.ID,
@@ -52,8 +65,8 @@ func BroadcastAlert(alert models.Alert) {
 		Message:   alert.LogMessage,
 		Timestamp: time.Now(),
 	}
-	data, _ := json.Marshal(payload)
-	notifHub.broadcast(data)
+	out, _ := json.Marshal(payload)
+	notifHub.broadcast(out)
 }
 
 func (h *NotificationHub) broadcast(data []byte) {

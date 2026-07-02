@@ -209,12 +209,57 @@ redisExternal:
   port: 6379
   existingSecret: "" # key: password
 
-# Kafka and MinIO have no bundled option (see Chart.yaml comment — no free
-# Bitnami image currently available for either). Both are fully optional
-# from the app's own perspective (graceful degradation if unreachable), so
-# "disabled" is a completely supported, normal configuration, not a
-# fallback. Set enabled: true and fill in the rest only if you have an
-# external Kafka/S3-compatible store to point at.
+# ── Bundled Kafka (3-broker HA cluster) ──────────────────────────────────────
+# Uses the official bitnami/kafka Helm sub-chart (add to Chart.yaml with
+# condition: kafka.enabled). Disabled by default; enable for deployments that
+# need the full event-bus capability without an external broker.
+#
+# Production settings applied:
+#   - 3 replicas (anti-affinity: preferred, spreads across zones)
+#   - replicationFactor=3 on all XCloak topics
+#   - min.insync.replicas=2 (write acknowledged only after 2 replicas)
+#   - Backend uses RequireAll acks (KAFKA_REQUIRE_ALL_ACKS=true)
+kafka:
+  enabled: false
+  replicaCount: 3
+  image:
+    repository: bitnami/kafka
+    tag: "3.7"
+    pullPolicy: IfNotPresent
+  kraft:
+    enabled: true    # KRaft mode — no ZooKeeper dependency
+  listeners:
+    client:
+      protocol: PLAINTEXT
+    interbroker:
+      protocol: PLAINTEXT
+  extraConfig: |
+    default.replication.factor=3
+    min.insync.replicas=2
+    offsets.topic.replication.factor=3
+    transaction.state.log.replication.factor=3
+    transaction.state.log.min.isr=2
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: topology.kubernetes.io/zone
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: kafka
+
+# External Kafka (use when kafka.enabled=false and you provide your own broker).
 kafkaExternal:
   enabled: false
   brokers: ""

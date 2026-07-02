@@ -9,16 +9,20 @@ import (
 // per platform, republishing replaces it rather than accumulating history.
 func PublishAgentRelease(r models.AgentRelease) (*models.AgentRelease, error) {
 	err := database.DB.QueryRow(`
-		INSERT INTO agent_releases (platform, version, sha256, download_url, created_by)
-		VALUES ($1,$2,$3,$4,$5)
+		INSERT INTO agent_releases
+			(platform, version, sha256, signature, public_key_fingerprint, download_url, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		ON CONFLICT (platform) DO UPDATE SET
-			version = EXCLUDED.version,
-			sha256 = EXCLUDED.sha256,
-			download_url = EXCLUDED.download_url,
-			created_by = EXCLUDED.created_by,
-			created_at = now()
+			version               = EXCLUDED.version,
+			sha256                = EXCLUDED.sha256,
+			signature             = EXCLUDED.signature,
+			public_key_fingerprint = EXCLUDED.public_key_fingerprint,
+			download_url          = EXCLUDED.download_url,
+			created_by            = EXCLUDED.created_by,
+			created_at            = now()
 		RETURNING id, created_at
-	`, r.Platform, r.Version, r.SHA256, r.DownloadURL, r.CreatedBy).Scan(&r.ID, &r.CreatedAt)
+	`, r.Platform, r.Version, r.SHA256, r.Signature, r.PublicKeyFingerprint,
+		r.DownloadURL, r.CreatedBy).Scan(&r.ID, &r.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +32,9 @@ func PublishAgentRelease(r models.AgentRelease) (*models.AgentRelease, error) {
 // GetAgentReleases returns every platform's current release.
 func GetAgentReleases() ([]models.AgentRelease, error) {
 	rows, err := database.DB.Query(`
-		SELECT id, platform, version, sha256, download_url, created_by, created_at
+		SELECT id, platform, version, sha256,
+		       COALESCE(signature,''), COALESCE(public_key_fingerprint,''),
+		       download_url, created_by, created_at
 		FROM agent_releases ORDER BY platform
 	`)
 	if err != nil {
@@ -39,7 +45,9 @@ func GetAgentReleases() ([]models.AgentRelease, error) {
 	var out []models.AgentRelease
 	for rows.Next() {
 		var r models.AgentRelease
-		if err := rows.Scan(&r.ID, &r.Platform, &r.Version, &r.SHA256, &r.DownloadURL, &r.CreatedBy, &r.CreatedAt); err == nil {
+		if err := rows.Scan(&r.ID, &r.Platform, &r.Version, &r.SHA256,
+			&r.Signature, &r.PublicKeyFingerprint,
+			&r.DownloadURL, &r.CreatedBy, &r.CreatedAt); err == nil {
 			out = append(out, r)
 		}
 	}
@@ -52,9 +60,13 @@ func GetAgentReleases() ([]models.AgentRelease, error) {
 func GetAgentReleaseByPlatform(platform string) (*models.AgentRelease, error) {
 	var r models.AgentRelease
 	err := database.DB.QueryRow(`
-		SELECT id, platform, version, sha256, download_url, created_by, created_at
+		SELECT id, platform, version, sha256,
+		       COALESCE(signature,''), COALESCE(public_key_fingerprint,''),
+		       download_url, created_by, created_at
 		FROM agent_releases WHERE platform = $1
-	`, platform).Scan(&r.ID, &r.Platform, &r.Version, &r.SHA256, &r.DownloadURL, &r.CreatedBy, &r.CreatedAt)
+	`, platform).Scan(&r.ID, &r.Platform, &r.Version, &r.SHA256,
+		&r.Signature, &r.PublicKeyFingerprint,
+		&r.DownloadURL, &r.CreatedBy, &r.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
