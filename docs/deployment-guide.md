@@ -1,0 +1,685 @@
+# XCloak Deployment Guide
+
+For operators deploying and maintaining XCloak in production.
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Quick Start (Docker Compose)](#quick-start-docker-compose)
+3. [Production Deployment (Kubernetes / Helm)](#production-deployment-kubernetes--helm)
+4. [Environment Variables Reference](#environment-variables-reference)
+5. [Database](#database)
+6. [Redis](#redis)
+7. [Kafka](#kafka)
+8. [Elasticsearch](#elasticsearch)
+9. [MinIO (Audit Log)](#minio-audit-log)
+10. [TLS](#tls)
+11. [PgBouncer](#pgbouncer)
+12. [HashiCorp Vault](#hashicorp-vault)
+13. [Observability](#observability)
+14. [Backups & Recovery](#backups--recovery)
+15. [Upgrades](#upgrades)
+16. [Tenant Provisioning](#tenant-provisioning)
+17. [Agent Release Management](#agent-release-management)
+18. [Troubleshooting](#troubleshooting)
+
+---
+
+## Prerequisites
+
+| Component | Minimum version | Notes |
+|-----------|----------------|-------|
+| Go | 1.21 | Backend |
+| Node.js | 18 | Frontend |
+| PostgreSQL | 16 | Partitioning and RLS features required |
+| Redis | 7 | Token revocation, rate limiting, pub/sub |
+| Docker | 24 | For the observability stack |
+
+Optional but recommended for production:
+- Apache Kafka 3.x — event bus for IOC matching, async tasks
+- Elasticsearch / OpenSearch 8.x — log search at scale
+- MinIO — immutable audit export
+- HashiCorp Vault — secret management, TOTP transit engine
+
+---
+
+## Quick Start (Docker Compose)
+
+For evaluation or small deployments.
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
+cd XCLOAK-SECURITY-SUITE
+
+cd xcloak-ngfw/backend
+cp .env.example .env
+```
+
+Edit `.env` — at minimum set:
+
+```env
+DB_PASSWORD=<strong-password>
+JWT_SECRET=<openssl rand -hex 32>
+METRICS_TOKEN=<openssl rand -hex 32>
+```
+
+### 2. Start the observability stack
+
+```bash
+cd XCLOAK-SECURITY-SUITE
+docker compose up -d
+```
+
+This starts PostgreSQL, Redis, Kafka, Kafka UI, Prometheus, Grafana, and MinIO.
+
+### 3. Start the backend
+
+```bash
+cd xcloak-ngfw/backend
+go run main.go
+# or with hot reload:
+air
+```
+
+Migrations run automatically on startup. On first start you will see ~55 migration steps logged.
+
+### 4. Start the frontend
+
+```bash
+cd xcloak-ngfw/frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. The first registered user becomes the tenant admin.
+
+### 5. Enroll the first agent
+
+```bash
+cd xcloak-agent
+go build -o xcloak-agent ./main.go
+./xcloak-agent
+```
+
+Generate an install token from **Settings → Integrations → Install Tokens** in the UI, then paste it when the agent prompts on first run. The token is single-use. After registration the agent saves its token and reconnects automatically.
+
+---
+
+## Production Deployment (Kubernetes / Helm)
+
+### Add the chart
+
+```bash
+helm repo add xcloak https://charts.xcloak.io  # or use the local charts/ directory
+helm repo update
+```
+
+### Minimal values file
+
+```yaml
+# values-prod.yaml
+backend:
+  replicaCount: 3
+  image:
+    repository: ghcr.io/the-abhishek1/xcloak-backend
+    tag: "latest"
+  env:
+    DB_SSLMODE: require
+    LLM_PROVIDER: anthropic
+    AUDIT_EXPORT_RETENTION_DAYS: "365"
+  secrets:
+    existingSecret: xcloak-secrets   # see below
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/the-abhishek1/xcloak-frontend
+    tag: "latest"
+
+postgresql:
+  enabled: true
+  auth:
+    username: xcloak
+    database: ngfw
+    existingSecret: xcloak-pg-secret  # key: password
+
+redis:
+  enabled: true
+
+pgbouncer:
+  enabled: true
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: xcloak.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: xcloak-tls
+      hosts:
+        - xcloak.yourdomain.com
+```
+
+### Create secrets
+
+```bash
+kubectl create secret generic xcloak-secrets \
+  --from-literal=JWT_SECRET=$(openssl rand -hex 32) \
+  --from-literal=METRICS_TOKEN=$(openssl rand -hex 32) \
+  --from-literal=DB_PASSWORD=<strong-password>
+
+kubectl create secret generic xcloak-pg-secret \
+  --from-literal=password=<strong-password>
+```
+
+### Install
+
+```bash
+helm install xcloak ./charts/xcloak -f values-prod.yaml -n xcloak --create-namespace
+```
+
+### Upgrade
+
+```bash
+helm upgrade xcloak ./charts/xcloak -f values-prod.yaml -n xcloak
+```
+
+Migrations run automatically in an init container on every upgrade.
+
+### High availability
+
+The backend is stateless — scale horizontally freely. Redis pub/sub (enabled by default) ensures WebSocket alerts reach clients regardless of which replica they are connected to.
+
+```yaml
+backend:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+```
+
+---
+
+## Environment Variables Reference
+
+### Required
+
+| Variable | Description |
+|----------|-------------|
+| `DB_HOST` | PostgreSQL host |
+| `DB_PORT` | PostgreSQL port (default: 5432) |
+| `DB_USER` | Database user |
+| `DB_PASSWORD` | Database password |
+| `DB_NAME` | Database name |
+| `DB_SSLMODE` | `disable` / `require` / `verify-full` |
+| `JWT_SECRET` | HS256 signing key — minimum 32 bytes of entropy |
+| `METRICS_TOKEN` | Bearer token for `/metrics` endpoint |
+| `CORS_ALLOWED_ORIGINS` | Frontend URL (e.g. `https://xcloak.yourdomain.com`) |
+
+### Redis
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_ADDR` | `localhost:6379` | Redis address |
+| `REDIS_PASSWORD` | _(empty)_ | Redis password |
+
+### AI
+
+| Variable | Description |
+|----------|-------------|
+| `LLM_PROVIDER` | `ollama` or `anthropic` |
+| `OLLAMA_URL` | Ollama base URL (if provider=ollama) |
+| `OLLAMA_MODEL` | Model name (e.g. `qwen2.5:3b`) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (if provider=anthropic) |
+| `ANTHROPIC_MODEL` | Model ID (default: `claude-sonnet-4-6`) |
+
+### Kafka
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAFKA_ENABLED` | `false` | Set to `true` to enable |
+| `KAFKA_BROKERS` | `localhost:9092` | Comma-separated broker list |
+| `KAFKA_REQUIRE_ALL_ACKS` | `false` | Set `true` for `min.insync.replicas=2` clusters |
+
+### Elasticsearch
+
+| Variable | Description |
+|----------|-------------|
+| `ELASTICSEARCH_URL` | ES/OpenSearch URL (e.g. `http://elasticsearch:9200`) |
+| `ELASTICSEARCH_USERNAME` | Optional basic auth username |
+| `ELASTICSEARCH_PASSWORD` | Optional basic auth password |
+
+### MinIO
+
+| Variable | Description |
+|----------|-------------|
+| `MINIO_ENDPOINT` | MinIO endpoint (e.g. `minio:9000`) |
+| `MINIO_ACCESS_KEY` | Access key |
+| `MINIO_SECRET_KEY` | Secret key |
+| `MINIO_AUDIT_BUCKET` | Bucket name for audit exports |
+| `MINIO_USE_SSL` | `true` / `false` |
+| `AUDIT_EXPORT_RETENTION_DAYS` | Days to retain audit exports (default: 365) |
+
+### TLS (backend)
+
+| Variable | Description |
+|----------|-------------|
+| `TLS_CERT_FILE` | Path to TLS certificate PEM |
+| `TLS_KEY_FILE` | Path to TLS private key PEM |
+
+Leave both empty to run plain HTTP (terminate TLS at ingress/load balancer instead).
+
+### Agent release signing
+
+| Variable | Description |
+|----------|-------------|
+| `AGENT_RELEASE_SIGNING_KEY` | base64url-encoded ed25519 seed (32 bytes) — used to sign agent releases |
+| `AGENT_RELEASE_PUBLIC_KEY` | base64url-encoded ed25519 public key — stored on server for fingerprinting |
+| `AGENT_RELEASE_REQUIRE_SIGNATURE` | `true` to reject unsigned release uploads |
+
+Generate a keypair:
+
+```bash
+# Generate 32-byte seed
+SEED=$(openssl rand 32 | base64 | tr '+/' '-_' | tr -d '=')
+echo "AGENT_RELEASE_SIGNING_KEY=$SEED"
+
+# Derive public key (Go snippet)
+# The backend derives the public key from the seed automatically.
+# To get the public key for embedding in agent builds:
+go run ./cmd/keygen/main.go  # if provided, or use the backend /api/platform/agent-releases key info
+```
+
+### Logging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `LOG_FORMAT` | `text` | `json` for structured production logging |
+
+Set `LOG_FORMAT=json` in production to integrate with log aggregators.
+
+### Vault
+
+| Variable | Description |
+|----------|-------------|
+| `VAULT_ADDR` | HashiCorp Vault address |
+| `VAULT_TOKEN` | Vault token (or use `existingSecret` in Helm) |
+
+---
+
+## Database
+
+### Migrations
+
+Migrations run automatically on backend startup via `golang-migrate`. The migration files are in `backend/database/migrations/`. There are 55 migrations as of the latest release.
+
+To run migrations manually:
+
+```bash
+migrate -path backend/database/migrations \
+        -database "postgres://xcloak:password@localhost/ngfw?sslmode=disable" up
+```
+
+### Row-Level Security
+
+RLS is enforced at the database level. Every query is scoped to the current tenant via `SET LOCAL app.tenant_id = $1` before execution. This is transparent to the application layer but means you **must** use PgBouncer in transaction mode (not session mode) to avoid GUC leaking across connections.
+
+### Partitioning
+
+The `endpoint_logs` table is partitioned by `collected_at` in monthly partitions (`endpoint_logs_2026_06`, etc.). The scheduler creates next-month's partition automatically each day. Pre-existing data was attached as the `endpoint_logs_legacy` DEFAULT partition.
+
+To manually create a partition for a given month:
+
+```sql
+SELECT create_endpoint_logs_partition('2026-08-01'::DATE);
+```
+
+### Retention
+
+Set retention per tenant from the UI at **Settings → Log Retention**. The nightly retention job deletes logs older than the configured number of days. For partitioned data, whole-month partitions are deleted as a single fast operation when the entire partition is past the retention window.
+
+---
+
+## Redis
+
+Redis is used for:
+- **Token revocation** — JWT blacklist on logout
+- **Rate limiting** — auth and API endpoints
+- **WebSocket pub/sub** — `xcloak:ws:alerts` channel for multi-replica alert broadcasting
+
+In production, use Redis Sentinel or Redis Cluster for HA. The `REDIS_ADDR` variable accepts a single address; for cluster/sentinel configure via the Helm `redis` section.
+
+---
+
+## Kafka
+
+Kafka is optional. When disabled (`KAFKA_ENABLED=false`) all event bus operations are silently no-oped — the platform degrades gracefully.
+
+### Production cluster (3-broker)
+
+Enable the bundled Kafka StatefulSet in Helm:
+
+```yaml
+kafka:
+  enabled: true      # spins up 3-broker KRaft cluster
+```
+
+The Helm chart configures:
+- `replication.factor=3` on all XCloak topics
+- `min.insync.replicas=2` — writes require 2 of 3 replicas to acknowledge
+- `KAFKA_REQUIRE_ALL_ACKS=true` in the backend — backend waits for all ISR acks
+
+For an external cluster, use `kafkaExternal.enabled=true` and set `kafkaExternal.brokers` to your broker list.
+
+### Topics
+
+| Topic | Purpose |
+|-------|---------|
+| `xcloak.alerts` | New alert events |
+| `xcloak.incidents` | Incident creation |
+| `xcloak.agent_tasks` | Task dispatch and completion |
+| `xcloak.audit` | Admin action audit stream |
+| `xcloak.fim_alerts` | File integrity violations |
+| `xcloak.yara_matches` | YARA signature matches |
+| `xcloak.ioc_match_jobs` | Async IOC matching queue |
+
+---
+
+## Elasticsearch
+
+Elasticsearch (or OpenSearch) is optional. When `ELASTICSEARCH_URL` is not set, all log search goes through PostgreSQL.
+
+When ES is configured:
+- Logs are dual-written: Postgres remains the source of truth; ES is indexed asynchronously (non-blocking goroutine) after the Postgres commit
+- Log search routes to ES first; falls back to Postgres if ES returns an error
+- One index per tenant: `xcloak-logs-<tenant_id>`
+- Index template `xcloak-logs` is registered on startup (idempotent)
+
+### OpenSearch compatibility
+
+The ES client uses the REST API only (no ES-specific SDK). OpenSearch 2.x is compatible — just set `ELASTICSEARCH_URL` to your OpenSearch endpoint.
+
+---
+
+## MinIO (Audit Log)
+
+Audit logs are exported to MinIO under Object Lock (GOVERNANCE mode). This means:
+- Exported objects cannot be deleted or modified until the retention period expires
+- Not even the MinIO root user can delete them before expiry
+- The export schedule is configurable per deployment; status is visible at **Audit → Export Status**
+
+Set up MinIO Object Lock when creating the bucket:
+
+```bash
+mc mb --with-lock minio/xcloak-audit-log
+mc retention set --default GOVERNANCE 365d minio/xcloak-audit-log
+```
+
+---
+
+## TLS
+
+### Option 1 — Terminate at ingress (recommended)
+
+Configure TLS in your ingress controller (nginx, Traefik, etc.) or load balancer. Leave `TLS_CERT_FILE` and `TLS_KEY_FILE` empty in the backend config.
+
+### Option 2 — Backend TLS
+
+Set `TLS_CERT_FILE` and `TLS_KEY_FILE` to the paths of your certificate and private key inside the container. The backend listens on HTTPS directly.
+
+```env
+TLS_CERT_FILE=/etc/xcloak/tls/tls.crt
+TLS_KEY_FILE=/etc/xcloak/tls/tls.key
+```
+
+In Helm, set `backend.tls.enabled=true` and provide a cert secret:
+
+```yaml
+backend:
+  tls:
+    enabled: true
+    secretName: xcloak-backend-tls
+```
+
+### Agent → Backend TLS
+
+Set `XCLOAK_CA_CERT_PATH` on the agent to the CA certificate path for TLS verification. Set `XCLOAK_INSECURE_SKIP_VERIFY=true` to disable verification (development only).
+
+---
+
+## PgBouncer
+
+PgBouncer sits between the backend and PostgreSQL. It pools connections and reduces connection overhead at scale (critical for 1,000+ agents sending concurrent log batches).
+
+**Required mode: transaction pooling** — session pooling breaks RLS because the `SET LOCAL app.tenant_id` GUC would persist across different tenants' requests.
+
+In Helm, enable PgBouncer:
+
+```yaml
+pgbouncer:
+  enabled: true
+  poolSize: 25        # connections per pool
+  maxClientConn: 500
+```
+
+The backend automatically routes through PgBouncer when `pgbouncer.enabled=true`.
+
+---
+
+## HashiCorp Vault
+
+Vault integration is optional. When enabled, it provides:
+- **KV secrets** — per-tenant integration credentials (OIDC client secrets, Slack tokens, etc.) stored in Vault rather than Postgres
+- **Transit engine** — TOTP secrets are encrypted/decrypted via Vault's transit engine instead of stored directly
+
+Enable in Helm:
+
+```yaml
+vault:
+  enabled: true
+  addr: https://vault.yourdomain.com
+  existingSecret: xcloak-vault-token  # key: token
+```
+
+The backend falls back to Postgres-only storage when Vault is disabled.
+
+---
+
+## Observability
+
+### Prometheus
+
+The backend exposes a `/metrics` endpoint gated by the `METRICS_TOKEN` bearer token.
+
+Add to your Prometheus scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: xcloak-backend
+    static_configs:
+      - targets: ['xcloak-backend:8080']
+    authorization:
+      credentials: <METRICS_TOKEN value>
+```
+
+### Grafana
+
+The Docker Compose stack includes a pre-configured Grafana at `http://localhost:3001` (admin/xcloak). Dashboards cover request rates, database query latency, Kafka lag, and alert throughput.
+
+In Kubernetes, configure Grafana via the `grafana` section of your `values.yaml`.
+
+### Structured logs
+
+Set `LOG_FORMAT=json` for JSON-structured logs compatible with any log aggregator (Loki, CloudWatch, Datadog, Splunk). Each log line includes `level`, `msg`, `time`, and contextual fields (`tenant_id`, `agent_id`, etc. where applicable).
+
+---
+
+## Backups & Recovery
+
+### Manual backup
+
+```bash
+./scripts/backup_db.sh
+# Output: backups/ngfw_YYYYMMDD_HHMMSS.sql.gz
+```
+
+### Automated daily backup
+
+Add to crontab:
+
+```
+0 2 * * * /path/to/xcloak/scripts/backup_db.sh >> /var/log/xcloak-backup.log 2>&1
+```
+
+Backups are pruned after `RETENTION_DAYS` days (default: 14). Set this in `scripts/backup_db.sh`.
+
+### Restore
+
+```bash
+# DESTRUCTIVE — drops all tables and restores from the backup
+./scripts/restore_db.sh backups/ngfw_20260630_020000.sql.gz
+```
+
+Always take a fresh backup before restoring.
+
+### Kubernetes / persistent volumes
+
+For Kubernetes deployments, back up the PostgreSQL PersistentVolume using your storage provider's snapshot feature (EBS snapshots, GCE disk snapshots, etc.) in addition to logical pg_dump backups.
+
+---
+
+## Upgrades
+
+1. Back up the database.
+2. Pull the new backend image (or build from source).
+3. Restart the backend — migrations run automatically on startup.
+4. Check `GET /api/health/deep` to confirm all subsystems are healthy.
+
+**Rolling upgrades** — the backend is stateless. In Kubernetes, a rolling update is safe: new replicas come up (running new migrations) while old replicas continue serving. Because migrations are additive (no column drops or renames), old and new replicas can coexist during the rollout window.
+
+**Migration squashing** — do not squash or remove migration files. Always add new migrations rather than editing existing ones.
+
+---
+
+## Tenant Provisioning
+
+XCloak supports multi-tenancy. Each tenant is an isolated environment with its own agents, alerts, rules, users, and configuration.
+
+### Create a tenant (platform admin only)
+
+From the UI: **Platform → Tenants → New Tenant**. Set a name and optionally a primary domain.
+
+Via API:
+
+```bash
+curl -X POST http://localhost:8080/api/platform/tenants \
+  -H "Authorization: Bearer <platform-admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Acme Corp", "domain": "acme.com"}'
+```
+
+### First user in a tenant
+
+The first user to register on a tenant becomes that tenant's admin. Subsequent users default to the `analyst` role. Admins can change roles from **Settings → Users**.
+
+### Tenant domains
+
+Domains are used for SSO discovery (`GET /api/auth/sso-discover?domain=acme.com` returns the tenant's OIDC config). Add domains at **Platform → Tenants → [tenant] → Domains**.
+
+### Disable a tenant
+
+Toggle a tenant inactive from **Platform → Tenants → [toggle]**. Users and agents in that tenant can no longer log in or send data.
+
+---
+
+## Agent Release Management
+
+Signed agent releases let endpoints self-update safely.
+
+### Generate a signing keypair
+
+```bash
+# Backend derives the public key from the seed automatically.
+# Generate a seed:
+openssl rand 32 | base64 | tr '+/' '-_' | tr -d '='
+# → set as AGENT_RELEASE_SIGNING_KEY
+```
+
+### Publish a release (platform admin)
+
+```bash
+curl -X POST http://localhost:8080/api/platform/agent-releases \
+  -H "Authorization: Bearer <platform-admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "linux_amd64",
+    "version": "2.0.0",
+    "sha256": "<sha256-of-binary>",
+    "signature": "<base64url-ed25519-signature>",
+    "download_url": "https://releases.yourdomain.com/xcloak-agent-2.0.0-linux-amd64"
+  }'
+```
+
+### Build agent with embedded public key
+
+```bash
+PUBLIC_KEY=$(cat public_key.b64)  # base64url of the 32-byte ed25519 public key
+go build \
+  -ldflags "-X xcloak-agent/agent.AgentReleasePublicKey=${PUBLIC_KEY}" \
+  -o xcloak-agent ./main.go
+```
+
+Agents built without `-ldflags` skip signature verification (development builds only). Set `AGENT_RELEASE_REQUIRE_SIGNATURE=true` on the backend to reject any unsigned release upload.
+
+---
+
+## Troubleshooting
+
+### Backend won't start — migration error
+
+Check the migration log output. Common causes:
+- Wrong `DB_*` credentials or the database doesn't exist
+- A previous failed migration left the schema in a dirty state
+
+To force-reset a dirty migration:
+
+```bash
+migrate -path backend/database/migrations \
+        -database "postgres://..." force <version>
+```
+
+### `503 Service Unavailable` on all endpoints
+
+The DB circuit breaker tripped. Check `/api/health/deep` — it will tell you which subsystem is down (Postgres, Redis, etc.). The circuit resets automatically once the subsystem recovers.
+
+### Agents show offline immediately after heartbeat
+
+Check that the backend clock is synced (NTP). Agents are considered offline after 5 minutes without a heartbeat. A clock skew of more than a few seconds between the agent host and the backend can cause false offline status.
+
+### WebSocket alerts not appearing (multi-replica)
+
+Verify Redis pub/sub is working: `redis-cli subscribe xcloak:ws:alerts` and trigger a test alert. If no messages arrive, check `REDIS_ADDR` is correct and the backend has `REDIS_ADDR` configured consistently across all replicas.
+
+### Elasticsearch search returning no results
+
+Check that the backend logged `elasticsearch: connected` on startup. If the per-tenant index (`xcloak-logs-<id>`) doesn't exist yet (no logs ingested since ES was enabled), search returns an empty result — this is expected.
+
+### Kafka consumer lag growing
+
+Check Kafka UI at `http://localhost:8090`. If the `xcloak.ioc_match_jobs` consumer group is lagging, increase the number of backend replicas or tune `KAFKA_BROKERS` to include all 3 brokers.
+
+### JWT errors after key rotation
+
+Rotating `JWT_SECRET` invalidates all existing sessions. After rotation, all users must re-login. There is no zero-downtime key rotation in the current release — schedule maintenance accordingly or accept the session disruption.

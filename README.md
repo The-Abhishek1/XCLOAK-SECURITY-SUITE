@@ -105,6 +105,17 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 - **TOTP 2FA** — RFC 4226, works with Google Authenticator/Authy
 - **Session Management** — active session listing and remote revocation
 
+## Documentation
+
+| Guide | Audience |
+|-------|---------|
+| [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, detection rules, AI tools |
+| [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, backups |
+| [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing and managing the agent on Linux, Windows, and macOS |
+| [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps |
+
+---
+
 ## Quick Start
 
 ### Prerequisites
