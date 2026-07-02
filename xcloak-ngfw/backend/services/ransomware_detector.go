@@ -19,12 +19,12 @@ package services
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
-	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
+	"xcloak-ngfw/repositories"
 )
 
 const (
@@ -116,66 +116,44 @@ func StartRansomwareScheduler() {
 }
 
 func runRansomwareDetection() {
-	rows, err := database.DB.Query(`SELECT id FROM tenants WHERE is_active = true`)
+	tenants, err := repositories.GetActiveTenantIDs()
 	if err != nil {
 		return
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var tid int
-		if rows.Scan(&tid) == nil {
-			detectFIMRansomware(tid)
-			detectKillChainCommands(tid)
-			detectSecurityServiceKill(tid)
-		}
+	for _, tid := range tenants {
+		detectFIMRansomware(tid)
+		detectKillChainCommands(tid)
+		detectSecurityServiceKill(tid)
 	}
 }
 
 // ── Layer 1: FIM mass-modification sweep ─────────────────────────────────────
 
 func detectFIMRansomware(tenantID int) {
-	// Count FIM modifications per agent in the window across all change types,
-	// with special weight for known crypto extensions.
-	rows, err := database.DB.Query(`
-		SELECT fa.agent_id,
-		       COUNT(*)                                              AS total_changes,
-		       COUNT(DISTINCT REGEXP_REPLACE(fa.file_path, '[^/\\]+$', '')) AS dirs_hit,
-		       SUM(CASE WHEN `+cryptoExtSQL()+` THEN 1 ELSE 0 END) AS crypto_count
-		FROM fim_alerts fa
-		JOIN agents a ON a.id = fa.agent_id AND a.tenant_id = $1
-		WHERE fa.created_at > NOW() - INTERVAL '`+ransomFIMWindow+`'
-		GROUP BY fa.agent_id
-		HAVING COUNT(*) >= $2 OR SUM(CASE WHEN `+cryptoExtSQL()+` THEN 1 ELSE 0 END) >= 5
-	`, tenantID, ransomFIMThreshold)
+	candidates, err := repositories.GetFIMRansomwareCandidates(tenantID, ransomFIMThreshold, cryptoExtSQL())
 	if err != nil {
 		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var agentID, totalChanges, dirsHit, cryptoCount int
-		if rows.Scan(&agentID, &totalChanges, &dirsHit, &cryptoCount) != nil {
-			continue
-		}
-
-		key := fmt.Sprintf("%d:ransom-fim:%d", tenantID, agentID)
+	for _, c := range candidates {
+		key := fmt.Sprintf("%d:ransom-fim:%d", tenantID, c.AgentID)
 		if ransomDedup.touched(key) {
 			continue
 		}
 		ransomDedup.touch(key)
 
 		severity := "high"
-		if cryptoCount >= 5 || totalChanges >= 50 {
+		if c.CryptoCount >= 5 || c.TotalChanges >= 50 {
 			severity = "critical"
 		}
 
 		msg := fmt.Sprintf(
 			"Ransomware behavior — mass file modification: agent %d modified %d files across %d directories in %s (crypto extensions: %d)",
-			agentID, totalChanges, dirsHit, ransomFIMWindow, cryptoCount,
+			c.AgentID, c.TotalChanges, c.DirsHit, ransomFIMWindow, c.CryptoCount,
 		)
-		log.Printf("[Ransomware] %s", msg)
+		slog.Warn("ransomware detected", "msg", msg)
 		CreateAlert(models.Alert{
-			AgentID:        agentID,
+			AgentID:        c.AgentID,
 			TenantID:       tenantID,
 			Severity:       severity,
 			RuleName:       "Ransomware — Mass File Modification",
@@ -183,7 +161,7 @@ func detectFIMRansomware(tenantID int) {
 			MitreTactic:    "Impact",
 			MitreTechnique: "T1486",
 			MitreName:      "Data Encrypted for Impact",
-			Fingerprint:    fmt.Sprintf("ransomware-fim-%d", agentID),
+			Fingerprint:    fmt.Sprintf("ransomware-fim-%d", c.AgentID),
 		})
 	}
 }
@@ -200,52 +178,29 @@ func cryptoExtSQL() string {
 // ── Layer 2: Kill-chain command detection ──────────────────────────────────────
 
 func detectKillChainCommands(tenantID int) {
-	rows, err := database.DB.Query(`
-		SELECT el.agent_id, el.log_message, el.parsed_fields->>'command_line' AS cmdline
-		FROM endpoint_logs el
-		JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
-		WHERE el.created_at > NOW() - INTERVAL '5 minutes'
-		  AND el.parsed_fields->>'event_id' = '4688'
-		LIMIT 2000
-	`, tenantID)
+	logs, err := repositories.GetRecentProcessLogs(tenantID)
 	if err != nil {
-		// Fallback: scan raw log messages when parsed EventID not available
-		rows, err = database.DB.Query(`
-			SELECT el.agent_id, el.log_message, '' AS cmdline
-			FROM endpoint_logs el
-			JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
-			WHERE el.created_at > NOW() - INTERVAL '5 minutes'
-			LIMIT 5000
-		`, tenantID)
-		if err != nil {
-			return
-		}
+		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var agentID int
-		var logMsg, cmdLine string
-		if rows.Scan(&agentID, &logMsg, &cmdLine) != nil {
-			continue
-		}
-		searchText := strings.ToLower(logMsg + " " + cmdLine)
+	for _, row := range logs {
+		searchText := strings.ToLower(row.LogMessage + " " + row.CmdLine)
 
 		for _, pat := range ransomKillChainPatterns {
 			if !strings.Contains(searchText, pat.needle) {
 				continue
 			}
-			key := fmt.Sprintf("%d:ransom-kc:%d:%s", tenantID, agentID, pat.needle)
+			key := fmt.Sprintf("%d:ransom-kc:%d:%s", tenantID, row.AgentID, pat.needle)
 			if ransomDedup.touched(key) {
 				continue
 			}
 			ransomDedup.touch(key)
 
 			msg := fmt.Sprintf("Ransomware kill-chain — %s detected on agent %d: %s",
-				pat.ruleName, agentID, truncateLog(logMsg, 300))
-			log.Printf("[Ransomware] %s", msg)
+				pat.ruleName, row.AgentID, truncateLog(row.LogMessage, 300))
+			slog.Warn("ransomware detected", "msg", msg)
 			CreateAlert(models.Alert{
-				AgentID:        agentID,
+				AgentID:        row.AgentID,
 				TenantID:       tenantID,
 				Severity:       pat.severity,
 				RuleName:       pat.ruleName,
@@ -253,7 +208,7 @@ func detectKillChainCommands(tenantID int) {
 				MitreTactic:    "Impact",
 				MitreTechnique: pat.mitre,
 				MitreName:      pat.mitreNm,
-				Fingerprint:    fmt.Sprintf("ransomware-kc-%d-%s", agentID, strings.ReplaceAll(pat.needle[:10], " ", "-")),
+				Fingerprint:    fmt.Sprintf("ransomware-kc-%d-%s", row.AgentID, strings.ReplaceAll(pat.needle[:10], " ", "-")),
 			})
 			break
 		}
@@ -263,43 +218,27 @@ func detectKillChainCommands(tenantID int) {
 // ── Layer 3: Security service kill (ransomware EDR evasion) ──────────────────
 
 func detectSecurityServiceKill(tenantID int) {
-	rows, err := database.DB.Query(`
-		SELECT el.agent_id, el.log_message
-		FROM endpoint_logs el
-		JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
-		WHERE el.created_at > NOW() - INTERVAL '5 minutes'
-		  AND (lower(el.log_message) LIKE '%net stop%'
-		    OR lower(el.log_message) LIKE '%sc stop%'
-		    OR lower(el.log_message) LIKE '%sc delete%'
-		    OR lower(el.log_message) LIKE '%taskkill%')
-		LIMIT 1000
-	`, tenantID)
+	logs, err := repositories.GetRecentServiceStopLogs(tenantID)
 	if err != nil {
 		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var agentID int
-		var logMsg string
-		if rows.Scan(&agentID, &logMsg) != nil {
-			continue
-		}
-		lower := strings.ToLower(logMsg)
+	for _, row := range logs {
+		lower := strings.ToLower(row.LogMessage)
 		for _, svc := range securityServices {
 			if !strings.Contains(lower, svc) {
 				continue
 			}
-			key := fmt.Sprintf("%d:ransom-svcstop:%d:%s", tenantID, agentID, svc)
+			key := fmt.Sprintf("%d:ransom-svcstop:%d:%s", tenantID, row.AgentID, svc)
 			if ransomDedup.touched(key) {
 				continue
 			}
 			ransomDedup.touch(key)
 			msg := fmt.Sprintf("Security service '%s' killed on agent %d (ransomware evasion pattern): %s",
-				svc, agentID, truncateLog(logMsg, 300))
-			log.Printf("[Ransomware] %s", msg)
+				svc, row.AgentID, truncateLog(row.LogMessage, 300))
+			slog.Warn("ransomware detected", "msg", msg)
 			CreateAlert(models.Alert{
-				AgentID:        agentID,
+				AgentID:        row.AgentID,
 				TenantID:       tenantID,
 				Severity:       "critical",
 				RuleName:       "Security Tool Disabled (Ransomware Pattern)",
@@ -307,7 +246,7 @@ func detectSecurityServiceKill(tenantID int) {
 				MitreTactic:    "Defense Evasion",
 				MitreTechnique: "T1562.001",
 				MitreName:      "Disable or Modify Tools",
-				Fingerprint:    fmt.Sprintf("ransom-svcstop-%d-%s", agentID, svc),
+				Fingerprint:    fmt.Sprintf("ransom-svcstop-%d-%s", row.AgentID, svc),
 			})
 			break
 		}

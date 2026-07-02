@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"xcloak-ngfw/api"
 	"xcloak-ngfw/database"
+	"xcloak-ngfw/logger"
 	"xcloak-ngfw/middleware"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/routes"
@@ -40,6 +42,7 @@ func loadAllowedOrigins() {
 func main() {
 
 	godotenv.Load()
+	logger.Init()
 
 	// Vault is optional (same BYO-infra pattern as Kafka/MinIO): Init no-ops
 	// if VAULT_ADDR isn't set. Must run before database.Connect/InitRedis/
@@ -52,7 +55,7 @@ func main() {
 		// but every Setup2FA/Verify2FA/Disable2FA call will 500 until this is
 		// fixed — encryption failing loudly beats silently storing 2FA
 		// secrets in plaintext.
-		log.Println("[Vault] could not ensure TOTP transit key, 2FA endpoints will fail until resolved:", err)
+		slog.Warn("Vault: could not ensure TOTP transit key; 2FA endpoints will fail until resolved", "err", err)
 	}
 
 	err := database.Connect()
@@ -62,7 +65,7 @@ func main() {
 
 	// Read replica is optional — log a warning but don't abort startup.
 	if err := database.ConnectReadReplica(); err != nil {
-		log.Println("[DB] read replica unavailable, analytics will use primary:", err)
+		slog.Warn("DB: read replica unavailable, analytics will use primary", "err", err)
 	}
 
 	// Circuit breaker monitors primary + replica health in the background.
@@ -78,7 +81,7 @@ func main() {
 	// Non-fatal: audit export is a compliance nice-to-have, not a hard
 	// dependency for the API to serve traffic.
 	if err := services.InitMinIO(); err != nil {
-		log.Println("[AuditExport] MinIO unavailable, audit export disabled:", err)
+		slog.Warn("AuditExport: MinIO unavailable, audit export disabled", "err", err)
 	} else {
 		go services.StartAuditExportScheduler()
 	}
@@ -244,18 +247,15 @@ func main() {
 	certFile := os.Getenv("TLS_CERT_FILE")
 	keyFile := os.Getenv("TLS_KEY_FILE")
 	if certFile != "" && keyFile != "" {
-		log.Println("XCloak API Running (TLS)")
+		slog.Info("XCloak API running", "tls", true, "addr", ":8443")
 		if err := router.RunTLS(":8443", certFile, keyFile); err != nil {
 			log.Fatal("server exited: ", err)
 		}
 		return
 	}
 
-	log.Println("XCloak API Running")
+	slog.Info("XCloak API running", "addr", ":8080")
 	if err := router.Run(":8080"); err != nil {
-		// Was previously discarded — a port already in use (e.g. a stale
-		// process from a prior run) made the process exit silently right
-		// after printing every other startup log, looking deceptively healthy.
 		log.Fatal("server exited: ", err)
 	}
 }

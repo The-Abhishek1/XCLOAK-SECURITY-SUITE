@@ -10,6 +10,18 @@ import (
 	"xcloak-ngfw/services"
 )
 
+// CreateIOC adds a new indicator of compromise for the tenant.
+//
+// @Summary      Create IOC
+// @Tags         ioc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      models.IOC  true  "IOC definition"
+// @Success      200   {object}  map[string]string
+// @Failure      400   {object}  map[string]string
+// @Failure      500   {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /api/iocs [post]
 func CreateIOC(c *gin.Context) {
 
 	var ioc models.IOC

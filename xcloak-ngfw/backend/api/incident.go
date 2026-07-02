@@ -6,6 +6,15 @@ import (
 	"xcloak-ngfw/services"
 )
 
+// GetIncidents returns open and recently closed incidents for the tenant.
+//
+// @Summary      List incidents
+// @Tags         incidents
+// @Produce      json
+// @Success      200  {array}   models.Incident
+// @Failure      500  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /api/incidents [get]
 func GetIncidents(c *gin.Context) {
 
 	incidents, err := services.GetIncidents(tenantIDFromContext(c))
