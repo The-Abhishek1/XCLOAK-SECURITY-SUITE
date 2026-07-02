@@ -48,8 +48,9 @@ END;
 $$;
 
 -- ── Step 3: Create the new partitioned parent ─────────────────────────────────
+-- Use SERIAL (int4) to match the original table's id INTEGER column type.
 CREATE TABLE IF NOT EXISTS endpoint_logs (
-    id          BIGSERIAL,
+    id          SERIAL,
     agent_id    INTEGER,
     tenant_id   INTEGER,
     log_source  VARCHAR(100),
@@ -59,12 +60,27 @@ CREATE TABLE IF NOT EXISTS endpoint_logs (
     PRIMARY KEY (id, collected_at)         -- PK must include partition key
 ) PARTITION BY RANGE (collected_at);
 
--- ── Step 4: Attach legacy data as the default partition ───────────────────────
--- endpoint_logs_legacy catches all historical data and any future inserts
--- that don't fall in a dedicated month partition.
-ALTER TABLE endpoint_logs_legacy
-    ADD COLUMN IF NOT EXISTS collected_at_hack BOOLEAN;  -- no-op: column already exists
+-- ── Step 4: Add (id, collected_at) unique constraint needed for ATTACH ────────
+-- The partitioned parent's PRIMARY KEY (id, collected_at) requires each child
+-- to have a matching unique constraint. The legacy table only has PK (id).
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'endpoint_logs_legacy'::regclass
+          AND conname  = 'endpoint_logs_legacy_id_collected_at_key'
+    ) AND EXISTS (
+        SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'endpoint_logs_legacy' AND n.nspname = 'public'
+    ) THEN
+        ALTER TABLE endpoint_logs_legacy
+            ADD CONSTRAINT endpoint_logs_legacy_id_collected_at_key
+            UNIQUE (id, collected_at);
+    END IF;
+END;
+$$;
 
+-- ── Step 5: Attach legacy data as the default partition ───────────────────────
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -77,7 +93,7 @@ BEGIN
 END;
 $$;
 
--- ── Step 5: Pre-create the current and next 3 months of partitions ────────────
+-- ── Step 6: Pre-create the current and next 3 months of partitions ────────────
 DO $$
 DECLARE
     month_start DATE;
