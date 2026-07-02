@@ -4,6 +4,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -16,8 +17,12 @@ var migrationsFS embed.FS
 // Migrate applies all pending up migrations from db/migrations against DB.
 // Safe to call on every startup — migrate tracks applied versions in the
 // schema_migrations table and no-ops once the DB is current.
+//
+// If the database is in a dirty state (a previous migration run was
+// interrupted), Migrate forces the version to the dirty number and retries.
+// The migration SQL itself is idempotent (uses CREATE TABLE IF NOT EXISTS,
+// IF NOT EXISTS guards in PL/pgSQL blocks, etc.) so re-running it is safe.
 func Migrate() error {
-
 	source, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
 		return fmt.Errorf("loading embedded migrations: %w", err)
@@ -33,7 +38,27 @@ func Migrate() error {
 		return fmt.Errorf("initializing migrate: %w", err)
 	}
 
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+	if err := m.Up(); err != nil {
+		if errors.Is(err, migrate.ErrNoChange) {
+			return nil
+		}
+
+		// A dirty-state error looks like: "Dirty database version N. Fix and
+		// force version." Force the version to clear the dirty flag and retry.
+		var dirtyErr migrate.ErrDirty
+		if errors.As(err, &dirtyErr) {
+			slog.Warn("dirty migration state detected — forcing version and retrying",
+				"version", dirtyErr.Version)
+			if ferr := m.Force(dirtyErr.Version); ferr != nil {
+				return fmt.Errorf("forcing migration version %d: %w", dirtyErr.Version, ferr)
+			}
+			// Retry the up migration now that dirty is cleared.
+			if rerr := m.Up(); rerr != nil && !errors.Is(rerr, migrate.ErrNoChange) {
+				return fmt.Errorf("applying migrations after force: %w", rerr)
+			}
+			return nil
+		}
+
 		return fmt.Errorf("applying migrations: %w", err)
 	}
 
