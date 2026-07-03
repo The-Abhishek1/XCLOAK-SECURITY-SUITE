@@ -73,17 +73,40 @@ BEGIN
 END;
 $$;
 
+-- ── Step 3b: Mark collected_at NOT NULL on the legacy table ──────────────────
+-- PostgreSQL requires the partition key column to be NOT NULL in every child.
+-- The original table defined collected_at as nullable; fill any NULLs first so
+-- the ALTER doesn't fail on existing rows, then set the constraint.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'endpoint_logs_legacy' AND n.nspname = 'public'
+    ) AND EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'endpoint_logs_legacy'::regclass
+          AND attname   = 'collected_at'
+          AND NOT attnotnull
+    ) THEN
+        UPDATE endpoint_logs_legacy SET collected_at = now() WHERE collected_at IS NULL;
+        ALTER TABLE endpoint_logs_legacy ALTER COLUMN collected_at SET NOT NULL;
+    END IF;
+END;
+$$;
+
 -- ── Step 4: Create the partitioned parent ─────────────────────────────────────
--- Use SERIAL (int4) to match the original table's id INTEGER type.
--- The sequence for new rows is independent from the legacy sequence; that is
--- fine because the PK is (id, collected_at) and uniqueness is per-partition.
+-- id: SERIAL (int4) to match the original table's INTEGER type.
+-- tenant_id: BIGINT NOT NULL DEFAULT 1 — migration 004 added this column as
+--   BIGINT (not INTEGER) to all tenant-scoped tables, so migration 051's
+--   ADD COLUMN IF NOT EXISTS tenant_id INTEGER was a no-op. ATTACH PARTITION
+--   fails unless the parent's type matches the child's actual BIGINT type.
 CREATE TABLE IF NOT EXISTS endpoint_logs (
     id            SERIAL,
     agent_id      INTEGER,
-    tenant_id     INTEGER,
+    tenant_id     BIGINT NOT NULL DEFAULT 1,
     log_source    VARCHAR(100),
     log_message   TEXT,
-    collected_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+    collected_at  TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
     parsed_fields JSONB DEFAULT '{}'::jsonb,
     PRIMARY KEY (id, collected_at)
 ) PARTITION BY RANGE (collected_at);

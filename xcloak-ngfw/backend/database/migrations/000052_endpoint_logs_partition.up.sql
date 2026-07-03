@@ -52,7 +52,7 @@ $$;
 CREATE TABLE IF NOT EXISTS endpoint_logs (
     id          SERIAL,
     agent_id    INTEGER,
-    tenant_id   INTEGER,
+    tenant_id   BIGINT NOT NULL DEFAULT 1,
     log_source  VARCHAR(100),
     log_message TEXT,
     collected_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),

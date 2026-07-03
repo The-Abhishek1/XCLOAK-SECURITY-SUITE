@@ -40,5 +40,5 @@ func GetAgentsByPlatform(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"agents": agents})
+	c.JSON(http.StatusOK, agents)
 }
