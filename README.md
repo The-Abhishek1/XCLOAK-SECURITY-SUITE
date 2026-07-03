@@ -20,7 +20,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 ## Detection Engines
 
 ### Threat Detection
-- **Sigma Rules** — custom detection engine with field-level matching, tags, MITRE ATT&CK mapping
+- **Sigma Rules** — custom detection engine with field-level matching, tags, MITRE ATT&CK mapping; ships with **43 production-ready rules** across 12 tactics (Initial Access → Impact, Cloud/Container/Supply Chain) seeded automatically on first run
 - **YARA Rules** — malware signature scanning on endpoints, real-time match reporting
 - **IOC Engine** — IP, domain, hash, URL, email indicator matching; async-matched via Kafka consumer off the request path
 - **Threat Intel Ingestion** — STIX/TAXII, MISP, and AlienVault OTX feed connectors plus flat-file feeds
@@ -98,6 +98,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 
 ## Multi-Tenancy & Access Control
 
+- **Self-Serve Signup** — `POST /api/signup` (or `/signup` in the UI) provisions a new tenant + admin account without SMTP; the seeded Sigma rule library is copied in automatically so detection starts immediately
 - **Tenants** — every agent, alert, rule, playbook, and integration is scoped to a tenant
 - **Custom Roles** — fine-grained, additive RBAC (19 permissions) on top of built-in admin/analyst/viewer
 - **SSO (OIDC)** — per-tenant generic OpenID Connect login
@@ -113,6 +114,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 | [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, backups |
 | [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing and managing the agent on Linux, Windows, and macOS |
 | [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps |
+| [OpenAPI Spec](xcloak-ngfw/backend/docs/generated/openapi.yaml) | Developers — full REST API reference (OpenAPI 3.0) |
 
 ---
 
@@ -138,7 +140,8 @@ cp .env.example .env
 openssl rand -hex 32  # paste as JWT_SECRET in .env
 openssl rand -hex 32  # paste as METRICS_TOKEN in .env — also set in prometheus/metrics_token
 
-# Migrations run automatically on startup (golang-migrate, 38 migrations)
+# Migrations run automatically on startup (golang-migrate, 56 migrations)
+# Migration 056 seeds the Sigma rule library on first run
 # Start with hot reload
 air
 ```
@@ -290,13 +293,14 @@ Backups land in `backups/` (gitignored) and are pruned after `RETENTION_DAYS` (d
 ## API
 
 Base URL: `http://localhost:8080`  
-Authentication: `Authorization: Bearer <token>`
+Authentication: httpOnly cookie (`token`) set by `/api/auth/login` — no Authorization header needed. Agent endpoints use `X-Agent-Key` header instead. Full spec: [`docs/generated/openapi.yaml`](xcloak-ngfw/backend/docs/generated/openapi.yaml).
 
 Key endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/auth/login` | Login (returns JWT or 2FA prompt) |
+| POST | `/api/auth/login` | Login — sets `token` + `logged_in` cookies (or 2FA prompt) |
+| POST | `/api/signup` | Self-serve org signup — creates tenant + admin, sets cookies |
 | GET | `/api/alerts/paginated` | Paginated alerts with status filter |
 | POST | `/api/alerts/:id/acknowledge` | Acknowledge alert |
 | GET | `/api/incidents/paginated` | Paginated incidents |
@@ -352,7 +356,7 @@ Key endpoints:
 |-------|-----------|
 | Frontend | Next.js 14, TypeScript, Tailwind CSS |
 | Backend | Go 1.21, Gin, JWT |
-| Database | PostgreSQL 16 (golang-migrate, 38 migrations) |
+| Database | PostgreSQL 16 (golang-migrate, 56 migrations incl. partitioned `endpoint_logs`) |
 | Cache / State | Redis (rate limiting, token revocation) |
 | Agent | Go (single binary, no dependencies) |
 | Message Bus | Apache Kafka |
