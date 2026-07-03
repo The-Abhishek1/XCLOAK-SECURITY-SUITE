@@ -364,8 +364,15 @@ Key endpoints:
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+XCloak Security Suite is licensed under the
+[Business Source License 1.1](LICENSE).
+
+- **Free** for non-commercial use and self-hosted deployments up to 10 agents
+- **Commercial license required** for production SaaS or commercial deployments
+- Converts to Apache 2.0 on 2029-01-01
+
+For commercial licensing: abhishekn1003@gmail.com
 
 ---
 
-Built by [0xIdiot](https://github.com/0xIdiot)
+Built by [0xIdiot](https://github.com/The-Abhishek1)

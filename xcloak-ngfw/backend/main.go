@@ -269,3 +269,7 @@ func main() {
 		log.Fatal("server exited: ", err)
 	}
 }
+
+// Copyright (c) 2025 Abhishek N. All rights reserved.
+// Licensed under the Business Source License 1.1.
+// See LICENSE in the project root for details.
