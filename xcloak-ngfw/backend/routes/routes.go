@@ -29,6 +29,7 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Auth ──────────────────────────────────────────────────────
 	router.POST("/api/auth/register", middleware.RateLimitAuth(), api.Register)
 	router.POST("/api/auth/login", middleware.RateLimitAuth(), api.Login)
+	router.POST("/api/signup", middleware.RateLimitAuth(), api.Signup)
 
 	// ── SSO (OIDC) ────────────────────────────────────────────────
 	// Unauthenticated — these ARE the login entry point for a tenant's

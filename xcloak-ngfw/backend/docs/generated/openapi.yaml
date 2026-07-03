@@ -1,0 +1,1210 @@
+openapi: "3.0.3"
+info:
+  title: XCloak Security Suite API
+  version: "1.0.0"
+  description: |
+    REST API for the XCloak SOC platform. Authentication is via httpOnly cookie
+    (`token`) set by `POST /api/auth/login`. All protected endpoints read the
+    cookie automatically — no Authorization header is required. Agent endpoints
+    authenticate with a per-agent API key in the `X-Agent-Key` header.
+  contact:
+    email: abhishekn1003@gmail.com
+
+servers:
+  - url: /api
+    description: Same-origin (production / dev server)
+
+tags:
+  - name: Auth
+    description: User authentication and session management
+  - name: Signup
+    description: Self-serve tenant provisioning
+  - name: Agents
+    description: Endpoint agent registration and telemetry
+  - name: Alerts
+    description: Security alert lifecycle
+  - name: Incidents
+    description: Incident management and IR lifecycle
+  - name: Sigma
+    description: Sigma detection rules
+  - name: IOC
+    description: Indicators of Compromise
+  - name: YARA
+    description: YARA rules and scan matches
+  - name: Firewall
+    description: Firewall rule management and sync
+  - name: Users
+    description: User and role management
+  - name: Platform
+    description: Platform-admin tenant provisioning
+  - name: Logs
+    description: Log search and retention
+  - name: Dashboard
+    description: Dashboard overview metrics
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+    agentKey:
+      type: apiKey
+      in: header
+      name: X-Agent-Key
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    Ok:
+      type: object
+      properties:
+        ok: { type: boolean }
+
+    Agent:
+      type: object
+      properties:
+        id:            { type: integer }
+        hostname:      { type: string }
+        platform:      { type: string, enum: [linux, windows, darwin] }
+        arch:          { type: string }
+        version:       { type: string }
+        ip_address:    { type: string }
+        status:        { type: string, enum: [online, offline, degraded] }
+        last_seen:     { type: string, format: date-time }
+        tenant_id:     { type: integer }
+
+    Alert:
+      type: object
+      properties:
+        id:           { type: integer }
+        title:        { type: string }
+        severity:     { type: string, enum: [low, medium, high, critical] }
+        status:       { type: string, enum: [open, acknowledged, resolved] }
+        source:       { type: string }
+        agent_id:     { type: integer }
+        created_at:   { type: string, format: date-time }
+        tenant_id:    { type: integer }
+
+    Incident:
+      type: object
+      properties:
+        id:           { type: integer }
+        title:        { type: string }
+        severity:     { type: string }
+        status:       { type: string, enum: [open, investigating, contained, resolved] }
+        created_at:   { type: string, format: date-time }
+
+    SigmaRule:
+      type: object
+      properties:
+        id:               { type: integer }
+        title:            { type: string }
+        description:      { type: string }
+        severity:         { type: string, enum: [low, medium, high, critical] }
+        mitre_tactic:     { type: string }
+        mitre_technique:  { type: string }
+        logsource_cat:    { type: string }
+        logsource_prod:   { type: string }
+        logsource_svc:    { type: string }
+        status:           { type: string }
+        keywords:         { type: array, items: { type: string } }
+        selections:       { type: object }
+        condition:        { type: string }
+        enabled:          { type: boolean }
+        tags:             { type: array, items: { type: string } }
+        falsepositives:   { type: array, items: { type: string } }
+        references:       { type: array, items: { type: string } }
+        tenant_id:        { type: integer }
+        created_at:       { type: string, format: date-time }
+
+    IOC:
+      type: object
+      properties:
+        id:         { type: integer }
+        type:       { type: string, enum: [ip, domain, hash, url, email] }
+        value:      { type: string }
+        severity:   { type: string }
+        source:     { type: string }
+        enabled:    { type: boolean }
+        tenant_id:  { type: integer }
+        created_at: { type: string, format: date-time }
+
+    FirewallRule:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        action:      { type: string, enum: [allow, deny, drop] }
+        protocol:    { type: string }
+        src_ip:      { type: string }
+        dst_ip:      { type: string }
+        dst_port:    { type: integer }
+        enabled:     { type: boolean }
+        priority:    { type: integer }
+        tenant_id:   { type: integer }
+
+    User:
+      type: object
+      properties:
+        id:         { type: integer }
+        username:   { type: string }
+        email:      { type: string }
+        role:       { type: string }
+        is_active:  { type: boolean }
+        tenant_id:  { type: integer }
+        created_at: { type: string, format: date-time }
+
+    Tenant:
+      type: object
+      properties:
+        id:         { type: integer }
+        name:       { type: string }
+        slug:       { type: string }
+        is_active:  { type: boolean }
+        user_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    YARARule:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        description: { type: string }
+        rule_text:   { type: string }
+        enabled:     { type: boolean }
+        tenant_id:   { type: integer }
+        created_at:  { type: string, format: date-time }
+
+    Pagination:
+      type: object
+      properties:
+        page:        { type: integer }
+        per_page:    { type: integer }
+        total:       { type: integer }
+        total_pages: { type: integer }
+
+security:
+  - cookieAuth: []
+
+paths:
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with username + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: |
+            Authenticated. Sets `token` (httpOnly) and `logged_in` cookies.
+            If TOTP is enabled, returns `needs_2fa: true` and a `temp_token`
+            instead — caller must complete `/auth/login/2fa`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Ok"
+                  - type: object
+                    properties:
+                      needs_2fa:  { type: boolean }
+                      temp_token: { type: string }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/login/2fa:
+    post:
+      tags: [Auth]
+      summary: Complete TOTP two-factor login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [temp_token, code]
+              properties:
+                temp_token: { type: string }
+                code:       { type: string, minLength: 6, maxLength: 6 }
+      responses:
+        "200":
+          description: TOTP verified — auth cookies set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "401":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out (clears auth cookies)
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user (first user gets admin)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username: { type: string }
+                email:    { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Account created
+        "500":
+          description: Username or email conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset link via email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Always succeeds (prevents email enumeration)
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password with a token from email link
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token:        { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Password reset successfully
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/profile:
+    get:
+      tags: [Auth]
+      summary: Get the current user's profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+    patch:
+      tags: [Auth]
+      summary: Update profile (email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Profile updated
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password (requires current password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password:     { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Password changed
+        "400":
+          description: Current password incorrect or new password too short
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ── Signup ──────────────────────────────────────────────────────────────────
+
+  /signup:
+    post:
+      tags: [Signup]
+      summary: Self-serve tenant provisioning (no SMTP required)
+      description: |
+        Creates a new tenant and its first admin user in a single request.
+        On success, sets auth cookies and returns `{"ok": true}` so the caller
+        can redirect directly to the dashboard without a separate login.
+        Sigma rules are copied from the platform library (tenant 1) into the
+        new tenant automatically.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [org_name, slug, username, email, password]
+              properties:
+                org_name: { type: string, example: "Acme Security Inc." }
+                slug:     { type: string, example: "acme-security", pattern: "^[a-z0-9][a-z0-9-]*[a-z0-9]$" }
+                username: { type: string, example: "admin" }
+                email:    { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Organization created, auth cookies set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400":
+          description: Validation error or duplicate slug / username
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ── Agents ──────────────────────────────────────────────────────────────────
+
+  /agents:
+    get:
+      tags: [Agents]
+      summary: List agents (optionally filtered by platform)
+      parameters:
+        - name: platform
+          in: query
+          schema: { type: string, enum: [linux, windows, darwin] }
+      responses:
+        "200":
+          description: Array of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Agent" }
+
+  /agents/register:
+    post:
+      tags: [Agents]
+      summary: Register a new endpoint agent
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname, platform, arch, version, tenant_id]
+              properties:
+                hostname:   { type: string }
+                platform:   { type: string }
+                arch:       { type: string }
+                version:    { type: string }
+                tenant_id:  { type: integer }
+                ip_address: { type: string }
+      responses:
+        "200":
+          description: Registration result with agent key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent_id:  { type: integer }
+                  agent_key: { type: string }
+
+  /agents/{id}:
+    get:
+      tags: [Agents]
+      summary: Get a single agent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Agent detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+
+  /agents/{id}/summary:
+    get:
+      tags: [Agents]
+      summary: Get a rich summary (health, risk, recent events) for an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Agent summary object
+
+  /agents/heartbeat:
+    post:
+      tags: [Agents]
+      summary: Agent heartbeat (agent-authenticated)
+      security:
+        - agentKey: []
+      responses:
+        "200":
+          description: Heartbeat acknowledged
+
+  /agents/logs:
+    post:
+      tags: [Agents]
+      summary: Submit log batch from an agent
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                logs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      message:      { type: string }
+                      log_source:   { type: string }
+                      severity:     { type: string }
+                      collected_at: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Logs ingested
+
+  # ── Alerts ──────────────────────────────────────────────────────────────────
+
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List recent alerts
+      parameters:
+        - name: severity
+          in: query
+          schema: { type: string, enum: [low, medium, high, critical] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, acknowledged, resolved] }
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Alert" }
+
+  /alerts/paginated:
+    get:
+      tags: [Alerts]
+      summary: Paginated alert list
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 25 }
+        - name: severity
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:       { type: array, items: { $ref: "#/components/schemas/Alert" } }
+                  pagination: { $ref: "#/components/schemas/Pagination" }
+
+  /alerts/{id}:
+    get:
+      tags: [Alerts]
+      summary: Get alert detail with AI triage result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Alert with triage
+
+  /alerts/{id}/acknowledge:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge an alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Acknowledged
+
+  /alerts/{id}/resolve:
+    post:
+      tags: [Alerts]
+      summary: Resolve an alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Resolved
+
+  # ── Incidents ────────────────────────────────────────────────────────────────
+
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents
+      responses:
+        "200":
+          description: Incident list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Incident" }
+
+  /incidents/{id}/status:
+    put:
+      tags: [Incidents]
+      summary: Update incident status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, investigating, contained, resolved] }
+      responses:
+        "200":
+          description: Status updated
+
+  /incidents/{id}/notes:
+    post:
+      tags: [Incidents]
+      summary: Add analyst note to incident
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string }
+      responses:
+        "200":
+          description: Note added
+
+  # ── Sigma ────────────────────────────────────────────────────────────────────
+
+  /sigma/rules:
+    get:
+      tags: [Sigma]
+      summary: List all Sigma detection rules for the tenant
+      responses:
+        "200":
+          description: Sigma rule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SigmaRule" }
+    post:
+      tags: [Sigma]
+      summary: Create a new Sigma rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SigmaRule" }
+      responses:
+        "200":
+          description: Rule created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SigmaRule" }
+
+  /sigma/rules/{id}:
+    get:
+      tags: [Sigma]
+      summary: Get a Sigma rule by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Sigma rule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SigmaRule" }
+    put:
+      tags: [Sigma]
+      summary: Update a Sigma rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SigmaRule" }
+      responses:
+        "200":
+          description: Rule updated
+    delete:
+      tags: [Sigma]
+      summary: Delete a Sigma rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Rule deleted
+
+  /sigma/rules/{id}/enable:
+    patch:
+      tags: [Sigma]
+      summary: Enable a Sigma rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Rule enabled
+
+  /sigma/rules/{id}/disable:
+    patch:
+      tags: [Sigma]
+      summary: Disable a Sigma rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Rule disabled
+
+  /sigma/rules/test:
+    post:
+      tags: [Sigma]
+      summary: Test Sigma rules against a sample log message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [log_message]
+              properties:
+                log_message: { type: string }
+                rule_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200":
+          description: Matching rules
+
+  /sigma/stats:
+    get:
+      tags: [Sigma]
+      summary: Get Sigma rule statistics (total, enabled, by severity)
+      responses:
+        "200":
+          description: Stats object
+
+  # ── IOC ─────────────────────────────────────────────────────────────────────
+
+  /iocs:
+    get:
+      tags: [IOC]
+      summary: List IOCs
+      responses:
+        "200":
+          description: IOC list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/IOC" }
+    post:
+      tags: [IOC]
+      summary: Create an IOC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IOC" }
+      responses:
+        "200":
+          description: IOC created
+
+  /iocs/{id}/enable:
+    patch:
+      tags: [IOC]
+      summary: Enable an IOC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Enabled
+
+  /iocs/{id}/disable:
+    patch:
+      tags: [IOC]
+      summary: Disable an IOC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Disabled
+
+  /iocs/import:
+    post:
+      tags: [IOC]
+      summary: Bulk import IOCs from a text list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [iocs, type]
+              properties:
+                iocs:     { type: array, items: { type: string } }
+                type:     { type: string, enum: [ip, domain, hash, url, email] }
+                severity: { type: string }
+      responses:
+        "200":
+          description: Import result
+
+  # ── YARA ────────────────────────────────────────────────────────────────────
+
+  /yara/rules:
+    get:
+      tags: [YARA]
+      summary: List YARA rules
+      responses:
+        "200":
+          description: YARA rule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/YARARule" }
+    post:
+      tags: [YARA]
+      summary: Create a YARA rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/YARARule" }
+      responses:
+        "200":
+          description: Rule created
+
+  /yara/matches:
+    get:
+      tags: [YARA]
+      summary: List YARA match events
+      responses:
+        "200":
+          description: Match list
+
+  # ── Firewall ─────────────────────────────────────────────────────────────────
+
+  /firewall/rules:
+    get:
+      tags: [Firewall]
+      summary: List firewall rules
+      responses:
+        "200":
+          description: Firewall rule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FirewallRule" }
+    post:
+      tags: [Firewall]
+      summary: Create a firewall rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FirewallRule" }
+      responses:
+        "200":
+          description: Rule created
+
+  /firewall/rules/{id}:
+    get:
+      tags: [Firewall]
+      summary: Get a firewall rule by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Firewall rule
+    put:
+      tags: [Firewall]
+      summary: Update a firewall rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FirewallRule" }
+      responses:
+        "200":
+          description: Rule updated
+    delete:
+      tags: [Firewall]
+      summary: Delete a firewall rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Rule deleted
+
+  /firewall/sync:
+    post:
+      tags: [Firewall]
+      summary: Push firewall rules to all online agents
+      responses:
+        "200":
+          description: Sync dispatched
+
+  /firewall/stats:
+    get:
+      tags: [Firewall]
+      summary: Firewall hit statistics
+      responses:
+        "200":
+          description: Stats
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users in the tenant
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+
+  /users/invite:
+    post:
+      tags: [Users]
+      summary: Invite a user (sends email with set-password link)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, role]
+              properties:
+                username: { type: string }
+                email:    { type: string, format: email }
+                role:     { type: string, enum: [admin, analyst, viewer] }
+      responses:
+        "200":
+          description: Invite sent
+
+  /users/{id}/role:
+    put:
+      tags: [Users]
+      summary: Update a user's role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string }
+      responses:
+        "200":
+          description: Role updated
+
+  /users/{id}/toggle:
+    patch:
+      tags: [Users]
+      summary: Enable or disable a user account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Toggled
+
+  # ── Platform Admin ───────────────────────────────────────────────────────────
+
+  /platform/tenants:
+    get:
+      tags: [Platform]
+      summary: List all tenants (platform admin only)
+      responses:
+        "200":
+          description: Tenant list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tenant" }
+    post:
+      tags: [Platform]
+      summary: Create a tenant and invite its first admin via email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug, admin_username, admin_email]
+              properties:
+                name:           { type: string }
+                slug:           { type: string }
+                admin_username: { type: string }
+                admin_email:    { type: string, format: email }
+      responses:
+        "200":
+          description: Tenant created
+
+  /platform/tenants/{id}/toggle:
+    patch:
+      tags: [Platform]
+      summary: Suspend or reactivate a tenant
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Toggled
+
+  # ── Logs ─────────────────────────────────────────────────────────────────────
+
+  /logs/search:
+    get:
+      tags: [Logs]
+      summary: Full-text search across ingested logs
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: agent_id
+          in: query
+          schema: { type: integer }
+        - name: severity
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100 }
+      responses:
+        "200":
+          description: Matching log entries
+
+  /logs/stats:
+    get:
+      tags: [Logs]
+      summary: Log volume and severity distribution stats
+      responses:
+        "200":
+          description: Log statistics
+
+  /logs/retention:
+    get:
+      tags: [Logs]
+      summary: Get current retention policy
+      responses:
+        "200":
+          description: Retention policy
+    put:
+      tags: [Logs]
+      summary: Set retention policy (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [days]
+              properties:
+                days: { type: integer, minimum: 1, maximum: 365 }
+      responses:
+        "200":
+          description: Policy updated
+
+  # ── Dashboard ────────────────────────────────────────────────────────────────
+
+  /dashboard/overview:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard overview metrics
+      responses:
+        "200":
+          description: |
+            Returns counts of open alerts, active incidents, online agents,
+            recent sigma detections, and top threat actors.
+
+  /health:
+    get:
+      tags: [Dashboard]
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /health/deep:
+    get:
+      tags: [Dashboard]
+      summary: Deep health check (DB, Kafka, circuit state)
+      security: []
+      responses:
+        "200":
+          description: All systems nominal
+        "503":
+          description: One or more subsystems degraded
