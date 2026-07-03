@@ -23,7 +23,7 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
     <div className="flex min-h-screen" style={{ background: 'var(--bg-0)' }}>
       <div className="bg-mesh" />
       <Sidebar />
- <div className="flex flex-1 flex-col min-w-0 ml-[56px] lg:ml-[240px]">
+ <div className="flex flex-1 flex-col min-w-0 ml-0 lg:ml-[240px] pt-14 lg:pt-0">
         <AppHeader title={title} subtitle={subtitle} onRefresh={onRefresh} refreshing={refreshing} actions={actions} />
         <main className="flex-1 p-4 sm:p-6 relative z-10">{children}</main>
       </div>
@@ -73,7 +73,7 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<Roo
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between px-5 gap-4"
+    <header className="sticky top-14 lg:top-0 z-30 flex h-14 items-center justify-between px-5 gap-4"
       style={{
         background: 'var(--glass-bg)',
         backdropFilter: 'var(--blur)',
