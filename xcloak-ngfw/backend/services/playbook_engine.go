@@ -501,6 +501,9 @@ func handleWebhook(payload json.RawMessage, ctx map[string]string) (string, erro
 	if cfg.URL == "" {
 		return "", fmt.Errorf("webhook: url is required")
 	}
+	if err := CheckURL(cfg.URL); err != nil {
+		return "", fmt.Errorf("webhook: %w", err)
+	}
 	if cfg.Method == "" {
 		cfg.Method = "POST"
 	}
@@ -541,6 +544,9 @@ func handleSlackMessage(payload json.RawMessage, ctx map[string]string) (string,
 	json.Unmarshal(payload, &cfg)
 	if cfg.WebhookURL == "" {
 		return "", fmt.Errorf("slack_message: webhook_url is required")
+	}
+	if err := CheckURL(cfg.WebhookURL); err != nil {
+		return "", fmt.Errorf("slack_message: %w", err)
 	}
 
 	msg := renderTemplate(cfg.Message, ctx)

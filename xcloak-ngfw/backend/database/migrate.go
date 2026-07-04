@@ -28,7 +28,7 @@ func Migrate() error {
 		return fmt.Errorf("loading embedded migrations: %w", err)
 	}
 
-	driver, err := postgres.WithInstance(DB, &postgres.Config{})
+	driver, err := postgres.WithInstance(MigrationDB, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("creating migrate driver: %w", err)
 	}

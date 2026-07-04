@@ -289,6 +289,11 @@ func deliverSlack(payload WebhookPayload, tenantID int) {
 }
 
 func deliver(integration, eventType, url string, body []byte, headers map[string]string, tenantID int) {
+	if err := CheckURL(url); err != nil {
+		logDelivery(integration, eventType, body, 0, false, "ssrf blocked: "+err.Error(), tenantID)
+		return
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {

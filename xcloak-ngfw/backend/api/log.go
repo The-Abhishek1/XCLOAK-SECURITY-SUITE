@@ -1,13 +1,18 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/services"
 )
 
+const maxAgentLogBytes = 10 << 20 // 10 MiB per batch — matches /api/ingest limit
+
 func ReceiveLogs(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAgentLogBytes)
 
 	var logs []models.Log
 

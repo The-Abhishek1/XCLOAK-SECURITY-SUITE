@@ -243,6 +243,7 @@ func main() {
 		c.Next()
 	})
 
+	router.Use(middleware.SecurityHeaders())
 	router.Use(middleware.RequestLogger())
 	router.Use(middleware.RequestID())
 

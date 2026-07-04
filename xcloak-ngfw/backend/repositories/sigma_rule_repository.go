@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -154,24 +156,26 @@ func CreateSigmaRule(rule models.SigmaRule, tenantID int) error {
 	fpJSON, _ := json.Marshal(orEmptySlice(rule.FalsePositives))
 	refsJSON, _ := json.Marshal(orEmptySlice(rule.References))
 
-	_, err := database.DB.Exec(`
-		INSERT INTO sigma_rules
-		(
-			title, description, severity,
-			mitre_tactic, mitre_technique, mitre_name,
-			logsource_cat, logsource_prod, logsource_svc,
-			status, tags, falsepositives, "references",
-			keywords, selections, condition, enabled, tenant_id
+	return database.WithTenantTx(context.Background(), tenantID, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			INSERT INTO sigma_rules
+			(
+				title, description, severity,
+				mitre_tactic, mitre_technique, mitre_name,
+				logsource_cat, logsource_prod, logsource_svc,
+				status, tags, falsepositives, "references",
+				keywords, selections, condition, enabled, tenant_id
+			)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+		`,
+			rule.Title, rule.Description, rule.Severity,
+			rule.MitreTactic, rule.MitreTechnique, rule.MitreName,
+			rule.LogsourceCategory, rule.LogsourceProduct, rule.LogsourceService,
+			rule.Status, tagsJSON, fpJSON, refsJSON,
+			keywordsJSON, selectionsJSON, rule.Condition, rule.Enabled, tenantID,
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-	`,
-		rule.Title, rule.Description, rule.Severity,
-		rule.MitreTactic, rule.MitreTechnique, rule.MitreName,
-		rule.LogsourceCategory, rule.LogsourceProduct, rule.LogsourceService,
-		rule.Status, tagsJSON, fpJSON, refsJSON,
-		keywordsJSON, selectionsJSON, rule.Condition, rule.Enabled, tenantID,
-	)
-	return err
+		return err
+	})
 }
 
 func UpdateSigmaRule(id string, rule models.SigmaRule, tenantID int) error {
@@ -181,41 +185,43 @@ func UpdateSigmaRule(id string, rule models.SigmaRule, tenantID int) error {
 	fpJSON, _ := json.Marshal(orEmptySlice(rule.FalsePositives))
 	refsJSON, _ := json.Marshal(orEmptySlice(rule.References))
 
-	tag, err := database.DB.Exec(`
-		UPDATE sigma_rules SET
-			title          = $1,
-			description    = $2,
-			severity       = $3,
-			mitre_tactic   = $4,
-			mitre_technique= $5,
-			mitre_name     = $6,
-			logsource_cat  = $7,
-			logsource_prod = $8,
-			logsource_svc  = $9,
-			status         = $10,
-			tags           = $11,
-			falsepositives = $12,
-			"references"   = $13,
-			keywords       = $14,
-			selections     = $15,
-			condition      = $16,
-			enabled        = $17
-		WHERE id = $18 AND tenant_id = $19
-	`,
-		rule.Title, rule.Description, rule.Severity,
-		rule.MitreTactic, rule.MitreTechnique, rule.MitreName,
-		rule.LogsourceCategory, rule.LogsourceProduct, rule.LogsourceService,
-		rule.Status, tagsJSON, fpJSON, refsJSON,
-		keywordsJSON, selectionsJSON, rule.Condition, rule.Enabled,
-		id, tenantID,
-	)
-	if err != nil {
-		return err
-	}
-	if n, _ := tag.RowsAffected(); n == 0 {
-		return ErrSigmaRuleNotFound
-	}
-	return nil
+	return database.WithTenantTx(context.Background(), tenantID, func(tx *sql.Tx) error {
+		tag, err := tx.Exec(`
+			UPDATE sigma_rules SET
+				title          = $1,
+				description    = $2,
+				severity       = $3,
+				mitre_tactic   = $4,
+				mitre_technique= $5,
+				mitre_name     = $6,
+				logsource_cat  = $7,
+				logsource_prod = $8,
+				logsource_svc  = $9,
+				status         = $10,
+				tags           = $11,
+				falsepositives = $12,
+				"references"   = $13,
+				keywords       = $14,
+				selections     = $15,
+				condition      = $16,
+				enabled        = $17
+			WHERE id = $18 AND tenant_id = $19
+		`,
+			rule.Title, rule.Description, rule.Severity,
+			rule.MitreTactic, rule.MitreTechnique, rule.MitreName,
+			rule.LogsourceCategory, rule.LogsourceProduct, rule.LogsourceService,
+			rule.Status, tagsJSON, fpJSON, refsJSON,
+			keywordsJSON, selectionsJSON, rule.Condition, rule.Enabled,
+			id, tenantID,
+		)
+		if err != nil {
+			return err
+		}
+		if n, _ := tag.RowsAffected(); n == 0 {
+			return ErrSigmaRuleNotFound
+		}
+		return nil
+	})
 }
 
 func DeleteSigmaRule(id string, tenantID int) error {

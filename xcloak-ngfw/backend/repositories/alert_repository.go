@@ -1,6 +1,9 @@
 package repositories
 
 import (
+	"context"
+	"database/sql"
+
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
@@ -16,36 +19,47 @@ func CreateAlert(
 		return nil
 	}
 
-	// tenant_id is resolved from the owning agent rather than taken from
-	// alert.TenantID — CreateAlert is called from detection engines
-	// (sigma/ioc/yara matching) that only carry agent_id, and the agent is
-	// the single source of truth for which tenant an alert belongs to.
-	_, err := database.DB.Exec(`
-		INSERT INTO alerts
-		(
-			agent_id,
-			severity,
-			rule_name,
-			fingerprint,
-			mitre_tactic,
-			mitre_technique,
-			mitre_name,
-			log_message,
-			tenant_id
-		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8, (SELECT tenant_id FROM agents WHERE id = $1))
-	`,
-		alert.AgentID,
-		alert.Severity,
-		alert.RuleName,
-		alert.Fingerprint,
-		alert.MitreTactic,
-		alert.MitreTechnique,
-		alert.MitreName,
-		alert.LogMessage,
-	)
+	// Resolve the owning tenant before opening the RLS transaction. The
+	// detection engine only carries agent_id; this internal lookup doesn't
+	// need to be RLS-scoped because agents.tenant_id is its own ground truth.
+	var tenantID int
+	if err := database.DB.QueryRow(
+		`SELECT tenant_id FROM agents WHERE id = $1`, alert.AgentID,
+	).Scan(&tenantID); err != nil {
+		return err
+	}
 
-	return err
+	// WithTenantTx sets SET LOCAL app.tenant_id so the RLS WITH CHECK
+	// policy validates the INSERT, catching any engine bug that mis-routes
+	// an alert to the wrong tenant at the DB layer.
+	return database.WithTenantTx(context.Background(), tenantID, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			INSERT INTO alerts
+			(
+				agent_id,
+				severity,
+				rule_name,
+				fingerprint,
+				mitre_tactic,
+				mitre_technique,
+				mitre_name,
+				log_message,
+				tenant_id
+			)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		`,
+			alert.AgentID,
+			alert.Severity,
+			alert.RuleName,
+			alert.Fingerprint,
+			alert.MitreTactic,
+			alert.MitreTechnique,
+			alert.MitreName,
+			alert.LogMessage,
+			tenantID,
+		)
+		return err
+	})
 }
 
 // GetAlerts returns alerts belonging to tenantID only. Use this from

@@ -12,8 +12,17 @@ import (
 	"xcloak-ngfw/secrets"
 )
 
-// DB is the primary (read-write) database connection.
+// DB is the primary application connection pool. In production it connects as
+// the limited-privilege APP_DB_USER role (xcloak_app) which is subject to
+// PostgreSQL Row-Level Security. When APP_DB_USER is not set it falls back to
+// DB_USER (existing behaviour — backwards-compatible).
 var DB *sql.DB
+
+// MigrationDB is a privileged connection used only by the migration runner.
+// It connects as DB_USER (the schema owner) which has DDL rights and bypasses
+// RLS — required for golang-migrate to run CREATE TABLE / ALTER TABLE etc.
+// When APP_DB_USER is not configured, MigrationDB == DB (same pool, same user).
+var MigrationDB *sql.DB
 
 // ReadDB is the read-replica connection. Nil when DB_READ_HOST is not set,
 // in which case RDB() falls back to DB so callers need no nil checks.
@@ -45,6 +54,12 @@ const (
 
 // Connect establishes the primary Postgres connection with retry logic so the
 // backend survives docker-compose startup races.
+//
+// Two env vars control the database user:
+//   - DB_USER / DB_PASSWORD — the schema owner used for migrations (DDL rights)
+//   - APP_DB_USER / APP_DB_PASSWORD — the limited-privilege application role
+//     (recommended: xcloak_app, which is subject to RLS policies). Falls back
+//     to DB_USER when not set so existing deployments require no changes.
 func Connect() error {
 	godotenv.Load()
 
@@ -53,13 +68,22 @@ func Connect() error {
 		sslmode = "disable"
 	}
 
-	dbPassword := secrets.Resolve("DB_PASSWORD", "xcloak/backend", "db_password")
+	// Resolve the application-pool credentials. APP_DB_USER/APP_DB_PASSWORD
+	// are used when set; otherwise fall back to the owner credentials.
+	appUser := os.Getenv("APP_DB_USER")
+	if appUser == "" {
+		appUser = os.Getenv("DB_USER")
+	}
+	appPassword := os.Getenv("APP_DB_PASSWORD")
+	if appPassword == "" {
+		appPassword = secrets.Resolve("DB_PASSWORD", "xcloak/backend", "db_password")
+	}
 
 	connStr := buildConnStr(
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
-		os.Getenv("DB_USER"),
-		dbPassword,
+		appUser,
+		appPassword,
 		os.Getenv("DB_NAME"),
 		sslmode,
 	)
@@ -84,9 +108,41 @@ func Connect() error {
 		db.SetConnMaxLifetime(connLifetime)
 		DB = db
 		fmt.Println("Database connected successfully")
-		return nil
+		break
 	}
-	return fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
+	if DB == nil {
+		return fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
+	}
+
+	// Open a separate privileged pool for the migration runner when APP_DB_USER
+	// differs from DB_USER. The migration runner needs DDL rights (CREATE TABLE,
+	// ALTER TABLE, etc.) that xcloak_app does not have. When APP_DB_USER is not
+	// set, both pools use the same credentials and MigrationDB == DB.
+	if ownerUser := os.Getenv("DB_USER"); ownerUser != "" && ownerUser != appUser {
+		ownerPw := secrets.Resolve("DB_PASSWORD", "xcloak/backend", "db_password")
+		migConnStr := buildConnStr(
+			os.Getenv("DB_HOST"), os.Getenv("DB_PORT"),
+			ownerUser, ownerPw,
+			os.Getenv("DB_NAME"), sslmode,
+		)
+		if migDB, merr := sql.Open("postgres", migConnStr); merr == nil {
+			if merr = migDB.Ping(); merr == nil {
+				migDB.SetMaxOpenConns(3) // migration is single-threaded
+				migDB.SetMaxIdleConns(1)
+				migDB.SetConnMaxLifetime(connLifetime)
+				MigrationDB = migDB
+				fmt.Printf("Migration DB connected as privileged owner (%s)\n", ownerUser)
+			} else {
+				migDB.Close()
+				fmt.Printf("Migration DB ping failed — falling back to app pool: %v\n", merr)
+			}
+		}
+	}
+	if MigrationDB == nil {
+		MigrationDB = DB
+	}
+
+	return nil
 }
 
 // ConnectReadReplica attempts to connect to a Postgres read replica using

@@ -24,11 +24,18 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	if services.IsUsernameLocked(req.Username) {
+		c.JSON(429, gin.H{"error": "account temporarily locked due to too many failed login attempts — try again in 15 minutes"})
+		return
+	}
+
 	token, needs2FA, err := services.LoginUser(req.Username, req.Password)
 	if err != nil {
+		services.RecordLoginFailure(req.Username)
 		c.JSON(401, gin.H{"error": "invalid credentials"})
 		return
 	}
+	services.ClearLoginFailures(req.Username)
 
 	var userID, tenantID int
 	var role string

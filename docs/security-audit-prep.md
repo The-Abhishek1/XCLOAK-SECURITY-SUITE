@@ -75,13 +75,20 @@ All routes are defined in `backend/routes/routes.go`.
 - `POST /api/platform/agent-releases`
 - `/api/platform/tenants/*`
 
-### Known Gaps (Address Before Audit)
-- [ ] **No rate limiting / account lockout** on `/api/auth/login` — add middleware (e.g. `golang.org/x/time/rate` per IP + per username)
-- [ ] **No CSP header** — add `Content-Security-Policy` to API responses and Next.js middleware
-- [ ] **No HSTS header** — set `Strict-Transport-Security` at ingress or in Gin middleware
-- [ ] **No request size limit** on log ingest — add `c.Request.Body = http.MaxBytesReader(...)` 
-- [ ] **Webhook SSRF** — `POST /api/integrations` accepts arbitrary URLs; add allowlist or SSRF filter
-- [ ] **No account lockout** — brute-force on login is unthrottled at the app level
+### Gaps — Phase 1 (all closed)
+
+- [x] **Per-IP rate limiting on login** — `RateLimitAuth()` (10 req/min sliding window, Redis) in `backend/middleware/rate_limiter.go`. Applied to /api/auth/login, /api/auth/register, /api/signup.
+- [x] **Per-username lockout on login** — `services.IsUsernameLocked()` / `RecordLoginFailure()` / `ClearLoginFailures()` in `backend/services/login_guard.go`; 5 failures in 15 min → 15-min lockout (Redis `login:fail:{u}`, `login:locked:{u}`). Wired into `api/auth.go:Login()`.
+- [x] **CSP + HSTS headers** — `SecurityHeaders()` Gin middleware in `backend/middleware/security_headers.go`, registered globally in `main.go`. Sets `Content-Security-Policy: default-src 'none'`, HSTS (TLS-conditional, 1 year), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`.
+- [x] **Request size limit on log ingest** — `http.MaxBytesReader(10 MiB)` on `ReceiveLogs` in `api/log.go` (POST /api/agents/logs). Matches existing cap on POST /api/logs/ingest.
+- [x] **Webhook SSRF** — `services.CheckURL()` in `backend/services/ssrf.go` denies loopback (127.0.0.0/8, ::1), RFC1918, link-local/metadata (169.254.0.0/16, fe80::/10), shared CGN (100.64.0.0/10), and known metadata hostnames. Wired into `webhook_service.go:deliver()`, `playbook_engine.go:handleWebhook()`, and `playbook_engine.go:handleSlackMessage()`.
+- [x] **RLS bypass (superuser app pool)** — `APP_DB_USER=xcloak_app` added to `.env.example` and compose/Helm defaults. `database/db.go:Connect()` opens the app pool as APP_DB_USER (DML-only, subject to RLS) and a separate `MigrationDB` pool as DB_USER (DDL rights). `WithTenantTx` wired into `CreateAlert`, `CreateSigmaRule`, `UpdateSigmaRule`, `CreateIOC` so the RLS WITH CHECK policy validates every write at the DB layer.
+
+### Gaps — Phase 2 (still open)
+- [ ] **File upload hardening** — YARA/Sigma import, ZIP bomb, path traversal (ASVS 12.1.1)
+- [ ] **KQL injection** — raw query construction in `log_search_service.go`
+- [ ] **JSONB injection** — `parsed_fields` in JSONB; ensure no eval/exec paths from log data
+- [ ] **Script runner sandboxing** — `POST /api/agents/:id/script` command injection on agent side
 
 ---
 

@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -77,27 +79,28 @@ func CreateIOC(
 		return nil
 	}
 
-	_, err := database.DB.Exec(`
-		INSERT INTO iocs
-		(
-			indicator,
-			type,
-			severity,
-			description,
-			enabled,
-			tenant_id
+	return database.WithTenantTx(context.Background(), tenantID, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			INSERT INTO iocs
+			(
+				indicator,
+				type,
+				severity,
+				description,
+				enabled,
+				tenant_id
+			)
+			VALUES ($1,$2,$3,$4,$5,$6)
+		`,
+			ioc.Indicator,
+			ioc.Type,
+			ioc.Severity,
+			ioc.Description,
+			ioc.Enabled,
+			tenantID,
 		)
-		VALUES ($1,$2,$3,$4,$5,$6)
-	`,
-		ioc.Indicator,
-		ioc.Type,
-		ioc.Severity,
-		ioc.Description,
-		ioc.Enabled,
-		tenantID,
-	)
-
-	return err
+		return err
+	})
 }
 
 // GetIOCs returns IOCs belonging to tenantID only. Use this from
