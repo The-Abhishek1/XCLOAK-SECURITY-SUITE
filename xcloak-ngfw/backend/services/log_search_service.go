@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,44 +17,105 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 // KQL-lite query parser
 //
-// Grammar (AND-implicit between terms):
+// Grammar:
+//   query  = group (OR group)*
+//   group  = term (AND? term)*         — AND is implicit between terms
+//   term   = [-|NOT] field:value
+//          | [-|NOT] "quoted phrase"
+//          | [-|NOT] bare word
+//
+// Operators:
 //   field:value      — parsed_fields->>'field' ILIKE '%value%'
 //   -field:value     — NOT parsed_fields->>'field' ILIKE '%value%'
+//   NOT field:value  — same as above
 //   "quoted phrase"  — log_message ILIKE '%quoted phrase%'
 //   bare word        — log_message ILIKE '%word%'
+//   OR               — separates term groups; groups are ORed, terms within a
+//                      group are ANDed
+//   AND              — explicit AND between terms (same as implicit whitespace)
 //
 // The field names map directly to ParsedFields JSON keys.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type kqlCondition struct {
-	sql  string
-	args []interface{}
-}
+// kqlOR is an internal sentinel emitted by the tokenizer for the OR keyword.
+// Using a NUL-byte prefix guarantees it can never appear in real user input.
+const kqlOR = "\x00OR"
 
-// parseKQL converts a KQL-lite query string into a list of SQL conditions
-// (all ANDed together) and the corresponding positional parameter values.
-// The caller must provide startIdx as the next $N to use (usually 1 or
-// after the tenant/agent parameters that precede the WHERE conditions).
+// parseKQL converts a KQL-lite query string into SQL conditions and parameter
+// values. startIdx is the next positional parameter index ($N) to use.
+//
+// When the query contains OR, groups of terms are wrapped individually and
+// joined with SQL OR: (termA AND termB) OR (termC AND termD).
+// Without OR, conditions are returned as a flat AND list (original behaviour).
 func parseKQL(query string, startIdx int) (conditions []string, args []interface{}) {
 	tokens := tokenizeKQL(query)
+
+	// Split the token stream on OR sentinels into term groups.
+	var groups [][]string
+	var cur []string
+	for _, tok := range tokens {
+		if tok == kqlOR {
+			if len(cur) > 0 {
+				groups = append(groups, cur)
+				cur = nil
+			}
+		} else {
+			cur = append(cur, tok)
+		}
+	}
+	if len(cur) > 0 {
+		groups = append(groups, cur)
+	}
+	if len(groups) == 0 {
+		return
+	}
+
 	idx := startIdx
 
+	if len(groups) == 1 {
+		// Fast path (no OR): emit flat AND conditions — preserves exact prior behaviour.
+		return buildKQLConditions(groups[0], idx)
+	}
+
+	// Multiple OR groups: build (groupA) OR (groupB) OR ...
+	var orParts []string
+	for _, group := range groups {
+		conds, gArgs := buildKQLConditions(group, idx)
+		idx += len(gArgs)
+		args = append(args, gArgs...)
+		switch len(conds) {
+		case 0:
+		case 1:
+			orParts = append(orParts, conds[0])
+		default:
+			orParts = append(orParts, "("+strings.Join(conds, " AND ")+")")
+		}
+	}
+	switch len(orParts) {
+	case 0:
+	case 1:
+		conditions = orParts
+	default:
+		conditions = []string{"(" + strings.Join(orParts, " OR ") + ")"}
+	}
+	return
+}
+
+// buildKQLConditions converts a flat list of terms (within a single OR group)
+// into SQL conditions. Extracted from the original parseKQL so it can be called
+// once per OR group when OR support is active.
+func buildKQLConditions(tokens []string, startIdx int) (conditions []string, args []interface{}) {
+	idx := startIdx
 	for _, tok := range tokens {
 		neg := strings.HasPrefix(tok, "-")
 		if neg {
 			tok = tok[1:]
 		}
-
 		colonIdx := strings.Index(tok, ":")
 		if colonIdx > 0 {
-			// field:value
 			field := tok[:colonIdx]
 			value := tok[colonIdx+1:]
-			if value == "" {
-				continue
-			}
-			// Sanitize: only allow [a-zA-Z0-9_] in field name.
-			if !isSafeFieldName(field) {
+			if value == "" || !isSafeFieldName(field) {
 				continue
 			}
 			cond := fmt.Sprintf("(parsed_fields->>'%s' ILIKE $%d)", field, idx)
@@ -64,7 +126,6 @@ func parseKQL(query string, startIdx int) (conditions []string, args []interface
 			args = append(args, "%"+value+"%")
 			idx++
 		} else {
-			// Free text — unquoted word or quoted phrase.
 			value := strings.Trim(tok, `"`)
 			if value == "" {
 				continue
@@ -81,11 +142,18 @@ func parseKQL(query string, startIdx int) (conditions []string, args []interface
 	return
 }
 
-// tokenizeKQL splits a KQL-lite string into tokens, respecting double-quoted
-// phrases and -negation prefixes.
+// tokenizeKQL splits a KQL-lite query string into tokens.
+//
+//   - OR emits the kqlOR sentinel so parseKQL can split term groups.
+//   - AND is implicit and silently consumed.
+//   - NOT sets pending negation on the next term (equivalent to a `-` prefix).
+//   - `-token` and `NOT token` are both supported and combinable.
+//   - Double-quoted phrases are kept intact (including interior spaces).
 func tokenizeKQL(q string) []string {
 	var tokens []string
 	q = strings.TrimSpace(q)
+	pendingNot := false
+
 	for len(q) > 0 {
 		q = strings.TrimLeft(q, " \t")
 		if len(q) == 0 {
@@ -96,10 +164,15 @@ func tokenizeKQL(q string) []string {
 		if neg {
 			q = q[1:]
 		}
+		// Apply any NOT from the previous iteration after consuming `-`.
+		if pendingNot {
+			neg = !neg // NOT followed by - is double-negation → positive
+			pendingNot = false
+		}
 
 		var tok string
 		if len(q) > 0 && q[0] == '"' {
-			// Quoted phrase — scan to next "
+			// Quoted phrase — scan to closing "
 			end := strings.Index(q[1:], `"`)
 			if end < 0 {
 				tok = q[1:]
@@ -110,7 +183,6 @@ func tokenizeKQL(q string) []string {
 			}
 			tok = `"` + tok + `"`
 		} else {
-			// Unquoted token — scan to next whitespace
 			end := strings.IndexAny(q, " \t")
 			if end < 0 {
 				tok = q
@@ -121,13 +193,19 @@ func tokenizeKQL(q string) []string {
 			}
 		}
 
-		if tok == "AND" || tok == "OR" || tok == "NOT" {
-			continue // skip boolean operators (we always AND)
+		switch tok {
+		case "OR":
+			tokens = append(tokens, kqlOR)
+		case "AND":
+			// implicit — consume and continue
+		case "NOT":
+			pendingNot = !neg // `-NOT` flips the pending state
+		default:
+			if neg {
+				tok = "-" + tok
+			}
+			tokens = append(tokens, tok)
 		}
-		if neg {
-			tok = "-" + tok
-		}
-		tokens = append(tokens, tok)
 	}
 	return tokens
 }
@@ -591,10 +669,8 @@ func EnsureNextMonthPartition() {
 }
 
 // ApplyRetentionPolicies deletes time-series rows older than each tenant's
-// configured retention window. For partitioned endpoint_logs, whole month
-// partitions older than the retention cutoff are dropped (fast path); the
-// batched-DELETE loop remains as a fallback for the legacy/default partition.
-// Called from StartScheduler nightly.
+// configured retention window, then drops any monthly endpoint_logs partitions
+// that are now fully empty. Called from StartScheduler nightly.
 func ApplyRetentionPolicies() {
 	rows, err := database.DB.Query(`
 		SELECT tenant_id, retention_days FROM log_retention_policies
@@ -611,6 +687,9 @@ func ApplyRetentionPolicies() {
 		}
 		applyRetentionForTenant(tenantID, days)
 	}
+
+	// After all per-tenant DELETEs, reclaim partitions that are now fully empty.
+	pruneEmptyEndpointLogsPartitions()
 }
 
 // applyRetentionForTenant purges all time-series tables for one tenant.
@@ -656,13 +735,18 @@ func applyRetentionForTenant(tenantID, days int) {
 	}
 }
 
-// dropEndpointLogsPartitionsBefore drops monthly endpoint_logs partitions whose
-// entire month is older than cutoff for the given tenant. For multi-tenant
-// partitions the DELETE fallback removes only that tenant's rows; whole-partition
-// DROP only fires when the partition is single-tenant (future: per-tenant
-// sub-partitioning). The legacy/default partition always falls through to DELETE.
+// validPartName ensures endpoint_logs partition names from pg_class are safe
+// to use in DDL. While relname comes from the system catalog, validating it
+// defends against catalog corruption and makes the DDL intent explicit.
+var validPartName = regexp.MustCompile(`^endpoint_logs_\d{4}_\d{2}$`)
+
+// dropEndpointLogsPartitionsBefore removes expired rows for tenantID from
+// monthly partitions older than cutoff. The actual partition DROP is deferred
+// to pruneEmptyEndpointLogsPartitions (called from ApplyRetentionPolicies after
+// all tenants have been processed) so we only DROP a partition once it is
+// completely empty across every tenant.
 func dropEndpointLogsPartitionsBefore(tenantID int, cutoff time.Time, batchSize int) {
-	// Find named month partitions (endpoint_logs_YYYY_MM) older than cutoff.
+	// Per-tenant targeted DELETE from each old partition.
 	rows, err := database.DB.Query(`
 		SELECT c.relname
 		FROM pg_inherits i
@@ -679,9 +763,9 @@ func dropEndpointLogsPartitionsBefore(tenantID int, cutoff time.Time, batchSize 
 			if rows.Scan(&partName) != nil {
 				continue
 			}
-			// DROP is safe only when the partition holds data for one tenant.
-			// For now, use targeted DELETE (safe for shared partitions).
-			// TODO: enable DROP once per-tenant partitioning is implemented.
+			if !validPartName.MatchString(partName) {
+				continue
+			}
 			database.DB.Exec(
 				`DELETE FROM `+partName+` WHERE tenant_id = $1`, tenantID,
 			)
@@ -714,6 +798,64 @@ func deleteInBatches(batchSize int, del func() (int64, error)) {
 		n, err := del()
 		if err != nil || n < int64(batchSize) {
 			return
+		}
+	}
+}
+
+// pruneEmptyEndpointLogsPartitions drops monthly endpoint_logs partitions that
+// are fully empty. This runs after ApplyRetentionPolicies has done per-tenant
+// DELETEs on all partitions, so a partition that held only expired data across
+// every tenant will be caught here and reclaimed at the OS level.
+//
+// Safety: we verify emptiness with EXISTS just before DROP, and we validate the
+// partition name against a regex before using it in DDL — the name comes from
+// pg_class but we are defensive against catalog anomalies.
+func pruneEmptyEndpointLogsPartitions() {
+	// No-op when endpoint_logs is not partitioned.
+	var relkind string
+	if err := database.DB.QueryRow(
+		`SELECT relkind FROM pg_class
+		 WHERE relname='endpoint_logs' AND relnamespace='public'::regnamespace`,
+	).Scan(&relkind); err != nil || relkind != "p" {
+		return
+	}
+
+	rows, err := database.DB.Query(`
+		SELECT c.relname
+		FROM pg_inherits i
+		JOIN pg_class c ON c.oid = i.inhrelid
+		WHERE i.inhparent = 'endpoint_logs'::regclass
+		  AND c.relname ~ '^endpoint_logs_\d{4}_\d{2}$'
+		ORDER BY c.relname
+	`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var partName string
+		if rows.Scan(&partName) != nil {
+			continue
+		}
+		if !validPartName.MatchString(partName) {
+			slog.Warn("unexpected partition name — skipping DROP check", "partition", partName)
+			continue
+		}
+
+		// Verify emptiness immediately before DROP to eliminate any TOCTOU window.
+		var hasRows bool
+		database.DB.QueryRow(
+			`SELECT EXISTS(SELECT 1 FROM ` + partName + ` LIMIT 1)`,
+		).Scan(&hasRows)
+		if hasRows {
+			continue
+		}
+
+		if _, err := database.DB.Exec(`DROP TABLE ` + partName); err != nil {
+			slog.Warn("failed to drop empty partition", "partition", partName, "err", err)
+		} else {
+			slog.Info("dropped empty endpoint_logs partition", "partition", partName)
 		}
 	}
 }

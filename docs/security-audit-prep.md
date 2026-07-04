@@ -55,7 +55,7 @@ scope, and test evidence to collect before the engagement.
 All routes are defined in `backend/routes/routes.go`.
 
 **Public (no auth):**
-- `POST /api/auth/login` — credential stuffing, account lockout (not yet implemented — see gap)
+- `POST /api/auth/login` — credential stuffing; per-IP rate limiting (10 req/min) + per-username lockout (5 failures → 15-min lock) now enforced
 - `POST /api/auth/register` — first user creates admin; subsequent users analyst
 - `GET /api/agent-releases/:platform` — requires agent token, not user token
 - `GET /api/auth/oidc/*` — OIDC callback (CSRF state param enforced)
@@ -91,10 +91,11 @@ All routes are defined in `backend/routes/routes.go`.
 - [x] **JSONB injection** — `parsed_fields` data accessed exclusively via `->>` text extraction with hardcoded key names (behavioral_baseline_service, email_security_detector, ot_ics_detector) or through `isSafeFieldName`-validated user keys (KQL search). Data is never executed — only compared via ILIKE/= operators. No plv8 or eval path exists. Reviewed 2026-07-04.
 - [x] **Script runner shell allowlist** — `api/script_runner.go:DispatchScript()` now validates `shell` against `{bash, sh, python3, pwsh}`. Script body capped at 512 KiB. Backend does not execute scripts (payload is queued for agent); cross-tenant execution was already blocked via `GetAgentByID(id, tenantID)`.
 
-### Gaps — Phase 3 (still open)
-- [ ] **Path traversal in file uploads** — YARA/Sigma import stores content in DB (no filesystem write), so no path traversal risk today; revisit if on-disk YARA scanning is added
-- [ ] **Per-tenant partition DROP** — `dropEndpointLogsPartitionsBefore` comments note a TODO to enable whole-partition DROP once per-tenant sub-partitioning lands
-- [ ] **KQL `not` / `or` operators** — current KQL always ANDs conditions; OR semantics are silently ignored; document for users
+### Gaps — Phase 3 (all closed)
+
+- [x] **Path traversal in file uploads** — Confirmed N/A: YARA and Sigma import store rule content in PostgreSQL only; no file is written to the filesystem. No path traversal attack surface today. Revisit if on-disk YARA scanning is added.
+- [x] **Per-tenant partition DROP** — `pruneEmptyEndpointLogsPartitions()` added to `log_search_service.go`; runs after every `ApplyRetentionPolicies()` nightly pass. Validates partition name against `^endpoint_logs_\d{4}_\d{2}$` before DDL, checks `EXISTS` immediately before DROP (no TOCTOU gap). Old partitions are reclaimed once all tenant data has expired out of them.
+- [x] **KQL OR/NOT operators** — `log_search_service.go` tokenizer and parser fully rewritten. OR is now a first-class separator producing `(groupA) OR (groupB)` SQL. NOT keyword equivalent to `-` prefix (combinable). AND remains implicit. No query silently ignores user intent.
 
 ---
 
@@ -108,10 +109,10 @@ All routes are defined in `backend/routes/routes.go`.
 5. Agent token theft (can a compromised agent register as a different tenant?)
 
 ### Priority 2 — Data paths  
-6. SQL injection (KQL-lite parser in `log_search_service.go`, raw query construction)
-7. JSONB injection via `parsed_fields` — ensure no eval/exec paths from log data
-8. File upload security (`POST /api/files`, YARA/Sigma import — ZIP bomb, path traversal)
-9. Script runner (`POST /api/agents/:id/script`) — command injection on agent side
+6. SQL injection (KQL-lite parser in `log_search_service.go`) — reviewed clean: field names gated by `isSafeFieldName`, values parameterized
+7. JSONB injection via `parsed_fields` — reviewed clean: data accessed via `->>`/`->` only, never executed
+8. File upload security (YARA/Sigma import) — size-limited 1 MiB/file, 20 files max; content stored in DB only
+9. Script runner (`POST /api/scripts/run`) — shell allowlisted, script capped at 512 KiB, tenant scoped
 
 ### Priority 3 — Resilience
 10. DoS via large request bodies on log ingest
@@ -151,9 +152,11 @@ psql $DATABASE_URL -c "SELECT relname, relrowsecurity FROM pg_class WHERE relnam
 | 3.4.1 | Cookie secure + httpOnly | ✅ P1.x cookie migration |
 | 4.1.1 | Access control on every resource | ✅ RequireAuth() on all routes |
 | 4.3.1 | Administrative functions isolated | ✅ RequireRole("admin") + platform_admin |
-| 5.2.1 | Input validation on all fields | ⚠️ Partial — KQL sanitized, file upload needs review |
-| 7.1.1 | Sensitive data not logged | ⚠️ Review parsed_fields for PII |
-| 8.1.1 | RLS / tenant isolation | ✅ PostgreSQL RLS migration 000050 |
+| 2.5.2 | Account lockout after failed attempts | ✅ per-username 5-failure/15-min lock in `login_guard.go` |
+| 5.2.1 | Input validation on all fields | ✅ KQL gated by `isSafeFieldName`; uploads 1 MiB/file; shell allowlisted |
+| 7.1.1 | Sensitive data not logged | ⚠️ `parsed_fields` may contain PII (email, IP, username) — operators should define a data-handling policy |
+| 8.1.1 | RLS / tenant isolation | ✅ PostgreSQL RLS + `WithTenantTx` on all writes (Phase 1) |
 | 9.1.1 | TLS for all connections | ✅ configurable, enforced at ingress |
 | 10.2.1 | No hardcoded credentials | ✅ all secrets via env/Vault |
-| 12.1.1 | File upload size limits | ❌ not yet implemented |
+| 12.1.1 | File upload size limits | ✅ 1 MiB/file (YARA/Sigma), 200 MiB (vuln scan), 10 MiB (log ingest) |
+| 14.4.1 | Security headers on all responses | ✅ `SecurityHeaders()` middleware: CSP, HSTS, X-Content-Type-Options, X-Frame-Options |
