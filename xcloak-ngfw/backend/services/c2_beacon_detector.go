@@ -206,6 +206,9 @@ func scoreBeacon(tsList []int64, dstIP string, dstPort int, comm string, agentID
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 func computeIntervals(tsList []int64) []float64 {
+	if len(tsList) < 2 {
+		return nil
+	}
 	sorted := make([]int64, len(tsList))
 	copy(sorted, tsList)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })

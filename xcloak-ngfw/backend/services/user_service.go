@@ -13,6 +13,32 @@ import (
 	"xcloak-ngfw/repositories"
 )
 
+// ValidatePasswordComplexity returns an error when a password fails minimum
+// requirements: ≥8 chars, at least one uppercase, lowercase, digit, and
+// special character. Call this at every registration and password-reset path.
+func ValidatePasswordComplexity(password string) error {
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, ch := range password {
+		switch {
+		case ch >= 'A' && ch <= 'Z':
+			hasUpper = true
+		case ch >= 'a' && ch <= 'z':
+			hasLower = true
+		case ch >= '0' && ch <= '9':
+			hasDigit = true
+		default:
+			hasSpecial = true
+		}
+	}
+	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
+		return errors.New("password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character")
+	}
+	return nil
+}
+
 // RegisterUser creates a new user.
 // Only the FIRST user ever registered gets admin role.
 // All subsequent registrations are forced to "analyst" regardless of what the client sends.
@@ -99,8 +125,8 @@ func ChangePassword(userID int, currentPassword, newPassword string) error {
 		return errors.New("current password is incorrect")
 	}
 
-	if len(newPassword) < 8 {
-		return errors.New("new password must be at least 8 characters")
+	if err := ValidatePasswordComplexity(newPassword); err != nil {
+		return err
 	}
 
 	newHash, err := auth.HashPassword(newPassword)
@@ -264,8 +290,8 @@ If you didn't request this, you can safely ignore this email.
 
 // ResetPassword validates the reset token and sets the new password.
 func ResetPassword(token, newPassword string) error {
-	if len(newPassword) < 8 {
-		return errors.New("password must be at least 8 characters")
+	if err := ValidatePasswordComplexity(newPassword); err != nil {
+		return err
 	}
 
 	var userID int

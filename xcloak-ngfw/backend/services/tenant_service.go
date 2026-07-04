@@ -49,8 +49,8 @@ func SelfServeSignup(orgName, slug, username, email, password string) (string, e
 	if orgName == "" || slug == "" || username == "" || email == "" {
 		return "", errors.New("all fields are required")
 	}
-	if len(password) < 8 {
-		return "", errors.New("password must be at least 8 characters")
+	if err := ValidatePasswordComplexity(password); err != nil {
+		return "", err
 	}
 	if !isValidSlug(slug) {
 		return "", errors.New("slug must be lowercase letters, numbers, and hyphens only")

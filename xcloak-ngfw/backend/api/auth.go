@@ -72,8 +72,8 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	if len(user.Password) < 8 {
-		c.JSON(400, gin.H{"error": "password must be at least 8 characters"})
+	if err := services.ValidatePasswordComplexity(user.Password); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 

@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -77,6 +78,10 @@ func Connect() error {
 	appPassword := os.Getenv("APP_DB_PASSWORD")
 	if appPassword == "" {
 		appPassword = secrets.Resolve("DB_PASSWORD", "xcloak/backend", "db_password")
+	}
+	if appPassword == "change_me_in_production" {
+		slog.Warn("SECURITY: APP_DB_PASSWORD is set to the insecure default. " +
+			"Change it before deploying to production.")
 	}
 
 	connStr := buildConnStr(

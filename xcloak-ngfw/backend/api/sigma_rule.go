@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -176,6 +177,8 @@ func DeleteSigmaRule(
 		return
 	}
 
+	username, _ := c.Get("username")
+	services.LogEvent("SIGMA_RULE_DELETE", fmt.Sprintf("id=%s", id), fmt.Sprintf("%v", username))
 	c.JSON(
 		200,
 		gin.H{

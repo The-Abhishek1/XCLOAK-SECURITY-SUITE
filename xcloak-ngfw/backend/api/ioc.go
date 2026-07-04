@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -143,6 +144,8 @@ func DeleteIOC(c *gin.Context) {
 		return
 	}
 
+	username, _ := c.Get("username")
+	services.LogEvent("IOC_DELETE", fmt.Sprintf("id=%s", id), fmt.Sprintf("%v", username))
 	c.JSON(200, gin.H{
 		"message": "IOC Deleted",
 	})

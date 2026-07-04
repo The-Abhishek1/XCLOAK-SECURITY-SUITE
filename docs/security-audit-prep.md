@@ -97,6 +97,15 @@ All routes are defined in `backend/routes/routes.go`.
 - [x] **Per-tenant partition DROP** — `pruneEmptyEndpointLogsPartitions()` added to `log_search_service.go`; runs after every `ApplyRetentionPolicies()` nightly pass. Validates partition name against `^endpoint_logs_\d{4}_\d{2}$` before DDL, checks `EXISTS` immediately before DROP (no TOCTOU gap). Old partitions are reclaimed once all tenant data has expired out of them.
 - [x] **KQL OR/NOT operators** — `log_search_service.go` tokenizer and parser fully rewritten. OR is now a first-class separator producing `(groupA) OR (groupB)` SQL. NOT keyword equivalent to `-` prefix (combinable). AND remains implicit. No query silently ignores user intent.
 
+### Gaps — Phase 4 (all closed)
+
+- [x] **RLS not operationally active** — Migration `000057_xcloak_app_full_grants.up.sql` grants `xcloak_app` SELECT/INSERT/UPDATE/DELETE on ALL tables in the public schema (not just the 6 RLS-protected tables from migration 000050) and sets `ALTER DEFAULT PRIVILEGES` so future migrations inherit the same grants. With `APP_DB_USER=xcloak_app` in `.env`, the app pool now connects as the limited-privilege role end-to-end and RLS is load-bearing for every query.
+- [x] **Default xcloak_app password warning** — `database/db.go:Connect()` emits `slog.Warn` when `APP_DB_PASSWORD` is the known default `change_me_in_production`. Visible in startup logs before any traffic is served.
+- [x] **Unprotected high-cost endpoints** — Added `middleware.RateLimitAPI()` (120 req/min sliding window) to `GET /api/logs/search`, `GET /api/logs/export`, `GET /api/dashboard/overview`, `GET /api/dashboard/metrics`, `POST /api/alerts/bulk-acknowledge`, `POST /api/iocs/bulk`. These endpoints perform full-table scans or aggregations; without rate limiting they were a DoS vector for authenticated users.
+- [x] **Audit logging gaps for DELETE/config operations** — Added `services.LogEvent()` calls to `DeleteIOC` (`IOC_DELETE`), `DeleteSigmaRule` (`SIGMA_RULE_DELETE`), and `DeleteThreatFeed` (`THREAT_FEED_DELETE`). Audit trail now covers all destructive detection-rule operations.
+- [x] **Weak password policy** — `services.ValidatePasswordComplexity()` replaces all bare `len(password) < 8` checks. New policy: ≥8 chars, at least one uppercase, lowercase, digit, and special character. Applied at all four registration/reset paths: `api/auth.go:Register`, `services/user_service.go:ChangePassword`, `services/user_service.go:ResetPassword`, `services/tenant_service.go:SelfServeSignup`.
+- [x] **Detection engine test coverage** — Added unit tests for pure helper functions across 4 detectors previously without any test file: `c2_beacon_detector_test.go` (computeIntervals, meanF, stddevF, coefficientOfVariation, isBenignProcess, isSuspiciousPort, splitAddr, scoreBeacon edge cases), `exfil_detector_test.go` (ExtractBytesFromLogMessage, isCloudStorageDomain, cloudStorageDomains integrity), `port_scan_detector_test.go` (portScanScore, adminPortName), `lotl_detector_test.go` (exeName, suspiciousChains table, lolBinSigs table, encodedPSFlags). Also fixed a latent panic in `computeIntervals` (negative capacity make when called with < 2 elements).
+
 ---
 
 ## Recommended Pentest Scope
@@ -146,7 +155,7 @@ psql $DATABASE_URL -c "SELECT relname, relrowsecurity FROM pg_class WHERE relnam
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| 2.1.1 | Passwords ≥ 8 chars | ✅ enforced in `POST /api/auth/register` |
+| 2.1.1 | Passwords ≥ 8 chars + complexity | ✅ `ValidatePasswordComplexity()` in `services/user_service.go`; requires uppercase, lowercase, digit, special char |
 | 2.3.1 | Credentials not sent in URL | ✅ `?token=` removed (P1.6) |
 | 3.3.1 | Session tokens invalidated on logout | ✅ Redis revocation list |
 | 3.4.1 | Cookie secure + httpOnly | ✅ P1.x cookie migration |
@@ -155,7 +164,7 @@ psql $DATABASE_URL -c "SELECT relname, relrowsecurity FROM pg_class WHERE relnam
 | 2.5.2 | Account lockout after failed attempts | ✅ per-username 5-failure/15-min lock in `login_guard.go` |
 | 5.2.1 | Input validation on all fields | ✅ KQL gated by `isSafeFieldName`; uploads 1 MiB/file; shell allowlisted |
 | 7.1.1 | Sensitive data not logged | ⚠️ `parsed_fields` may contain PII (email, IP, username) — operators should define a data-handling policy |
-| 8.1.1 | RLS / tenant isolation | ✅ PostgreSQL RLS + `WithTenantTx` on all writes (Phase 1) |
+| 8.1.1 | RLS / tenant isolation | ✅ PostgreSQL RLS + `WithTenantTx` on writes (P1); `xcloak_app` granted all tables so RLS is load-bearing for every query (P4 migration 000057) |
 | 9.1.1 | TLS for all connections | ✅ configurable, enforced at ingress |
 | 10.2.1 | No hardcoded credentials | ✅ all secrets via env/Vault |
 | 12.1.1 | File upload size limits | ✅ 1 MiB/file (YARA/Sigma), 200 MiB (vuln scan), 10 MiB (log ingest) |

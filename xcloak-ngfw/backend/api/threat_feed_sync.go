@@ -32,6 +32,8 @@ func DeleteThreatFeed(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "feed not found"})
 		return
 	}
+	username, _ := c.Get("username")
+	services.LogEvent("THREAT_FEED_DELETE", fmt.Sprintf("id=%s", id), fmt.Sprintf("%v", username))
 	c.JSON(200, gin.H{"message": "deleted"})
 }
 

@@ -88,7 +88,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/:id/logs/stream", api.LiveLogsWS) // WS — auth via ?ticket= (see IssueWSTicket)
 
 	// ── Dashboard ─────────────────────────────────────────────────
-	router.GET("/api/dashboard/overview", middleware.RequireAuth(), api.DashboardOverview)
+	router.GET("/api/dashboard/overview", middleware.RequireAuth(), middleware.RateLimitAPI(), api.DashboardOverview)
 
 	// ── Tasks ─────────────────────────────────────────────────────
 	router.POST("/api/tasks", middleware.RequireAuth(), api.CreateTask)
@@ -264,8 +264,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/threat/findings/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeAnomalyFinding)
 
 	// ── Log search, saved searches, retention ─────────────────────
-	router.GET("/api/logs/search", middleware.RequireAuth(), api.SearchLogsHandler)
-	router.GET("/api/logs/export", middleware.RequireAuth(), api.ExportLogs)
+	router.GET("/api/logs/search", middleware.RequireAuth(), middleware.RateLimitAPI(), api.SearchLogsHandler)
+	router.GET("/api/logs/export", middleware.RequireAuth(), middleware.RateLimitAPI(), api.ExportLogs)
 	router.GET("/api/logs/stats", middleware.RequireAuth(), api.GetLogStats)
 	router.GET("/api/logs/searches", middleware.RequireAuth(), api.GetSavedLogSearches)
 	router.POST("/api/logs/searches", middleware.RequireAuth(), api.SaveLogSearch)
@@ -286,7 +286,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.PATCH("/api/scheduler/tasks/:id/toggle", middleware.RequireAuth(), middleware.RequirePermission("manage_scheduler"), api.ToggleScheduledTask)
 	router.POST("/api/scheduler/tasks/:id/run", middleware.RequireAuth(), middleware.RequirePermission("manage_scheduler"), api.RunScheduledTaskNow)
 	router.DELETE("/api/scheduler/tasks/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_scheduler"), api.DeleteScheduledTask)
-	router.GET("/api/dashboard/metrics", middleware.RequireAuth(), api.GetDashboardMetrics)
+	router.GET("/api/dashboard/metrics", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetDashboardMetrics)
 	router.GET("/api/correlation/rules", middleware.RequireAuth(), api.GetCorrelationRules)
 	router.POST("/api/correlation/rules", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.CreateCorrelationRule)
 	router.PUT("/api/correlation/rules/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.UpdateCorrelationRule)
@@ -305,10 +305,10 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/incidents/:id/deepdive", middleware.RequireAuth(), api.GetIncidentDeepDive)
 	router.POST("/api/alerts/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeAlert)
 	router.POST("/api/alerts/:id/resolve", middleware.RequireAuth(), api.ResolveAlert)
-	router.POST("/api/alerts/bulk-acknowledge", middleware.RequireAuth(), api.BulkAcknowledgeAlerts)
+	router.POST("/api/alerts/bulk-acknowledge", middleware.RequireAuth(), middleware.RateLimitAPI(), api.BulkAcknowledgeAlerts)
 	router.POST("/api/alerts/:id/respond", middleware.RequireAuth(), api.DispatchAlertResponse)
 	router.GET("/api/alerts/:id", middleware.RequireAuth(), api.GetAlertWithTriage)
-	router.POST("/api/iocs/bulk", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.BulkImportIOCs)
+	router.POST("/api/iocs/bulk", middleware.RequireAuth(), middleware.RateLimitAPI(), middleware.RequirePermission("manage_detection_rules"), api.BulkImportIOCs)
 	router.POST("/api/firewall/sync", middleware.RequireAuth(), middleware.RequirePermission("sync_firewall"), api.SyncFirewallRules)
 	router.GET("/api/firewall/sync/log", middleware.RequireAuth(), api.GetFirewallSyncLog)
 	router.GET("/api/firewall/groups", middleware.RequireAuth(), api.GetFirewallGroups)
