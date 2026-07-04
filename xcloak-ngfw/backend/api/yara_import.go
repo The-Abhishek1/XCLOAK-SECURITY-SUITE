@@ -13,6 +13,11 @@ import (
 	"xcloak-ngfw/services"
 )
 
+const (
+	maxYARAFileBytes = 1 << 20 // 1 MiB — a YARA file this large is almost certainly malicious
+	maxYARAFiles     = 20      // prevent tarpit-style uploads with thousands of tiny files
+)
+
 // ImportYARAFiles — POST /api/yara/import
 // Accepts multipart upload of one or more .yar / .yara files.
 // Each file may contain multiple YARA rules.
@@ -28,6 +33,10 @@ func ImportYARAFiles(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "no files uploaded (field name: rules)"})
 		return
 	}
+	if len(files) > maxYARAFiles {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("too many files — maximum %d per request", maxYARAFiles)})
+		return
+	}
 
 	imported := 0
 	skipped  := 0
@@ -39,10 +48,18 @@ func ImportYARAFiles(c *gin.Context) {
 			errors = append(errors, fh.Filename+": open error")
 			continue
 		}
-		data, err := io.ReadAll(f)
+		// Read at most maxYARAFileBytes+1 bytes. If we get more than the limit
+		// the read was truncated and we reject the file — do not store partial rules.
+		lr := io.LimitReader(f, maxYARAFileBytes+1)
+		data, err := io.ReadAll(lr)
 		f.Close()
 		if err != nil {
 			errors = append(errors, fh.Filename+": read error")
+			continue
+		}
+		if len(data) > maxYARAFileBytes {
+			errors = append(errors, fmt.Sprintf("%s: file exceeds %d-byte limit", fh.Filename, maxYARAFileBytes))
+			skipped++
 			continue
 		}
 

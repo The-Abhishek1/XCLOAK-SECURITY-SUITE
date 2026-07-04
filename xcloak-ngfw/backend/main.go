@@ -224,6 +224,10 @@ func main() {
 	loadAllowedOrigins()
 
 	router := gin.Default()
+	// Global multipart memory threshold: parts up to 8 MiB are buffered in RAM;
+	// larger parts spill to temp files. Per-handler io.LimitReader caps still
+	// enforce the real per-file size policy; this is a secondary backstop.
+	router.MaxMultipartMemory = 8 << 20
 
 	// CORS — explicit allowlist only; credentials are never sent to an
 	// origin that isn't on the list (reflecting Origin + credentials:true

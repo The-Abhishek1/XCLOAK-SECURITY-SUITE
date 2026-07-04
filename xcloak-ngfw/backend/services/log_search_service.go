@@ -132,6 +132,14 @@ func tokenizeKQL(q string) []string {
 	return tokens
 }
 
+// isSafeFieldName is the security gate for field-name interpolation in
+// parseKQL. Field values always go through parameterized query args ($N),
+// but field *names* are embedded literally in SQL
+// (parsed_fields->>'<field>' ILIKE $N) because PostgreSQL does not support
+// a parameterized JSONB key on the ->> operator.
+// This function therefore must be conservative: only ASCII alphanumeric +
+// underscore, 1–60 chars. No quotes, no whitespace, no SQL metacharacters.
+// Reviewed 2026-07-04: no SQL injection path through field names.
 func isSafeFieldName(s string) bool {
 	for _, c := range s {
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||

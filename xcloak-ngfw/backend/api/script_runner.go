@@ -37,6 +37,24 @@ func DispatchScript(c *gin.Context) {
 		req.Shell = "bash"
 	}
 
+	// Allowlist the interpreter. An arbitrary shell value here would let an
+	// attacker inject flags or paths (e.g. "--login", "/tmp/evil") that the
+	// agent could pass directly to exec — the agent is responsible for the
+	// final execution, but we close the path at the dispatch layer.
+	switch req.Shell {
+	case "bash", "sh", "python3", "pwsh":
+		// allowed
+	default:
+		c.JSON(400, gin.H{"error": "shell must be one of: bash, sh, python3, pwsh"})
+		return
+	}
+
+	const maxScriptBytes = 512 * 1024 // 512 KiB — plenty for any legitimate SOAR script
+	if len(req.Script) > maxScriptBytes {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("script exceeds maximum size of %d bytes", maxScriptBytes)})
+		return
+	}
+
 	payload, _ := json.Marshal(map[string]string{
 		"script": req.Script,
 		"shell":  req.Shell,

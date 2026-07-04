@@ -36,6 +36,11 @@ type sigmaLogsource struct {
 	Service  string `yaml:"service"`
 }
 
+const (
+	maxSigmaFileBytes = 1 << 20 // 1 MiB — a Sigma YAML file this large is almost certainly malicious
+	maxSigmaFiles     = 20
+)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ImportSigmaYAML — POST /api/sigma/import
 // Accepts multipart files; each file may contain multiple documents (--- sep).
@@ -53,6 +58,10 @@ func ImportSigmaYAML(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no files uploaded (field name: rules)"})
 		return
 	}
+	if len(files) > maxSigmaFiles {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many files — maximum %d per request", maxSigmaFiles)})
+		return
+	}
 
 	imported := 0
 	skipped := 0
@@ -66,10 +75,16 @@ func ImportSigmaYAML(c *gin.Context) {
 			errs = append(errs, fh.Filename+": open error")
 			continue
 		}
-		data, err := io.ReadAll(f)
+		lr := io.LimitReader(f, maxSigmaFileBytes+1)
+		data, err := io.ReadAll(lr)
 		f.Close()
 		if err != nil {
 			errs = append(errs, fh.Filename+": read error")
+			continue
+		}
+		if len(data) > maxSigmaFileBytes {
+			errs = append(errs, fmt.Sprintf("%s: file exceeds %d-byte limit", fh.Filename, maxSigmaFileBytes))
+			skipped++
 			continue
 		}
 

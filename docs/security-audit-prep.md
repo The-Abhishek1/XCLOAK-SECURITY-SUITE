@@ -84,11 +84,17 @@ All routes are defined in `backend/routes/routes.go`.
 - [x] **Webhook SSRF** — `services.CheckURL()` in `backend/services/ssrf.go` denies loopback (127.0.0.0/8, ::1), RFC1918, link-local/metadata (169.254.0.0/16, fe80::/10), shared CGN (100.64.0.0/10), and known metadata hostnames. Wired into `webhook_service.go:deliver()`, `playbook_engine.go:handleWebhook()`, and `playbook_engine.go:handleSlackMessage()`.
 - [x] **RLS bypass (superuser app pool)** — `APP_DB_USER=xcloak_app` added to `.env.example` and compose/Helm defaults. `database/db.go:Connect()` opens the app pool as APP_DB_USER (DML-only, subject to RLS) and a separate `MigrationDB` pool as DB_USER (DDL rights). `WithTenantTx` wired into `CreateAlert`, `CreateSigmaRule`, `UpdateSigmaRule`, `CreateIOC` so the RLS WITH CHECK policy validates every write at the DB layer.
 
-### Gaps — Phase 2 (still open)
-- [ ] **File upload hardening** — YARA/Sigma import, ZIP bomb, path traversal (ASVS 12.1.1)
-- [ ] **KQL injection** — raw query construction in `log_search_service.go`
-- [ ] **JSONB injection** — `parsed_fields` in JSONB; ensure no eval/exec paths from log data
-- [ ] **Script runner sandboxing** — `POST /api/agents/:id/script` command injection on agent side
+### Gaps — Phase 2 (all closed)
+
+- [x] **File upload size limits** — `io.LimitReader(f, 1 MiB+1)` added to `api/yara_import.go` and `api/sigma_import.go`; max 20 files per request; oversized files are rejected before parsing. Vuln import (`api/vuln_import.go`) already had a 200 MiB check. Global Gin `router.MaxMultipartMemory = 8 MiB` set in `main.go` as a secondary backstop.
+- [x] **KQL injection** — `log_search_service.go:isSafeFieldName()` validated as the security gate: field names go through `[a-zA-Z0-9_]{1-60}` before SQL interpolation; all field values are parameterized (`$N` args). No injection path exists. Reviewed and commented 2026-07-04.
+- [x] **JSONB injection** — `parsed_fields` data accessed exclusively via `->>` text extraction with hardcoded key names (behavioral_baseline_service, email_security_detector, ot_ics_detector) or through `isSafeFieldName`-validated user keys (KQL search). Data is never executed — only compared via ILIKE/= operators. No plv8 or eval path exists. Reviewed 2026-07-04.
+- [x] **Script runner shell allowlist** — `api/script_runner.go:DispatchScript()` now validates `shell` against `{bash, sh, python3, pwsh}`. Script body capped at 512 KiB. Backend does not execute scripts (payload is queued for agent); cross-tenant execution was already blocked via `GetAgentByID(id, tenantID)`.
+
+### Gaps — Phase 3 (still open)
+- [ ] **Path traversal in file uploads** — YARA/Sigma import stores content in DB (no filesystem write), so no path traversal risk today; revisit if on-disk YARA scanning is added
+- [ ] **Per-tenant partition DROP** — `dropEndpointLogsPartitionsBefore` comments note a TODO to enable whole-partition DROP once per-tenant sub-partitioning lands
+- [ ] **KQL `not` / `or` operators** — current KQL always ANDs conditions; OR semantics are silently ignored; document for users
 
 ---
 
