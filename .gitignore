@@ -3,6 +3,7 @@
 *.env
 prometheus/metrics_token
 backups/
+.claude/
 
 # ── Build artifacts ───────────────────────────────────────────────────────────
 **/tmp/main
