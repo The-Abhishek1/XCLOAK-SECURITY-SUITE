@@ -509,7 +509,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.DELETE("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeleteLogSource)
 
 	// ── MDM — Mobile Device Management ───────────────────────────────────────
-	// Devices
+	// Devices (admin/dashboard)
 	router.POST("/api/mdm/devices", middleware.RequireAuth(), api.EnrollMDMDevice)
 	router.GET("/api/mdm/devices", middleware.RequireAuth(), api.ListMDMDevices)
 	router.GET("/api/mdm/devices/:id", middleware.RequireAuth(), api.GetMDMDevice)
@@ -530,5 +530,17 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/mdm/profiles", middleware.RequireAuth(), api.ListMDMProfiles)
 	router.POST("/api/mdm/profiles", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateMDMProfile)
 	router.POST("/api/mdm/profiles/:id/deploy", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeployMDMProfile)
+
+	// ── MDM Mobile — self-enrollment + agent-authenticated device ops ─────────
+	// Enrollment token management (admin — RequireAuth)
+	router.POST("/api/mdm/enrollment-tokens", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateEnrollmentToken)
+	router.GET("/api/mdm/enrollment-tokens", middleware.RequireAuth(), api.ListEnrollmentTokens)
+	router.DELETE("/api/mdm/enrollment-tokens/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.RevokeEnrollmentToken)
+	// Self-enroll — called by the mobile agent on first run (no user auth, only enrollment token)
+	router.POST("/api/mdm/self-enroll", api.SelfEnrollDevice)
+	// Agent-authenticated device operations (mobile agent uses agent_token)
+	router.PUT("/api/mdm/devices/:id/checkin", middleware.RequireAgentAuth(), api.MobileDeviceCheckIn)
+	router.GET("/api/mdm/devices/:id/commands/pending", middleware.RequireAgentAuth(), api.GetPendingMobileCommands)
+	router.POST("/api/mdm/devices/:id/apps", middleware.RequireAgentAuth(), api.SubmitAppInventory)
 
 }
