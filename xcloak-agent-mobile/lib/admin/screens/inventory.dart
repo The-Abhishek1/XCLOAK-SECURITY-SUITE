@@ -38,7 +38,7 @@ class _AssetsState extends State<AssetsScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
           child: TextField(
-            decoration: const InputDecoration(labelText: 'Search assets', border: OutlineInputBorder(), isDense: true, prefixIcon: Icon(Icons.search)),
+            decoration: const InputDecoration(labelText: 'Search assets', isDense: true, prefixIcon: Icon(Icons.search)),
             onChanged: (v) => setState(() => _filter = v),
           ),
         ),
@@ -70,22 +70,29 @@ class _AssetsState extends State<AssetsScreen> {
 
   Widget _assetIcon(String type) {
     final color = switch(type.toLowerCase()) {
-      'server'   => Colors.blue,
-      'workstation' || 'desktop' => Colors.indigo,
-      'network'  => Colors.teal,
-      'mobile'   => Colors.green,
-      'cloud'    => Colors.cyan,
-      _          => Colors.grey,
+      'server'                   => const Color(0xFF3B82F6),
+      'workstation' || 'desktop' => const Color(0xFF6366F1),
+      'network'                  => const Color(0xFF0EA5E9),
+      'mobile'                   => const Color(0xFF22C55E),
+      'cloud'                    => const Color(0xFF06B6D4),
+      _                          => const Color(0xFF6B7280),
     };
     final icon = switch(type.toLowerCase()) {
-      'server'          => Icons.dns,
+      'server'                   => Icons.dns,
       'workstation' || 'desktop' => Icons.computer,
-      'network'         => Icons.router,
-      'mobile'          => Icons.smartphone,
-      'cloud'           => Icons.cloud,
-      _                 => Icons.devices,
+      'network'                  => Icons.router,
+      'mobile'                   => Icons.smartphone,
+      'cloud'                    => Icons.cloud,
+      _                          => Icons.devices,
     };
-    return Icon(icon, color: color);
+    return Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(
+        color: color.withOpacity(.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, color: color, size: 18),
+    );
   }
 
   void _showDetail(Map<String,dynamic> a) {
@@ -122,8 +129,7 @@ class _AssetsState extends State<AssetsScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => SingleChildScrollView(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Asset', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Asset'),
           xField(nameCtrl, 'Hostname / Name'),
           const SizedBox(height: 10),
           xField(ipCtrl, 'IP Address', keyboardType: TextInputType.numberWithOptions(decimal: true)),

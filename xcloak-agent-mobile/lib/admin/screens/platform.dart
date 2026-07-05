@@ -95,7 +95,7 @@ class _AIAssistantState extends State<AIAssistantScreen> {
                   constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: isUser ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.surfaceVariant,
+                    color: isUser ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
@@ -226,8 +226,7 @@ class _SettingsState extends State<SettingsScreen> with SingleTickerProviderStat
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New User', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New User'),
           xField(emailCtrl, 'Email', keyboardType: TextInputType.emailAddress),
           const SizedBox(height: 10),
           xField(passCtrl, 'Password', obscure: true),
@@ -283,8 +282,7 @@ class _SettingsState extends State<SettingsScreen> with SingleTickerProviderStat
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New API Key', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New API Key'),
           xField(nameCtrl, 'Key Name'),
           const SizedBox(height: 10),
           xDropdown('Role', role, ['agent','admin','read_only'], (v) => ss(() => role = v!)),
@@ -369,8 +367,7 @@ class _SettingsState extends State<SettingsScreen> with SingleTickerProviderStat
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Custom Role', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Custom Role'),
           xField(nameCtrl, 'Role Name'),
           const SizedBox(height: 10),
           xField(descCtrl, 'Description'),
@@ -453,8 +450,7 @@ class _TenantsState extends State<TenantsScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Tenant', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Tenant'),
           xField(nameCtrl, 'Tenant Name'),
           const SizedBox(height: 10),
           xDropdown('Plan', plan, ['basic','professional','enterprise'], (v) => ss(() => plan = v!)),

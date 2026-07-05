@@ -80,8 +80,7 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Hunt Template', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Hunt Template'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(descCtrl, 'Description'),
@@ -110,8 +109,7 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Select Agents', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          sheetHeader('Select Agents'),
           SizedBox(
             height: 200,
             child: ListView(children: _agents.map((a) {
@@ -216,8 +214,7 @@ class _ThreatActorsState extends State<ThreatActorsScreen> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Threat Actor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Threat Actor'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(descCtrl, 'Description', maxLines: 3),
@@ -311,8 +308,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New IOC', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New IOC'),
           xField(valCtrl, 'Value (IP/Domain/Hash)'),
           const SizedBox(height: 10),
           xDropdown('Type', type, ['ip','domain','hash','url','email'], (v) => ss(() => type = v!)),
@@ -377,8 +373,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Threat Feed', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Threat Feed'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(urlCtrl, 'URL', keyboardType: TextInputType.url),
@@ -465,8 +460,7 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Sigma Rule', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Sigma Rule'),
           xField(nameCtrl, 'Rule Name'),
           const SizedBox(height: 10),
           xDropdown('Severity', sev, ['critical','high','medium','low'], (v) => ss(() => sev = v!)),
@@ -552,8 +546,7 @@ class _YaraRulesState extends State<YaraRulesScreen> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New YARA Rule', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New YARA Rule'),
           xField(nameCtrl, 'Rule Name'),
           const SizedBox(height: 10),
           xField(contentCtrl, 'Rule Content', maxLines: 8),
@@ -632,8 +625,7 @@ class _JA3State extends State<JA3Screen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New JA3 Fingerprint', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New JA3 Fingerprint'),
           xField(fpCtrl, 'JA3 Hash (MD5)'),
           const SizedBox(height: 10),
           xField(labelCtrl, 'Label (e.g. Cobalt Strike)'),
@@ -816,8 +808,7 @@ class _LogSourcesState extends State<LogSourcesScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Log Source', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Log Source'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xDropdown('Type', type, ['syslog','winlog','filebeat','json','csv'], (v) => ss(() => type = v!)),

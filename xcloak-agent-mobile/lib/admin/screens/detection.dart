@@ -95,31 +95,62 @@ class _AlertsState extends State<AlertsScreen> {
           padding: const EdgeInsets.all(8),
           itemCount: _alerts.length,
           itemBuilder: (_, i) {
-            final a = _alerts[i] as Map<String,dynamic>;
-            final id = a['id'] as int? ?? 0;
+            final a      = _alerts[i] as Map<String,dynamic>;
+            final id     = a['id'] as int? ?? 0;
             final status = str(a['status']);
-            return Card(
-              margin: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                leading: CircleAvatar(radius: 5, backgroundColor: sevColor(str(a['severity']))),
-                title: Text(str(a['rule_name'] ?? a['message']), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                  '${str(a['severity']).toUpperCase()}  ·  ${str(a['hostname'] ?? '')}  ·  ${timeAgo(a['created_at'])}',
-                  style: const TextStyle(fontSize: 11),
+            final col    = sevColor(str(a['severity']));
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Card(
+                child: IntrinsicHeight(
+                  child: Row(children: [
+                    Container(
+                      width: 4,
+                      decoration: BoxDecoration(
+                        color: col,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(12),
+                          bottomLeft: Radius.circular(12),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+                        child: Row(children: [
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(str(a['rule_name'] ?? a['message']), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              SevChip(str(a['severity'])),
+                              const SizedBox(width: 6),
+                              Flexible(child: Text(
+                                '${str(a['hostname'] ?? '')}  ·  ${timeAgo(a['created_at'])}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                overflow: TextOverflow.ellipsis,
+                              )),
+                            ]),
+                          ])),
+                          if (status == 'open')
+                            PopupMenuButton<String>(
+                              onSelected: (v) async {
+                                final ok = v == 'ack' ? await widget.api.ackAlert(id) : await widget.api.resolveAlert(id);
+                                if (context.mounted) xSnack(context, ok ? 'Done' : 'Failed', error: !ok);
+                                if (ok) _load();
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'ack',     child: Text('Acknowledge')),
+                                PopupMenuItem(value: 'resolve', child: Text('Resolve')),
+                              ],
+                            )
+                          else
+                            Padding(padding: const EdgeInsets.only(right: 4), child: StatusChip(status)),
+                        ]),
+                      ),
+                    ),
+                  ]),
                 ),
-                trailing: status == 'open'
-                    ? PopupMenuButton<String>(
-                        onSelected: (v) async {
-                          final ok = v == 'ack' ? await widget.api.ackAlert(id) : await widget.api.resolveAlert(id);
-                          if (context.mounted) xSnack(context, ok ? 'Done' : 'Failed', error: !ok);
-                          if (ok) _load();
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'ack',     child: Text('Acknowledge')),
-                          PopupMenuItem(value: 'resolve', child: Text('Resolve')),
-                        ],
-                      )
-                    : StatusChip(status),
               ),
             );
           },
@@ -197,8 +228,7 @@ class _IncidentsState extends State<IncidentsScreen> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Add Note', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('Add Note'),
           xField(ctrl, 'Note', maxLines: 4),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
@@ -480,8 +510,7 @@ class _DeceptionState extends State<DeceptionScreen> with SingleTickerProviderSt
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Create Canary Token', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('Create Canary Token'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xDropdown('Type', type, ['url', 'dns', 'file', 'email'], (v) => ss(() => type = v!)),
@@ -555,8 +584,7 @@ class _DeceptionState extends State<DeceptionScreen> with SingleTickerProviderSt
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Create Honeyport', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('Create Honeyport'),
           xField(portCtrl, 'Port', keyboardType: TextInputType.number),
           const SizedBox(height: 10),
           xDropdown('Protocol', proto, ['tcp', 'udp'], (v) => ss(() => proto = v!)),
@@ -891,8 +919,7 @@ class _CorrelationState extends State<CorrelationScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Correlation Rule', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Correlation Rule'),
           xField(nameCtrl, 'Rule Name'),
           const SizedBox(height: 10),
           xField(queryCtrl, 'Query', maxLines: 3),
@@ -981,8 +1008,7 @@ class _SuppressionState extends State<SuppressionScreen> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Suppression Rule', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Suppression Rule'),
           xField(nameCtrl, 'Rule Name'),
           const SizedBox(height: 10),
           xField(fieldCtrl, 'Field (e.g. hostname)'),

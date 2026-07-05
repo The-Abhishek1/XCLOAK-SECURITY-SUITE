@@ -75,8 +75,7 @@ class _CasesState extends State<CasesScreen> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Add Comment', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('Add Comment'),
           xField(ctrl, 'Comment', maxLines: 4),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
@@ -97,8 +96,7 @@ class _CasesState extends State<CasesScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Case', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Case'),
           xField(titleCtrl, 'Title'),
           const SizedBox(height: 10),
           xField(descCtrl, 'Description', maxLines: 3),
@@ -185,8 +183,7 @@ class _PlaybooksState extends State<PlaybooksScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Playbook', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Playbook'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(descCtrl, 'Description', maxLines: 2),
@@ -553,8 +550,7 @@ class _FirewallState extends State<FirewallScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => SingleChildScrollView(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Firewall Rule', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Firewall Rule'),
           Row(children: [
             Expanded(child: xField(srcCtrl, 'Src IP')),
             const SizedBox(width: 8),
@@ -659,8 +655,7 @@ class _ScheduledTasksState extends State<ScheduledTasksScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => SingleChildScrollView(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Scheduled Task', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Scheduled Task'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(cronCtrl, 'Cron Expression'),
@@ -743,8 +738,7 @@ class _DFIRState extends State<DFIRScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Trigger Forensic Collection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('Trigger Forensic Collection'),
           DropdownButtonFormField<int>(
             value: agentId,
             decoration: const InputDecoration(labelText: 'Agent', border: OutlineInputBorder()),

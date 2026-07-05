@@ -67,8 +67,7 @@ class _ReportsState extends State<ReportsScreen> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('New Report', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          sheetHeader('New Report'),
           xField(nameCtrl, 'Report Name'),
           const SizedBox(height: 10),
           xDropdown('Type', type, ['summary','incident','compliance','executive','threat_intel'], (v) => ss(() => type = v!)),
@@ -125,14 +124,20 @@ class _FrameworksState extends State<FrameworksScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Expanded(child: Text(str(f['name']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-                  Text('${pct.round()}%', style: TextStyle(color: pct >= 80 ? Colors.green : pct >= 60 ? Colors.orange : Colors.red, fontWeight: FontWeight.bold)),
+                  Text('${pct.round()}%', style: TextStyle(
+                    color: pct >= 80 ? const Color(0xFF22C55E) : pct >= 60 ? const Color(0xFFF97316) : const Color(0xFFEF4444),
+                    fontWeight: FontWeight.bold,
+                  )),
                 ]),
                 const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: pct / 100,
-                  backgroundColor: Colors.grey.shade300,
-                  color: pct >= 80 ? Colors.green : pct >= 60 ? Colors.orange : Colors.red,
-                  minHeight: 6,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: pct / 100,
+                    backgroundColor: Colors.grey.shade200,
+                    color: pct >= 80 ? const Color(0xFF22C55E) : pct >= 60 ? const Color(0xFFF97316) : const Color(0xFFEF4444),
+                    minHeight: 8,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

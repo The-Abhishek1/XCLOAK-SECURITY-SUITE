@@ -34,16 +34,16 @@ class _DashboardState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           StatRow([
-            ('Agents Online',    str(o['agents_online'] ?? o['online_agents'] ?? 0),     Colors.green),
-            ('Open Alerts',      str(o['open_alerts']   ?? o['active_alerts'] ?? 0),     Colors.orange),
+            ('Agents Online',    str(o['agents_online'] ?? o['online_agents'] ?? 0),     const Color(0xFF22C55E)),
+            ('Open Alerts',      str(o['open_alerts']   ?? o['active_alerts'] ?? 0),     const Color(0xFFF97316)),
           ]),
           StatRow([
-            ('Critical Alerts',  str(o['critical_alerts']   ?? 0), Colors.red),
-            ('Open Incidents',   str(o['active_incidents']  ?? o['open_incidents'] ?? 0), Colors.blue),
+            ('Critical Alerts',  str(o['critical_alerts']   ?? 0),                        const Color(0xFFEF4444)),
+            ('Open Incidents',   str(o['active_incidents']  ?? o['open_incidents'] ?? 0), const Color(0xFF3B82F6)),
           ]),
           StatRow([
-            ('Open Cases',       str(o['open_cases']        ?? 0), Colors.purple),
-            ('Pending Approvals',str(o['pending_approvals'] ?? 0), Colors.amber),
+            ('Open Cases',       str(o['open_cases']        ?? 0), const Color(0xFF8B5CF6)),
+            ('Pending Approvals',str(o['pending_approvals'] ?? 0), const Color(0xFFF59E0B)),
           ]),
           if (o['risk_score'] != null) ...[
             const SizedBox(height: 12),
@@ -52,11 +52,14 @@ class _DashboardState extends State<DashboardScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('RISK SCORE', style: TextStyle(fontSize: 11, letterSpacing: 1.2, color: Colors.grey)),
                 const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: (o['risk_score'] as num).toDouble() / 100,
-                  backgroundColor: Colors.grey.shade300,
-                  color: sevColor(_riskLabel(o['risk_score'] as num)),
-                  minHeight: 8,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: (o['risk_score'] as num).toDouble() / 100,
+                    backgroundColor: Colors.grey.shade200,
+                    color: sevColor(_riskLabel(o['risk_score'] as num)),
+                    minHeight: 8,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text('${o['risk_score']} / 100 — ${_riskLabel(o['risk_score'] as num).toUpperCase()}',
@@ -128,19 +131,42 @@ class _AgentsState extends State<AgentsScreen> {
           padding: const EdgeInsets.all(8),
           itemCount: _agents.length,
           itemBuilder: (_, i) {
-            final a = _agents[i] as Map<String,dynamic>;
-            final id = a['id'] as int? ?? 0;
+            final a      = _agents[i] as Map<String,dynamic>;
+            final id     = a['id'] as int? ?? 0;
             final online = str(a['status']) == 'online';
+            final os     = str(a['os'] ?? a['platform']).toLowerCase();
+            final dotCol = online ? const Color(0xFF22C55E) : Colors.grey.shade400;
             return Card(
               margin: const EdgeInsets.only(bottom: 6),
               child: ListTile(
-                leading: Stack(children: [
-                  Icon(Icons.computer, color: online ? Colors.green : Colors.grey),
-                  Positioned(right: 0, bottom: 0, child: OnlineDot(online)),
-                ]),
+                leading: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: (online ? const Color(0xFF22C55E) : Colors.grey).withOpacity(.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(_osIcon(os),
+                          color: online ? const Color(0xFF22C55E) : Colors.grey, size: 20),
+                    ),
+                    Positioned(
+                      right: -2, bottom: -2,
+                      child: Container(
+                        width: 11, height: 11,
+                        decoration: BoxDecoration(
+                          color: dotCol,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 title: Text(str(a['hostname'], 'Agent $id'), style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(
-                  '${str(a['os'] ?? a['platform']).toUpperCase()}  ·  ${str(a['ip_address'])}'
+                  '${os.toUpperCase().isEmpty ? '—' : os.toUpperCase()}  ·  ${str(a['ip_address'])}'
                   '\nLast seen ${timeAgo(a['last_seen'])}',
                   style: const TextStyle(fontSize: 11),
                 ),
@@ -163,6 +189,14 @@ class _AgentsState extends State<AgentsScreen> {
         ),
       )),
     ]);
+  }
+
+  IconData _osIcon(String os) {
+    if (os.contains('windows')) return Icons.laptop_windows;
+    if (os.contains('mac') || os.contains('darwin')) return Icons.laptop_mac;
+    if (os.contains('android')) return Icons.phone_android;
+    if (os.contains('ios')) return Icons.phone_iphone;
+    return Icons.computer;
   }
 
   void _showDetail(Map<String,dynamic> a) {
@@ -210,8 +244,8 @@ class _NetworkMapState extends State<NetworkMapScreen> {
         padding: const EdgeInsets.all(8),
         children: [
           StatRow([
-            ('Nodes', '${nodes.length}', Colors.blue),
-            ('Connections', '${edges.length}', Colors.green),
+            ('Nodes', '${nodes.length}', const Color(0xFF3B82F6)),
+            ('Connections', '${edges.length}', const Color(0xFF22C55E)),
           ]),
           const SizedBox(height: 4),
           const Padding(

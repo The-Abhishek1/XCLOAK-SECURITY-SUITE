@@ -292,16 +292,26 @@ TextField xField(TextEditingController ctrl, String label, {int maxLines = 1, bo
       maxLines: maxLines,
       obscureText: obscure,
       keyboardType: keyboardType,
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      decoration: InputDecoration(labelText: label),
     );
 
 DropdownButtonFormField<String> xDropdown(String label, String value, List<String> items, void Function(String?) onChanged) =>
     DropdownButtonFormField<String>(
       value: items.contains(value) ? value : items.first,
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      decoration: InputDecoration(labelText: label),
       items: items.map((i) => DropdownMenuItem(value: i, child: Text(i))).toList(),
       onChanged: onChanged,
     );
+
+Widget sheetHeader(String title) => Column(children: [
+  Container(
+    width: 36, height: 4,
+    decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+  ),
+  const SizedBox(height: 14),
+  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+  const SizedBox(height: 16),
+]);
 
 // ── Detail sheet ──────────────────────────────────────────────────────────────
 
