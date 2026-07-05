@@ -1,0 +1,9 @@
+# Flutter/Dart
+.dart_tool/
+build/
+*.log
+
+# Android generated
+android/.gradle/
+android/.kotlin/
+android/local.properties

@@ -35,7 +35,7 @@ class ThreatDetector {
       );
       return installed.map((app) {
         // installer source: empty string means sideloaded (not from Play Store)
-        final installer = app.installerPackageName ?? '';
+        final installer = app.isSystemApp ? 'system' : '';
         return AppInventoryItem(
           packageName: app.packageName,
           appName:     app.name,

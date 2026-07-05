@@ -515,6 +515,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/mdm/devices/:id", middleware.RequireAuth(), api.GetMDMDevice)
 	router.DELETE("/api/mdm/devices/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UnenrollMDMDevice)
 	router.POST("/api/mdm/devices/:id/block", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.BlockMDMDevice)
+	router.POST("/api/mdm/devices/:id/unblock", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UnblockMDMDevice)
 	// Compliance
 	router.GET("/api/mdm/devices/:id/compliance", middleware.RequireAuth(), api.GetMDMDeviceCompliance)
 	router.GET("/api/mdm/compliance/summary", middleware.RequireAuth(), api.GetMDMComplianceSummary)

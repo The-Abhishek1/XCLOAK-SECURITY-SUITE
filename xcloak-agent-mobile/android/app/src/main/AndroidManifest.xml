@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- Notifications (required on Android 13+ to show foreground service notification) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Foreground service (required for background agent) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Android 14+: declare the foreground service type -->
@@ -46,7 +49,8 @@
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            tools:replace="android:exported" />
 
         <!-- Restart agent on device boot -->
         <receiver

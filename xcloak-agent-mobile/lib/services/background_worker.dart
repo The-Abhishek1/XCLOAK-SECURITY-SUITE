@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service/flutter_background_service_android.dart';
 
 import 'command_service.dart';
 import 'log_forwarder.dart';
@@ -25,6 +24,7 @@ Future<void> initializeBackgroundService() async {
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onServiceStart,
+      autoStart: false,
       isForegroundMode: true,
       notificationChannelId: 'xcloak_agent',
       initialNotificationTitle: 'XCloak Agent',

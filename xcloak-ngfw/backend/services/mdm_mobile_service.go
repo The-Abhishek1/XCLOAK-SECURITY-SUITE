@@ -240,7 +240,7 @@ func GetPendingMobileCommands(deviceID, tenantID int) ([]MDMCommand, error) {
 		SELECT id, tenant_id, device_id, command_type, payload, status,
 		       queued_by, queued_at, sent_at, acknowledged_at, COALESCE(error_msg,'')
 		FROM mdm_commands
-		WHERE device_id=$1 AND tenant_id=$2 AND status='queued'
+		WHERE device_id=$1 AND tenant_id=$2 AND status='pending'
 		ORDER BY queued_at ASC
 		LIMIT 10
 	`, deviceID, tenantID)

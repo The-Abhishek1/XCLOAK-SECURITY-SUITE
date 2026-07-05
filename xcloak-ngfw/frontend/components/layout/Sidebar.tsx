@@ -15,7 +15,7 @@ import {
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
   Cloud, Mail, Container, ShieldOff, Package,
-  EyeOff, Wrench,
+  EyeOff, Wrench, Smartphone,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -72,6 +72,7 @@ const NAV = [
   ]},
   { group: 'INVENTORY', items: [
     { href: '/assets', label: 'Assets (CMDB)', icon: Server },
+    { href: '/mdm',    label: 'Mobile (MDM)',  icon: Smartphone },
   ]},
   { group: 'COMPLIANCE', items: [
     { href: '/compliance',          label: 'Reports',           icon: ClipboardCheck },

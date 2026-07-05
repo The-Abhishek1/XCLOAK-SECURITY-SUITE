@@ -41,6 +41,16 @@ class ApiClient {
     return _decode(res);
   }
 
+  Future<Map<String, dynamic>> delete(String path) async {
+    final res = await http.delete(_uri(path), headers: _headers);
+    return _decode(res);
+  }
+
+  Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body) async {
+    final res = await http.patch(_uri(path), headers: _headers, body: jsonEncode(body));
+    return _decode(res);
+  }
+
   Map<String, dynamic> _decode(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       final body = jsonDecode(res.body);

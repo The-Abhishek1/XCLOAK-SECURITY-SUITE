@@ -397,4 +397,29 @@ export const feedSyncAPI = {
   getLog: (feedID: number) => api.get(`/threat-feeds/${feedID}/sync-log`),
 };
 
+export const mdmAPI = {
+  // Devices
+  getDevices:     (params?: { platform?: string; status?: string; owner_email?: string }) =>
+    api.get('/mdm/devices', { params }),
+  getDevice:      (id: number) => api.get(`/mdm/devices/${id}`),
+  unenrollDevice: (id: number) => api.delete(`/mdm/devices/${id}`),
+  blockDevice:    (id: number) => api.post(`/mdm/devices/${id}/block`),
+  unblockDevice:  (id: number) => api.post(`/mdm/devices/${id}/unblock`),
+  getCompliance:  (id: number) => api.get(`/mdm/devices/${id}/compliance`).catch(() => ({ data: { results: [] } })),
+  getComplianceSummary: ()     => api.get('/mdm/compliance/summary').catch(() => ({ data: null })),
+  triggerCompliance: ()        => api.post('/mdm/compliance/run'),
+
+  // Commands
+  queueCommand:   (deviceId: number, commandType: string, payload?: Record<string, unknown>) =>
+    api.post(`/mdm/devices/${deviceId}/commands`, { command_type: commandType, payload: payload ?? {} }),
+  getCommands:    (deviceId: number, limit = 50) =>
+    api.get(`/mdm/devices/${deviceId}/commands`, { params: { limit } }).catch(() => ({ data: { commands: [] } })),
+
+  // Enrollment tokens
+  getTokens:   () => api.get('/mdm/enrollment-tokens'),
+  createToken: (label: string, platform = 'any', maxUses?: number, expiresIn?: number) =>
+    api.post('/mdm/enrollment-tokens', { label, platform, max_uses: maxUses, expires_in: expiresIn }),
+  revokeToken: (id: number) => api.delete(`/mdm/enrollment-tokens/${id}`),
+};
+
 export default api;

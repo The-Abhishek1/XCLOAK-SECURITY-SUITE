@@ -11,12 +11,14 @@ class SetupScreen extends StatefulWidget {
 }
 
 class _SetupScreenState extends State<SetupScreen> {
-  final _formKey     = GlobalKey<FormState>();
-  final _serverCtrl  = TextEditingController();
-  final _tokenCtrl   = TextEditingController();
-  final _emailCtrl   = TextEditingController();
+  final _formKey    = GlobalKey<FormState>();
+  final _serverCtrl = TextEditingController();
+  final _tokenCtrl  = TextEditingController();
+  final _emailCtrl  = TextEditingController();
+  final _apiKeyCtrl = TextEditingController();
 
-  bool _loading = false;
+  bool _loading  = false;
+  bool _advanced = false;
   String? _error;
 
   @override
@@ -24,6 +26,7 @@ class _SetupScreenState extends State<SetupScreen> {
     _serverCtrl.dispose();
     _tokenCtrl.dispose();
     _emailCtrl.dispose();
+    _apiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -36,6 +39,7 @@ class _SetupScreenState extends State<SetupScreen> {
         serverUrl:   _serverCtrl.text.trim(),
         enrollToken: _tokenCtrl.text.trim(),
         ownerEmail:  _emailCtrl.text.trim(),
+        apiKey:      _apiKeyCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -54,7 +58,7 @@ class _SetupScreenState extends State<SetupScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('XCloak Agent Setup')),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
@@ -62,22 +66,25 @@ class _SetupScreenState extends State<SetupScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Icon(Icons.security, size: 64, color: Colors.blue),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 const Text(
                   'Enroll this device with your XCloak server.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
+
+                // ── Required fields ────────────────────────────────────────
                 TextFormField(
                   controller: _serverCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Server URL',
+                    labelText: 'Server URL *',
                     hintText: 'https://xcloak.example.com',
                     prefixIcon: Icon(Icons.dns),
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.url,
+                  autocorrect: false,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Required';
                     final uri = Uri.tryParse(v.trim());
@@ -85,18 +92,21 @@ class _SetupScreenState extends State<SetupScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+
                 TextFormField(
                   controller: _tokenCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Enrollment Token',
+                    labelText: 'Enrollment Token *',
                     hintText: 'xck-enroll-…',
                     prefixIcon: Icon(Icons.vpn_key),
                     border: OutlineInputBorder(),
                   ),
+                  autocorrect: false,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+
                 TextFormField(
                   controller: _emailCtrl,
                   decoration: const InputDecoration(
@@ -107,16 +117,49 @@ class _SetupScreenState extends State<SetupScreen> {
                   ),
                   keyboardType: TextInputType.emailAddress,
                 ),
+
+                // ── Advanced / API key ─────────────────────────────────────
                 const SizedBox(height: 8),
-                if (_error != null) ...[
+                GestureDetector(
+                  onTap: () => setState(() => _advanced = !_advanced),
+                  child: Row(
+                    children: [
+                      Icon(_advanced ? Icons.expand_less : Icons.expand_more,
+                          size: 18, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      const Text('Advanced (dashboard access)',
+                          style: TextStyle(color: Colors.blue, fontSize: 13)),
+                    ],
+                  ),
+                ),
+
+                if (_advanced) ...[
                   const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _apiKeyCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Admin API Key (optional)',
+                      hintText: 'xck_…',
+                      helperText: 'Create one under Settings → API Keys in the dashboard.',
+                      prefixIcon: Icon(Icons.admin_panel_settings),
+                      border: OutlineInputBorder(),
+                    ),
+                    autocorrect: false,
+                    obscureText: true,
+                  ),
+                ],
+
+                // ── Error ──────────────────────────────────────────────────
+                if (_error != null) ...[
+                  const SizedBox(height: 14),
                   Text(
                     _error!,
                     style: TextStyle(color: Theme.of(context).colorScheme.error),
                     textAlign: TextAlign.center,
                   ),
                 ],
-                const SizedBox(height: 32),
+
+                const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _loading ? null : _enroll,
                   icon: _loading

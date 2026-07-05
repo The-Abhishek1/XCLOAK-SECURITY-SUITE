@@ -180,6 +180,14 @@ func BlockDevice(deviceID, tenantID int) error {
 	return err
 }
 
+func UnblockDevice(deviceID, tenantID int) error {
+	_, err := database.DB.Exec(
+		`UPDATE mdm_devices SET status='enrolled' WHERE id=$1 AND tenant_id=$2 AND status='blocked'`,
+		deviceID, tenantID,
+	)
+	return err
+}
+
 // GetDevice returns one device scoped to the tenant.
 func GetDevice(deviceID, tenantID int) (*MDMDevice, error) {
 	row := database.RDB().QueryRow(`

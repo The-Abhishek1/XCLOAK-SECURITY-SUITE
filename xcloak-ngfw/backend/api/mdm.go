@@ -14,7 +14,7 @@ import (
 // POST /api/mdm/devices
 // Enroll or update a device check-in.
 func EnrollMDMDevice(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 
 	var d services.MDMDevice
 	if err := c.ShouldBindJSON(&d); err != nil {
@@ -39,7 +39,7 @@ func EnrollMDMDevice(c *gin.Context) {
 // GET /api/mdm/devices
 // Query params: platform, status, owner_email
 func ListMDMDevices(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	platform   := c.Query("platform")
 	status     := c.Query("status")
 	ownerEmail := c.Query("owner_email")
@@ -57,7 +57,7 @@ func ListMDMDevices(c *gin.Context) {
 
 // GET /api/mdm/devices/:id
 func GetMDMDevice(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	deviceID, _ := strconv.Atoi(c.Param("id"))
 
 	device, err := services.GetDevice(deviceID, tenantID)
@@ -70,7 +70,7 @@ func GetMDMDevice(c *gin.Context) {
 
 // DELETE /api/mdm/devices/:id
 func UnenrollMDMDevice(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	deviceID, _ := strconv.Atoi(c.Param("id"))
 
 	if err := services.UnenrollDevice(deviceID, tenantID); err != nil {
@@ -82,7 +82,7 @@ func UnenrollMDMDevice(c *gin.Context) {
 
 // POST /api/mdm/devices/:id/block
 func BlockMDMDevice(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	deviceID, _ := strconv.Atoi(c.Param("id"))
 
 	if err := services.BlockDevice(deviceID, tenantID); err != nil {
@@ -92,11 +92,23 @@ func BlockMDMDevice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "device blocked"})
 }
 
+// POST /api/mdm/devices/:id/unblock
+func UnblockMDMDevice(c *gin.Context) {
+	tenantID := tenantIDFromContext(c)
+	deviceID, _ := strconv.Atoi(c.Param("id"))
+
+	if err := services.UnblockDevice(deviceID, tenantID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "device unblocked"})
+}
+
 // ── Compliance endpoints ──────────────────────────────────────────────────────
 
 // GET /api/mdm/devices/:id/compliance
 func GetMDMDeviceCompliance(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	deviceID, _ := strconv.Atoi(c.Param("id"))
 
 	results, err := services.GetDeviceCompliance(deviceID, tenantID)
@@ -112,14 +124,14 @@ func GetMDMDeviceCompliance(c *gin.Context) {
 
 // GET /api/mdm/compliance/summary
 func GetMDMComplianceSummary(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	c.JSON(http.StatusOK, services.GetComplianceSummary(tenantID))
 }
 
 // POST /api/mdm/compliance/run
 // Manually trigger a compliance evaluation for the tenant.
 func TriggerMDMCompliance(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	go services.RunComplianceForTenant(tenantID)
 	c.JSON(http.StatusAccepted, gin.H{"message": "compliance evaluation started"})
 }
@@ -128,7 +140,7 @@ func TriggerMDMCompliance(c *gin.Context) {
 
 // GET /api/mdm/policies
 func ListMDMPolicies(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	policies, err := services.ListPolicies(tenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -142,7 +154,7 @@ func ListMDMPolicies(c *gin.Context) {
 
 // POST /api/mdm/policies
 func CreateMDMPolicy(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 
 	var p services.MDMPolicy
 	if err := c.ShouldBindJSON(&p); err != nil {
@@ -169,8 +181,8 @@ func CreateMDMPolicy(c *gin.Context) {
 // POST /api/mdm/devices/:id/commands
 // Body: { "command_type": "lock"|"wipe"|"sync"|"push_profile"|..., "payload": {} }
 func QueueMDMCommand(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
-	userID   := c.GetInt("user_id")
+	tenantID := tenantIDFromContext(c)
+	userID   := userIDFromContext(c)
 	deviceID, _ := strconv.Atoi(c.Param("id"))
 
 	var req struct {
@@ -195,7 +207,7 @@ func QueueMDMCommand(c *gin.Context) {
 
 // GET /api/mdm/devices/:id/commands
 func ListMDMCommands(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	deviceID, _ := strconv.Atoi(c.Param("id"))
 	limit := 50
 	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 200 {
@@ -235,7 +247,7 @@ func AcknowledgeMDMCommand(c *gin.Context) {
 
 // GET /api/mdm/profiles
 func ListMDMProfiles(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 	profiles, err := services.ListProfiles(tenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -249,7 +261,7 @@ func ListMDMProfiles(c *gin.Context) {
 
 // POST /api/mdm/profiles
 func CreateMDMProfile(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
+	tenantID := tenantIDFromContext(c)
 
 	var p services.MDMProfile
 	if err := c.ShouldBindJSON(&p); err != nil {
@@ -274,8 +286,8 @@ func CreateMDMProfile(c *gin.Context) {
 // POST /api/mdm/profiles/:id/deploy
 // Queues push_profile commands for all matching enrolled devices.
 func DeployMDMProfile(c *gin.Context) {
-	tenantID := c.GetInt("tenant_id")
-	userID   := c.GetInt("user_id")
+	tenantID := tenantIDFromContext(c)
+	userID   := userIDFromContext(c)
 	profileID, _ := strconv.Atoi(c.Param("id"))
 
 	count, err := services.DeployProfileToDevices(profileID, tenantID, userID)

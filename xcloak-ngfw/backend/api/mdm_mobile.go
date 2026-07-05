@@ -134,7 +134,7 @@ func SelfEnrollDevice(c *gin.Context) {
 		BuildVersion:   req.BuildVersion,
 		OwnerEmail:     req.OwnerEmail,
 		PushToken:      req.PushToken,
-		EnrollmentType: "self",
+		EnrollmentType: "byod",
 		IsEncrypted:    req.IsEncrypted,
 		HasPasscode:    req.HasPasscode,
 		IsJailbroken:   req.IsRooted,

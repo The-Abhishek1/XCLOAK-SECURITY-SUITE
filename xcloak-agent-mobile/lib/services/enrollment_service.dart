@@ -13,8 +13,9 @@ class EnrollmentService {
     required String enrollToken,
     String? ownerEmail,
     String? fcmToken,
+    String? apiKey,
   }) async {
-    final client = ApiClient(baseUrl: serverUrl.trimRight('/'));
+    final client = ApiClient(baseUrl: serverUrl.replaceAll(RegExp(r'/+$'), ''));
 
     final udid   = await PostureCollector.deviceUDID();
     final name   = await PostureCollector.deviceName();
@@ -40,10 +41,11 @@ class EnrollmentService {
     final result = await client.post('/api/mdm/self-enroll', body);
 
     await SecureStore.saveCredentials(
-      serverUrl:  serverUrl.trimRight('/'),
+      serverUrl:  serverUrl.replaceAll(RegExp(r'/+$'), ''),
       agentToken: result['agent_token'] as String,
       deviceId:   result['device_id'] as int,
       agentId:    result['agent_id'] as int,
+      apiKey:     apiKey,
     );
   }
 
