@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'screens/admin_app.dart';
+import 'admin/api.dart';
+import 'admin/shell.dart';
 import 'screens/setup_screen.dart';
 import 'screens/status_screen.dart';
 import 'services/background_worker.dart';
-import 'services/dashboard_api.dart';
 import 'services/secure_storage.dart';
 
 void main() async {

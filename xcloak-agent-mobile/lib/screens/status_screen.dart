@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-import '../services/dashboard_api.dart';
+import '../admin/api.dart';
+import '../admin/shell.dart';
 import '../services/enrollment_service.dart';
 import '../services/posture_collector.dart';
 import '../services/secure_storage.dart';
@@ -81,10 +82,10 @@ class _StatusScreenState extends State<StatusScreen>
     if (_dash == null) return;
     setState(() => _dashLoading = true);
     final results = await Future.wait([
-      _dash!.getOverview(),
-      _dash!.getAlerts(severity: _alertFilter),
-      _dash!.getAgents(),
-      _dash!.getIncidents(),
+      _dash!.overview(),
+      _dash!.alerts(sev: _alertFilter),
+      _dash!.agents(),
+      _dash!.incidents(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -181,6 +182,16 @@ class _StatusScreenState extends State<StatusScreen>
               if (_dashAvailable) _loadDashboard();
             },
           ),
+          if (_dashAvailable)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings),
+              tooltip: 'Admin Mode',
+              onPressed: () => Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => AdminApp(api: _dash!)),
+                (_) => false,
+              ),
+            ),
           PopupMenuButton<String>(
             onSelected: (v) {
               if (v == 'unenroll') _unenroll();
@@ -222,7 +233,7 @@ class _StatusScreenState extends State<StatusScreen>
               _loadDashboard();
             },
             onAcknowledge: _dash == null ? null : (id) async {
-              final ok = await _dash!.acknowledgeAlert(id);
+              final ok = await _dash!.ackAlert(id);
               if (ok) _loadDashboard();
               return ok;
             },
@@ -240,7 +251,7 @@ class _StatusScreenState extends State<StatusScreen>
             loading: _dashLoading,
             timeAgo: _timeAgo,
             onTask: _dash == null ? null : (agentId, task) async {
-              final ok = await _dash!.queueAgentTask(agentId, task);
+              final ok = await _dash!.queueTask(agentId, task);
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(ok ? 'Task queued' : 'Failed to queue task'),
                 duration: const Duration(seconds: 2),
