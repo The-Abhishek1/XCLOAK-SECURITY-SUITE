@@ -21,6 +21,7 @@ For sysadmins installing and managing the XCloak agent on endpoints.
 10. [Running at Scale](#running-at-scale)
 11. [Uninstalling](#uninstalling)
 12. [Troubleshooting](#troubleshooting)
+13. [Android Mobile Agent](#android-mobile-agent)
 
 ---
 
@@ -484,3 +485,104 @@ The agent must run as root (Linux/macOS) or SYSTEM/Administrator (Windows) to ex
 ### Agent token lost / host reimaged
 
 If the token file (`/etc/xcloak/token`) is lost, the agent cannot re-authenticate. Generate a new install token and re-register. The old agent entry in XCloak can be deleted from **Agents → [old agent] → Delete** or will automatically transition to offline after 5 minutes.
+
+---
+
+## Android Mobile Agent
+
+The XCloak Mobile Agent is a Flutter 3.24 Android application that runs on enrolled Android devices. It provides two modes: **Agent Mode** (endpoint monitoring for any enrolled device) and **Admin Console Mode** (full 53-section NGFW dashboard for admins).
+
+### Requirements
+
+| Requirement | Version |
+|-------------|---------|
+| Android | 6.0 Marshmallow (API 23) or later |
+| Flutter SDK | 3.24.5 |
+| Java (build only) | 21 (not 25 — see note below) |
+| Android SDK / NDK | NDK 27.0.12077973 |
+
+> **Build note:** Flutter 3.24.5 is incompatible with Java 25. If your system default is Java 25, override it:
+> ```bash
+> flutter config --jdk-dir=/usr/lib/jvm/java-21-openjdk-amd64
+> ```
+
+### Building the APK
+
+```bash
+cd xcloak-agent-mobile
+flutter pub get
+
+# Debug build (for development / sideloading)
+flutter run -d <device-id>
+flutter build apk --debug
+
+# Release build (for distribution)
+flutter build apk --release
+# Output: build/app/outputs/flutter-apk/app-release.apk
+```
+
+### Sideloading onto a Device
+
+1. Enable **Settings → Developer Options → USB Debugging** on the device.
+2. Connect via USB and verify: `adb devices`
+3. Install: `adb install build/app/outputs/flutter-apk/app-debug.apk`
+4. Or use `flutter run -d <device-id>` for a live debug session.
+
+For distribution without the Play Store, host the APK on an internal file server or MDM and allow installation from unknown sources in device policy.
+
+### Enrollment
+
+1. Open the XCloak app on the device.
+2. Tap **Enroll Device**.
+3. Enter:
+   - **Server URL** — your XCloak backend (e.g. `https://xcloak.yourdomain.com`)
+   - **Enrollment Token** — single-use token from **Settings → Install Tokens** in the web UI
+   - **Email** *(optional)* — associates the device with a user account
+   - **Admin API Key** *(optional)* — enables the full admin console; create one under **Settings → API Keys → Create** with role `admin`
+4. Tap **Enroll Device**. The app registers with the backend, stores the token in the Android Keystore, and starts the background monitoring service.
+
+### Agent Mode — What It Monitors
+
+| Check | Details |
+|-------|---------|
+| **Root Detection** | Checks for `su`, Magisk, known root binaries, and superuser apps |
+| **Developer Options** | Reads `Settings.Global.DEVELOPMENT_SETTINGS_ENABLED` |
+| **Sideloaded Apps** | Lists packages not installed via `com.android.vending` (Play Store) |
+| **OS Version** | Reports Android API level and build string |
+| **Device Fingerprint** | Stable SHA-256 ID derived from `ANDROID_ID` + device model |
+| **MDM Check-in** | Reports posture JSON to `/api/mobile/checkin` every 60 seconds |
+
+The background service runs as a foreground service (persistent notification) so Android does not kill it when the app is backgrounded or the screen is off.
+
+### Admin Console Mode
+
+When an Admin API Key is stored, the app switches to Admin Console Mode — a full mobile NGFW dashboard covering all 53 sections:
+
+- **Alerts** — live feed with severity filter (All / Critical / High / Medium); acknowledge and resolve from mobile
+- **Agents** — list of enrolled endpoints with online/offline status, OS, IP, and last-seen time; queue remote tasks (process collection, vulnerability scan, host isolation, etc.)
+- **Detection** — incidents, UEBA, insider threat, ITDR findings, canary tokens, honeyports
+- **Threat Intel** — threat actors, IOCs, Sigma rules, YARA rules, JA3 fingerprints, threat feeds
+- **Response** — cases, playbooks, approval queue, firewall rules, forensic collection
+- **Inventory** — CMDB assets, vulnerabilities, processes, connections, packages
+- **Compliance** — framework scores (SOC 2, NIST, PCI-DSS, ISO 27001), controls, audit trail, reports
+- **Platform** — user management, API key management, integrations, custom roles, tenants, AI assistant
+
+To enter admin mode from agent mode, tap the shield icon in the top-right corner and enter your API key when prompted.
+
+### Switching Back to Agent Mode
+
+From the admin console, tap the hamburger menu → **Agent Mode** at the bottom of the sidebar. This clears the stored API key and returns to the standard agent view.
+
+### Unenrolling a Device
+
+In the app: tap **⋮ (overflow menu) → Unenroll device**. This deletes the local agent token and stops the background service. The device will appear offline in the NGFW dashboard within 5 minutes and can be deleted from **Agents → [device] → Delete**.
+
+### Permissions Required
+
+| Permission | Why |
+|------------|-----|
+| `FOREGROUND_SERVICE` | Background monitoring service |
+| `RECEIVE_BOOT_COMPLETED` | Restart service after device reboot |
+| `INTERNET` | Backend communication |
+| `QUERY_ALL_PACKAGES` | Sideloaded app detection |
+| `POST_NOTIFICATIONS` | Foreground service notification (Android 13+) |

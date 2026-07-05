@@ -1,20 +1,20 @@
 # XCloak Security Suite
 
-An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR capabilities. Built with Go, PostgreSQL, and Next.js — designed as a single solution for enterprises of all sizes.
+An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR capabilities. Built with Go, PostgreSQL, Next.js, and Flutter — designed as a single solution for enterprises of all sizes.
 
 ![XCloak Dashboard](docs/dashboard.png)
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        XCloak Platform                          │
-├──────────────┬──────────────┬──────────────┬────────────────────┤
-│   Frontend   │   Backend    │    Agent     │  Observability     │
-│  Next.js 14  │  Go / Gin    │  Go Binary   │  Prometheus        │
-│  TypeScript  │  PostgreSQL  │  Linux/Win   │  Grafana           │
-│  Port 3000   │  Port 8080   │  Endpoint    │  Kafka             │
-└──────────────┴──────────────┴──────────────┴────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                XCloak Platform                                   │
+├──────────────┬──────────────┬──────────────┬────────────────┬────────────────────┤
+│   Frontend   │   Backend    │  Go Agent    │ Mobile Agent   │  Observability     │
+│  Next.js 14  │  Go / Gin    │  Go Binary   │  Flutter 3.24  │  Prometheus        │
+│  TypeScript  │  PostgreSQL  │  Linux/Win   │  Android       │  Grafana           │
+│  Port 3000   │  Port 8080   │  macOS       │  + Admin UI    │  Kafka             │
+└──────────────┴──────────────┴──────────────┴────────────────┴────────────────────┘
 ```
 
 ## Detection Engines
@@ -51,6 +51,58 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 - **Syslog Receiver** — UDP/TCP syslog ingest on port 5140; auto-parses CEF, LEEF, JSON, NDJSON, plain syslog
 - **HTTP Log Source API** — REST endpoint with per-source API key auth; accepts any log format
 - **Log Normalizer** — unified ParsedFields extraction across all formats: src_ip, dst_ip, user, auth_result, event_id, bytes_sent/recv, JA3 hash, command_line, parent_image, process name
+
+## Mobile Agent (Android)
+
+The XCloak Mobile Agent is a Flutter 3.24 Android app that brings endpoint monitoring and the full admin console to mobile devices.
+
+### Agent Mode (all enrolled devices)
+
+- **Background Service** — persistent foreground service survives app close; checks in to the backend every 60 seconds
+- **Device Posture Checks** — root/jailbreak detection, developer options status, sideloaded (non-Play-Store) app inventory
+- **MDM Check-in** — reports OS version, device fingerprint, enrollment status, posture to the NGFW backend
+- **Secure Storage** — agent token and API key stored in Android Keystore via `flutter_secure_storage`
+- **Alert & Agent View** — read-only view of live alerts (with severity filter) and enrolled agents without needing admin access
+
+### Admin Console Mode (API key required)
+
+The same app doubles as a full admin console when an Admin API Key is provided. Covers all 53 sections of the NGFW dashboard:
+
+| Section Group | Screens |
+|---------------|---------|
+| **Overview** | Dashboard, Agents, Network Map, Attack Paths, Timeline |
+| **Detection** | Alerts, Incidents, UEBA, Insider Threat, ITDR, Deception (Canary/Honeyports) |
+| **Threat Intel** | Threat Actors, IOCs, Threat Feeds, Sigma Rules, YARA Rules, JA3 Fingerprints, Log Sources |
+| **Hunt** | Hunt Workbench (templates + runs) |
+| **Response** | Cases, Playbooks, Approval Queue, Firewall Rules, Scheduled Tasks, Forensics |
+| **Inventory** | Assets (CMDB), Vulnerabilities, Processes, Connections, Packages, File Hashes, Users, Auth Logs |
+| **Compliance** | Frameworks (SOC 2/NIST/PCI/ISO), Policies, Controls, Audit Trail, Reports |
+| **Platform** | Settings (Users, API Keys, Integrations, Roles), Tenants, AI Assistant |
+
+### Enrollment
+
+1. Open the app → tap **Enroll Device**
+2. Enter **Server URL** (e.g. `https://xcloak.yourdomain.com`) and **Enrollment Token** (generated from Settings → Install Tokens)
+3. Optionally enter an **Admin API Key** to enable the admin console
+4. The app registers the device, starts the background service, and stores the token securely
+
+### Building from Source
+
+```bash
+cd xcloak-agent-mobile
+
+# Requires Flutter 3.24.5, Java 21, Android SDK
+flutter pub get
+flutter run                       # debug build on connected device
+flutter build apk --release       # release APK
+```
+
+> **Java compatibility:** Flutter 3.24.5 requires Java ≤ 21. Set the JDK explicitly if your system default is newer:
+> ```bash
+> flutter config --jdk-dir=/usr/lib/jvm/java-21-openjdk-amd64
+> ```
+
+---
 
 ## Response (SOAR)
 
@@ -112,7 +164,7 @@ An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR ca
 |-------|---------|
 | [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, detection rules, AI tools |
 | [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, backups |
-| [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing and managing the agent on Linux, Windows, and macOS |
+| [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing the Go agent (Linux/Windows/macOS) and the Android mobile agent |
 | [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps |
 | [OpenAPI Spec](xcloak-ngfw/backend/docs/generated/openapi.yaml) | Developers — full REST API reference (OpenAPI 3.0) |
 
@@ -167,7 +219,7 @@ Services:
 - Kafka UI: http://localhost:8090
 - MinIO Console: http://localhost:9001 (immutable audit log export target)
 
-### 4. Agent
+### 4. Go Agent (Linux / Windows / macOS)
 
 ```bash
 cd xcloak-agent
@@ -180,7 +232,21 @@ go build -o xcloak-agent ./main.go
 
 After first registration, the agent token is saved to `~/.config/xcloak-agent/token` and reused on every subsequent start.
 
-### 5. Agentless Log Sources (Syslog / HTTP)
+### 5. Mobile Agent (Android)
+
+```bash
+cd xcloak-agent-mobile
+
+# Requires Flutter 3.24.5 + Java 21
+flutter pub get
+flutter run          # hot-reload on connected device
+# or: flutter build apk --release
+```
+
+Enroll from the app: enter your server URL + an Enrollment Token generated from **Settings → Install Tokens**.  
+Enable the admin console by entering an Admin API Key (Settings → API Keys → Create → role: `admin`).
+
+### 7. Agentless Log Sources (Syslog / HTTP)
 
 ```bash
 # Syslog (UDP/TCP, port 5140) — configure your firewall/switch to forward here
@@ -358,7 +424,8 @@ Key endpoints:
 | Backend | Go 1.21, Gin, JWT |
 | Database | PostgreSQL 16 (golang-migrate, 56 migrations incl. partitioned `endpoint_logs`) |
 | Cache / State | Redis (rate limiting, token revocation) |
-| Agent | Go (single binary, no dependencies) |
+| Go Agent | Go (single binary, no dependencies) — Linux / Windows / macOS |
+| Mobile Agent | Flutter 3.24.5 (Dart) — Android; Material 3 UI; admin console + MDM check-in |
 | Message Bus | Apache Kafka |
 | Object Storage | MinIO (immutable audit log, Object Lock) |
 | Metrics | Prometheus + Grafana |
