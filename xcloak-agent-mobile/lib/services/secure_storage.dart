@@ -52,5 +52,6 @@ class SecureStore {
 
   static Future<void> clear() => _storage.deleteAll();
 
+  static Future<void> saveApiKey(String key) => _storage.write(key: _keyApiKey, value: key);
   static Future<void> removeApiKey() => _storage.delete(key: _keyApiKey);
 }

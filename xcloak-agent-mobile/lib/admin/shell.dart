@@ -176,81 +176,167 @@ class _AdminAppState extends State<AdminApp> {
 
 // ── Drawer ────────────────────────────────────────────────────────────────────
 
-class _Drawer extends StatelessWidget {
+class _Drawer extends StatefulWidget {
   final int sel;
   final void Function(int) onSelect;
   final VoidCallback onAgentMode;
   const _Drawer({required this.sel, required this.onSelect, required this.onAgentMode});
+  @override State<_Drawer> createState() => _DrawerState();
+}
+
+class _DrawerState extends State<_Drawer> {
+  late String _openGroup;
+
+  static final _groups = <String, List<(int, IconData, String)>>{};
+  static final _top    = <(int, IconData, String)>[];
+  static bool  _parsed = false;
+
+  static void _parse() {
+    if (_parsed) return;
+    for (final s in _kSections) {
+      if (s.$4.isEmpty) {
+        _top.add((s.$1, s.$2, s.$3));
+      } else {
+        _groups.putIfAbsent(s.$4, () => []).add((s.$1, s.$2, s.$3));
+      }
+    }
+    _parsed = true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _parse();
+    _openGroup = _groupOf(widget.sel);
+  }
+
+  @override
+  void didUpdateWidget(_Drawer old) {
+    super.didUpdateWidget(old);
+    if (old.sel != widget.sel) {
+      final g = _groupOf(widget.sel);
+      if (g.isNotEmpty && g != _openGroup) setState(() => _openGroup = g);
+    }
+  }
+
+  String _groupOf(int idx) {
+    final s = _kSections.firstWhere((s) => s.$1 == idx, orElse: () => _kSections.first);
+    return s.$4;
+  }
+
+  void _toggle(String group) =>
+      setState(() => _openGroup = _openGroup == group ? '' : group);
 
   @override
   Widget build(BuildContext context) {
-    // Group sections by their group label
-    final groups = <String, List<(int, IconData, String)>>{};
-    final top    = <(int, IconData, String)>[];
-    for (final s in _kSections) {
-      if (s.$4.isEmpty) {
-        top.add((s.$1, s.$2, s.$3));
-      } else {
-        groups.putIfAbsent(s.$4, () => []).add((s.$1, s.$2, s.$3));
-      }
-    }
-
+    final cs = Theme.of(context).colorScheme;
     return Drawer(
       child: Column(children: [
+        // ── Header ─────────────────────────────────────────────────────────
         DrawerHeader(
-          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end,
+          margin: EdgeInsets.zero,
+          decoration: BoxDecoration(color: cs.primary),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Icon(Icons.security, color: Colors.white, size: 32),
-              SizedBox(height: 6),
-              Text('XCloak Admin', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
-              Text('NGFW Security Suite', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              const Icon(Icons.security, color: Colors.white, size: 28),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: const [
+                  Text('XCloak Admin',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 2),
+                  Text('NGFW Security Suite',
+                      style: TextStyle(color: Colors.white70, fontSize: 11)),
+                ],
+              ),
             ],
           ),
         ),
+
+        // ── Nav list ───────────────────────────────────────────────────────
         Expanded(
           child: ListView(
-            padding: EdgeInsets.zero,
+            padding: const EdgeInsets.only(top: 4, bottom: 8),
             children: [
-              // Top-level items
-              for (final t in top)
-                _tile(context, t.$1, t.$2, t.$3),
-              // Grouped sections
-              for (final entry in groups.entries)
-                ExpansionTile(
-                  title: Text(entry.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                  initiallyExpanded: entry.value.any((s) => s.$1 == sel),
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  childrenPadding: EdgeInsets.zero,
-                  children: entry.value.map((s) => _tile(context, s.$1, s.$2, s.$3, indent: true)).toList(),
-                ),
+              for (final t in _top) _tile(context, t.$1, t.$2, t.$3),
+              const SizedBox(height: 4),
+              for (final entry in _groups.entries) ...[
+                _groupHeader(context, entry.key),
+                if (_openGroup == entry.key)
+                  for (final s in entry.value)
+                    _tile(context, s.$1, s.$2, s.$3, indent: true),
+              ],
             ],
           ),
         ),
+
+        // ── Footer: back to agent ──────────────────────────────────────────
         const Divider(height: 1),
-        ListTile(
-          leading: const Icon(Icons.phone_android, color: Colors.blue),
-          title: const Text('Agent Mode', style: TextStyle(color: Colors.blue)),
-          subtitle: const Text('Switch to device agent view', style: TextStyle(fontSize: 11)),
-          onTap: onAgentMode,
+        Material(
+          color: cs.primaryContainer.withOpacity(.35),
+          child: ListTile(
+            leading: Icon(Icons.phone_android, color: cs.primary, size: 20),
+            title: Text('Agent Mode',
+                style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+            trailing: Icon(Icons.chevron_right, color: cs.primary, size: 18),
+            visualDensity: VisualDensity.compact,
+            onTap: widget.onAgentMode,
+          ),
         ),
         const SizedBox(height: 4),
       ]),
     );
   }
 
+  Widget _groupHeader(BuildContext context, String label) {
+    final cs     = Theme.of(context).colorScheme;
+    final isOpen = _openGroup == label;
+    final hasActive = _groups[label]!.any((s) => s.$1 == widget.sel);
+    return InkWell(
+      onTap: () => _toggle(label),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(children: [
+          if (hasActive)
+            Container(width: 3, height: 14, margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(2)))
+          else
+            const SizedBox(width: 11),
+          Text(label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.3,
+                color: hasActive ? cs.primary : cs.onSurfaceVariant,
+              )),
+          const Spacer(),
+          Icon(isOpen ? Icons.expand_less : Icons.expand_more,
+              size: 16, color: cs.onSurfaceVariant),
+        ]),
+      ),
+    );
+  }
+
   Widget _tile(BuildContext context, int idx, IconData icon, String label, {bool indent = false}) {
-    final active = idx == sel;
+    final active = idx == widget.sel;
+    final cs     = Theme.of(context).colorScheme;
     return ListTile(
-      contentPadding: EdgeInsets.only(left: indent ? 32.0 : 16.0, right: 16.0),
-      leading: Icon(icon, size: 18, color: active ? Theme.of(context).colorScheme.primary : null),
-      title: Text(label, style: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+      contentPadding: EdgeInsets.only(left: indent ? 28.0 : 16.0, right: 12.0),
+      leading: Icon(icon, size: 17,
+          color: active ? cs.primary : cs.onSurfaceVariant),
+      title: Text(label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+            color: active ? cs.primary : null,
+          )),
       selected: active,
-      selectedTileColor: Theme.of(context).colorScheme.primary.withOpacity(.1),
+      selectedTileColor: cs.primary.withOpacity(.1),
       visualDensity: VisualDensity.compact,
-      onTap: () => onSelect(idx),
+      onTap: () => widget.onSelect(idx),
     );
   }
 }

@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.xcloak.agent"
     compileSdk = 36
-    ndkVersion = "25.1.8937393"
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8

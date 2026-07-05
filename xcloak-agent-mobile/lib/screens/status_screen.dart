@@ -144,6 +144,47 @@ class _StatusScreenState extends State<StatusScreen>
         context, MaterialPageRoute(builder: (_) => const SetupScreen()));
   }
 
+  Future<void> _enterAdminMode() async {
+    final keyCtrl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Admin API Key'),
+        content: TextField(
+          controller: keyCtrl,
+          decoration: const InputDecoration(
+            labelText: 'API Key',
+            hintText: 'xck_…',
+            helperText: 'Create one in Settings → API Keys on the dashboard.',
+            prefixIcon: Icon(Icons.vpn_key),
+            border: OutlineInputBorder(),
+          ),
+          obscureText: true,
+          autocorrect: false,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, keyCtrl.text.trim()),
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    await SecureStore.saveApiKey(result);
+    await _initDashboard();
+    if (!mounted || _dash == null) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => AdminApp(api: _dash!)),
+      (_) => false,
+    );
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Color _severityClr(String s) {
@@ -182,16 +223,17 @@ class _StatusScreenState extends State<StatusScreen>
               if (_dashAvailable) _loadDashboard();
             },
           ),
-          if (_dashAvailable)
-            IconButton(
-              icon: const Icon(Icons.admin_panel_settings),
-              tooltip: 'Admin Mode',
-              onPressed: () => Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => AdminApp(api: _dash!)),
-                (_) => false,
-              ),
-            ),
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings),
+            tooltip: 'Admin Mode',
+            onPressed: _dashAvailable
+                ? () => Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => AdminApp(api: _dash!)),
+                      (_) => false,
+                    )
+                : _enterAdminMode,
+          ),
           PopupMenuButton<String>(
             onSelected: (v) {
               if (v == 'unenroll') _unenroll();
