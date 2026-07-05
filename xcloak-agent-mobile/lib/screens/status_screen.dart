@@ -37,7 +37,7 @@ class _StatusScreenState extends State<StatusScreen>
   bool _dashAvailable = false;
   bool _dashLoading   = false;
 
-  String _alertFilter = '';  // '' | 'critical' | 'high'
+  String _alertFilter = '';
 
   @override
   void initState() {
@@ -93,7 +93,6 @@ class _StatusScreenState extends State<StatusScreen>
       _alerts    = results[1] as List<dynamic>;
       _agents    = results[2] as List<dynamic>;
       _incidents = results[3] as List<dynamic>;
-      // back-fill overview incident count if the overview API didn't include it
       if (_overview != null && _overview!['active_incidents'] == null) {
         _overview = {..._overview!, 'active_incidents': _incidents.length};
       }
@@ -157,7 +156,6 @@ class _StatusScreenState extends State<StatusScreen>
             hintText: 'xck_…',
             helperText: 'Create one in Settings → API Keys on the dashboard.',
             prefixIcon: Icon(Icons.vpn_key),
-            border: OutlineInputBorder(),
           ),
           obscureText: true,
           autocorrect: false,
@@ -187,14 +185,12 @@ class _StatusScreenState extends State<StatusScreen>
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  Color _severityClr(String s) {
-    switch (s.toLowerCase()) {
-      case 'critical': return Colors.red;
-      case 'high':     return Colors.orange;
-      case 'medium':   return Colors.yellow.shade700;
-      default:         return Colors.grey;
-    }
-  }
+  Color _severityClr(String s) => switch (s.toLowerCase()) {
+    'critical' => const Color(0xFFEF4444),
+    'high'     => const Color(0xFFF97316),
+    'medium'   => const Color(0xFFF59E0B),
+    _          => const Color(0xFF6B7280),
+  };
 
   String _timeAgo(String? ts) {
     if (ts == null || ts.isEmpty) return 'never';
@@ -208,16 +204,22 @@ class _StatusScreenState extends State<StatusScreen>
     } catch (_) { return ts; }
   }
 
-  // ── Tabs ──────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('XCloak'),
+        title: Row(children: [
+          Icon(Icons.security, color: cs.primary, size: 20),
+          const SizedBox(width: 8),
+          const Text('XCloak', style: TextStyle(fontWeight: FontWeight.w700)),
+        ]),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
             onPressed: () {
               _refreshAgent();
               if (_dashAvailable) _loadDashboard();
@@ -235,9 +237,7 @@ class _StatusScreenState extends State<StatusScreen>
                 : _enterAdminMode,
           ),
           PopupMenuButton<String>(
-            onSelected: (v) {
-              if (v == 'unenroll') _unenroll();
-            },
+            onSelected: (v) { if (v == 'unenroll') _unenroll(); },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'unenroll', child: Text('Unenroll device')),
             ],
@@ -246,9 +246,9 @@ class _StatusScreenState extends State<StatusScreen>
         bottom: TabBar(
           controller: _tabs,
           tabs: const [
-            Tab(icon: Icon(Icons.shield), text: 'Agent'),
-            Tab(icon: Icon(Icons.notifications), text: 'Alerts'),
-            Tab(icon: Icon(Icons.devices), text: 'Agents'),
+            Tab(icon: Icon(Icons.shield_outlined), text: 'Agent'),
+            Tab(icon: Icon(Icons.notifications_outlined), text: 'Alerts'),
+            Tab(icon: Icon(Icons.devices_outlined), text: 'Agents'),
           ],
         ),
       ),
@@ -294,8 +294,11 @@ class _StatusScreenState extends State<StatusScreen>
             timeAgo: _timeAgo,
             onTask: _dash == null ? null : (agentId, task) async {
               final ok = await _dash!.queueTask(agentId, task);
+              if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(ok ? 'Task queued' : 'Failed to queue task'),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 duration: const Duration(seconds: 2),
               ));
             },
@@ -331,81 +334,195 @@ class _AgentTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs  = Theme.of(context).colorScheme;
     final risk = rooted || sideloaded.isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: () async {},
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          // ── Service toggle ───────────────────────────────────────────
-          Card(
-            child: ListTile(
-              leading: Icon(serviceRunning ? Icons.shield : Icons.shield_outlined,
-                  color: serviceRunning ? Colors.green : Colors.grey, size: 32),
-              title: const Text('Agent Service', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(serviceRunning ? 'Active — monitoring' : 'Stopped',
-                  style: TextStyle(color: serviceRunning ? Colors.green : Colors.grey)),
-              trailing: Switch(value: serviceRunning, onChanged: (_) => onToggle()),
-            ),
-          ),
+
+          // ── Service card ───────────────────────────────────────────────
+          _serviceCard(context, cs),
           const SizedBox(height: 10),
 
-          // ── Risk level ───────────────────────────────────────────────
-          Card(
-            child: ListTile(
-              leading: Icon(risk ? Icons.warning_amber : Icons.check_circle,
-                  color: risk ? Colors.orange : Colors.green, size: 32),
-              title: const Text('Risk Level', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(risk ? 'Action needed' : 'All clear',
-                  style: TextStyle(color: risk ? Colors.orange : Colors.green)),
-            ),
-          ),
+          // ── Risk banner ────────────────────────────────────────────────
+          _riskBanner(context, cs, risk),
           const SizedBox(height: 10),
 
-          // ── Dashboard overview (if API key provided) ─────────────────
+          // ── Overview grid ──────────────────────────────────────────────
           if (overview != null) ...[
-            _SectionHeader('NGFW Overview'),
+            _sectionLabel(context, 'NGFW Overview'),
             const SizedBox(height: 8),
             _OverviewGrid(overview: overview!),
             const SizedBox(height: 10),
           ],
 
-          // ── Device info ──────────────────────────────────────────────
-          _InfoCard(title: 'Device Info', children: [
-            _Row('OS Version', osVersion),
-            _Row('Device ID', deviceId ?? '—'),
-          ]),
+          // ── Device info ────────────────────────────────────────────────
+          _sectionLabel(context, 'Device'),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(children: [
+                _infoRow(context, Icons.phone_android, 'OS Version', osVersion.isNotEmpty ? osVersion : '—'),
+                const SizedBox(height: 10),
+                _infoRow(context, Icons.fingerprint, 'Device ID', deviceId ?? '—'),
+              ]),
+            ),
+          ),
           const SizedBox(height: 10),
 
-          // ── Security checks ──────────────────────────────────────────
-          _InfoCard(title: 'Security Checks', children: [
-            _Check('Not Rooted / Jailbroken', !rooted),
-            _Check('Developer Options Off', !devMode),
-            _Check('No Sideloaded Apps', sideloaded.isEmpty),
-          ]),
+          // ── Security checks ────────────────────────────────────────────
+          _sectionLabel(context, 'Security'),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(children: [
+                _checkRow('Not Rooted / Jailbroken',     !rooted),
+                _divider(),
+                _checkRow('Developer Options Off',        !devMode),
+                _divider(),
+                _checkRow('No Sideloaded Apps',           sideloaded.isEmpty),
+              ]),
+            ),
+          ),
 
           if (sideloaded.isNotEmpty) ...[
             const SizedBox(height: 10),
-            _InfoCard(
-              title: 'Sideloaded Apps (${sideloaded.length})',
-              children: sideloaded
-                  .take(15)
-                  .map((p) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text(p,
-                            style: const TextStyle(
-                                fontFamily: 'monospace', fontSize: 12)),
-                      ))
-                  .toList(),
+            _sectionLabel(context, 'Sideloaded Apps (${sideloaded.length})'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: sideloaded.take(15).map((p) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(children: [
+                      Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(p,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
+                    ]),
+                  )).toList(),
+                ),
+              ),
             ),
           ],
-          const SizedBox(height: 24),
         ],
       ),
     );
   }
+
+  Widget _serviceCard(BuildContext context, ColorScheme cs) {
+    final color = serviceRunning ? const Color(0xFF22C55E) : Colors.grey;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(
+              color: color.withOpacity(.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              serviceRunning ? Icons.shield : Icons.shield_outlined,
+              color: color, size: 24,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Agent Service',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            const SizedBox(height: 2),
+            Text(
+              serviceRunning ? 'Active — monitoring device' : 'Stopped',
+              style: TextStyle(fontSize: 12,
+                  color: serviceRunning ? const Color(0xFF22C55E) : Colors.grey),
+            ),
+          ])),
+          Switch.adaptive(value: serviceRunning, onChanged: (_) => onToggle()),
+        ]),
+      ),
+    );
+  }
+
+  Widget _riskBanner(BuildContext context, ColorScheme cs, bool risk) {
+    final color   = risk ? const Color(0xFFF97316) : const Color(0xFF22C55E);
+    final icon    = risk ? Icons.warning_amber_rounded : Icons.verified_user;
+    final label   = risk ? 'Action Needed' : 'Device Secure';
+    final sublabel = risk ? 'Security issues detected on this device' : 'All checks passed';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: color.withOpacity(.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: color, fontSize: 13)),
+            Text(sublabel, style: TextStyle(fontSize: 11, color: color.withOpacity(.7))),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _infoRow(BuildContext context, IconData icon, String label, String value) {
+    return Row(children: [
+      Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary.withOpacity(.6)),
+      const SizedBox(width: 10),
+      Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      const Spacer(),
+      Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+    ]);
+  }
+
+  Widget _checkRow(String label, bool passing) {
+    final color = passing ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
+    final icon  = passing ? Icons.check_rounded : Icons.close_rounded;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(children: [
+        Container(
+          width: 26, height: 26,
+          decoration: BoxDecoration(
+            color: color.withOpacity(.12),
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Icon(icon, size: 14, color: color),
+        ),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(fontSize: 13)),
+        const Spacer(),
+        Text(passing ? 'Pass' : 'Fail',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+      ]),
+    );
+  }
+
+  Widget _divider() => Divider(height: 1, color: Colors.grey.shade200);
+
+  Widget _sectionLabel(BuildContext context, String text) => Text(
+    text,
+    style: TextStyle(
+      fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
+      color: Theme.of(context).colorScheme.primary.withOpacity(.75),
+    ),
+  );
 }
+
+// ── Overview grid ─────────────────────────────────────────────────────────────
 
 class _OverviewGrid extends StatelessWidget {
   final Map<String, dynamic> overview;
@@ -414,30 +531,30 @@ class _OverviewGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      ('Agents Online', '${overview['agents_online'] ?? overview['online_agents'] ?? '—'}', Colors.green),
-      ('Open Alerts', '${overview['open_alerts'] ?? overview['active_alerts'] ?? '—'}', Colors.orange),
-      ('Critical', '${overview['critical_alerts'] ?? '—'}', Colors.red),
-      ('Incidents', '${overview['active_incidents'] ?? overview['open_incidents'] ?? '—'}', Colors.blue),
+      ('Agents Online', '${overview['agents_online'] ?? overview['online_agents'] ?? '—'}', const Color(0xFF22C55E)),
+      ('Open Alerts',   '${overview['open_alerts']   ?? overview['active_alerts']  ?? '—'}', const Color(0xFFF97316)),
+      ('Critical',      '${overview['critical_alerts'] ?? '—'}',                              const Color(0xFFEF4444)),
+      ('Incidents',     '${overview['active_incidents'] ?? overview['open_incidents'] ?? '—'}', const Color(0xFF3B82F6)),
     ];
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 2.2,
+      childAspectRatio: 2.4,
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       children: items.map((e) => Card(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(e.$3 == Colors.red ? '${e.$2}' : e.$2,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: e.$3)),
-              Text(e.$1, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            ],
-          ),
+          child: Row(children: [
+            Container(width: 4, height: 32,
+                decoration: BoxDecoration(color: e.$3, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text(e.$2, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: e.$3, height: 1)),
+              Text(e.$1, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ]),
+          ]),
         ),
       )).toList(),
     );
@@ -480,76 +597,112 @@ class _AlertsTab extends StatelessWidget {
 
     return Column(
       children: [
-        // Filter chips
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (final f in ['', 'critical', 'high', 'medium'])
+                for (final f in [('All', ''), ('Critical', 'critical'), ('High', 'high'), ('Medium', 'medium')])
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: FilterChip(
-                      label: Text(f.isEmpty ? 'All' : f[0].toUpperCase() + f.substring(1)),
-                      selected: filter == f,
-                      onSelected: (_) => onFilterChanged(f),
+                      label: Text(f.$1),
+                      selected: filter == f.$2,
+                      onSelected: (_) => onFilterChanged(f.$2),
                     ),
                   ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         if (loading && alerts.isEmpty)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
+          const Expanded(child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
         else if (alerts.isEmpty)
-          const Expanded(
+          Expanded(
             child: Center(
-              child: Text('No alerts', style: TextStyle(color: Colors.grey)),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.notifications_none, size: 48, color: Colors.grey.shade400),
+                const SizedBox(height: 12),
+                Text('No alerts', style: TextStyle(color: Colors.grey.shade500)),
+              ]),
             ),
           )
         else
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
               itemCount: alerts.length,
               itemBuilder: (ctx, i) {
                 final a   = alerts[i] as Map<String, dynamic>;
                 final sev = (a['severity'] ?? '').toString();
                 final sta = (a['status']   ?? '').toString();
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      radius: 6,
-                      backgroundColor: severityColor(sev),
+                final col = severityColor(sev);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Card(
+                    child: IntrinsicHeight(
+                      child: Row(children: [
+                        Container(
+                          width: 4,
+                          decoration: BoxDecoration(
+                            color: col,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              bottomLeft: Radius.circular(12),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                            child: Row(children: [
+                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(
+                                  (a['rule_name'] ?? a['message'] ?? 'Alert').toString(),
+                                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(children: [
+                                  _sevPill(sev, col),
+                                  const SizedBox(width: 6),
+                                  Text(timeAgo(a['created_at']?.toString()),
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                  if (a['hostname'] != null) ...[
+                                    Text('  ·  ',
+                                        style: TextStyle(color: Colors.grey.shade400)),
+                                    Flexible(child: Text(a['hostname'].toString(),
+                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                        overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ]),
+                              ])),
+                              if (sta == 'open' && (onAcknowledge != null || onResolve != null))
+                                PopupMenuButton<String>(
+                                  onSelected: (v) {
+                                    if (v == 'ack')    onAcknowledge?.call(a['id'] as int);
+                                    if (v == 'resolve') onResolve?.call(a['id'] as int);
+                                  },
+                                  itemBuilder: (_) => [
+                                    if (onAcknowledge != null)
+                                      const PopupMenuItem(value: 'ack',     child: Text('Acknowledge')),
+                                    if (onResolve != null)
+                                      const PopupMenuItem(value: 'resolve', child: Text('Resolve')),
+                                  ],
+                                )
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Text(sta,
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                ),
+                            ]),
+                          ),
+                        ),
+                      ]),
                     ),
-                    title: Text(
-                      (a['rule_name'] ?? a['message'] ?? 'Alert').toString(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      '${sev.toUpperCase()}  ·  ${timeAgo(a['created_at']?.toString())}'
-                      '${a['hostname'] != null ? "  ·  ${a['hostname']}" : ""}',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    trailing: sta == 'open' && (onAcknowledge != null || onResolve != null)
-                      ? PopupMenuButton<String>(
-                          onSelected: (v) {
-                            if (v == 'ack')     onAcknowledge?.call(a['id'] as int);
-                            if (v == 'resolve')  onResolve?.call(a['id'] as int);
-                          },
-                          itemBuilder: (_) => [
-                            if (onAcknowledge != null)
-                              const PopupMenuItem(value: 'ack',     child: Text('Acknowledge')),
-                            if (onResolve != null)
-                              const PopupMenuItem(value: 'resolve', child: Text('Resolve')),
-                          ],
-                        )
-                      : Text(sta, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   ),
                 );
               },
@@ -558,6 +711,16 @@ class _AlertsTab extends StatelessWidget {
       ],
     );
   }
+
+  Widget _sevPill(String sev, Color col) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: col.withOpacity(.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(sev.toUpperCase(),
+        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: col, letterSpacing: .4)),
+  );
 }
 
 // ── Agents tab ────────────────────────────────────────────────────────────────
@@ -596,53 +759,98 @@ class _AgentsTab extends StatelessWidget {
     }
 
     if (loading && agents.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (agents.isEmpty) {
-      return const Center(child: Text('No agents', style: TextStyle(color: Colors.grey)));
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.devices_outlined, size: 48, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          Text('No agents', style: TextStyle(color: Colors.grey.shade500)),
+        ]),
+      );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       itemCount: agents.length,
       itemBuilder: (ctx, i) {
         final a       = agents[i] as Map<String, dynamic>;
         final online  = (a['status'] ?? '') == 'online';
         final agentId = a['id'] as int? ?? 0;
+        final os      = (a['os'] ?? a['platform'] ?? '').toString().toLowerCase();
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: Icon(
-              Icons.computer,
-              color: online ? Colors.green : Colors.grey,
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Card(
+            child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+              leading: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: (online ? const Color(0xFF22C55E) : Colors.grey).withOpacity(.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      _osIcon(os),
+                      color: online ? const Color(0xFF22C55E) : Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+                  Positioned(
+                    right: -2, bottom: -2,
+                    child: Container(
+                      width: 11, height: 11,
+                      decoration: BoxDecoration(
+                        color: online ? const Color(0xFF22C55E) : Colors.grey.shade400,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Theme.of(ctx).colorScheme.surface, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              title: Text(
+                (a['hostname'] ?? 'Agent $agentId').toString(),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '${os.toUpperCase().isEmpty ? '—' : os.toUpperCase()}'
+                  '  ·  ${a['ip_address'] ?? '—'}'
+                  '  ·  ${timeAgo(a['last_seen']?.toString())}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ),
+              trailing: onTask != null
+                ? PopupMenuButton<String>(
+                    onSelected: (task) => onTask!(agentId, task),
+                    itemBuilder: (_) => _AGENT_TASKS
+                        .map((t) => PopupMenuItem(value: t.$1, child: Text(t.$2)))
+                        .toList(),
+                  )
+                : null,
             ),
-            title: Text(
-              (a['hostname'] ?? 'Agent $agentId').toString(),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              '${(a['os'] ?? a['platform'] ?? '').toString().toUpperCase()}'
-              '  ·  ${a['ip_address'] ?? '—'}'
-              '  ·  ${timeAgo(a['last_seen']?.toString())}',
-              style: const TextStyle(fontSize: 11),
-            ),
-            trailing: onTask != null
-              ? PopupMenuButton<String>(
-                  onSelected: (task) => onTask!(agentId, task),
-                  itemBuilder: (_) => _AGENT_TASKS
-                      .map((t) => PopupMenuItem(value: t.$1, child: Text(t.$2)))
-                      .toList(),
-                )
-              : null,
           ),
         );
       },
     );
   }
+
+  IconData _osIcon(String os) {
+    if (os.contains('windows')) return Icons.laptop_windows;
+    if (os.contains('mac') || os.contains('darwin')) return Icons.laptop_mac;
+    if (os.contains('android')) return Icons.phone_android;
+    if (os.contains('ios')) return Icons.phone_iphone;
+    return Icons.computer;
+  }
 }
 
-// ── Shared widgets ────────────────────────────────────────────────────────────
+// ── Shared placeholder ────────────────────────────────────────────────────────
 
 class _NoApiKeyPlaceholder extends StatelessWidget {
   final IconData icon;
@@ -651,78 +859,32 @@ class _NoApiKeyPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 48, color: Colors.grey),
-          const SizedBox(height: 12),
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 8),
-          const Text(
-            'Unenroll and re-enroll with an API Key\nfrom Settings → API Keys in the dashboard.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String text;
-  const _SectionHeader(this.text);
-  @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      );
-}
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  const _InfoCard({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            const Divider(height: 12),
-            ...children,
-          ],
-        ),
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 72, height: 72,
+            decoration: BoxDecoration(
+              color: cs.primary.withOpacity(.07),
+              borderRadius: BorderRadius.circular(36),
+            ),
+            child: Icon(icon, size: 30, color: cs.primary.withOpacity(.4)),
+          ),
+          const SizedBox(height: 16),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500,
+                  color: cs.onSurface.withOpacity(.55))),
+          const SizedBox(height: 8),
+          Text(
+            'Tap  to enter an Admin API Key.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(.35)),
+          ),
+        ]),
       ),
     );
   }
 }
-
-Widget _Row(String label, String value) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        Expanded(flex: 2, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13))),
-        Expanded(flex: 3, child: Text(value, style: const TextStyle(fontSize: 13))),
-      ]),
-    );
-
-Widget _Check(String label, bool passing) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        Icon(passing ? Icons.check_circle : Icons.cancel,
-            color: passing ? Colors.green : Colors.red, size: 16),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontSize: 13)),
-      ]),
-    );
