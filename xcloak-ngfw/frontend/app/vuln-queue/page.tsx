@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { vulnQueueAPI } from '@/lib/api';
 import { VulnQueueItem } from '@/types';
-import { RefreshCw, ChevronDown, ChevronRight, ExternalLink, Shield, Zap } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, ExternalLink, Shield, Zap, Download } from 'lucide-react';
 
 const SEV_COLOR: Record<string, string> = { critical: '#f85149', high: '#fb923c', medium: '#fbbf24', low: '#22c55e' };
 
@@ -174,14 +174,36 @@ export default function VulnQueuePage() {
   const kevCount = items.filter(i => i.is_kev).length;
   const highScore = items.filter(i => i.priority_score >= 700).length;
 
+  const exportCSV = () => {
+    const headers = ['CVE', 'Severity', 'Package', 'Version', 'Host', 'CVSS', 'EPSS%', 'KEV', 'Priority', 'Status', 'Notes'];
+    const rows = items.map(v => [
+      v.cve_id, v.severity, v.package_name, v.package_version, v.hostname || '',
+      v.cvss_score.toFixed(1), (v.epss_score * 100).toFixed(2),
+      v.is_kev ? 'Yes' : 'No', v.priority_score, v.patch_status, v.patch_notes || '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+      download: `vuln-queue-${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
   return (
     <RootLayout title="Vulnerability Priority Queue" subtitle="Risk-ranked patch tracking · CVSS + EPSS + KEV + Asset criticality"
       actions={
-        <button onClick={refresh} disabled={refreshing}
-          className="g-btn g-btn-ghost flex items-center gap-1.5 text-xs">
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Rescoring…' : 'Rescore'}
-        </button>
+        <div className="flex gap-2">
+          {items.length > 0 && (
+            <button onClick={exportCSV} className="g-btn g-btn-ghost flex items-center gap-1.5 text-xs">
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+          )}
+          <button onClick={refresh} disabled={refreshing}
+            className="g-btn g-btn-ghost flex items-center gap-1.5 text-xs">
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Rescoring…' : 'Rescore'}
+          </button>
+        </div>
       }>
 
       {/* Stats */}

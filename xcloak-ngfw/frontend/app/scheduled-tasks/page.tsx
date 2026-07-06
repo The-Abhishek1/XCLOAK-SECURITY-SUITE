@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import api from '@/lib/api';
-import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, X, Cpu, Check } from 'lucide-react';
+import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, X, Cpu, Check, Activity } from 'lucide-react';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
 
@@ -110,6 +110,26 @@ export default function ScheduledTasksPage() {
       }>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
+
+      {!loading && tasks.length > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {[
+            { label: 'Total Schedules', value: tasks.length, icon: Clock, color: 'var(--accent)' },
+            { label: 'Enabled',         value: tasks.filter(t => t.enabled).length, icon: Activity, color: 'var(--green)' },
+            { label: 'Total Runs',      value: tasks.reduce((s, t) => s + t.run_count, 0), icon: Cpu, color: '#fbbf24' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="g-card p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+                <Icon className="h-4 w-4" style={{ color }} />
+              </div>
+              <div>
+                <p className="text-xl font-bold" style={{ color }}>{value}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-3">
         {loading ? (
