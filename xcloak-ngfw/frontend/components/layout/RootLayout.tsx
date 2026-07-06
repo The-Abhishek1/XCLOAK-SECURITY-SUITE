@@ -108,9 +108,9 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
       <div className="flex items-center gap-2 shrink-0">
         {actions}
 
-        <div className="hidden md:block">
-          <GlobalSearch />
-        </div>
+        {/* Search — icon only on mobile, full pill on desktop */}
+        <div className="hidden md:block"><GlobalSearch /></div>
+        <div className="flex md:hidden"><GlobalSearch compact /></div>
 
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
           style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>

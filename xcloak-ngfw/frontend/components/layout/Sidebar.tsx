@@ -8,9 +8,9 @@ import { useUser } from '@/context/UserContext';
 import {
   LayoutDashboard, Cpu, Bell, AlertTriangle, Play,
   Shield, Bug, Settings, ShieldCheck, LogOut,
-  Archive, ChevronRight, Network, FileCode, Code2,
+  Archive, ChevronRight, ChevronDown, Network, FileCode, Code2,
   ClipboardCheck, Bot, Radio, Search, CalendarClock,
-  GitMerge, Map, Clock, VolumeX, TerminalSquare, Menu, X,
+  GitMerge, Map, Clock, VolumeX, TerminalSquare, X,
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
@@ -21,77 +21,80 @@ import api from '@/lib/api';
 import type { UserProfile } from '@/types';
 
 const NAV = [
-  { group: 'OVERVIEW', items: [
-    { href: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
+  { group: 'OVERVIEW', icon: LayoutDashboard, items: [
+    { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+    { href: '/network-map',  label: 'Network Map',  icon: Map },
+    { href: '/attack-path',  label: 'Attack Paths', icon: Crosshair },
+    { href: '/risk-posture', label: 'Risk Posture', icon: Gauge },
+  ]},
+  { group: 'MONITORING', icon: Activity, items: [
     { href: '/agents',      label: 'Agents',      icon: Cpu },
-    { href: '/network-map', label: 'Network Map', icon: Map },
-    { href: '/attack-path', label: 'Attack Paths', icon: Crosshair },
     { href: '/timeline',    label: 'Timeline',    icon: Clock },
+    { href: '/live-logs',   label: 'Live Logs',   icon: Radio },
+    { href: '/log-search',  label: 'Log Search',  icon: SearchCode },
+    { href: '/log-sources', label: 'Log Sources', icon: PlugZap },
   ]},
-  { group: 'DETECTION', items: [
-    { href: '/alerts',         label: 'Alerts',         icon: Bell },
-    { href: '/incidents',      label: 'Incidents',      icon: AlertTriangle },
-    { href: '/ueba',           label: 'UEBA',           icon: Activity },
-    { href: '/insider-threat',     label: 'Insider Threat',   icon: UserX },
-    { href: '/cloud-security',     label: 'Cloud Security',   icon: Cloud },
-    { href: '/email-security',     label: 'Email Security',   icon: Mail },
-    { href: '/container-security', label: 'Containers / K8s', icon: Container },
-    { href: '/ad-attacks',          label: 'AD Attacks',       icon: ShieldOff },
-    { href: '/supply-chain',        label: 'Supply Chain',     icon: Package },
-    { href: '/process-injection',   label: 'Process Injection',icon: Cpu },
-    { href: '/defense-evasion',     label: 'Defense Evasion',  icon: EyeOff },
-    { href: '/ot-ics',              label: 'OT / ICS',         icon: Wrench },
-    { href: '/deception',      label: 'Deception',      icon: Aperture },
-    { href: '/hunt-workbench', label: 'Hunt Workbench', icon: Microscope },
-    { href: '/threat-actors',  label: 'Threat Actors',  icon: Target },
-    { href: '/nba',            label: 'Net Behavior',   icon: Wifi },
-    { href: '/threat-intel',   label: 'Threat Intel',   icon: Shield },
-    { href: '/sigma-rules',        label: 'Sigma Rules',     icon: FileCode },
-    { href: '/yara-rules',        label: 'YARA Rules',      icon: Code2 },
-    { href: '/ja3-fingerprints',  label: 'JA3 Fingerprints', icon: Fingerprint },
-    { href: '/threat-detection',  label: 'Behavioral',      icon: Activity },
-    { href: '/live-logs',    label: 'Live Logs',    icon: Radio },
-    { href: '/log-search',   label: 'Log Search',   icon: SearchCode },
-    { href: '/log-sources',  label: 'Log Sources',  icon: PlugZap },
-    { href: '/hunt',         label: 'Threat Hunt',  icon: Search },
-    { href: '/clusters',     label: 'Alert Clusters', icon: Layers },
-    { href: '/correlation',  label: 'Correlation',  icon: GitMerge },
-    { href: '/suppression',  label: 'Suppression',  icon: VolumeX },
+  { group: 'DETECTION', icon: AlertTriangle, items: [
+    { href: '/alerts',           label: 'Alerts',          icon: Bell },
+    { href: '/incidents',        label: 'Incidents',        icon: AlertTriangle },
+    { href: '/ueba',             label: 'UEBA',             icon: Activity },
+    { href: '/insider-threat',   label: 'Insider Threat',   icon: UserX },
+    { href: '/nba',              label: 'Net Behavior',     icon: Wifi },
+    { href: '/threat-detection', label: 'Behavioral',       icon: Layers },
+    { href: '/correlation',      label: 'Correlation',      icon: GitMerge },
+    { href: '/clusters',         label: 'Alert Clusters',   icon: Aperture },
   ]},
-  { group: 'RESPONSE', items: [
+  { group: 'INTEL & HUNT', icon: Target, items: [
+    { href: '/threat-intel',     label: 'Threat Intel',     icon: Shield },
+    { href: '/threat-actors',    label: 'Threat Actors',    icon: Target },
+    { href: '/sigma-rules',      label: 'Sigma Rules',      icon: FileCode },
+    { href: '/yara-rules',       label: 'YARA Rules',       icon: Code2 },
+    { href: '/ja3-fingerprints', label: 'JA3 Fingerprints', icon: Fingerprint },
+    { href: '/hunt-workbench',   label: 'Hunt Workbench',   icon: Microscope },
+    { href: '/hunt',             label: 'Threat Hunt',      icon: Search },
+    { href: '/dfir',             label: 'DFIR',             icon: HardDrive },
+    { href: '/deception',        label: 'Deception',        icon: EyeOff },
+  ]},
+  { group: 'CLOUD & INFRA', icon: Cloud, items: [
+    { href: '/cloud-security',     label: 'Cloud Security',    icon: Cloud },
+    { href: '/email-security',     label: 'Email Security',    icon: Mail },
+    { href: '/container-security', label: 'Containers / K8s',  icon: Container },
+    { href: '/ad-attacks',         label: 'AD Attacks',        icon: ShieldOff },
+    { href: '/supply-chain',       label: 'Supply Chain',      icon: Package },
+    { href: '/ot-ics',             label: 'OT / ICS',          icon: Wrench },
+    { href: '/process-injection',  label: 'Process Injection', icon: Cpu },
+    { href: '/defense-evasion',    label: 'Defense Evasion',   icon: Bug },
+  ]},
+  { group: 'RESPONSE', icon: ShieldCheck, items: [
     { href: '/cases',           label: 'Cases',           icon: FolderOpen },
     { href: '/playbooks',       label: 'Playbooks',       icon: Play },
     { href: '/soar-approvals',  label: 'Approval Queue',  icon: ShieldCheck },
     { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
-    { href: '/vuln-queue',     label: 'Vuln Queue',       icon: ListChecks },
+    { href: '/vuln-queue',      label: 'Vuln Queue',      icon: ListChecks },
+    { href: '/suppression',     label: 'Suppression',     icon: VolumeX },
     { href: '/quarantine',      label: 'Quarantine',      icon: Archive },
+    { href: '/script-runner',   label: 'Script Runner',   icon: TerminalSquare },
+    { href: '/scheduled-tasks', label: 'Scheduled Tasks', icon: CalendarClock },
     { href: '/firewall',        label: 'Firewall',        icon: Network },
-    { href: '/scheduled-tasks',  label: 'Scheduled Tasks', icon: CalendarClock },
-    { href: '/dfir',             label: 'DFIR',             icon: HardDrive },
-    { href: '/script-runner',    label: 'Script Runner',    icon: TerminalSquare },
   ]},
-  { group: 'INVENTORY', items: [
+  { group: 'COMPLIANCE', icon: ClipboardCheck, items: [
+    { href: '/compliance',           label: 'Reports',     icon: ClipboardCheck },
+    { href: '/framework-compliance', label: 'Frameworks',  icon: ScrollText },
+    { href: '/executive',            label: 'Executive',   icon: BarChart2 },
+    { href: '/soc-metrics',          label: 'SOC Metrics', icon: Users },
+  ]},
+  { group: 'ASSETS', icon: Server, items: [
     { href: '/assets', label: 'Assets (CMDB)', icon: Server },
     { href: '/mdm',    label: 'Mobile (MDM)',  icon: Smartphone },
   ]},
-  { group: 'COMPLIANCE', items: [
-    { href: '/compliance',          label: 'Reports',           icon: ClipboardCheck },
-    { href: '/framework-compliance', label: 'Frameworks',         icon: ScrollText },
-    { href: '/executive',     label: 'Executive',     icon: BarChart2 },
-    { href: '/soc-metrics',   label: 'SOC Metrics',   icon: Users },
-    { href: '/risk-posture',  label: 'Risk Posture',  icon: Gauge },
-  ]},
-  { group: 'AI', items: [
+  { group: 'AI & SYSTEM', icon: Bot, items: [
     { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },
+    { href: '/settings',     label: 'Settings',     icon: Settings },
   ]},
-  { group: 'SYSTEM', items: [
-    { href: '/settings', label: 'Settings', icon: Settings },
-  ]},
-  { group: 'PLATFORM', platformOnly: true, items: [
+  { group: 'PLATFORM', icon: Building2, platformOnly: true, items: [
     { href: '/platform', label: 'Tenants', icon: Building2 },
   ]},
 ];
-
 
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -116,52 +119,128 @@ function NavContent({
   profile: UserProfile | null;
   badges: Record<string, number>;
 }) {
+  const [query, setQuery] = useState('');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
   const visibleNav = NAV.filter(s => !s.platformOnly || profile?.is_platform_admin);
 
+  const lq = query.toLowerCase().trim();
+  const displayed = lq
+    ? visibleNav
+        .map(s => ({ ...s, items: s.items.filter(i => i.label.toLowerCase().includes(lq)) }))
+        .filter(s => s.items.length > 0)
+    : visibleNav;
+
+  const toggleGroup = (group: string) =>
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      next.has(group) ? next.delete(group) : next.add(group);
+      return next;
+    });
+
+  const isGroupCollapsed = (group: string) => !lq && collapsedGroups.has(group);
+
   return (
-<>
-      <nav className="flex-1 overflow-y-auto px-2.5 py-4 space-y-5">
-        {visibleNav.map(section => (
-          <div key={section.group}>
-            <p className="px-3 mb-1.5 text-[9px] font-bold tracking-widest uppercase"
-              style={{ color: 'var(--text-3)' }}>
-              {section.group}
-            </p>
-            <div className="space-y-0.5">
-              {section.items.map(item => {
-                const Icon   = item.icon;
-                const active = pathname === item.href || pathname?.startsWith(item.href + '/');
-                const badge  = badges[item.href] ?? 0;
-                return (
-                  <Link key={item.href} href={item.href}
-                    onClick={onNavigate}
-                    className="flex items-center justify-between rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-150"
-                    style={{
-                      background: active ? 'var(--accent-glow)' : 'transparent',
-                      color:      active ? 'var(--accent)' : 'var(--text-2)',
-                      border:     active ? '1px solid var(--accent-border)' : '1px solid transparent',
-                      boxShadow:  active ? '0 0 12px var(--accent-glow)' : undefined,
-                    }}
-                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; }}
-                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
-                    <div className="flex items-center gap-2.5">
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {item.label}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <NavBadge count={badge} />
-                      {active && <ChevronRight className="h-3 w-3 opacity-50" />}
-                    </div>
-                  </Link>
-                );
-              })}
+    <>
+      {/* Sidebar search */}
+      <div className="px-3 pt-3 pb-2">
+        <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors"
+          style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
+          <Search className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--text-3)' }} />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Filter…"
+            className="flex-1 bg-transparent outline-none text-[12px]"
+            style={{ color: 'var(--text-1)' }}
+          />
+          {query && (
+            <button onClick={() => setQuery('')} style={{ color: 'var(--text-3)' }}>
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Nav groups */}
+      <nav className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+        {displayed.length === 0 && (
+          <p className="py-8 text-center text-xs" style={{ color: 'var(--text-3)' }}>
+            No results for &quot;{query}&quot;
+          </p>
+        )}
+
+        {displayed.map(section => {
+          const sectionCollapsed = isGroupCollapsed(section.group);
+          const GroupIcon = section.icon;
+          const hasActiveItem = section.items.some(
+            i => pathname === i.href || pathname?.startsWith(i.href + '/'));
+          const hasBadge = section.items.some(i => (badges[i.href] ?? 0) > 0);
+
+          return (
+            <div key={section.group} className="mb-1">
+              {/* Group header */}
+              <button
+                onClick={() => toggleGroup(section.group)}
+                className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg transition-colors"
+                style={{ color: 'var(--text-3)' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                <div className="flex items-center gap-2">
+                  <GroupIcon className="h-3 w-3 shrink-0" />
+                  <span className="text-[9.5px] font-bold tracking-widest uppercase">{section.group}</span>
+                  {hasBadge && (
+                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: 'var(--red)' }} />
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {hasActiveItem && !sectionCollapsed && (
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                  )}
+                  <ChevronDown className="h-3 w-3 transition-transform duration-200"
+                    style={{ transform: sectionCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }} />
+                </div>
+              </button>
+
+              {/* Items */}
+              <div className="overflow-hidden transition-all duration-200"
+                style={{ maxHeight: sectionCollapsed ? 0 : 9999, opacity: sectionCollapsed ? 0 : 1 }}>
+                <div className="space-y-0.5 pl-1 pr-0.5 pb-1">
+                  {section.items.map(item => {
+                    const Icon = item.icon;
+                    const active = pathname === item.href || pathname?.startsWith(item.href + '/');
+                    const badge = badges[item.href] ?? 0;
+                    return (
+                      <Link key={item.href} href={item.href}
+                        onClick={onNavigate}
+                        className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[12.5px] font-medium transition-all duration-100"
+                        style={{
+                          background: active ? 'var(--accent-glow)' : 'transparent',
+                          color: active ? 'var(--accent)' : 'var(--text-2)',
+                          border: active ? '1px solid var(--accent-border)' : '1px solid transparent',
+                        }}
+                        onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; }}
+                        onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <NavBadge count={badge} />
+                          {active && <ChevronRight className="h-3 w-3 opacity-50" />}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
-      <div className="px-2.5 pb-4 space-y-0.5 shrink-0"
-        style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+      {/* Sign out */}
+      <div className="px-2.5 pb-4 shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
         <button onClick={logout}
           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all"
           style={{ color: 'var(--text-2)' }}
@@ -219,17 +298,14 @@ export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggl
   }, []);
 
   const logout = () => {
-    // Ask the backend to revoke the token and expire the httpOnly cookie.
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-    // Clear the JS-readable presence flag immediately so the UI reflects
-    // the logged-out state before the redirect completes.
     document.cookie = 'logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     router.push('/login');
   };
 
   return (
     <>
-      {/* ── DESKTOP SIDEBAR (240px, hidden on mobile) ─────── */}
+      {/* ── DESKTOP SIDEBAR ───────────────────────────────── */}
       <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-40"
         style={{
           width: 240,
@@ -268,13 +344,12 @@ export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggl
         <aside
           className="fixed top-0 left-0 h-screen z-50 flex flex-col transition-transform duration-300 ease-in-out"
           style={{
-            width: 260,
+            width: 270,
             background: 'var(--bg-1)',
             borderRight: '1px solid var(--border)',
             transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
           }}>
 
-          {/* Drawer header */}
           <div className="flex items-center justify-between px-4 h-14 shrink-0"
             style={{ borderBottom: '1px solid var(--border)' }}>
             <Logo />

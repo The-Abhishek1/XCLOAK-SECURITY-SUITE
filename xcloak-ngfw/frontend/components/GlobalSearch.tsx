@@ -44,7 +44,7 @@ const SEV_COLORS: Record<string, string> = {
   low:      'var(--blue)',
 };
 
-export function GlobalSearch() {
+export function GlobalSearch({ compact = false }: { compact?: boolean }) {
   const [open, setOpen]         = useState(false);
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState<SearchResult[]>([]);
@@ -109,6 +109,16 @@ export function GlobalSearch() {
   };
 
   if (!open) {
+    if (compact) {
+      return (
+        <button onClick={() => setOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+          style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+          title="Search (Ctrl+K)">
+          <Search className="h-4 w-4" />
+        </button>
+      );
+    }
     return (
       <button
         onClick={() => setOpen(true)}
