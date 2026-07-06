@@ -9,8 +9,9 @@ import 'secure_storage.dart';
 class ApiClient {
   final String baseUrl;
   final String? agentToken;
+  final String? cookie;  // For admin cookie-based auth
 
-  ApiClient({required this.baseUrl, this.agentToken});
+  ApiClient({required this.baseUrl, this.agentToken, this.cookie});
 
   static Future<ApiClient> fromStorage() async {
     final url   = await SecureStore.serverUrl()  ?? '';
@@ -22,6 +23,8 @@ class ApiClient {
         'Content-Type': 'application/json',
         if (agentToken != null && agentToken!.isNotEmpty)
           'Authorization': 'Bearer $agentToken',
+        if (cookie != null && cookie!.isNotEmpty)
+          'Cookie': cookie!,
       };
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');

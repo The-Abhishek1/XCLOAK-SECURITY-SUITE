@@ -12,7 +12,10 @@ const _keyAgentToken  = 'xcloak_agent_token';
 const _keyDeviceId    = 'xcloak_device_id';
 const _keyAgentId     = 'xcloak_agent_id';
 const _keyEnrolled    = 'xcloak_enrolled';
-const _keyApiKey      = 'xcloak_api_key';
+const _keyApiKey      = 'xcloak_api_key';  // legacy — kept for backward compat
+const _keyAdminCookie = 'xcloak_admin_cookie';
+const _keyAdminEmail  = 'xcloak_admin_email';
+const _keyAdminRole   = 'xcloak_admin_role';
 
 class SecureStore {
   static Future<void> saveCredentials({
@@ -48,6 +51,31 @@ class SecureStore {
   static Future<int?> agentId() async {
     final v = await _storage.read(key: _keyAgentId);
     return v != null ? int.tryParse(v) : null;
+  }
+
+  // Admin console session (cookie-based, role-verified)
+  static Future<void> saveAdminSession({
+    required String cookie,
+    required String email,
+    required String role,
+  }) async {
+    await Future.wait([
+      _storage.write(key: _keyAdminCookie, value: cookie),
+      _storage.write(key: _keyAdminEmail,  value: email),
+      _storage.write(key: _keyAdminRole,   value: role),
+    ]);
+  }
+
+  static Future<String?> adminCookie() => _storage.read(key: _keyAdminCookie);
+  static Future<String?> adminEmail()  => _storage.read(key: _keyAdminEmail);
+  static Future<String?> adminRole()   => _storage.read(key: _keyAdminRole);
+
+  static Future<void> clearAdminSession() async {
+    await Future.wait([
+      _storage.delete(key: _keyAdminCookie),
+      _storage.delete(key: _keyAdminEmail),
+      _storage.delete(key: _keyAdminRole),
+    ]);
   }
 
   static Future<void> clear() => _storage.deleteAll();

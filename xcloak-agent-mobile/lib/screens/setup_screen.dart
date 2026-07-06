@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/enrollment_service.dart';
-import 'status_screen.dart';
+import 'agent_shell.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -43,7 +43,7 @@ class _SetupScreenState extends State<SetupScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const StatusScreen()),
+        MaterialPageRoute(builder: (_) => const AgentShell()),
       );
     } catch (e) {
       setState(() => _error = e.toString());

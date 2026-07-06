@@ -1,12 +1,103 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../services/api_client.dart';
 import '../services/secure_storage.dart';
 
+class AdminUnauthorizedException implements Exception {
+  final String message;
+  const AdminUnauthorizedException(this.message);
+  @override String toString() => message;
+}
+
 class DashboardApi {
+  /// Legacy: create from stored API key (backward compat).
   static Future<DashboardApi?> create() async {
     final url    = await SecureStore.serverUrl();
     final apiKey = await SecureStore.apiKey();
     if (url == null || url.isEmpty || apiKey == null || apiKey.isEmpty) return null;
     return DashboardApi._(ApiClient(baseUrl: url, agentToken: apiKey));
+  }
+
+  /// Login with email + password. Verifies admin role. Saves session cookie.
+  /// Throws [AdminUnauthorizedException] if credentials are valid but role insufficient.
+  /// Throws [ApiException] / [Exception] on network/server error.
+  static Future<DashboardApi> login(String serverUrl, String email, String password) async {
+    // 1 — Authenticate
+    final loginRes = await http.post(
+      Uri.parse('$serverUrl/api/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    ).timeout(const Duration(seconds: 15));
+
+    if (loginRes.statusCode == 401 || loginRes.statusCode == 403) {
+      throw const AdminUnauthorizedException('Invalid credentials');
+    }
+    if (loginRes.statusCode < 200 || loginRes.statusCode >= 300) {
+      throw ApiException(loginRes.statusCode, 'Login failed (${loginRes.statusCode})');
+    }
+
+    // 2 — Extract session cookie
+    final setCookie = loginRes.headers['set-cookie'] ?? '';
+    final tokenMatch = RegExp(r'access_token=([^;,\s]+)').firstMatch(setCookie);
+    final token = tokenMatch?.group(1) ?? '';
+    if (token.isEmpty) throw Exception('Server did not return a session token');
+    final cookie = 'access_token=$token';
+
+    // 3 — Fetch user profile & verify admin role
+    final meRes = await http.get(
+      Uri.parse('$serverUrl/api/auth/me'),
+      headers: {'Cookie': cookie},
+    ).timeout(const Duration(seconds: 10));
+
+    if (meRes.statusCode != 200) {
+      throw ApiException(meRes.statusCode, 'Could not verify account');
+    }
+
+    final profile = jsonDecode(meRes.body) as Map<String, dynamic>;
+    final isPlatformAdmin = profile['is_platform_admin'] == true;
+    final role = (profile['role'] ?? '').toString().toLowerCase();
+    final isAdmin = isPlatformAdmin || role == 'admin' || role == 'platform_admin';
+
+    if (!isAdmin) {
+      throw const AdminUnauthorizedException(
+          'Access denied — admin or platform_admin role required');
+    }
+
+    // 4 — Persist session
+    await SecureStore.saveAdminSession(
+      cookie: cookie,
+      email: (profile['email'] ?? email).toString(),
+      role: isPlatformAdmin ? 'Platform Admin' : 'Admin',
+    );
+
+    return DashboardApi._(ApiClient(baseUrl: serverUrl, cookie: cookie));
+  }
+
+  /// Restore admin session from stored cookie. Returns null if none / expired.
+  static Future<DashboardApi?> createFromSession() async {
+    final url    = await SecureStore.serverUrl();
+    final cookie = await SecureStore.adminCookie();
+    if (url == null || url.isEmpty || cookie == null || cookie.isEmpty) return null;
+
+    try {
+      final meRes = await http.get(
+        Uri.parse('$url/api/auth/me'),
+        headers: {'Cookie': cookie},
+      ).timeout(const Duration(seconds: 8));
+
+      if (meRes.statusCode != 200) {
+        await SecureStore.clearAdminSession();
+        return null;
+      }
+      final profile = jsonDecode(meRes.body) as Map<String, dynamic>;
+      final isAdmin = profile['is_platform_admin'] == true ||
+          (profile['role'] ?? '').toString().toLowerCase() == 'admin';
+      if (!isAdmin) { await SecureStore.clearAdminSession(); return null; }
+
+      return DashboardApi._(ApiClient(baseUrl: url, cookie: cookie));
+    } catch (_) {
+      return null;
+    }
   }
   DashboardApi._(this.c);
   final ApiClient c;

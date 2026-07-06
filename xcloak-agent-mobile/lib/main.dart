@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'admin/api.dart';
-import 'admin/shell.dart';
+import 'screens/agent_shell.dart';
 import 'screens/setup_screen.dart';
-import 'screens/status_screen.dart';
 import 'services/background_worker.dart';
 import 'services/secure_storage.dart';
 
@@ -95,18 +93,16 @@ class XCloakAgentApp extends StatelessWidget {
 }
 
 // Routes to:
-//  · SetupScreen   — not enrolled
-//  · AdminApp      — enrolled + API key stored (admin mode)
-//  · StatusScreen  — enrolled, no API key (agent-only mode)
+//  · SetupScreen  — not enrolled
+//  · AgentShell   — enrolled (always; admin mode is accessed by explicit login from within)
 class _EntryPoint extends StatefulWidget {
   const _EntryPoint();
   @override State<_EntryPoint> createState() => _EntryPointState();
 }
 
 class _EntryPointState extends State<_EntryPoint> {
-  bool? _enrolled;
-  DashboardApi? _adminApi;
   bool _resolved = false;
+  bool _enrolled = false;
 
   @override
   void initState() {
@@ -116,16 +112,8 @@ class _EntryPointState extends State<_EntryPoint> {
 
   Future<void> _resolve() async {
     final enrolled = await SecureStore.isEnrolled();
-    DashboardApi? adminApi;
-    if (enrolled) {
-      adminApi = await DashboardApi.create();
-    }
     if (!mounted) return;
-    setState(() {
-      _enrolled  = enrolled;
-      _adminApi  = adminApi;
-      _resolved  = true;
-    });
+    setState(() { _enrolled = enrolled; _resolved = true; });
   }
 
   @override
@@ -133,8 +121,6 @@ class _EntryPointState extends State<_EntryPoint> {
     if (!_resolved) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (!(_enrolled ?? false)) return const SetupScreen();
-    if (_adminApi != null) return AdminApp(api: _adminApi!);
-    return const StatusScreen();
+    return _enrolled ? const AgentShell() : const SetupScreen();
   }
 }
