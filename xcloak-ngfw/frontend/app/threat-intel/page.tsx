@@ -284,6 +284,25 @@ export default function ThreatIntelPage() {
 
       <div className="space-y-4">
 
+        {/* Stats strip */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Total IOCs', value: iocTotal.toLocaleString(), color: 'var(--accent)', icon: Shield },
+            { label: 'Active Feeds', value: feeds.filter(f => f.enabled).length, color: 'var(--green)', icon: Rss },
+            { label: 'Sigma Rules', value: sigmaTotal, color: 'var(--orange)', icon: FileCode },
+          ].map(({ label, value, color, icon: Icon }) => (
+            <div key={label} className="g-card p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+                <Icon className="h-4 w-4" style={{ color }} />
+              </div>
+              <div>
+                <p className="text-xl font-bold" style={{ color }}>{value}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* Tab bar + actions */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--glass-bg)', backdropFilter: 'var(--blur-sm)', border: '1px solid var(--border)' }}>

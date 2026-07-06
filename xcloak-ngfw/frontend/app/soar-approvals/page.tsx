@@ -4,8 +4,17 @@ import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { tasksAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { ShieldCheck, CheckCircle2, XCircle, X, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, X, AlertTriangle, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { useUser } from '@/context/UserContext';
+
+// Risk level per action — mirrors CrowdStrike's containment decision hierarchy
+const RISK: Record<string, { label: string; color: string; bg: string }> = {
+  isolate_host:    { label: 'High Risk', color: '#f85149', bg: 'rgba(248,81,73,0.12)' },
+  quarantine_file: { label: 'High Risk', color: '#f85149', bg: 'rgba(248,81,73,0.12)' },
+  kill_process:    { label: 'Med Risk',  color: '#fb923c', bg: 'rgba(251,146,60,0.12)' },
+  execute_script:  { label: 'Med Risk',  color: '#fb923c', bg: 'rgba(251,146,60,0.12)' },
+};
+const riskOf = (t: string) => RISK[t] ?? { label: 'Low Risk', color: '#fbbf24', bg: 'rgba(251,191,36,0.10)' };
 
 interface PendingTask {
   id: number;
@@ -23,6 +32,7 @@ export default function SoarApprovalsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing]     = useState<number | null>(null);
   const [rejectId, setRejectId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [reason, setReason]     = useState('');
   const [toast, setToast]       = useState<string | null>(null);
 
@@ -91,8 +101,9 @@ export default function SoarApprovalsPage() {
       )}
 
       <div className="g-table">
-        <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '100px 120px 1fr 90px 210px' }}>
-          <span>Agent</span><span>Action</span><span>Context</span><span>Queued</span><span>Decision</span>
+        <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '90px 120px 1fr 80px 20px 200px' }}>
+          <span>Agent</span><span>Action</span><span>Context</span><span>Queued</span><span />
+          <span>Decision</span>
         </div>
 
         {loading ? (
@@ -102,33 +113,51 @@ export default function SoarApprovalsPage() {
             <ShieldCheck className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
             <p className="text-sm" style={{ color: 'var(--text-2)' }}>Nothing awaiting approval.</p>
           </div>
-        ) : tasks.map(t => (
-          <div key={t.id} className="g-tr grid gap-3 items-center px-4"
-            style={{ gridTemplateColumns: '100px 120px 1fr 90px 210px' }}>
-            <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{t.hostname || `#${t.agent_id}`}</span>
-            <span className="mono text-xs font-semibold" style={{ color: 'var(--red)' }}>{t.task_type}</span>
-            <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{describePayload(t.payload)}</span>
-            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(t.created_at)}</span>
-            <div className="flex items-center gap-2">
-              <button
-                title="Approve — dispatch to agent"
-                onClick={() => approve(t.id)}
-                disabled={!isAdmin || acting === t.id}
-                className="g-btn text-xs"
-                style={{ background: 'rgba(52,211,153,0.15)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)', opacity: isAdmin ? 1 : 0.5 }}>
-                <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-              </button>
-              <button
-                title="Reject"
-                onClick={() => setRejectId(t.id)}
-                disabled={!isAdmin || acting === t.id}
-                className="g-btn text-xs"
-                style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', opacity: isAdmin ? 1 : 0.5 }}>
-                <XCircle className="h-3.5 w-3.5" /> Reject
-              </button>
+        ) : tasks.map(t => {
+          const risk = riskOf(t.task_type);
+          const expanded = expandedId === t.id;
+          let prettyPayload = '';
+          try { prettyPayload = JSON.stringify(JSON.parse(t.payload), null, 2); } catch { prettyPayload = t.payload; }
+          return (
+            <div key={t.id} className="border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="grid gap-3 items-center px-4 py-3"
+                style={{ gridTemplateColumns: '90px 120px 1fr 80px 20px 200px' }}>
+                <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{t.hostname || `#${t.agent_id}`}</span>
+                <div>
+                  <span className="mono text-xs font-semibold block" style={{ color: 'var(--red)' }}>{t.task_type}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded mt-0.5 inline-block" style={{ background: risk.bg, color: risk.color }}>{risk.label}</span>
+                </div>
+                <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{describePayload(t.payload)}</span>
+                <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+                  <Clock className="h-3 w-3" />{timeAgo(t.created_at)}
+                </span>
+                <button onClick={() => setExpandedId(expanded ? null : t.id)} style={{ color: 'var(--text-3)' }}>
+                  {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </button>
+                <div className="flex items-center gap-2">
+                  <button title="Approve — dispatch to agent" onClick={() => approve(t.id)}
+                    disabled={!isAdmin || acting === t.id} className="g-btn text-xs"
+                    style={{ background: 'rgba(52,211,153,0.15)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)', opacity: isAdmin ? 1 : 0.5 }}>
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                  </button>
+                  <button title="Reject" onClick={() => setRejectId(t.id)}
+                    disabled={!isAdmin || acting === t.id} className="g-btn text-xs"
+                    style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', opacity: isAdmin ? 1 : 0.5 }}>
+                    <XCircle className="h-3.5 w-3.5" /> Reject
+                  </button>
+                </div>
+              </div>
+              {expanded && (
+                <div className="px-4 pb-3">
+                  <pre className="rounded-lg p-3 mono text-[11px] overflow-x-auto"
+                    style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', color: 'var(--text-2)', maxHeight: 200 }}>
+                    {prettyPayload}
+                  </pre>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {rejectId !== null && (
