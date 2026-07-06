@@ -41,6 +41,84 @@ tags:
     description: Log search and retention
   - name: Dashboard
     description: Dashboard overview metrics
+  - name: AI
+    description: AI-powered triage, chat, and anomaly detection
+  - name: ApiKeys
+    description: API key management
+  - name: Assets
+    description: Asset inventory
+  - name: Audit
+    description: Audit log search and export
+  - name: Canary
+    description: Canary tokens and trip events
+  - name: Cases
+    description: Case management (alerts grouped into investigations)
+  - name: CIS
+    description: CIS benchmark scanning and scoring
+  - name: Clusters
+    description: Alert clustering and suppression
+  - name: Compliance
+    description: Compliance reports and framework scoring
+  - name: Correlation
+    description: Event correlation rules and matches
+  - name: CustomRoles
+    description: Custom RBAC role definitions
+  - name: DFIR
+    description: Digital forensics and incident response collections
+  - name: Enrichment
+    description: Hash, IP, and CVE enrichment lookups
+  - name: Export
+    description: Data export endpoints
+  - name: Honeyports
+    description: Honeypot port listeners
+  - name: Hunt
+    description: Threat hunting queries and runs
+  - name: ITDR
+    description: Identity threat detection and response
+  - name: InsiderThreat
+    description: Insider threat scoring and events
+  - name: Integrations
+    description: Webhook and notification integrations
+  - name: JA3
+    description: JA3/JA3S TLS fingerprint management
+  - name: LogSources
+    description: Agentless log source configuration
+  - name: MDM
+    description: Mobile device management — enrollment, commands, compliance
+  - name: NBA
+    description: Network behavior analytics
+  - name: NetworkMap
+    description: Live network topology and connection map
+  - name: Notifications
+    description: Email notification channels
+  - name: Playbooks
+    description: Automated response playbooks
+  - name: Quarantine
+    description: Endpoint quarantine management
+  - name: RiskPosture
+    description: Tenant-wide risk posture scoring
+  - name: ScheduledReports
+    description: Scheduled compliance and executive reports
+  - name: Scheduler
+    description: Background task scheduler
+  - name: Scripts
+    description: Remote script execution
+  - name: Sessions
+    description: Active user session management
+  - name: Suppression
+    description: Alert suppression rules
+  - name: Tasks
+    description: Agent task queue (approval workflow)
+  - name: ThreatActors
+    description: Threat actor tracking and tagging
+  - name: ThreatFeeds
+    description: External threat intelligence feeds
+  - name: ThreatScores
+    description: Per-agent threat scoring and behavioral baselines
+  - name: UEBA
+    description: User and entity behavior analytics
+  - name: Vulnerabilities
+    description: Vulnerability import and priority queue
 
 components:
   securitySchemes:
@@ -186,6 +264,136 @@ components:
         per_page:    { type: integer }
         total:       { type: integer }
         total_pages: { type: integer }
+
+    ApiKey:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        key_preview: { type: string, description: "Last 4 chars only" }
+        created_at:  { type: string, format: date-time }
+
+    Asset:
+      type: object
+      properties:
+        id:          { type: integer }
+        hostname:    { type: string }
+        ip_address:  { type: string }
+        asset_type:  { type: string, enum: [server, workstation, network, mobile, cloud] }
+        os:          { type: string }
+        criticality: { type: string, enum: [low, medium, high, critical] }
+        owner:       { type: string }
+        tenant_id:   { type: integer }
+        created_at:  { type: string, format: date-time }
+
+    Case:
+      type: object
+      properties:
+        id:          { type: integer }
+        title:       { type: string }
+        status:      { type: string, enum: [open, investigating, resolved, closed] }
+        severity:    { type: string, enum: [low, medium, high, critical] }
+        assignee_id: { type: integer }
+        tenant_id:   { type: integer }
+        created_at:  { type: string, format: date-time }
+
+    CanaryToken:
+      type: object
+      properties:
+        id:        { type: integer }
+        name:      { type: string }
+        type:      { type: string, enum: [dns, http, file, aws] }
+        value:     { type: string }
+        enabled:   { type: boolean }
+        tenant_id: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    ComplianceReport:
+      type: object
+      properties:
+        id:         { type: integer }
+        framework:  { type: string, enum: [soc2, iso27001, hipaa, pci_dss, nist_csf, cis] }
+        status:     { type: string, enum: [pending, running, complete, failed] }
+        score:      { type: number, format: float }
+        created_at: { type: string, format: date-time }
+
+    CorrelationRule:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        description: { type: string }
+        condition:   { type: string }
+        window_secs: { type: integer }
+        severity:    { type: string }
+        enabled:     { type: boolean }
+        tenant_id:   { type: integer }
+
+    Playbook:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        description: { type: string }
+        trigger:     { type: string }
+        enabled:     { type: boolean }
+        tenant_id:   { type: integer }
+        created_at:  { type: string, format: date-time }
+
+    ThreatFeed:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        url:         { type: string }
+        feed_type:   { type: string, enum: [ip, domain, hash, stix] }
+        enabled:     { type: boolean }
+        last_synced: { type: string, format: date-time }
+        tenant_id:   { type: integer }
+
+    ThreatActor:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        aliases:     { type: array, items: { type: string } }
+        motivation:  { type: string }
+        ttps:        { type: array, items: { type: string } }
+        tenant_id:   { type: integer }
+
+    MDMDevice:
+      type: object
+      properties:
+        id:               { type: integer }
+        device_id:        { type: string }
+        platform:         { type: string, enum: [android, ios, windows, macos] }
+        hostname:         { type: string }
+        enrollment_token: { type: string }
+        is_compliant:     { type: boolean }
+        last_seen:        { type: string, format: date-time }
+        tenant_id:        { type: integer }
+
+    LogSource:
+      type: object
+      properties:
+        id:           { type: integer }
+        name:         { type: string }
+        source_type:  { type: string, enum: [syslog, windows_event, cloudtrail, gcp, azure, custom] }
+        host:         { type: string }
+        port:         { type: integer }
+        enabled:      { type: boolean }
+        tenant_id:    { type: integer }
+
+    VulnPriority:
+      type: object
+      properties:
+        id:            { type: integer }
+        cve_id:        { type: string }
+        agent_id:      { type: integer }
+        cvss_score:    { type: number }
+        epss_score:    { type: number }
+        priority_rank: { type: integer }
+        patch_status:  { type: string, enum: [unpatched, patched, ignored, in_progress] }
 
 security:
   - cookieAuth: []
@@ -1197,6 +1405,3414 @@ paths:
                 type: object
                 properties:
                   status: { type: string, example: ok }
+
+  # ── Auth extensions ─────────────────────────────────────────────────────────
+
+  /auth/2fa/status:
+    get:
+      tags: [Auth]
+      summary: Get 2FA enabled/disabled status for the current user
+      responses:
+        "200": { description: 2FA status }
+
+  /auth/2fa/setup:
+    post:
+      tags: [Auth]
+      summary: Generate a TOTP secret and QR URI (first step of 2FA enroll)
+      responses:
+        "200":
+          description: QR URI and backup codes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  otp_uri:      { type: string }
+                  backup_codes: { type: array, items: { type: string } }
+
+  /auth/2fa/verify:
+    post:
+      tags: [Auth]
+      summary: Confirm TOTP code to activate 2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, minLength: 6, maxLength: 6 }
+      responses:
+        "200": { description: 2FA activated }
+        "400": { description: Invalid code }
+
+  /auth/2fa:
+    delete:
+      tags: [Auth]
+      summary: Disable 2FA for the current user (requires password confirmation)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        "200": { description: 2FA disabled }
+
+  /auth/sessions:
+    get:
+      tags: [Sessions]
+      summary: List active sessions for the current user
+      responses:
+        "200": { description: Session list }
+
+  /auth/oidc/exchange:
+    post:
+      tags: [Auth]
+      summary: Exchange PKCE code for tokens (SPA OIDC flow)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state, code_verifier]
+              properties:
+                code:           { type: string }
+                state:          { type: string }
+                code_verifier:  { type: string }
+      responses:
+        "200": { description: Tokens exchanged — auth cookies set }
+
+  /ws/ticket:
+    post:
+      tags: [Dashboard]
+      summary: Issue a short-lived WebSocket ticket for /notifications/stream
+      responses:
+        "200":
+          description: WS ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket: { type: string }
+
+  # ── API Keys ─────────────────────────────────────────────────────────────────
+
+  /api-keys:
+    get:
+      tags: [ApiKeys]
+      summary: List API keys for the current user
+      responses:
+        "200":
+          description: API key list (key values never returned after creation)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApiKey" }
+    post:
+      tags: [ApiKeys]
+      summary: Create a new API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "200":
+          description: Created — full key returned once, store it
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:  { type: string }
+                  name: { type: string }
+
+  /api-keys/{id}:
+    delete:
+      tags: [ApiKeys]
+      summary: Revoke an API key
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Revoked }
+
+  # ── Assets ───────────────────────────────────────────────────────────────────
+
+  /assets:
+    get:
+      tags: [Assets]
+      summary: List assets in the tenant
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Asset" }
+    post:
+      tags: [Assets]
+      summary: Register an asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Asset" }
+      responses:
+        "200": { description: Asset created }
+
+  /assets/platform-summary:
+    get:
+      tags: [Assets]
+      summary: Asset count breakdown by platform and criticality
+      responses:
+        "200": { description: Summary object }
+
+  /assets/{id}:
+    get:
+      tags: [Assets]
+      summary: Get asset detail
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+    put:
+      tags: [Assets]
+      summary: Update asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Asset" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Assets]
+      summary: Delete asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  # ── Audit ────────────────────────────────────────────────────────────────────
+
+  /audit/logs/paginated:
+    get:
+      tags: [Audit]
+      summary: Paginated audit log search
+      parameters:
+        - { name: page,     in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 50 } }
+        - { name: user_id,  in: query, schema: { type: integer } }
+        - { name: action,   in: query, schema: { type: string } }
+        - { name: from,     in: query, schema: { type: string, format: date-time } }
+        - { name: to,       in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: Paginated audit logs }
+
+  /audit/export/status:
+    get:
+      tags: [Audit]
+      summary: Get MinIO immutable-log export status
+      responses:
+        "200": { description: Export status and last-run time }
+
+  /audit-events/threats:
+    get:
+      tags: [Audit]
+      summary: Audit events filtered to security-relevant actions
+      responses:
+        "200": { description: Threat audit events }
+
+  /export/alerts:
+    get:
+      tags: [Export]
+      summary: Export alerts as CSV
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to,   in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /export/audit:
+    get:
+      tags: [Export]
+      summary: Export audit logs as CSV
+      responses:
+        "200": { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+
+  /export/incidents:
+    get:
+      tags: [Export]
+      summary: Export incidents as CSV
+      responses:
+        "200": { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+
+  /export/vulnerabilities:
+    get:
+      tags: [Export]
+      summary: Export vulnerability findings as CSV
+      responses:
+        "200": { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+
+  # ── Sessions ─────────────────────────────────────────────────────────────────
+
+  /sessions:
+    get:
+      tags: [Sessions]
+      summary: List all active sessions (admin view)
+      responses:
+        "200": { description: Session list }
+
+  /sessions/{id}:
+    delete:
+      tags: [Sessions]
+      summary: Revoke a session
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Session revoked }
+
+  # ── Canary Tokens ─────────────────────────────────────────────────────────────
+
+  /canary/tokens:
+    get:
+      tags: [Canary]
+      summary: List canary tokens
+      responses:
+        "200":
+          description: Token list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CanaryToken" }
+    post:
+      tags: [Canary]
+      summary: Create a canary token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [dns, http, file, aws] }
+      responses:
+        "200": { description: Token created }
+
+  /canary/tokens/{id}:
+    delete:
+      tags: [Canary]
+      summary: Delete a canary token
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /canary/tokens/{id}/toggle:
+    patch:
+      tags: [Canary]
+      summary: Enable or disable a canary token
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  /canary/trips:
+    get:
+      tags: [Canary]
+      summary: List all canary trip events
+      responses:
+        "200": { description: Trip event list }
+
+  /canary/trip/{value}:
+    get:
+      tags: [Canary]
+      summary: Get trip detail for a specific token value
+      parameters:
+        - { name: value, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Trip detail }
+
+  # ── Cases ────────────────────────────────────────────────────────────────────
+
+  /cases:
+    get:
+      tags: [Cases]
+      summary: List cases
+      responses:
+        "200":
+          description: Case list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Case" }
+    post:
+      tags: [Cases]
+      summary: Create a case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, severity]
+              properties:
+                title:    { type: string }
+                severity: { type: string, enum: [low, medium, high, critical] }
+      responses:
+        "200": { description: Case created }
+
+  /cases/{id}:
+    get:
+      tags: [Cases]
+      summary: Get case detail
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Case" }
+    put:
+      tags: [Cases]
+      summary: Update case
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Case" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Cases]
+      summary: Delete case
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /cases/{id}/alerts:
+    post:
+      tags: [Cases]
+      summary: Link an alert to a case
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alert_id]
+              properties:
+                alert_id: { type: integer }
+      responses:
+        "200": { description: Alert linked }
+
+  /cases/{id}/alerts/{alert_id}:
+    delete:
+      tags: [Cases]
+      summary: Unlink an alert from a case
+      parameters:
+        - { name: id,       in: path, required: true, schema: { type: integer } }
+        - { name: alert_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Unlinked }
+
+  /cases/{id}/comments:
+    post:
+      tags: [Cases]
+      summary: Add a comment to a case
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+      responses:
+        "200": { description: Comment added }
+
+  /cases/{id}/evidence:
+    post:
+      tags: [Cases]
+      summary: Attach evidence (file upload) to a case
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:        { type: string, format: binary }
+                description: { type: string }
+      responses:
+        "200": { description: Evidence attached }
+
+  # ── CIS Benchmarks ───────────────────────────────────────────────────────────
+
+  /cis/summary:
+    get:
+      tags: [CIS]
+      summary: Tenant-wide CIS benchmark summary
+      responses:
+        "200": { description: CIS summary }
+
+  /cis/agents/{id}:
+    get:
+      tags: [CIS]
+      summary: CIS findings for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: CIS findings list }
+
+  /cis/agents/{id}/score:
+    get:
+      tags: [CIS]
+      summary: CIS score (0–100) for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Score }
+
+  /cis/agents/{id}/scan:
+    post:
+      tags: [CIS]
+      summary: Trigger an on-demand CIS scan for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Scan queued }
+
+  # ── Clusters ─────────────────────────────────────────────────────────────────
+
+  /clusters:
+    get:
+      tags: [Clusters]
+      summary: List alert clusters
+      responses:
+        "200": { description: Cluster list }
+
+  /clusters/{id}/alerts:
+    get:
+      tags: [Clusters]
+      summary: Alerts in a cluster
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Alert list }
+
+  /clusters/analyze:
+    post:
+      tags: [Clusters]
+      summary: Run clustering analysis on recent alerts
+      responses:
+        "200": { description: Analysis complete }
+
+  /clusters/{id}/suppress:
+    post:
+      tags: [Clusters]
+      summary: Suppress all alerts in a cluster
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Suppressed }
+
+  # ── Compliance ───────────────────────────────────────────────────────────────
+
+  /compliance/reports:
+    get:
+      tags: [Compliance]
+      summary: List compliance reports
+      responses:
+        "200":
+          description: Report list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ComplianceReport" }
+    post:
+      tags: [Compliance]
+      summary: Generate a new compliance report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [framework]
+              properties:
+                framework: { type: string, enum: [soc2, iso27001, hipaa, pci_dss, nist_csf, cis] }
+      responses:
+        "200": { description: Report generation started }
+
+  /compliance/reports/{id}:
+    get:
+      tags: [Compliance]
+      summary: Get a compliance report
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Report }
+    delete:
+      tags: [Compliance]
+      summary: Delete a compliance report
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /compliance/reports/{id}/pdf:
+    get:
+      tags: [Compliance]
+      summary: Download compliance report as PDF
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: PDF binary
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /compliance/reports/{id}/scores:
+    get:
+      tags: [Compliance]
+      summary: Per-control scores within a report
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Control scores }
+
+  /framework-compliance:
+    get:
+      tags: [Compliance]
+      summary: Overview of all framework compliance statuses
+      responses:
+        "200": { description: Framework compliance map }
+
+  /framework-compliance/{framework}:
+    get:
+      tags: [Compliance]
+      summary: Detailed compliance for a single framework
+      parameters:
+        - { name: framework, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Framework detail }
+
+  # ── Correlation ───────────────────────────────────────────────────────────────
+
+  /correlation/rules:
+    get:
+      tags: [Correlation]
+      summary: List correlation rules
+      responses:
+        "200":
+          description: Rule list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CorrelationRule" }
+    post:
+      tags: [Correlation]
+      summary: Create a correlation rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CorrelationRule" }
+      responses:
+        "200": { description: Created }
+
+  /correlation/rules/{id}:
+    put:
+      tags: [Correlation]
+      summary: Update a correlation rule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CorrelationRule" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Correlation]
+      summary: Delete a correlation rule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /correlation/rules/{id}/toggle:
+    patch:
+      tags: [Correlation]
+      summary: Enable or disable a correlation rule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  /correlation/matches:
+    get:
+      tags: [Correlation]
+      summary: List correlation match events
+      responses:
+        "200": { description: Match list }
+
+  # ── Custom Roles ─────────────────────────────────────────────────────────────
+
+  /custom-roles:
+    get:
+      tags: [CustomRoles]
+      summary: List custom RBAC roles
+      responses:
+        "200": { description: Role list }
+    post:
+      tags: [CustomRoles]
+      summary: Create a custom role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, permissions]
+              properties:
+                name:        { type: string }
+                permissions: { type: array, items: { type: string } }
+      responses:
+        "200": { description: Created }
+
+  /custom-roles/{id}:
+    put:
+      tags: [CustomRoles]
+      summary: Update a custom role
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                permissions: { type: array, items: { type: string } }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [CustomRoles]
+      summary: Delete a custom role
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /permissions:
+    get:
+      tags: [CustomRoles]
+      summary: List all available permission strings
+      responses:
+        "200": { description: Permission list }
+
+  # ── DFIR ─────────────────────────────────────────────────────────────────────
+
+  /dfir/collections:
+    get:
+      tags: [DFIR]
+      summary: List forensic collections
+      responses:
+        "200": { description: Collection list }
+    post:
+      tags: [DFIR]
+      summary: Trigger forensic collection on an agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id]
+              properties:
+                agent_id: { type: integer }
+                targets:  { type: array, items: { type: string } }
+      responses:
+        "200": { description: Collection queued }
+
+  /dfir/collections/{id}/artifacts:
+    get:
+      tags: [DFIR]
+      summary: List artifacts in a collection
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Artifact list }
+
+  /dfir/incidents/{incident_id}/timeline:
+    get:
+      tags: [DFIR]
+      summary: Event timeline for an incident (DFIR view)
+      parameters:
+        - { name: incident_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Timeline entries }
+
+  # ── Enrichment ───────────────────────────────────────────────────────────────
+
+  /enrich/hash/{hash}:
+    get:
+      tags: [Enrichment]
+      summary: Enrich a file hash via VirusTotal / local threat intel
+      parameters:
+        - { name: hash, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Enrichment result }
+
+  /geoip/{ip}:
+    get:
+      tags: [Enrichment]
+      summary: GeoIP lookup for an IP address
+      parameters:
+        - { name: ip, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: GeoIP data }
+
+  /cve/{id}:
+    get:
+      tags: [Enrichment]
+      summary: CVE detail from local NVD mirror or online lookup
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, example: CVE-2023-44487 } }
+      responses:
+        "200": { description: CVE detail }
+
+  /mitre/mappings:
+    get:
+      tags: [Enrichment]
+      summary: MITRE ATT&CK tactic→technique mappings used by active rules
+      responses:
+        "200": { description: Mapping list }
+
+  /attack-path:
+    get:
+      tags: [Enrichment]
+      summary: Inferred attack path graph from recent correlated events
+      responses:
+        "200": { description: Attack path graph (nodes + edges) }
+
+  # ── Honeyports ───────────────────────────────────────────────────────────────
+
+  /honeyports:
+    get:
+      tags: [Honeyports]
+      summary: List configured honeyport listeners
+      responses:
+        "200": { description: Honeyport list }
+    post:
+      tags: [Honeyports]
+      summary: Add a honeyport listener
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [port, protocol]
+              properties:
+                port:        { type: integer }
+                protocol:    { type: string, enum: [tcp, udp] }
+                description: { type: string }
+      responses:
+        "200": { description: Created }
+
+  /honeyports/{id}:
+    delete:
+      tags: [Honeyports]
+      summary: Remove a honeyport listener
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  # ── Hunt ─────────────────────────────────────────────────────────────────────
+
+  /hunt/templates:
+    get:
+      tags: [Hunt]
+      summary: List hunt query templates
+      responses:
+        "200": { description: Template list }
+    post:
+      tags: [Hunt]
+      summary: Create a hunt template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, query]
+              properties:
+                name:        { type: string }
+                query:       { type: string }
+                description: { type: string }
+      responses:
+        "200": { description: Template created }
+
+  /hunt/templates/{id}:
+    delete:
+      tags: [Hunt]
+      summary: Delete a hunt template
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /hunt/queries:
+    get:
+      tags: [Hunt]
+      summary: List saved hunt queries (alias for templates used in UI)
+      responses:
+        "200": { description: Query list }
+
+  /hunt/run:
+    get:
+      tags: [Hunt]
+      summary: List hunt runs for the tenant
+      responses:
+        "200": { description: Run list }
+    post:
+      tags: [Hunt]
+      summary: Execute a hunt query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:    { type: string }
+                agent_ids: { type: array, items: { type: integer } }
+      responses:
+        "200": { description: Run started }
+
+  /hunt/runs:
+    get:
+      tags: [Hunt]
+      summary: List all hunt run results
+      responses:
+        "200": { description: Run list }
+
+  /hunt/runs/{id}:
+    get:
+      tags: [Hunt]
+      summary: Get a specific hunt run with results
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Run detail }
+
+  /hunt/runs/{id}/notes:
+    patch:
+      tags: [Hunt]
+      summary: Add analyst notes to a hunt run
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notes]
+              properties:
+                notes: { type: string }
+      responses:
+        "200": { description: Notes saved }
+
+  /hunt/execute:
+    post:
+      tags: [Hunt]
+      summary: One-shot hunt execute (no template — ad-hoc query)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+      responses:
+        "200": { description: Results }
+
+  # ── Identity ─────────────────────────────────────────────────────────────────
+
+  /identity:
+    get:
+      tags: [ITDR]
+      summary: Identity risk overview (AD / LDAP account anomalies)
+      responses:
+        "200": { description: Identity risk summary }
+
+  # ── ITDR ─────────────────────────────────────────────────────────────────────
+
+  /itdr/summary:
+    get:
+      tags: [ITDR]
+      summary: ITDR finding summary
+      responses:
+        "200": { description: Summary }
+
+  /itdr/findings:
+    get:
+      tags: [ITDR]
+      summary: List ITDR findings (anomalous identity actions)
+      responses:
+        "200": { description: Finding list }
+
+  /itdr/findings/{id}:
+    get:
+      tags: [ITDR]
+      summary: Get ITDR finding detail
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Finding }
+
+  /itdr/findings/{id}/status:
+    patch:
+      tags: [ITDR]
+      summary: Update ITDR finding status (acknowledge, false-positive, etc.)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, acknowledged, false_positive, resolved] }
+      responses:
+        "200": { description: Status updated }
+
+  # ── Insider Threat ────────────────────────────────────────────────────────────
+
+  /insider-threat:
+    get:
+      tags: [InsiderThreat]
+      summary: List insider threat user risk scores
+      responses:
+        "200": { description: Risk list }
+
+  /insider-threat/summary:
+    get:
+      tags: [InsiderThreat]
+      summary: Tenant-wide insider threat summary
+      responses:
+        "200": { description: Summary }
+
+  # ── Integrations ─────────────────────────────────────────────────────────────
+
+  /integrations:
+    get:
+      tags: [Integrations]
+      summary: List configured integrations (Slack, PagerDuty, Jira, etc.)
+      responses:
+        "200": { description: Integration list }
+
+  /integrations/{name}:
+    put:
+      tags: [Integrations]
+      summary: Create or update an integration configuration
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Integration-specific configuration (varies by name)
+      responses:
+        "200": { description: Saved }
+
+  /integrations/{name}/test:
+    post:
+      tags: [Integrations]
+      summary: Send a test notification to an integration
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Test sent }
+
+  /integrations/deliveries:
+    get:
+      tags: [Integrations]
+      summary: List recent webhook delivery attempts
+      responses:
+        "200": { description: Delivery list }
+
+  /integrations/install-tokens:
+    get:
+      tags: [Integrations]
+      summary: List agent install tokens
+      responses:
+        "200": { description: Token list }
+    post:
+      tags: [Integrations]
+      summary: Generate a new agent install token
+      responses:
+        "200": { description: Token }
+
+  # ── JA3 Fingerprints ─────────────────────────────────────────────────────────
+
+  /ja3/fingerprints:
+    get:
+      tags: [JA3]
+      summary: List JA3/JA3S TLS fingerprints
+      responses:
+        "200": { description: Fingerprint list }
+    post:
+      tags: [JA3]
+      summary: Submit a JA3 fingerprint for classification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ja3, ja3s]
+              properties:
+                ja3:    { type: string }
+                ja3s:   { type: string }
+                label:  { type: string, enum: [benign, malicious, unknown] }
+      responses:
+        "200": { description: Classified }
+
+  /ja3/fingerprints/{id}:
+    delete:
+      tags: [JA3]
+      summary: Delete a JA3 fingerprint entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  # ── Log Sources ───────────────────────────────────────────────────────────────
+
+  /log-sources:
+    get:
+      tags: [LogSources]
+      summary: List agentless log sources
+      responses:
+        "200":
+          description: Log source list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LogSource" }
+    post:
+      tags: [LogSources]
+      summary: Add a log source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LogSource" }
+      responses:
+        "200": { description: Created }
+
+  /log-sources/{id}:
+    put:
+      tags: [LogSources]
+      summary: Update a log source
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LogSource" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [LogSources]
+      summary: Delete a log source
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /logs/searches:
+    get:
+      tags: [Logs]
+      summary: List saved log searches
+      responses:
+        "200": { description: Saved search list }
+    post:
+      tags: [Logs]
+      summary: Save a log search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, query]
+              properties:
+                name:  { type: string }
+                query: { type: string }
+      responses:
+        "200": { description: Saved }
+
+  /logs/searches/{id}/run:
+    post:
+      tags: [Logs]
+      summary: Execute a saved log search
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Search results }
+
+  /logs/searches/{id}:
+    delete:
+      tags: [Logs]
+      summary: Delete a saved log search
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /logs/export:
+    get:
+      tags: [Logs]
+      summary: Export logs as NDJSON
+      parameters:
+        - { name: agent_id, in: query, schema: { type: integer } }
+        - { name: from,     in: query, schema: { type: string, format: date-time } }
+        - { name: to,       in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: NDJSON log export
+          content:
+            application/x-ndjson:
+              schema: { type: string }
+
+  /ingest:
+    post:
+      tags: [LogSources]
+      summary: Ingest raw log events from external sources (agentless push)
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                events:
+                  type: array
+                  items: { type: object }
+      responses:
+        "200": { description: Events ingested }
+
+  # ── MDM ───────────────────────────────────────────────────────────────────────
+
+  /mdm/devices:
+    get:
+      tags: [MDM]
+      summary: List enrolled MDM devices
+      responses:
+        "200":
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MDMDevice" }
+    post:
+      tags: [MDM]
+      summary: Manually enroll a device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MDMDevice" }
+      responses:
+        "200": { description: Enrolled }
+
+  /mdm/self-enroll:
+    post:
+      tags: [MDM]
+      summary: Self-enrollment endpoint used by mobile agent at first launch
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enrollment_token, device_id, platform]
+              properties:
+                enrollment_token: { type: string }
+                device_id:        { type: string }
+                platform:         { type: string, enum: [android, ios] }
+                hostname:         { type: string }
+      responses:
+        "200":
+          description: Enrolled — returns agent API key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  device_id: { type: integer }
+                  api_key:   { type: string }
+
+  /mdm/devices/{id}:
+    get:
+      tags: [MDM]
+      summary: Get MDM device detail
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Device }
+    delete:
+      tags: [MDM]
+      summary: Unenroll a device
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Unenrolled }
+
+  /mdm/devices/{id}/checkin:
+    put:
+      tags: [MDM]
+      summary: Device check-in (posture data from mobile agent)
+      security:
+        - agentKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                posture:    { type: object }
+                app_list:   { type: array, items: { type: object } }
+                os_version: { type: string }
+      responses:
+        "200": { description: Check-in recorded }
+
+  /mdm/devices/{id}/commands:
+    get:
+      tags: [MDM]
+      summary: List commands issued to a device
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Command list }
+    post:
+      tags: [MDM]
+      summary: Issue an MDM command to a device
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command: { type: string, enum: [lock, wipe, locate, restart, enable_wifi, disable_wifi] }
+                payload: { type: object }
+      responses:
+        "200": { description: Command queued }
+
+  /mdm/devices/{id}/commands/pending:
+    get:
+      tags: [MDM]
+      summary: Pending commands for a device (polled by agent)
+      security:
+        - agentKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Pending commands }
+
+  /mdm/commands/{id}/acknowledge:
+    post:
+      tags: [MDM]
+      summary: Agent acknowledges command execution
+      security:
+        - agentKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                result: { type: string }
+                error:  { type: string }
+      responses:
+        "200": { description: Acknowledged }
+
+  /mdm/devices/{id}/compliance:
+    get:
+      tags: [MDM]
+      summary: Compliance posture for a device
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Compliance detail }
+
+  /mdm/devices/{id}/block:
+    post:
+      tags: [MDM]
+      summary: Block a device (prevent check-in)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Blocked }
+
+  /mdm/devices/{id}/unblock:
+    post:
+      tags: [MDM]
+      summary: Unblock a previously blocked device
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Unblocked }
+
+  /mdm/devices/{id}/apps:
+    post:
+      tags: [MDM]
+      summary: Submit app inventory from mobile agent
+      security:
+        - agentKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                apps: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Inventory recorded }
+
+  /mdm/compliance/summary:
+    get:
+      tags: [MDM]
+      summary: Aggregate MDM compliance summary across all devices
+      responses:
+        "200": { description: Summary }
+
+  /mdm/compliance/run:
+    post:
+      tags: [MDM]
+      summary: Re-evaluate compliance for all enrolled devices
+      responses:
+        "200": { description: Evaluation queued }
+
+  /mdm/enrollment-tokens:
+    get:
+      tags: [MDM]
+      summary: List enrollment tokens
+      responses:
+        "200": { description: Token list }
+    post:
+      tags: [MDM]
+      summary: Create an enrollment token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:       { type: string }
+                max_uses:    { type: integer }
+                expires_at:  { type: string, format: date-time }
+      responses:
+        "200": { description: Token created }
+
+  /mdm/enrollment-tokens/{id}:
+    delete:
+      tags: [MDM]
+      summary: Revoke an enrollment token
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Revoked }
+
+  /mdm/policies:
+    get:
+      tags: [MDM]
+      summary: List MDM compliance policies
+      responses:
+        "200": { description: Policy list }
+    post:
+      tags: [MDM]
+      summary: Create a compliance policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, rules]
+              properties:
+                name:  { type: string }
+                rules: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Created }
+
+  /mdm/profiles:
+    get:
+      tags: [MDM]
+      summary: List MDM configuration profiles
+      responses:
+        "200": { description: Profile list }
+    post:
+      tags: [MDM]
+      summary: Create a configuration profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, payload]
+              properties:
+                name:    { type: string }
+                payload: { type: object }
+      responses:
+        "200": { description: Created }
+
+  /mdm/profiles/{id}/deploy:
+    post:
+      tags: [MDM]
+      summary: Deploy a profile to all enrolled devices
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deployment queued }
+
+  # ── Network Behavior Analytics ───────────────────────────────────────────────
+
+  /nba/anomalies:
+    get:
+      tags: [NBA]
+      summary: List NBA anomaly events
+      responses:
+        "200": { description: Anomaly list }
+
+  /nba/anomalies/{id}/acknowledge:
+    post:
+      tags: [NBA]
+      summary: Acknowledge an NBA anomaly
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Acknowledged }
+
+  /nba/baseline/{agent_id}:
+    get:
+      tags: [NBA]
+      summary: Get network behavior baseline for an agent
+      parameters:
+        - { name: agent_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Baseline }
+
+  /nba/analyze:
+    post:
+      tags: [NBA]
+      summary: Run NBA analysis on recent network events
+      responses:
+        "200": { description: Analysis complete }
+
+  # ── Network Map ───────────────────────────────────────────────────────────────
+
+  /network-map:
+    get:
+      tags: [NetworkMap]
+      summary: Live network topology graph
+      responses:
+        "200": { description: Nodes and edges }
+
+  /network-map/ip-info:
+    get:
+      tags: [NetworkMap]
+      summary: IP enrichment details for a selected node
+      parameters:
+        - { name: ip, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: IP info }
+
+  /network-map/port-info:
+    get:
+      tags: [NetworkMap]
+      summary: Port/service info for a selected connection
+      parameters:
+        - { name: port, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Port info }
+
+  # ── Notifications ─────────────────────────────────────────────────────────────
+
+  /notifications/email:
+    get:
+      tags: [Notifications]
+      summary: List email notification channels
+      responses:
+        "200": { description: Channel list }
+    post:
+      tags: [Notifications]
+      summary: Create an email notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, events]
+              properties:
+                email:  { type: string, format: email }
+                events: { type: array, items: { type: string } }
+      responses:
+        "200": { description: Created }
+
+  /notifications/email/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete a notification channel
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /notifications/email/{id}/toggle:
+    patch:
+      tags: [Notifications]
+      summary: Enable or disable a notification channel
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  # ── Playbooks ─────────────────────────────────────────────────────────────────
+
+  /playbooks:
+    get:
+      tags: [Playbooks]
+      summary: List automated response playbooks
+      responses:
+        "200":
+          description: Playbook list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Playbook" }
+    post:
+      tags: [Playbooks]
+      summary: Create a playbook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Playbook" }
+      responses:
+        "200": { description: Created }
+
+  /playbooks/{id}:
+    put:
+      tags: [Playbooks]
+      summary: Update a playbook
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Playbook" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Playbooks]
+      summary: Delete a playbook
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /playbooks/{id}/actions:
+    get:
+      tags: [Playbooks]
+      summary: List actions in a playbook
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Action list }
+
+  /playbooks/{id}/enable:
+    patch:
+      tags: [Playbooks]
+      summary: Enable a playbook
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Enabled }
+
+  /playbooks/{id}/disable:
+    patch:
+      tags: [Playbooks]
+      summary: Disable a playbook
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Disabled }
+
+  /playbook-actions:
+    post:
+      tags: [Playbooks]
+      summary: Create a playbook action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [playbook_id, action_type]
+              properties:
+                playbook_id:  { type: integer }
+                action_type:  { type: string }
+                parameters:   { type: object }
+                order:        { type: integer }
+      responses:
+        "200": { description: Created }
+
+  /playbook-actions/{id}:
+    delete:
+      tags: [Playbooks]
+      summary: Delete a playbook action
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /playbook-executions:
+    get:
+      tags: [Playbooks]
+      summary: List playbook executions
+      responses:
+        "200": { description: Execution list }
+
+  /playbook-executions/{id}/steps:
+    get:
+      tags: [Playbooks]
+      summary: Get step-by-step execution results
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Step results }
+
+  # ── Quarantine ────────────────────────────────────────────────────────────────
+
+  /quarantine:
+    get:
+      tags: [Quarantine]
+      summary: List quarantined endpoints
+      responses:
+        "200": { description: Quarantine list }
+    post:
+      tags: [Quarantine]
+      summary: Quarantine an endpoint (isolate from network)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, reason]
+              properties:
+                agent_id: { type: integer }
+                reason:   { type: string }
+      responses:
+        "200": { description: Quarantine action dispatched }
+
+  /quarantine/stats:
+    get:
+      tags: [Quarantine]
+      summary: Quarantine statistics
+      responses:
+        "200": { description: Stats }
+
+  /quarantine/{id}:
+    delete:
+      tags: [Quarantine]
+      summary: Release an endpoint from quarantine
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Released }
+
+  # ── Risk Posture ──────────────────────────────────────────────────────────────
+
+  /risk-posture:
+    get:
+      tags: [RiskPosture]
+      summary: Current tenant-wide risk posture score (0–100)
+      responses:
+        "200": { description: Risk posture }
+
+  /risk-posture/history:
+    get:
+      tags: [RiskPosture]
+      summary: Historical risk posture score series
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        "200": { description: Score history }
+
+  /risk-posture/refresh:
+    post:
+      tags: [RiskPosture]
+      summary: Trigger an on-demand risk posture recalculation
+      responses:
+        "200": { description: Refresh queued }
+
+  # ── Scheduled Reports ─────────────────────────────────────────────────────────
+
+  /scheduled-reports:
+    get:
+      tags: [ScheduledReports]
+      summary: List scheduled reports
+      responses:
+        "200": { description: Report schedule list }
+    post:
+      tags: [ScheduledReports]
+      summary: Create a scheduled report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, report_type, cron, recipients]
+              properties:
+                name:        { type: string }
+                report_type: { type: string, enum: [executive, compliance, alert_summary] }
+                cron:        { type: string, example: "0 8 * * 1" }
+                recipients:  { type: array, items: { type: string, format: email } }
+      responses:
+        "200": { description: Created }
+
+  /scheduled-reports/{id}:
+    put:
+      tags: [ScheduledReports]
+      summary: Update a scheduled report
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [ScheduledReports]
+      summary: Delete a scheduled report
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  # ── Scheduler ─────────────────────────────────────────────────────────────────
+
+  /scheduler/tasks:
+    get:
+      tags: [Scheduler]
+      summary: List background scheduler tasks
+      responses:
+        "200": { description: Task list }
+    post:
+      tags: [Scheduler]
+      summary: Create a scheduler task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, task_type]
+              properties:
+                name:      { type: string }
+                task_type: { type: string }
+                cron:      { type: string }
+                payload:   { type: object }
+      responses:
+        "200": { description: Created }
+
+  /scheduler/tasks/{id}/run:
+    post:
+      tags: [Scheduler]
+      summary: Trigger an immediate run of a scheduled task
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Run triggered }
+
+  /scheduler/tasks/{id}:
+    delete:
+      tags: [Scheduler]
+      summary: Delete a scheduler task
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /scheduler/tasks/{id}/toggle:
+    patch:
+      tags: [Scheduler]
+      summary: Enable or disable a scheduler task
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  # ── Scripts ───────────────────────────────────────────────────────────────────
+
+  /scripts/templates:
+    get:
+      tags: [Scripts]
+      summary: List available script templates
+      responses:
+        "200": { description: Template list }
+
+  /scripts/run:
+    post:
+      tags: [Scripts]
+      summary: Run a script on one or more agents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_ids, script]
+              properties:
+                agent_ids: { type: array, items: { type: integer } }
+                script:    { type: string }
+                timeout:   { type: integer, description: Seconds }
+      responses:
+        "200":
+          description: Task IDs to poll for results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_ids: { type: array, items: { type: string } }
+
+  /scripts/result/{task_id}:
+    get:
+      tags: [Scripts]
+      summary: Poll script execution result
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Result or pending status }
+
+  /scripts/history:
+    get:
+      tags: [Scripts]
+      summary: Script execution history
+      responses:
+        "200": { description: History list }
+
+  # ── Security Policy ───────────────────────────────────────────────────────────
+
+  /security-policy:
+    get:
+      tags: [Users]
+      summary: Get tenant security policy (password, MFA, session settings)
+      responses:
+        "200": { description: Security policy }
+    put:
+      tags: [Users]
+      summary: Update tenant security policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password_min_length:  { type: integer }
+                require_mfa:          { type: boolean }
+                session_timeout_mins: { type: integer }
+                allowed_ip_ranges:    { type: array, items: { type: string } }
+      responses:
+        "200": { description: Policy updated }
+
+  /settings/ioc-sharing:
+    patch:
+      tags: [IOC]
+      summary: Update IOC sharing settings (enable/disable cross-tenant sharing)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200": { description: Updated }
+
+  # ── Suppression ───────────────────────────────────────────────────────────────
+
+  /suppression/rules:
+    get:
+      tags: [Suppression]
+      summary: List alert suppression rules
+      responses:
+        "200": { description: Suppression rule list }
+    post:
+      tags: [Suppression]
+      summary: Create a suppression rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, match_type, match_value]
+              properties:
+                name:        { type: string }
+                match_type:  { type: string, enum: [title, source, agent_id, sigma_rule_id] }
+                match_value: { type: string }
+                expires_at:  { type: string, format: date-time }
+      responses:
+        "200": { description: Created }
+
+  /suppression/rules/{id}:
+    delete:
+      tags: [Suppression]
+      summary: Delete a suppression rule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /suppression/rules/{id}/toggle:
+    patch:
+      tags: [Suppression]
+      summary: Enable or disable a suppression rule
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  # ── Tasks (agent task queue) ──────────────────────────────────────────────────
+
+  /tasks:
+    post:
+      tags: [Tasks]
+      summary: Queue a task for an agent (requires approval if policy set)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, task_type]
+              properties:
+                agent_id:  { type: integer }
+                task_type: { type: string }
+                payload:   { type: object }
+      responses:
+        "200": { description: Task queued }
+
+  /tasks/agent/{id}:
+    get:
+      tags: [Tasks]
+      summary: Get pending tasks for an agent (polled by agent)
+      security:
+        - agentKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Pending tasks }
+
+  /tasks/pending-approval:
+    get:
+      tags: [Tasks]
+      summary: Tasks awaiting admin approval
+      responses:
+        "200": { description: Pending approval list }
+
+  /tasks/{id}/approve:
+    post:
+      tags: [Tasks]
+      summary: Approve a pending task
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Approved }
+
+  /tasks/{id}/reject:
+    post:
+      tags: [Tasks]
+      summary: Reject a pending task
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Rejected }
+
+  /tasks/result:
+    post:
+      tags: [Tasks]
+      summary: Agent posts task execution result
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id, output, exit_code]
+              properties:
+                task_id:   { type: string }
+                output:    { type: string }
+                exit_code: { type: integer }
+      responses:
+        "200": { description: Result recorded }
+
+  # ── Threat Actors ─────────────────────────────────────────────────────────────
+
+  /threat-actors:
+    get:
+      tags: [ThreatActors]
+      summary: List known threat actors
+      responses:
+        "200":
+          description: Threat actor list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ThreatActor" }
+    post:
+      tags: [ThreatActors]
+      summary: Create a threat actor profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ThreatActor" }
+      responses:
+        "200": { description: Created }
+
+  /threat-actors/{id}/alerts:
+    get:
+      tags: [ThreatActors]
+      summary: Alerts attributed to a threat actor
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Alert list }
+
+  /threat-actors/{id}:
+    delete:
+      tags: [ThreatActors]
+      summary: Delete a threat actor profile
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  # ── Threat Feeds ──────────────────────────────────────────────────────────────
+
+  /threat-feeds:
+    get:
+      tags: [ThreatFeeds]
+      summary: List configured threat intelligence feeds
+      responses:
+        "200":
+          description: Feed list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ThreatFeed" }
+    post:
+      tags: [ThreatFeeds]
+      summary: Add a threat feed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ThreatFeed" }
+      responses:
+        "200": { description: Created }
+
+  /threat-feeds/{id}:
+    put:
+      tags: [ThreatFeeds]
+      summary: Update a threat feed
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ThreatFeed" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [ThreatFeeds]
+      summary: Delete a threat feed
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /threat-feeds/{id}/sync:
+    post:
+      tags: [ThreatFeeds]
+      summary: Trigger immediate sync of a threat feed
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Sync started }
+
+  /threat-feeds/{id}/sync-log:
+    get:
+      tags: [ThreatFeeds]
+      summary: Sync history log for a threat feed
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Sync log }
+
+  # ── Threat Scores ─────────────────────────────────────────────────────────────
+
+  /threat/scores:
+    get:
+      tags: [ThreatScores]
+      summary: Per-agent threat scores
+      responses:
+        "200": { description: Score list }
+
+  /threat/fleet:
+    get:
+      tags: [ThreatScores]
+      summary: Fleet-wide threat score summary
+      responses:
+        "200": { description: Fleet summary }
+
+  /threat/baselines:
+    get:
+      tags: [ThreatScores]
+      summary: Behavioral baselines used for scoring
+      responses:
+        "200": { description: Baseline list }
+
+  /threat/score/{agent_id}:
+    post:
+      tags: [ThreatScores]
+      summary: Trigger threat score recalculation for an agent
+      parameters:
+        - { name: agent_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Score updated }
+
+  /threat/findings/{id}/acknowledge:
+    post:
+      tags: [ThreatScores]
+      summary: Acknowledge a threat finding
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Acknowledged }
+
+  # ── UEBA ─────────────────────────────────────────────────────────────────────
+
+  /ueba/users:
+    get:
+      tags: [UEBA]
+      summary: List user risk profiles from UEBA
+      responses:
+        "200": { description: User risk list }
+
+  /ueba/events:
+    get:
+      tags: [UEBA]
+      summary: List UEBA anomalous events
+      parameters:
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: from,    in: query, schema: { type: string, format: date-time } }
+        - { name: to,      in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: Event list }
+
+  /ueba/analyze:
+    post:
+      tags: [UEBA]
+      summary: Run UEBA analysis on recent user events
+      responses:
+        "200": { description: Analysis complete }
+
+  # ── Vulnerabilities ───────────────────────────────────────────────────────────
+
+  /vulns/priority-queue:
+    get:
+      tags: [Vulnerabilities]
+      summary: Prioritized vulnerability queue (CVSS + EPSS + asset criticality)
+      responses:
+        "200":
+          description: Priority-sorted vuln list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VulnPriority" }
+
+  /vulns/imports:
+    get:
+      tags: [Vulnerabilities]
+      summary: List vulnerability scan imports
+      responses:
+        "200": { description: Import list }
+
+  /vulns/import:
+    post:
+      tags: [Vulnerabilities]
+      summary: Import vulnerability scan results (Nessus, Qualys, OpenVAS)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, format]
+              properties:
+                file:   { type: string, format: binary }
+                format: { type: string, enum: [nessus, qualys, openvas, csv] }
+      responses:
+        "200": { description: Import queued }
+
+  /vulns/refresh-priorities:
+    post:
+      tags: [Vulnerabilities]
+      summary: Re-score all vulns with latest EPSS data
+      responses:
+        "200": { description: Refresh queued }
+
+  /vulns/{id}/patch-status:
+    patch:
+      tags: [Vulnerabilities]
+      summary: Update patch status for a vulnerability
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patch_status]
+              properties:
+                patch_status: { type: string, enum: [unpatched, patched, ignored, in_progress] }
+      responses:
+        "200": { description: Status updated }
+
+  # ── AI ────────────────────────────────────────────────────────────────────────
+
+  /ai/chat:
+    post:
+      tags: [AI]
+      summary: Chat with the XCloak AI assistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:     { type: string }
+                context_ids: { type: array, items: { type: integer }, description: Alert IDs to include as context }
+      responses:
+        "200":
+          description: Assistant reply
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply:      { type: string }
+                  session_id: { type: string }
+
+  /ai/chat/history:
+    get:
+      tags: [AI]
+      summary: Get AI chat history for the current user
+      responses:
+        "200": { description: Chat history }
+    delete:
+      tags: [AI]
+      summary: Clear AI chat history
+      responses:
+        "200": { description: Cleared }
+
+  /ai/triage/{id}:
+    post:
+      tags: [AI]
+      summary: Run AI triage on an alert
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Triage result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verdict:     { type: string, enum: [benign, suspicious, malicious] }
+                  confidence:  { type: number }
+                  explanation: { type: string }
+                  mitre_tags:  { type: array, items: { type: string } }
+
+  /ai/incidents/{id}/summarize:
+    post:
+      tags: [AI]
+      summary: Generate AI narrative summary of an incident
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Narrative summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: { type: string }
+
+  /ai/anomalies:
+    get:
+      tags: [AI]
+      summary: AI-detected anomaly events (ML-driven)
+      responses:
+        "200": { description: Anomaly list }
+
+  /ai/anomaly/{agent_id}:
+    post:
+      tags: [AI]
+      summary: Run anomaly detection for a specific agent
+      parameters:
+        - { name: agent_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Anomaly results }
+
+  # ── Alerts extensions ─────────────────────────────────────────────────────────
+
+  /alerts/{id}/investigate:
+    get:
+      tags: [Alerts]
+      summary: Auto-investigation results for an alert (related events, context)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Investigation data }
+
+  /alerts/{id}/actor-tags:
+    get:
+      tags: [Alerts]
+      summary: Threat actor tags attributed to an alert
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Actor tags }
+
+  /alerts/{id}/playbook-recommendations:
+    get:
+      tags: [Alerts]
+      summary: Recommended playbooks for an alert (based on tactic + severity)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Recommended playbooks }
+
+  /alerts/{id}/respond:
+    post:
+      tags: [Alerts]
+      summary: Execute a response action on an alert (isolate, kill process, etc.)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:  { type: string, enum: [isolate, kill_process, block_ip, run_playbook] }
+                payload: { type: object }
+      responses:
+        "200": { description: Response dispatched }
+
+  /alerts/{id}/execute-recommendation:
+    post:
+      tags: [Alerts]
+      summary: Execute a specific AI-recommended response for an alert
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Executed }
+
+  /alerts/bulk-acknowledge:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge multiple alerts in a single request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: integer } }
+      responses:
+        "200": { description: Acknowledged }
+
+  # ── Incidents extensions ──────────────────────────────────────────────────────
+
+  /incidents/paginated:
+    get:
+      tags: [Incidents]
+      summary: Paginated incident list
+      parameters:
+        - { name: page,     in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 25 } }
+        - { name: status,   in: query, schema: { type: string } }
+      responses:
+        "200": { description: Paginated incidents }
+
+  /incidents/{id}/events:
+    get:
+      tags: [Incidents]
+      summary: Raw events associated with an incident
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Event list }
+
+  /incidents/{id}/deepdive:
+    get:
+      tags: [Incidents]
+      summary: Deep-dive analysis (AI triage + correlated alerts + kill chain)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deep-dive result }
+
+  /incidents/{id}/remediation:
+    get:
+      tags: [Incidents]
+      summary: List remediation plans for an incident
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Remediation plans }
+    post:
+      tags: [Incidents]
+      summary: Generate a remediation plan
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Plan generated }
+
+  /incidents/{id}/remediation/{plan_id}:
+    get:
+      tags: [Incidents]
+      summary: Get a specific remediation plan
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Plan }
+
+  /incidents/{id}/remediation/{plan_id}/execute:
+    post:
+      tags: [Incidents]
+      summary: Execute all steps in a remediation plan
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Execution started }
+
+  /incidents/{id}/remediation/{plan_id}/steps/{step_id}/execute:
+    post:
+      tags: [Incidents]
+      summary: Execute a single remediation step
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: integer } }
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+        - { name: step_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Step executed }
+
+  # ── IOC extensions ────────────────────────────────────────────────────────────
+
+  /iocs/{id}:
+    get:
+      tags: [IOC]
+      summary: Get IOC detail
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: IOC }
+    put:
+      tags: [IOC]
+      summary: Update an IOC
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IOC" }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [IOC]
+      summary: Delete an IOC
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /iocs/bulk:
+    post:
+      tags: [IOC]
+      summary: Bulk-create IOCs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [iocs]
+              properties:
+                iocs: { type: array, items: { $ref: "#/components/schemas/IOC" } }
+      responses:
+        "200": { description: Created }
+
+  /iocs/{id}/shareable:
+    patch:
+      tags: [IOC]
+      summary: Toggle cross-tenant sharing for an IOC
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  /ioc-blocks:
+    get:
+      tags: [IOC]
+      summary: List IOC-triggered firewall blocks
+      responses:
+        "200": { description: Block list }
+
+  # ── Sigma extensions ──────────────────────────────────────────────────────────
+
+  /sigma/import:
+    post:
+      tags: [Sigma]
+      summary: Bulk-import Sigma rules from YAML text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [yaml]
+              properties:
+                yaml:    { type: string, description: Raw Sigma YAML (single rule or multi-doc) }
+                enabled: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported: { type: integer }
+                  skipped:  { type: integer }
+                  errors:   { type: array, items: { type: string } }
+
+  # ── YARA extensions ───────────────────────────────────────────────────────────
+
+  /yara/import:
+    post:
+      tags: [YARA]
+      summary: Bulk-import YARA rules from text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules_text]
+              properties:
+                rules_text: { type: string }
+      responses:
+        "200": { description: Import result }
+
+  /yara/rules/enabled:
+    get:
+      tags: [YARA]
+      summary: List only enabled YARA rules (used by agents on sync)
+      responses:
+        "200": { description: Enabled rules }
+
+  /yara/matches:
+    post:
+      tags: [YARA]
+      summary: Agent reports a YARA match event
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule_name, file_path, agent_id]
+              properties:
+                rule_name:  { type: string }
+                file_path:  { type: string }
+                agent_id:   { type: integer }
+                sha256:     { type: string }
+      responses:
+        "200": { description: Match recorded }
+
+  # ── Dashboard extensions ───────────────────────────────────────────────────────
+
+  /dashboard/metrics:
+    get:
+      tags: [Dashboard]
+      summary: Extended dashboard metrics (Prometheus-style counters and gauges)
+      responses:
+        "200": { description: Metrics object }
+
+  /soc/metrics:
+    get:
+      tags: [Dashboard]
+      summary: SOC operational metrics (MTTR, MTTD, alert volume)
+      responses:
+        "200": { description: SOC metrics }
+
+  /executive/metrics:
+    get:
+      tags: [Dashboard]
+      summary: Executive-level KPI metrics
+      responses:
+        "200": { description: Executive metrics }
+
+  /executive/report/download:
+    get:
+      tags: [Dashboard]
+      summary: Download latest executive report as PDF
+      responses:
+        "200":
+          description: PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /kafka/status:
+    get:
+      tags: [Dashboard]
+      summary: Kafka broker connection and consumer-group lag status
+      responses:
+        "200": { description: Kafka status }
+
+  /search:
+    get:
+      tags: [Dashboard]
+      summary: Global full-text search across alerts, agents, rules, and IOCs
+      parameters:
+        - { name: q,    in: query, required: true, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [all, alerts, agents, sigma, iocs] } }
+      responses:
+        "200": { description: Search results }
+
+  # ── Platform extensions ────────────────────────────────────────────────────────
+
+  /platform/tenants/{id}/domains:
+    get:
+      tags: [Platform]
+      summary: List SSO domains for a tenant
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Domain list }
+    post:
+      tags: [Platform]
+      summary: Add an SSO domain to a tenant
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain: { type: string }
+      responses:
+        "200": { description: Domain added }
+
+  /platform/tenants/{id}/domains/{did}:
+    delete:
+      tags: [Platform]
+      summary: Remove an SSO domain from a tenant
+      parameters:
+        - { name: id,  in: path, required: true, schema: { type: integer } }
+        - { name: did, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Removed }
+
+  /platform/agent-releases:
+    get:
+      tags: [Platform]
+      summary: List all agent release versions (platform admin)
+      responses:
+        "200": { description: Release list }
+    post:
+      tags: [Platform]
+      summary: Publish a new agent release
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [version, platform, file]
+              properties:
+                version:  { type: string }
+                platform: { type: string, enum: [linux, windows, darwin, android] }
+                file:     { type: string, format: binary }
+      responses:
+        "200": { description: Release published }
+
+  /agent-releases/{platform}:
+    get:
+      tags: [Agents]
+      summary: Get latest agent release for a platform (agent self-update)
+      security:
+        - agentKey: []
+      parameters:
+        - { name: platform, in: path, required: true, schema: { type: string, enum: [linux, windows, darwin, android] } }
+      responses:
+        "200":
+          description: Latest release info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:      { type: string }
+                  download_url: { type: string }
+                  sha256:       { type: string }
+
+  # ── Filehashes ────────────────────────────────────────────────────────────────
+
+  /filehashes:
+    post:
+      tags: [Agents]
+      summary: Agent submits file hashes for reputation lookup
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hashes: { type: array, items: { type: string } }
+      responses:
+        "200": { description: Hash reputation results }
+
+  # ── Agent extended telemetry ──────────────────────────────────────────────────
+
+  /agents/me:
+    get:
+      tags: [Agents]
+      summary: Get the current agent's own record (agent-authenticated)
+      security:
+        - agentKey: []
+      responses:
+        "200": { description: Agent record }
+
+  /agents/health:
+    get:
+      tags: [Agents]
+      summary: Health summary across all agents
+      responses:
+        "200": { description: Fleet health summary }
+
+  /agents/health/refresh:
+    post:
+      tags: [Agents]
+      summary: Force-refresh health status for all agents
+      responses:
+        "200": { description: Refresh triggered }
+
+  /agents/{id}/health:
+    get:
+      tags: [Agents]
+      summary: Health detail for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Health detail }
+
+  /agents/{id}/risk:
+    get:
+      tags: [Agents]
+      summary: Current risk score for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Risk score }
+
+  /agents/{id}/risk/breakdown:
+    get:
+      tags: [Agents]
+      summary: Risk score breakdown by category
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Breakdown }
+
+  /agents/{id}/timeline:
+    get:
+      tags: [Agents]
+      summary: Event timeline for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to,   in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: Timeline entries }
+
+  /agents/{id}/processes:
+    get:
+      tags: [Agents]
+      summary: Process list snapshot for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Process list }
+
+  /agents/{id}/connections:
+    get:
+      tags: [Agents]
+      summary: Active network connections for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Connection list }
+
+  /agents/{id}/packages:
+    get:
+      tags: [Agents]
+      summary: Installed packages/software for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Package list }
+
+  /agents/{id}/services:
+    get:
+      tags: [Agents]
+      summary: Running services for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Service list }
+
+  /agents/{id}/registry:
+    get:
+      tags: [Agents]
+      summary: Registry snapshot for a Windows agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Registry entries }
+
+  /agents/{id}/users:
+    get:
+      tags: [Agents]
+      summary: Local user accounts visible to an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: User list }
+
+  /agents/{id}/vulnerabilities:
+    get:
+      tags: [Agents]
+      summary: Vulnerabilities detected on an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Vulnerability list }
+
+  /agents/{id}/filehashes:
+    get:
+      tags: [Agents]
+      summary: File hashes submitted by an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Hash list }
+
+  /agents/{id}/fim/alerts:
+    get:
+      tags: [Agents]
+      summary: File integrity monitoring alerts for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: FIM alert list }
+
+  /agents/{id}/fim/baseline:
+    get:
+      tags: [Agents]
+      summary: Current FIM baseline for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: FIM baseline }
+
+  /agents/{id}/fim/baseline/accept:
+    post:
+      tags: [Agents]
+      summary: Accept pending FIM changes into the baseline
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Baseline updated }
+
+  /agents/{id}/vulnerability-scan:
+    post:
+      tags: [Agents]
+      summary: Trigger on-demand vulnerability scan on an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Scan queued }
+
+  /agents/{id}/process-snapshot:
+    post:
+      tags: [Agents]
+      summary: Request a live process snapshot from an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Snapshot queued }
+
+  /agents/{id}/memory-dump:
+    post:
+      tags: [Agents]
+      summary: Request a memory dump from an agent (forensics)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Dump queued }
+
+  /agents/{id}/kill-tree:
+    post:
+      tags: [Agents]
+      summary: Kill a process and its children on an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pid]
+              properties:
+                pid: { type: integer }
+      responses:
+        "200": { description: Kill dispatched }
+
+  /agents/{id}/enrich-connections:
+    post:
+      tags: [Agents]
+      summary: Run threat intel enrichment on an agent's active connections
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Enrichment complete }
+
+  /agents/{id}/geo-stats:
+    get:
+      tags: [Agents]
+      summary: GeoIP statistics for connections seen by an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Geo stats }
+
+  /agents/{id}/audit-events:
+    get:
+      tags: [Agents]
+      summary: Audit events generated by or for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Audit events }
+
+  /agents/{id}/auth-logs:
+    get:
+      tags: [Agents]
+      summary: Authentication log events for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Auth log entries }
+
+  /agents/{id}/connect-events:
+    get:
+      tags: [Agents]
+      summary: Network connection events for an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Connection events }
+
+  /agents/{id}/logs/stream:
+    get:
+      tags: [Agents]
+      summary: SSE stream of live log lines from an agent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /agents/{id}/tasks:
+    get:
+      tags: [Agents]
+      summary: Task queue for an agent (dashboard view)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Task list }
+
+  /agents/processes:
+    post:
+      tags: [Agents]
+      summary: Agent submits process list snapshot
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                processes: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/packages:
+    post:
+      tags: [Agents]
+      summary: Agent submits installed package list
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                packages: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/services:
+    post:
+      tags: [Agents]
+      summary: Agent submits running service list
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                services: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/connections:
+    post:
+      tags: [Agents]
+      summary: Agent submits network connection snapshot
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connections: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/connect-events:
+    post:
+      tags: [Agents]
+      summary: Agent reports individual connect/disconnect events
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                events: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/audit-events:
+    post:
+      tags: [Agents]
+      summary: Agent submits Linux auditd events
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                events: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/fim:
+    post:
+      tags: [Agents]
+      summary: Agent submits FIM change events
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                changes: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/firewall-hits:
+    post:
+      tags: [Agents]
+      summary: Agent reports local firewall rule hit events
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hits: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/quarantine:
+    post:
+      tags: [Agents]
+      summary: Agent applies local quarantine (network isolation) on itself
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isolate]
+              properties:
+                isolate: { type: boolean }
+      responses:
+        "200": { description: Applied }
+
+  /agents/registry:
+    post:
+      tags: [Agents]
+      summary: Agent submits Windows registry snapshot
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entries: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/users:
+    post:
+      tags: [Agents]
+      summary: Agent submits local user account list
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                users: { type: array, items: { type: object } }
+      responses:
+        "200": { description: Recorded }
+
+  /agents/file:
+    post:
+      tags: [Agents]
+      summary: Agent uploads a file (forensics artifact)
+      security:
+        - agentKey: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:        { type: string, format: binary }
+                description: { type: string }
+      responses:
+        "200": { description: File stored }
+
+  /users/{id}:
+    delete:
+      tags: [Users]
+      summary: Delete a user account
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted }
+
+  /ioc-blocks:
+    get:
+      tags: [IOC]
+      summary: List IOC-triggered firewall blocks (duplicate path alias)
+      responses:
+        "200": { description: Block list }
 
   /health/deep:
     get:
