@@ -106,6 +106,10 @@ func main() {
 	services.RegisterBroadcastFn(services.PublishAlertBroadcast)
 	services.StartWSBroadcastSubscriber()
 
+	// Pre-create endpoint_logs monthly partitions (current + 3 months ahead).
+	// Must run before any inserts land on a new month's first row.
+	go services.StartPartitionManager()
+
 	// Start background scheduler for recurring agent tasks.
 	go services.StartScheduler()
 	go services.StartHealthScheduler()
