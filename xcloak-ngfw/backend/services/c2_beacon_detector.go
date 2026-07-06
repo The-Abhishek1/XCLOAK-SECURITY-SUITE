@@ -30,13 +30,12 @@ import (
 // StartBeaconScheduler runs C2 beacon analysis every hour across all tenants.
 func StartBeaconScheduler() {
 	go func() {
-		// Initial run shortly after startup (give agents time to send events)
 		time.Sleep(3 * time.Minute)
-		runBeaconAnalysisAll()
+		RunDetector("beacon", runBeaconAnalysisAll)
 
 		for {
 			time.Sleep(1 * time.Hour)
-			runBeaconAnalysisAll()
+			RunDetector("beacon", runBeaconAnalysisAll)
 		}
 	}()
 }

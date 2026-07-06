@@ -282,3 +282,23 @@ vault:
   addr: ""
   existingSecret: "" # key: token (see vault.tokenSecretKey)
   tokenSecretKey: "token"
+
+# ── Kubernetes NetworkPolicy ──────────────────────────────────────────────────
+# Requires a CNI plugin that enforces NetworkPolicy (Calico, Cilium, Weave-Net,
+# etc.). Disable if your cluster uses a mesh-level equivalent (Istio
+# AuthorizationPolicy, Cilium NetworkPolicy) or if your CNI doesn't support it.
+#
+# When enabled, policies are:
+#   backend   — ingress from ingress-controller + Prometheus scraper only;
+#               egress to PgBouncer/Postgres, Redis, and external ports.
+#   frontend  — ingress from ingress-controller only; egress to backend only.
+#   pgbouncer — ingress from backend only; egress to Postgres upstream only.
+#
+# All three include unconditional egress to kube-dns (53/UDP+TCP).
+networkPolicy:
+  enabled: false
+  # Namespace and label selector for the Prometheus server pod.
+  # Used to allow Prometheus to scrape /metrics on the backend.
+  prometheusNamespace: monitoring
+  prometheusSelector:
+    app.kubernetes.io/name: prometheus

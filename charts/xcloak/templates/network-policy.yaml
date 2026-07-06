@@ -1,0 +1,244 @@
+{{- /*
+Network policies for the XCloak Security Suite.
+
+Topology (with all bundled components enabled):
+
+  Internet
+    │
+  Ingress controller  ──►  frontend (3000)  ──►  backend (8080)
+                                                     │
+                                          ┌──────────┼──────────┐
+                                       pgbouncer  Redis       (external)
+                                          │         (6379)    Kafka / MinIO /
+                                        PostgreSQL             Vault / SMTP / ES
+                                        (5432)
+
+Each policy below is a default-deny re-opened to exactly the traffic that
+component needs.  Egress to kube-dns (53/UDP) is universally allowed so DNS
+resolution inside the cluster keeps working.
+
+Set networkPolicy.enabled: false in values.yaml to skip all policies — useful
+in clusters that provide their own mesh-level policy (Istio AuthorizationPolicy,
+Cilium NetworkPolicy, etc.) or in local dev clusters that don't run the CNI
+plugin needed to enforce NetworkPolicy.
+*/}}
+
+{{- if .Values.networkPolicy.enabled }}
+
+{{- $appName := include "xcloak.name" . }}
+{{- $release  := .Release.Name }}
+
+# ── DNS egress (shared by every policy) ─────────────────────────────────────
+# Defined once as a named range variable so the three policies can reuse it.
+{{- $dnsEgress := list (dict
+  "ports" (list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53))
+) }}
+
+---
+# ── Backend ──────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $release }}-backend
+  labels:
+    {{- include "xcloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "xcloak.backend.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Ingress controller → backend (HTTP / HTTPS)
+    - ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+    # Prometheus scraper → /metrics
+    - ports:
+        - protocol: TCP
+          port: 8080
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.prometheusNamespace | default "monitoring" }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.prometheusSelector | nindent 14 }}
+
+  egress:
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # PostgreSQL — direct or via PgBouncer
+    {{- if .Values.pgbouncer.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "xcloak.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: pgbouncer
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- else if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/instance: {{ $release }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- else }}
+    # External PostgreSQL — allow egress to any destination on 5432
+    - ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
+    # Redis
+    {{- if .Values.redis.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+              app.kubernetes.io/instance: {{ $release }}
+      ports:
+        - protocol: TCP
+          port: 6379
+    {{- else }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.redisExternal.port | default 6379 }}
+    {{- end }}
+    # External services: Kafka, MinIO, Vault, Elasticsearch, SMTP, LLM APIs,
+    # threat-intel feeds (KEV, VirusTotal, etc.).
+    # These are all external to the cluster — allow unrestricted egress on
+    # the ports they use rather than trying to enumerate all provider CIDRs.
+    - ports:
+        - protocol: TCP
+          port: 9092   # Kafka plaintext
+        - protocol: TCP
+          port: 9093   # Kafka TLS
+        - protocol: TCP
+          port: 9000   # MinIO
+        - protocol: TCP
+          port: 8200   # Vault
+        - protocol: TCP
+          port: 9200   # Elasticsearch HTTP
+        - protocol: TCP
+          port: 9300   # Elasticsearch transport
+        - protocol: TCP
+          port: 587    # SMTP STARTTLS
+        - protocol: TCP
+          port: 465    # SMTP TLS
+        - protocol: TCP
+          port: 25     # SMTP plain
+        - protocol: TCP
+          port: 443    # HTTPS (threat-intel APIs, LLM, etc.)
+        - protocol: TCP
+          port: 80     # HTTP (some feed endpoints)
+        - protocol: TCP
+          port: 11434  # Ollama local LLM
+
+---
+# ── Frontend ─────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $release }}-frontend
+  labels:
+    {{- include "xcloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "xcloak.frontend.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Ingress controller → frontend (Next.js)
+    - ports:
+        - protocol: TCP
+          port: 3000
+
+  egress:
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Backend API (Next.js rewrites /api/* → backend:8080)
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "xcloak.backend.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+
+{{- if .Values.pgbouncer.enabled }}
+---
+# ── PgBouncer ────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $release }}-pgbouncer
+  labels:
+    {{- include "xcloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgbouncer
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "xcloak.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pgbouncer
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Only the backend may connect to PgBouncer
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "xcloak.backend.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 5432
+
+  egress:
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # PostgreSQL upstream
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/instance: {{ $release }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- else }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.postgresqlExternal.port | default 5432 }}
+    {{- end }}
+{{- end }}
+
+{{- end }}{{- /* networkPolicy.enabled */}}

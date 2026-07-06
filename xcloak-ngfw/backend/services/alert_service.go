@@ -151,8 +151,9 @@ func CreateAlert(alert models.Alert) error {
 		return err
 	}
 
-	// Prometheus — increment severity counter.
+	// Prometheus — increment severity counter + per-detector breakdown.
 	IncrementAlertCounter(strings.ToLower(alert.Severity))
+	RecordDetectorAlert(alert.RuleName, alert.Severity)
 
 	// Kafka — publish to xcloak.alerts topic.
 	go func() {

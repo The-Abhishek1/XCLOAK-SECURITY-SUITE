@@ -1,6 +1,8 @@
 package services
 
 import (
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -77,6 +79,31 @@ var (
 		Name: "xcloak_kafka_ioc_consumer_lag",
 		Help: "Unconsumed messages on xcloak.ioc_match_jobs (xcloak-ioc-matcher consumer group)",
 	})
+)
+
+// ── Per-detector counters ────────────────────────────────────
+var (
+	// DetectorAlertsTotal counts alerts fired by each detection engine.
+	// The `detector` label is the normalised detector name (e.g. "beacon",
+	// "ransomware", "sigma"). Increment via RecordDetectorAlert.
+	DetectorAlertsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "xcloak_detector_alerts_total",
+		Help: "Alerts created, partitioned by detector and severity",
+	}, []string{"detector", "severity"})
+
+	// DetectorRunsTotal counts scheduled detector ticks (success + error).
+	// Populate via RunDetector() or a detector's own call to RecordDetectorRun.
+	DetectorRunsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "xcloak_detector_runs_total",
+		Help: "Detector execution ticks by detector name and status (ok|error)",
+	}, []string{"detector", "status"})
+
+	// DetectorRunDurationSeconds records per-tick wall-clock time.
+	DetectorRunDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "xcloak_detector_run_duration_seconds",
+		Help:    "Duration of each detector tick in seconds",
+		Buckets: []float64{0.1, 0.5, 1, 5, 15, 30, 60, 120, 300},
+	}, []string{"detector"})
 )
 
 // ── Counter metrics (monotonically increasing) ───────────────
@@ -174,14 +201,97 @@ func RefreshMetrics() {
 	ThreatScore.Set(float64(score))
 }
 
+// normaliseDetector converts a raw rule name / source string into a short,
+// stable Prometheus label value.  The mapping is intentionally lossy —
+// we want "beacon", not "C2 Beacon — agent 7, process=chrome.exe (score 92)".
+func normaliseDetector(source string) string {
+	s := strings.ToLower(source)
+	for prefix, label := range map[string]string{
+		"sigma":         "sigma",
+		"ioc":           "ioc",
+		"beacon":        "beacon",
+		"dns":           "dns",
+		"port scan":     "port_scan",
+		"exfil":         "exfil",
+		"data exfil":    "exfil",
+		"ja3":           "ja3",
+		"credential":    "credential",
+		"brute":         "credential",
+		"priv":          "privesc",
+		"ransomware":    "ransomware",
+		"lotl":          "lotl",
+		"living":        "lotl",
+		"impossible":    "impossible_travel",
+		"web attack":    "web_attack",
+		"sql":           "web_attack",
+		"xss":           "web_attack",
+		"persistence":   "persistence",
+		"insider":       "insider_threat",
+		"cloud":         "cloud",
+		"email":         "email",
+		"container":     "container",
+		"kubernetes":    "container",
+		"active dir":    "ad_attack",
+		"dcsync":        "ad_attack",
+		"kerberoast":    "ad_attack",
+		"supply chain":  "supply_chain",
+		"process inj":   "process_injection",
+		"defense evas":  "defense_evasion",
+		"amsi":          "defense_evasion",
+		"yara":          "yara",
+		"fim":           "fim",
+		"ueba":          "ueba",
+		"nba":           "nba",
+		"itdr":          "itdr",
+	} {
+		if strings.Contains(s, prefix) {
+			return label
+		}
+	}
+	if s == "" {
+		return "unknown"
+	}
+	// Fallback: take the first word, truncate to 32 chars, replace spaces.
+	words := strings.Fields(s)
+	label := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		return '_'
+	}, words[0])
+	if len(label) > 32 {
+		label = label[:32]
+	}
+	return label
+}
+
+// RecordDetectorAlert increments the per-detector alert counter.
+// source is the raw RuleName / detector identifier from the alert.
+func RecordDetectorAlert(source, severity string) {
+	DetectorAlertsTotal.WithLabelValues(normaliseDetector(source), strings.ToLower(severity)).Inc()
+}
+
+// RunDetector wraps a detector tick function with Prometheus instrumentation.
+// Usage inside a detector's scheduler loop:
+//
+//	RunDetector("beacon", runBeaconAnalysisAll)
+func RunDetector(name string, fn func()) {
+	timer := prometheus.NewTimer(DetectorRunDurationSeconds.WithLabelValues(name))
+	defer timer.ObserveDuration()
+
+	defer func() {
+		if r := recover(); r != nil {
+			DetectorRunsTotal.WithLabelValues(name, "error").Inc()
+		}
+	}()
+
+	fn()
+	DetectorRunsTotal.WithLabelValues(name, "ok").Inc()
+}
+
 // IncrementAlertCounter is called from CreateAlert — increments the counter by severity.
 func IncrementAlertCounter(severity string) {
 	AlertsCreatedTotal.WithLabelValues(severity).Inc()
-	if severity == "critical" || severity == "high" {
-		if severity == "critical" {
-			// Check if it's an IOC match
-		}
-	}
 }
 
 // IncrementPlaybookCounter is called from playbook_engine.go
