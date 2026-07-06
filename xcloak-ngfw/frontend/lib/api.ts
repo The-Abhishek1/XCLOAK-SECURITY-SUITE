@@ -133,6 +133,7 @@ export const playbooksAPI = {
   deleteAction:  (id: number)            => api.delete(`/playbook-actions/${id}`),
   getExecutions: ()                      => api.get('/playbook-executions'),
   getStepResults: (executionId: number) => api.get(`/playbook-executions/${executionId}/steps`),
+  run:           (id: number, agentId: number) => api.post(`/playbooks/${id}/run`, { agent_id: agentId }),
 };
 
 export const sigmaAPI = {
@@ -369,7 +370,7 @@ export const vulnQueueAPI = {
 };
 
 export const socAPI = {
-  getMetrics: () => api.get('/soc/metrics'),
+  getMetrics: (range?: string) => api.get('/soc/metrics', { params: range ? { range } : {} }),
 };
 
 export const investigateAPI = {

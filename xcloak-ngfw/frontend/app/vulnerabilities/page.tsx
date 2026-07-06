@@ -7,7 +7,7 @@ import { Vulnerability, Agent } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import {
   Bug, Search, Download, Play, ChevronDown,
-  ExternalLink, Shield, AlertTriangle, Flame, Skull,
+  ExternalLink, Shield, AlertTriangle, Flame, Skull, ArrowDownUp,
 } from 'lucide-react';
 
 interface CVEData {
@@ -28,6 +28,8 @@ export default function VulnerabilitiesPage() {
   const [search, setSearch]       = useState('');
   const [sevFilter, setSevFilter] = useState('');
   const [kevFilter, setKevFilter] = useState(false);
+  const [epssFilter, setEpssFilter] = useState(false);
+  const [sortByRisk, setSortByRisk] = useState(true);
   const [cveDetail, setCveDetail] = useState<CVEData | null>(null);
   const [cveLoading, setCveLoading] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,21 +88,29 @@ export default function VulnerabilitiesPage() {
     }
   };
 
-  const filtered = vulns.filter(v => {
-    const matchSev  = !sevFilter || v.severity === sevFilter;
-    const matchKev  = !kevFilter || v.is_kev;
-    const matchSearch = !search || v.cve_id?.toLowerCase().includes(search.toLowerCase())
-      || v.package_name?.toLowerCase().includes(search.toLowerCase())
-      || v.name?.toLowerCase().includes(search.toLowerCase());
-    return matchSev && matchKev && matchSearch;
-  });
+  // Composite risk score: KEV=+4, EPSS*3, CVSS/10
+  const riskScore = (v: Vulnerability) =>
+    (v.is_kev ? 4 : 0) + (v.epss_score || 0) * 3 + (v.cvss_score || 0) / 10;
+
+  const filtered = vulns
+    .filter(v => {
+      const matchSev    = !sevFilter || v.severity === sevFilter;
+      const matchKev    = !kevFilter || v.is_kev;
+      const matchEpss   = !epssFilter || (v.epss_score || 0) >= 0.5;
+      const matchSearch = !search || v.cve_id?.toLowerCase().includes(search.toLowerCase())
+        || v.package_name?.toLowerCase().includes(search.toLowerCase())
+        || v.name?.toLowerCase().includes(search.toLowerCase());
+      return matchSev && matchKev && matchEpss && matchSearch;
+    })
+    .sort((a, b) => sortByRisk ? riskScore(b) - riskScore(a) : 0);
 
   const bySev = ['critical','high','medium','low'].reduce((acc, s) => {
     acc[s] = vulns.filter(v => v.severity === s).length;
     return acc;
   }, {} as Record<string, number>);
 
-  const kevCount = vulns.filter(v => v.is_kev).length;
+  const kevCount  = vulns.filter(v => v.is_kev).length;
+  const epssHigh  = vulns.filter(v => (v.epss_score || 0) >= 0.5).length;
 
   const selectedAgentObj = agents.find(a => a.id === selectedAgent);
 
@@ -148,6 +158,27 @@ export default function VulnerabilitiesPage() {
                   <span className="font-bold tabular-nums" style={{ color: '#f85149' }}>{kevCount}</span>
                 </button>
               )}
+              {epssHigh > 0 && (
+                <button onClick={() => setEpssFilter(!epssFilter)}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all"
+                  style={{
+                    background: epssFilter ? 'rgba(251,146,60,0.15)' : 'var(--glass-bg)',
+                    border: `1px solid ${epssFilter ? 'var(--orange)' : 'var(--border)'}`,
+                    color: epssFilter ? 'var(--orange)' : 'var(--text-2)',
+                  }}>
+                  <Flame className="h-3.5 w-3.5" /> EPSS≥50%
+                  <span className="font-bold tabular-nums" style={{ color: 'var(--orange)' }}>{epssHigh}</span>
+                </button>
+              )}
+              <button onClick={() => setSortByRisk(!sortByRisk)}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ml-auto"
+                style={{
+                  background: sortByRisk ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                  border: `1px solid ${sortByRisk ? 'var(--accent-border)' : 'var(--border)'}`,
+                  color: sortByRisk ? 'var(--accent)' : 'var(--text-2)',
+                }}>
+                <ArrowDownUp className="h-3.5 w-3.5" /> Risk Score
+              </button>
               {['critical','high','medium','low'].map(s => (
                 <button key={s} onClick={() => setSevFilter(sevFilter === s ? '' : s)}
                   className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all"

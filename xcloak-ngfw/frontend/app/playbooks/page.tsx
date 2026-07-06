@@ -8,7 +8,7 @@ import { timeAgo } from '@/lib/utils';
 import {
   Play, Plus, Trash2, Edit2, ChevronDown, ChevronRight, X, Zap,
   ToggleLeft, ToggleRight, GitBranch, RefreshCw, AlertCircle, CheckCircle2,
-  SkipForward, Clock,
+  SkipForward, Clock, BarChart3, Activity,
 } from 'lucide-react';
 
 const TRIGGERS = [
@@ -59,12 +59,29 @@ export default function PlaybooksPage() {
   const [showAddAct, setShowAddAct]   = useState<number | null>(null);
   const [actForm, setActForm]         = useState({ ...emptyAct });
 
+  // Manual trigger modal
+  const [triggerPB, setTriggerPB]         = useState<Playbook | null>(null);
+  const [triggerAgent, setTriggerAgent]   = useState<number>(0);
+  const [triggering, setTriggering]       = useState(false);
+
   // Execution drill-down
   const [expandedExec, setExpandedExec]     = useState<number | null>(null);
   const [stepResults, setStepResults]       = useState<Record<number, PlaybookStepResult[]>>({});
   const [loadingSteps, setLoadingSteps]     = useState<number | null>(null);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+  const manualTrigger = async () => {
+    if (!triggerPB || !triggerAgent) return;
+    setTriggering(true);
+    try {
+      await playbooksAPI.run(triggerPB.id, triggerAgent);
+      setTriggerPB(null);
+      notify(`Playbook "${triggerPB.name}" triggered on agent #${triggerAgent}`);
+      setTimeout(() => load(), 2000);
+    } catch { notify('Trigger failed'); }
+    finally { setTriggering(false); }
+  };
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
@@ -191,6 +208,28 @@ export default function PlaybooksPage() {
       )}
 
       <div className="space-y-6">
+        {/* ── Stats strip ── */}
+        {!loading && (
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: 'Playbooks', value: playbooks.length, icon: Zap, color: 'var(--accent)' },
+              { label: 'Active', value: playbooks.filter(p => p.enabled).length, icon: Activity, color: 'var(--green)' },
+              { label: 'Executions', value: executions.length, icon: BarChart3, color: 'var(--orange)' },
+              { label: 'Success Rate', value: executions.length ? `${Math.round(executions.filter(e => (e.overall_status || e.status) === 'success' || (e.overall_status || e.status) === 'completed').length / executions.length * 100)}%` : '—', icon: CheckCircle2, color: 'var(--green)' },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div key={label} className="g-card p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+                  <Icon className="h-4 w-4" style={{ color }} />
+                </div>
+                <div>
+                  <p className="text-lg font-bold" style={{ color }}>{value}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── Playbook list ── */}
         {loading ? (
           <div className="py-20 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
@@ -223,6 +262,13 @@ export default function PlaybooksPage() {
 
                   <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>{timeAgo(pb.created_at)}</span>
 
+                  <button onClick={() => { setTriggerPB(pb); setTriggerAgent(agents[0]?.id || 0); }}
+                    className="shrink-0 p-1.5 rounded transition-colors" style={{ color: 'var(--text-3)' }}
+                    title="Manual trigger"
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--green)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                    <Play className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={() => openEditPB(pb)}
                     className="shrink-0 p-1.5 rounded transition-colors" style={{ color: 'var(--text-3)' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
@@ -439,6 +485,35 @@ export default function PlaybooksPage() {
               <button onClick={() => { setShowAddPB(false); setShowEditPB(null); }} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
               <button onClick={showEditPB ? updatePB : addPB} disabled={saving || !pbForm.name.trim()} className="g-btn g-btn-primary flex-1 justify-center">
                 {saving ? 'Saving…' : (showEditPB ? 'Update' : 'Create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manual trigger modal ── */}
+      {triggerPB && (
+        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setTriggerPB(null)}>
+          <div className="g-modal" style={{ maxWidth: 420 }}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Manual Trigger</h2>
+              <button onClick={() => setTriggerPB(null)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+                Run <span className="font-semibold" style={{ color: 'var(--accent)' }}>{triggerPB.name}</span> immediately against an agent.
+              </p>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Target Agent *</label>
+                <select value={triggerAgent} onChange={e => setTriggerAgent(Number(e.target.value))} className="g-select w-full">
+                  {agents.map(a => <option key={a.id} value={a.id}>{a.hostname} (#{a.id})</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setTriggerPB(null)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={manualTrigger} disabled={triggering || !triggerAgent} className="g-btn g-btn-primary flex-1 justify-center">
+                {triggering ? 'Running…' : 'Run Now'}
               </button>
             </div>
           </div>

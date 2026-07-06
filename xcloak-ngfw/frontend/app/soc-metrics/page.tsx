@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { socAPI } from '@/lib/api';
 import { SOCMetrics, AnalystMetrics } from '@/types';
-import { Users, Clock, CheckCircle, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertTriangle, TrendingUp, Target } from 'lucide-react';
+
+const SLA_TARGETS: Record<string, number> = { critical: 1, high: 4, medium: 24, low: 72 };
 
 function MiniBar({ data, color = 'var(--accent)' }: { data: Array<{ count: number; date: string }>; color?: string }) {
   const max = Math.max(...data.map(d => d.count), 1);
@@ -83,15 +85,30 @@ function AnalystCard({ a }: { a: AnalystMetrics }) {
 export default function SOCMetricsPage() {
   const [metrics, setMetrics] = useState<SOCMetrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<'7d' | '30d' | '90d'>('30d');
 
   useEffect(() => {
-    socAPI.getMetrics().then(r => { setMetrics(r.data); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    socAPI.getMetrics(range).then(r => { setMetrics(r.data); setLoading(false); }).catch(() => setLoading(false));
+  }, [range]);
 
   const m = metrics;
 
   return (
-    <RootLayout title="SOC Performance" subtitle="Analyst metrics · MTTR · Alert backlog trends">
+    <RootLayout title="SOC Performance" subtitle="Analyst metrics · MTTR · Alert backlog trends"
+      actions={
+        <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+          {(['7d','30d','90d'] as const).map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+              style={{
+                background: range === r ? 'var(--accent-glow)' : 'transparent',
+                color: range === r ? 'var(--accent)' : 'var(--text-2)',
+                border: range === r ? '1px solid var(--accent-border)' : '1px solid transparent',
+              }}>{r}</button>
+          ))}
+        </div>
+      }>
       {loading ? (
         <div className="py-24 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading SOC metrics…</div>
       ) : !m ? (
@@ -117,6 +134,35 @@ export default function SOCMetricsPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* SLA compliance strip */}
+          <div className="g-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>SLA Compliance vs. MTTR</p>
+              <span className="text-[10px] ml-auto" style={{ color: 'var(--text-3)' }}>Avg MTTR: {(m.avg_mttr_minutes / 60).toFixed(1)}h</span>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              {(['critical','high','medium','low'] as const).map(sev => {
+                const slaH = SLA_TARGETS[sev];
+                const mttrH = m.avg_mttr_minutes / 60;
+                const pct   = Math.min(100, (mttrH / slaH) * 100);
+                const ok    = mttrH <= slaH;
+                const color = ok ? 'var(--green)' : 'var(--red)';
+                return (
+                  <div key={sev} className="text-center">
+                    <p className="text-[10px] capitalize mb-1" style={{ color: 'var(--text-3)' }}>{sev}</p>
+                    <p className="text-[10px] font-bold mb-1.5" style={{ color }}>
+                      {ok ? '✓' : '✗'} {slaH}h SLA
+                    </p>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--glass-bg-2)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Charts */}

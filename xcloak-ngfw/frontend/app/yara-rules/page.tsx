@@ -8,7 +8,7 @@ import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
 import {
   Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2, Upload, CheckCircle,
-  ChevronDown, ChevronUp, Clock, Hash,
+  ChevronDown, ChevronUp, Clock, Hash, Download, BarChart3,
 } from 'lucide-react';
 import { agentsAPI } from '@/lib/api';
 import { Agent } from '@/types';
@@ -53,6 +53,7 @@ export default function YaraRulesPage() {
   const [search, setSearch]   = useState('');
   const [toast, setToast]     = useState<string | null>(null);
 
+  const [matchSevFilter, setMatchSevFilter] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState<YaraRule | null>(null);
   const [form, setForm]       = useState({ ...emptyRule });
@@ -64,6 +65,15 @@ export default function YaraRulesPage() {
   const agentName = (id: number) => agents.find(a => a.id === id)?.hostname || `#${id}`;
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+  const exportRules = () => {
+    const combined = rules.filter(r => r.enabled).map(r => r.rule_content).join('\n\n');
+    const blob = new Blob([combined], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'xcloak-yara-rules.yar'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
@@ -143,6 +153,11 @@ export default function YaraRulesPage() {
       actions={
         tab === 'rules' ? (
           <div className="flex items-center gap-2">
+            {rules.length > 0 && (
+              <button onClick={exportRules} className="g-btn g-btn-ghost text-xs">
+                <Download className="h-3.5 w-3.5" /> Export .yar
+              </button>
+            )}
             <label className="g-btn g-btn-ghost text-xs cursor-pointer">
               <Upload className="h-3.5 w-3.5" /> Import .yar
               <input type="file" multiple accept=".yar,.yara" className="hidden"
@@ -183,6 +198,27 @@ export default function YaraRulesPage() {
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 200 }}>{toast}</div>}
 
       <div className="space-y-4">
+        {/* Stats strip */}
+        {!loading && (
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Total Rules', value: rules.length, icon: Code2, color: 'var(--accent)' },
+              { label: 'Active', value: rules.filter(r => r.enabled).length, icon: BarChart3, color: 'var(--green)' },
+              { label: 'Matches', value: matches.length, icon: FileWarning, color: 'var(--orange)' },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div key={label} className="g-card p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+                  <Icon className="h-4 w-4" style={{ color }} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold" style={{ color }}>{value}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Tab bar */}
         <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--glass-bg)', backdropFilter: 'var(--blur-sm)', border: '1px solid var(--border)' }}>
           {TABS.map(t => {
@@ -256,18 +292,32 @@ export default function YaraRulesPage() {
 
         {/* MATCHES TAB */}
         {tab === 'matches' && (
+          <>
+          <div className="flex items-center gap-2">
+            {['', 'critical','high','medium','low'].map(s => (
+              <button key={s || 'all'} onClick={() => setMatchSevFilter(s)}
+                className="rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all"
+                style={{
+                  background: matchSevFilter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                  border: `1px solid ${matchSevFilter === s ? 'var(--accent-border)' : 'var(--border)'}`,
+                  color: matchSevFilter === s ? 'var(--accent)' : 'var(--text-2)',
+                }}>
+                {s || 'All'} {s ? `(${matches.filter(m => m.severity === s).length})` : `(${matches.length})`}
+              </button>
+            ))}
+          </div>
           <div className="g-table">
             <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '90px 70px 1fr 1fr 100px 20px' }}>
               <span>Agent</span><span>Severity</span><span>Rule</span><span>File Path</span><span>Detected</span><span />
             </div>
             {loading ? (
               <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
-            ) : matches.length === 0 ? (
+            ) : matches.filter(m => !matchSevFilter || m.severity === matchSevFilter).length === 0 ? (
               <div className="py-16 text-center">
                 <FileWarning className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
-                <p className="text-sm" style={{ color: 'var(--text-2)' }}>No YARA matches yet. Dispatch a &quot;YARA Scan&quot; task from an agent&apos;s page, or enable periodic scanning above.</p>
+                <p className="text-sm" style={{ color: 'var(--text-2)' }}>{matches.length === 0 ? 'No YARA matches yet. Dispatch a "YARA Scan" task from an agent\'s page, or enable periodic scanning above.' : 'No matches for current filter.'}</p>
               </div>
-            ) : matches.map(m => {
+            ) : matches.filter(m => !matchSevFilter || m.severity === matchSevFilter).map(m => {
               let parsedStrings: MatchedString[] = [];
               try { parsedStrings = JSON.parse(m.matched_strings || '[]'); } catch { /* old rows, malformed JSON */ }
               const expanded = expandedId === m.id;
@@ -307,6 +357,7 @@ export default function YaraRulesPage() {
               );
             })}
           </div>
+          </>
         )}
       </div>
 
