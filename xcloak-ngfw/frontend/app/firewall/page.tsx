@@ -9,7 +9,7 @@ import {
   Network, Plus, Trash2, Edit2, X, Search,
   Upload, CheckCircle, XCircle, Loader2, RefreshCw,
   Shield, AlertTriangle, Zap, BarChart2, ChevronDown, ChevronRight,
-  Layers,
+  Layers, Copy, Download,
 } from 'lucide-react';
 
 const PROTOS  = ['tcp', 'udp', 'icmp', 'any'];
@@ -140,6 +140,8 @@ export default function FirewallPage() {
   const [form, setForm]           = useState<typeof EMPTY>({ ...EMPTY });
   const [saving, setSaving]       = useState(false);
   const [toast, setToast]         = useState<string | null>(null);
+  const [actionFilter, setActionFilter] = useState('');
+  const [protoFilter,  setProtoFilter]  = useState('');
 
   // Sync state
   const [showSync, setShowSync]       = useState(false);
@@ -248,13 +250,37 @@ export default function FirewallPage() {
     } finally { setSyncing(false); }
   };
 
-  const filtered = rules.filter(r =>
-    !search
-    || r.name?.toLowerCase().includes(search.toLowerCase())
-    || r.source_ip?.includes(search)
-    || r.destination_ip?.includes(search)
-    || r.group_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const cloneRule = async (r: FirewallRule) => {
+    try {
+      const payload = {
+        name: `${r.name} (copy)`, description: r.description, group_name: r.group_name,
+        source_ip: r.source_ip, destination_ip: r.destination_ip,
+        protocol: r.protocol, port: r.port, action: r.action,
+        enabled: false, priority: r.priority,
+      };
+      await firewallAPI.create(payload); load(); notify('Rule cloned (disabled by default)');
+    } catch { notify('Clone failed'); }
+  };
+
+  const exportRules = () => {
+    const blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `xcloak-firewall-rules-${Date.now()}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const filtered = rules.filter(r => {
+    if (actionFilter && r.action !== actionFilter) return false;
+    if (protoFilter  && r.protocol !== protoFilter) return false;
+    if (!search) return true;
+    return (
+      r.name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.source_ip?.includes(search) ||
+      r.destination_ip?.includes(search) ||
+      r.group_name?.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   const enabledCount  = rules.filter(r => r.enabled).length;
   const pendingSync   = rules.filter(r => r.enabled && !r.synced_at).length;
@@ -329,11 +355,44 @@ export default function FirewallPage() {
           </div>
         )}
 
-        {/* Search */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, IP, group…" className="g-input pl-9" />
+        {/* Search + filters + export */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search name, IP, group…" className="g-input pl-9" />
+          </div>
+          {/* Action filter */}
+          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {['', 'allow', 'deny'].map(a => (
+              <button key={a || 'all'} onClick={() => setActionFilter(a)}
+                className="px-2.5 py-1.5 text-xs font-medium capitalize transition-all"
+                style={{
+                  background: actionFilter === a ? 'var(--accent)' : 'transparent',
+                  color: actionFilter === a ? '#fff' : 'var(--text-3)',
+                }}>
+                {a || 'all'}
+              </button>
+            ))}
+          </div>
+          {/* Protocol filter */}
+          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {['', ...PROTOS].map(p => (
+              <button key={p || 'all'} onClick={() => setProtoFilter(p)}
+                className="px-2.5 py-1.5 text-xs font-medium uppercase transition-all"
+                style={{
+                  background: protoFilter === p ? 'var(--accent)' : 'transparent',
+                  color: protoFilter === p ? '#fff' : 'var(--text-3)',
+                }}>
+                {p || 'all'}
+              </button>
+            ))}
+          </div>
+          <button onClick={exportRules}
+            className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+            style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            <Download className="h-3.5 w-3.5" /> Export JSON
+          </button>
         </div>
 
         {/* Rules table */}
@@ -398,12 +457,17 @@ export default function FirewallPage() {
               </span>
 
               <div className="flex items-center justify-end gap-1">
-                <button onClick={() => openEdit(r)} className="p-1 rounded" style={{ color: 'var(--text-3)' }}
+                <button onClick={() => cloneRule(r)} title="Clone rule" className="p-1 rounded" style={{ color: 'var(--text-3)' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => openEdit(r)} title="Edit rule" className="p-1 rounded" style={{ color: 'var(--text-3)' }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
                   <Edit2 className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => del(r.id)} className="p-1 rounded" style={{ color: 'var(--text-3)' }}
+                <button onClick={() => del(r.id)} title="Delete rule" className="p-1 rounded" style={{ color: 'var(--text-3)' }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
                   <Trash2 className="h-3.5 w-3.5" />

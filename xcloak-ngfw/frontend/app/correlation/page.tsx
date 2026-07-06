@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { correlationAPI, playbooksAPI } from '@/lib/api';
 import { CorrelationMatch } from '@/types';
 import { timeAgo, formatDate } from '@/lib/utils';
-import { GitMerge, Plus, Trash2, ToggleLeft, ToggleRight, X, Info, ArrowRight, ChevronDown, ChevronUp, Zap } from 'lucide-react';
+import { GitMerge, Plus, Trash2, ToggleLeft, ToggleRight, X, Info, ArrowRight, ChevronDown, ChevronUp, Zap, BarChart3, Activity } from 'lucide-react';
 
 const ACTIONS = ['create_incident', 'notify'];
 const SEVERITIES = ['', 'critical', 'high', 'medium', 'low'];
@@ -190,6 +190,27 @@ export default function CorrelationPage() {
       }>
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
+
+      {/* Stats strip */}
+      {!loading && (
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          {[
+            { label: 'Total Rules', value: rules.length + 4, icon: GitMerge, color: 'var(--accent)' },
+            { label: 'Active', value: rules.filter(r => r.enabled).length + 4, icon: Activity, color: 'var(--green)' },
+            { label: 'Total Matches', value: rules.reduce((acc, r) => acc + r.match_count, 0), icon: BarChart3, color: 'var(--orange)' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="g-card p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+                <Icon className="h-4 w-4" style={{ color }} />
+              </div>
+              <div>
+                <p className="text-xl font-bold" style={{ color }}>{value}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Info banner */}
       <div className="g-card p-4 flex items-start gap-3 mb-5"

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import api from '@/lib/api';
-import { HardDrive, Play, ChevronDown, ChevronRight, Clock, CheckCircle, Loader2, Plus, AlertTriangle, List, Layers } from 'lucide-react';
+import { HardDrive, Play, ChevronDown, ChevronRight, Clock, CheckCircle, Loader2, Plus, AlertTriangle, List, Layers, Download, Filter } from 'lucide-react';
 
 interface ForensicCollection {
   id: number; tenant_id: number; incident_id: number | null; agent_id: number | null;
@@ -156,6 +156,7 @@ export default function DFIRPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [tab, setTab] = useState<'collections' | 'timeline'>('collections');
+  const [statusFilter, setStatusFilter] = useState('');
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [timelineIncident, setTimelineIncident] = useState('');
   const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -199,6 +200,18 @@ export default function DFIRPage() {
 
   const running = collections.filter(c => c.status === 'running').length;
 
+  const exportCollection = (col: ForensicCollection) => {
+    const blob = new Blob([JSON.stringify(col, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `dfir-${col.id}-${col.agent_hostname}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const displayedCollections = statusFilter
+    ? collections.filter(c => c.status === statusFilter)
+    : collections;
+
   return (
     <RootLayout title="Digital Forensics & IR"
       subtitle="Forensic artifact collection · Evidence preservation · Incident timeline"
@@ -230,7 +243,8 @@ export default function DFIRPage() {
             </div>
           </div>
           <div className="text-[10px] mb-3 px-3 py-2 rounded-lg" style={{ background: 'var(--glass-bg)', color: 'var(--text-3)' }}>
-            Collects: processes, network connections, services, installed packages, user accounts, auth logs, file hashes. Results available after agent checks in (up to 10 min).
+            <strong>Volatile-first order:</strong> processes → connections → services → users → auth logs → packages → file hashes.
+            Results available after agent checks in (up to 10 min). Chain-of-custody log created automatically.
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowCreate(false)} className="g-btn g-btn-ghost text-xs">Cancel</button>
@@ -286,13 +300,42 @@ export default function DFIRPage() {
             <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Trigger a collection on an agent to capture evidence snapshots.</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {collections.map(c => (
-              <CollectionCard key={c.id} col={c}
-                expanded={expandedID === c.id}
-                onExpand={() => setExpandedID(p => p === c.id ? null : c.id)} />
-            ))}
-          </div>
+          <>
+            {/* Status filter */}
+            <div className="flex items-center gap-1.5 mb-3">
+              <Filter className="h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+              {['', 'running', 'completed', 'partial', 'failed'].map(s => (
+                <button key={s || 'all'} onClick={() => setStatusFilter(s)}
+                  className="px-2.5 py-1 text-[11px] rounded-lg capitalize transition-all"
+                  style={{
+                    background: statusFilter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                    border: `1px solid ${statusFilter === s ? 'var(--accent-border)' : 'var(--border)'}`,
+                    color: statusFilter === s ? 'var(--accent)' : 'var(--text-2)',
+                  }}>
+                  {s || 'all'}{s && ` (${collections.filter(c => c.status === s).length})`}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              {displayedCollections.map(c => (
+                <div key={c.id} className="relative">
+                  <CollectionCard col={c}
+                    expanded={expandedID === c.id}
+                    onExpand={() => setExpandedID(p => p === c.id ? null : c.id)} />
+                  {c.status === 'completed' && (
+                    <button onClick={() => exportCollection(c)}
+                      title="Export collection metadata as JSON"
+                      className="absolute top-3 right-3 p-1.5 rounded-lg transition-all"
+                      style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                      <Download className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         )
       ) : (
         <div className="g-card p-4">
