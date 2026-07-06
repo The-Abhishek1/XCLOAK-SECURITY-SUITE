@@ -189,12 +189,11 @@ function Logo() {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggle: () => void }) {
   const pathname = usePathname();
   const router   = useRouter();
   const { profile } = useUser();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [badges, setBadges]         = useState<Record<string, number>>({});
+  const [badges, setBadges] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const loadBadges = async () => {
@@ -253,32 +252,15 @@ export function Sidebar() {
         />
       </aside>
 
-      {/* ── MOBILE: top navbar + slide-out drawer ─────────── */}
+      {/* ── MOBILE: backdrop + slide-out drawer ──────────── */}
       <div className="lg:hidden">
-
-        {/* Top navbar */}
-        <div className="fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-4"
-          style={{
-            background: 'var(--glass-bg)',
-            backdropFilter: 'var(--blur)',
-            WebkitBackdropFilter: 'var(--blur)',
-            borderBottom: '1px solid var(--border)',
-          }}>
-          <Logo />
-          <button
-            onClick={() => setMobileOpen(o => !o)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl transition-all"
-            style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </button>
-        </div>
 
         {/* Backdrop */}
         {mobileOpen && (
           <div
             className="fixed inset-0 z-40"
             style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-            onClick={() => setMobileOpen(false)}
+            onClick={onToggle}
           />
         )}
 
@@ -296,14 +278,14 @@ export function Sidebar() {
           <div className="flex items-center justify-between px-4 h-14 shrink-0"
             style={{ borderBottom: '1px solid var(--border)' }}>
             <Logo />
-            <button onClick={() => setMobileOpen(false)} style={{ color: 'var(--text-2)' }}>
+            <button onClick={onToggle} style={{ color: 'var(--text-2)' }}>
               <X className="h-4 w-4" />
             </button>
           </div>
 
           <NavContent
             pathname={pathname}
-            onNavigate={() => setMobileOpen(false)}
+            onNavigate={onToggle}
             logout={logout}
             profile={profile}
             badges={badges}

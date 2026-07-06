@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock } from 'lucide-react';
+import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock, Menu } from 'lucide-react';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { timeAgo } from '@/lib/utils';
 
@@ -19,12 +19,15 @@ interface RootLayoutProps {
 }
 
 export function RootLayout({ children, title, subtitle, onRefresh, refreshing, actions }: RootLayoutProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const toggleMenu = () => setMobileOpen(o => !o);
+
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg-0)' }}>
       <div className="bg-mesh" />
-      <Sidebar />
- <div className="flex flex-1 flex-col min-w-0 ml-0 lg:ml-[240px] pt-14 lg:pt-0">
-        <AppHeader title={title} subtitle={subtitle} onRefresh={onRefresh} refreshing={refreshing} actions={actions} />
+      <Sidebar mobileOpen={mobileOpen} onToggle={toggleMenu} />
+      <div className="flex flex-1 flex-col min-w-0 lg:ml-[240px]">
+        <AppHeader title={title} subtitle={subtitle} onRefresh={onRefresh} refreshing={refreshing} actions={actions} onToggleMenu={toggleMenu} />
         <main className="flex-1 p-4 sm:p-6 relative z-10">{children}</main>
       </div>
     </div>
@@ -37,7 +40,7 @@ const ROLE_COLORS: Record<string, string> = {
   viewer:  'var(--text-3)',
 };
 
-function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<RootLayoutProps, 'children'>) {
+function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMenu }: Omit<RootLayoutProps, 'children'> & { onToggleMenu: () => void }) {
   const { notifications, unread, markRead, markAllRead, dismiss } = useNotifications();
   const { theme, toggle } = useTheme();
   const { profile } = useUser();
@@ -73,7 +76,7 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<Roo
   };
 
   return (
-    <header className="sticky top-14 lg:top-0 z-30 flex h-14 items-center justify-between px-5 gap-4"
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between px-4 lg:px-5 gap-3"
       style={{
         background: 'var(--glass-bg)',
         backdropFilter: 'var(--blur)',
@@ -81,13 +84,20 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions }: Omit<Roo
         borderBottom: '1px solid var(--border)',
       }}>
 
+      {/* Hamburger — mobile only */}
+      <button onClick={onToggleMenu}
+        className="flex lg:hidden h-8 w-8 items-center justify-center rounded-lg shrink-0 transition-colors"
+        style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+        <Menu className="h-4 w-4" />
+      </button>
+
       <div className="min-w-0 flex-1">
         {title && (
           <div className="flex items-center gap-2">
             <h1 className="text-[15px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{title}</h1>
             {subtitle && (
               <>
-                <span style={{ color: 'var(--text-3)' }}>·</span>
+                <span className="hidden sm:inline" style={{ color: 'var(--text-3)' }}>·</span>
                 <p className="text-xs truncate hidden sm:block" style={{ color: 'var(--text-2)' }}>{subtitle}</p>
               </>
             )}
