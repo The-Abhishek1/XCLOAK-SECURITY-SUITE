@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { RootLayout }  from '@/components/layout/RootLayout';
 import { agentsAPI }   from '@/lib/api';
 import { Agent }       from '@/types';
-import { Activity, Pause, Play, Trash2, Search, Filter, X } from 'lucide-react';
+import { Activity, Pause, Play, Trash2, Search, Filter, X, Download } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -202,10 +202,21 @@ export default function LiveLogsPage() {
   const [fieldFilters, setFieldFilters] = useState<FieldFilter[]>([]);
   const [addField, setAddField]       = useState(FILTERABLE_FIELDS[0].key);
   const [addValue, setAddValue]       = useState('');
+  const [epsRate, setEpsRate]         = useState(0);
 
-  const wsRef     = useRef<WebSocket | null>(null);
+  const wsRef      = useRef<WebSocket | null>(null);
+  const epsCountRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(false);
+
+  // EPS (events per second) ticker — resets every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setEpsRate(epsCountRef.current);
+      epsCountRef.current = 0;
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     agentsAPI.getAll().then(r => {
@@ -268,6 +279,7 @@ export default function LiveLogsPage() {
           fields,
         };
 
+        epsCountRef.current += 1;
         setLogs(prev => {
           const next = [...prev, entry];
           return next.length > MAX_LOGS ? next.slice(next.length - MAX_LOGS) : next;
@@ -361,9 +373,25 @@ export default function LiveLogsPage() {
               placeholder="Filter message text…" className="g-input pl-8" style={{ fontSize: 12 }} />
           </div>
 
+          <span className="text-xs font-mono" style={{ color: connected && epsRate > 0 ? 'var(--green)' : 'var(--text-3)' }}>
+            {epsRate} EPS
+          </span>
+
           <span className="text-xs" style={{ color: 'var(--text-3)' }}>
             {filtered.length}/{logs.length}
           </span>
+
+          {logs.length > 0 && (
+            <button onClick={() => {
+              const ndjson = logs.map(l => JSON.stringify({ ts: l.ts, source: l.source, message: l.message, fields: l.fields })).join('\n');
+              const blob = new Blob([ndjson], { type: 'application/x-ndjson' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = 'live-logs.ndjson'; a.click();
+              URL.revokeObjectURL(url);
+            }} className="g-btn g-btn-ghost text-xs">
+              <Download className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* ── Field filter panel ────────────────────────────────── */}

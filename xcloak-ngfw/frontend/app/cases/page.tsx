@@ -7,8 +7,10 @@ import { Case, CaseComment, CaseEvidence, Alert } from '@/types';
 import {
   Plus, X, ChevronDown, ChevronRight, MessageSquare, Paperclip,
   AlertCircle, Clock, CheckCircle2, Shield, Target, RefreshCw,
-  User, Tag, FileText, Link2,
+  User, Tag, FileText, Link2, Download,
 } from 'lucide-react';
+
+const PHASE_ORDER = ['identification','containment','eradication','recovery','lessons_learned','closed'];
 
 // ─── Severity / Status / Phase helpers ───────────────────────────────────────
 const SEV_COLOR: Record<string, string> = {
@@ -406,12 +408,33 @@ export default function CasesPage() {
   const criticalCount = cases.filter(c => c.severity === 'critical' && c.status !== 'closed').length;
   const breachedCount = cases.filter(c => c.sla_breached).length;
 
+  const exportCSV = () => {
+    const headers = ['ID','Title','Severity','Status','Phase','Assigned','SLA Breached','Alerts','Created'];
+    const rows = cases.map(c => [
+      c.id, c.title, c.severity, c.status, c.phase,
+      c.assigned_to_name || '', c.sla_breached ? 'yes' : 'no',
+      c.alert_count, c.created_at,
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'cases.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <RootLayout title="Case Management" subtitle="IR Lifecycle · SLA Tracking · Evidence Chain"
       actions={
-        <button onClick={() => setShowCreate(true)} className="g-btn g-btn-primary flex items-center gap-1.5 text-xs">
-          <Plus className="h-3.5 w-3.5" /> Open Case
-        </button>
+        <div className="flex items-center gap-2">
+          {cases.length > 0 && (
+            <button onClick={exportCSV} className="g-btn g-btn-ghost text-xs">
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+          )}
+          <button onClick={() => setShowCreate(true)} className="g-btn g-btn-primary flex items-center gap-1.5 text-xs">
+            <Plus className="h-3.5 w-3.5" /> Open Case
+          </button>
+        </div>
       }>
 
       {/* Stats bar */}
@@ -488,7 +511,15 @@ export default function CasesPage() {
                       {STATUS_ICON[c.status]} {c.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--text-2)' }}>{c.phase}</td>
+                  <td className="px-4 py-3">
+                    <p className="text-[10px] capitalize mb-1" style={{ color: 'var(--text-2)' }}>{c.phase}</p>
+                    <div className="flex gap-0.5">
+                      {PHASE_ORDER.map((ph, i) => {
+                        const done = PHASE_ORDER.indexOf(c.phase) >= i;
+                        return <div key={ph} className="flex-1 h-1 rounded-sm" style={{ background: done ? 'var(--accent)' : 'var(--glass-bg-2)' }} />;
+                      })}
+                    </div>
+                  </td>
                   <td className="px-4 py-3" style={{ color: 'var(--text-2)' }}>{c.assigned_to_name || '—'}</td>
                   <td className="px-4 py-3"><SLABadge c={c} /></td>
                   <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--text-2)' }}>{c.alert_count}</td>
