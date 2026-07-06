@@ -7,8 +7,18 @@ import { SigmaRule, SigmaRuleStat } from '@/types';
 import { sevClass } from '@/lib/utils';
 import {
   FileCode, Plus, Trash2, Edit2, X, TestTube,
-  ToggleLeft, ToggleRight, Search, Info, Upload, BarChart2
+  ToggleLeft, ToggleRight, Search, Info, Upload, BarChart2, Copy
 } from 'lucide-react';
+
+const MITRE_TACTICS_SHORT = [
+  ['Recon', 'Reconnaissance'], ['Res Dev', 'Resource Development'],
+  ['Init Acc', 'Initial Access'], ['Exec', 'Execution'],
+  ['Persist', 'Persistence'], ['PrivEsc', 'Privilege Escalation'],
+  ['Def Eva', 'Defense Evasion'], ['Cred Acc', 'Credential Access'],
+  ['Discov', 'Discovery'], ['Lat Mov', 'Lateral Movement'],
+  ['Collect', 'Collection'], ['C2', 'Command and Control'],
+  ['Exfil', 'Exfiltration'], ['Impact', 'Impact'],
+] as const;
 
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const STATUSES   = ['stable', 'test', 'experimental', 'deprecated'];
@@ -45,6 +55,7 @@ export default function SigmaRulesPage() {
   const [toast,      setToast]      = useState<string | null>(null);
   const [importing,  setImporting]  = useState(false);
   const [importLog,  setImportLog]  = useState<string | null>(null);
+  const [sevFilter,  setSevFilter]  = useState('');
 
   const [testMsg,  setTestMsg]  = useState('');
   const [testRes,  setTestRes]  = useState<any>(null);
@@ -137,8 +148,19 @@ export default function SigmaRulesPage() {
     finally { setSaving(false); }
   };
 
-  const del    = async (id: number) => { await sigmaAPI.delete(id); setRules(p => p.filter(r => r.id !== id)); notify('Rule deleted'); };
-  const toggle = async (r: SigmaRule) => {
+  const del       = async (id: number) => { await sigmaAPI.delete(id); setRules(p => p.filter(r => r.id !== id)); notify('Rule deleted'); };
+  const duplicate = async (r: SigmaRule) => {
+    try {
+      const payload = {
+        title: `${r.title} (copy)`, description: r.description, status: r.status, severity: r.severity,
+        mitre_tactic: r.mitre_tactic, mitre_technique: r.mitre_technique, mitre_name: r.mitre_name,
+        logsource_cat: r.logsource_cat, logsource_prod: r.logsource_prod, logsource_svc: r.logsource_svc,
+        tags: r.tags, keywords: r.keywords, selections: r.selections, condition: r.condition, enabled: false,
+      };
+      await sigmaAPI.create(payload); load(); notify('Rule duplicated (disabled by default)');
+    } catch { notify('Duplication failed'); }
+  };
+  const toggle    = async (r: SigmaRule) => {
     r.enabled ? await sigmaAPI.disable(r.id) : await sigmaAPI.enable(r.id);
     setRules(p => p.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
   };
@@ -175,6 +197,7 @@ export default function SigmaRulesPage() {
 
   // ── filtering ─────────────────────────────────────────────────────────────
   const filtered = rules.filter(r => {
+    if (sevFilter && r.severity !== sevFilter) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -273,6 +296,45 @@ export default function SigmaRulesPage() {
           </div>
         )}
 
+        {/* MITRE ATT&CK coverage matrix */}
+        {rules.length > 0 && (() => {
+          const coveredTactics = new Set(rules.filter(r => r.enabled && r.mitre_tactic).map(r => r.mitre_tactic!.toLowerCase()));
+          return (
+            <div className="g-card p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <FileCode className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                  MITRE ATT&CK Coverage ({coveredTactics.size}/14 tactics)
+                </p>
+              </div>
+              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+                {MITRE_TACTICS_SHORT.map(([short, full]) => {
+                  const covered = coveredTactics.has(full.toLowerCase());
+                  return (
+                    <div key={full} title={`${full}: ${covered ? 'covered' : 'no coverage'}`}
+                      className="flex items-center justify-center rounded-lg text-[9px] font-bold text-center leading-tight py-2 px-1"
+                      style={{
+                        background: covered ? 'rgba(52,211,153,0.12)' : 'var(--bg-0)',
+                        border: `1px solid ${covered ? 'rgba(52,211,153,0.4)' : 'var(--border)'}`,
+                        color: covered ? 'var(--green)' : 'var(--text-3)',
+                      }}>
+                      {short}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-3 mt-2 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: 'rgba(52,211,153,0.4)' }} /> Covered
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: 'var(--border)' }} /> No coverage
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Test panel */}
         <div className="g-card p-4">
           <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>Test Rules Against Log</p>
@@ -296,11 +358,26 @@ export default function SigmaRulesPage() {
           )}
         </div>
 
-        {/* Search */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search title, description, MITRE, tags, product…" className="g-input pl-9" />
+        {/* Search + severity filter */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search title, description, MITRE, tags, product…" className="g-input pl-9" />
+          </div>
+          <div className="flex gap-1">
+            {['', ...SEVERITIES].map(s => (
+              <button key={s || 'all'} onClick={() => setSevFilter(s)}
+                className="px-3 py-1.5 text-xs rounded-lg capitalize transition-all"
+                style={{
+                  background: sevFilter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                  border: `1px solid ${sevFilter === s ? 'var(--accent-border)' : 'var(--border)'}`,
+                  color: sevFilter === s ? 'var(--accent)' : 'var(--text-2)',
+                }}>
+                {s || 'all'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Rules table */}
@@ -378,12 +455,17 @@ export default function SigmaRulesPage() {
 
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => openEdit(r)} className="p-1 rounded" style={{ color: 'var(--text-3)' }}
+                  <button onClick={() => duplicate(r)} title="Duplicate rule" className="p-1 rounded" style={{ color: 'var(--text-3)' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => openEdit(r)} title="Edit rule" className="p-1 rounded" style={{ color: 'var(--text-3)' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
                     <Edit2 className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={() => del(r.id)} className="p-1 rounded" style={{ color: 'var(--text-3)' }}
+                  <button onClick={() => del(r.id)} title="Delete rule" className="p-1 rounded" style={{ color: 'var(--text-3)' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
                     <Trash2 className="h-3.5 w-3.5" />

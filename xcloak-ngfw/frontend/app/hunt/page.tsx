@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import api from '@/lib/api';
-import { Search, Play, Save, Trash2, Clock, ChevronDown, ChevronRight, Shield } from 'lucide-react';
+import { Search, Play, Save, Trash2, Clock, ChevronDown, ChevronRight, Shield, Download, Cpu, Calendar, Zap } from 'lucide-react';
+import { agentsAPI } from '@/lib/api';
+import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
 
 const QUERY_TYPES = [
@@ -53,6 +55,12 @@ export default function HuntPage() {
   const [saved, setSaved]         = useState<SavedQuery[]>([]);
   const [expanded, setExpanded]   = useState<number | null>(null);
   const [toast, setToast]         = useState<string | null>(null);
+  const [agents, setAgents]       = useState<Agent[]>([]);
+  const [agentFilter, setAgentFilter] = useState('');
+  const [timeRange, setTimeRange]  = useState('24h');
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [promoteModal, setPromoteModal] = useState(false);
+  const [promoteName, setPromoteName]  = useState('');
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -61,17 +69,23 @@ export default function HuntPage() {
   }, []);
 
   useEffect(() => { loadSaved(); }, [loadSaved]);
+  useEffect(() => {
+    agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
+  }, []);
 
   const run = async (type = queryType, text = queryText, saveIt = false) => {
     if (!text.trim()) return;
     setRunning(true);
     setResult(null);
+    setExpandedRow(null);
     try {
       const r = await api.post('/hunt/run', {
         query_type: type,
         query_text: text,
         save:       saveIt && saveName.trim() !== '',
         name:       saveName || `${type}: ${text}`,
+        agent_id:   agentFilter ? parseInt(agentFilter) : undefined,
+        time_range: timeRange,
       });
       setResult(r.data);
       if (saveIt) { setSaveName(''); loadSaved(); notify('Query saved'); }
@@ -80,6 +94,33 @@ export default function HuntPage() {
     } finally {
       setRunning(false);
     }
+  };
+
+  const exportResults = () => {
+    if (!result) return;
+    const rows = result.results.map(r => {
+      const data = typeof r.result === 'string' ? JSON.parse(r.result) : r.result;
+      return JSON.stringify({ agent_id: r.agent_id, ...data });
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'application/x-ndjson' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `hunt-${queryType}-${Date.now()}.ndjson`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const promoteToRule = async () => {
+    if (!promoteName.trim()) return;
+    try {
+      await api.post('/sigma-rules/from-hunt', {
+        name: promoteName,
+        query_type: queryType,
+        query_text: queryText,
+      });
+      notify('Detection rule created — see Sigma Rules');
+      setPromoteModal(false);
+      setPromoteName('');
+    } catch { notify('Promotion failed'); }
   };
 
   const rerun = async (q: SavedQuery) => {
@@ -132,8 +173,8 @@ export default function HuntPage() {
           </div>
 
           {/* Search input */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
+          <div className="flex gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
               <input value={queryText}
                 onChange={e => setQueryText(e.target.value)}
@@ -141,9 +182,29 @@ export default function HuntPage() {
                 placeholder={selectedType?.hint || 'Search term…'}
                 className="g-input pl-9 w-full font-mono" />
             </div>
+            {/* Agent filter */}
+            <div className="relative">
+              <Cpu className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+              <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)}
+                className="g-select pl-8 text-xs" style={{ minWidth: 140 }}>
+                <option value="">All Agents</option>
+                {agents.map(a => <option key={a.id} value={String(a.id)}>{a.hostname}</option>)}
+              </select>
+            </div>
+            {/* Time range */}
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+              <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
+                className="g-select pl-8 text-xs" style={{ minWidth: 110 }}>
+                <option value="1h">Last 1h</option>
+                <option value="24h">Last 24h</option>
+                <option value="7d">Last 7d</option>
+                <option value="30d">Last 30d</option>
+              </select>
+            </div>
             <input value={saveName} onChange={e => setSaveName(e.target.value)}
               placeholder="Save as… (optional)"
-              className="g-input" style={{ width: 180 }} />
+              className="g-input" style={{ width: 160 }} />
             <button onClick={() => run(queryType, queryText, saveName.trim() !== '')}
               disabled={running || !queryText.trim()}
               className="g-btn g-btn-primary text-xs gap-2">
@@ -173,7 +234,7 @@ export default function HuntPage() {
         {/* Results */}
         {result && (
           <div className="g-card overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3"
+            <div className="flex items-center justify-between px-5 py-3 flex-wrap gap-2"
               style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
@@ -186,9 +247,24 @@ export default function HuntPage() {
                   <span className="text-xs" style={{ color: 'var(--green)' }}>✓ No matches — clean</span>
                 )}
               </div>
-              <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
-                {queryType}: {queryText}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                  {queryType}: {queryText}
+                </span>
+                {result.hits > 0 && (
+                  <>
+                    <button onClick={exportResults}
+                      className="g-btn g-btn-ghost text-[11px] flex items-center gap-1">
+                      <Download className="h-3 w-3" /> Export
+                    </button>
+                    <button onClick={() => { setPromoteName(`Detect: ${queryText}`); setPromoteModal(true); }}
+                      className="g-btn text-[11px] flex items-center gap-1"
+                      style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)' }}>
+                      <Zap className="h-3 w-3" /> Promote to Rule
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {result.hits > 0 && (
@@ -208,21 +284,37 @@ export default function HuntPage() {
                   <tbody>
                     {result.results.slice(0, 100).map((r, i) => {
                       const data = typeof r.result === 'string' ? JSON.parse(r.result) : r.result;
+                      const isExp = expandedRow === i;
                       return (
-                        <tr key={i} className="border-b transition-colors"
-                          style={{ borderColor: 'var(--border)' }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-bg)'}
-                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}>
-                          <td className="px-4 py-2 font-mono" style={{ color: 'var(--accent)' }}>
-                            {data.hostname || `#${r.agent_id}`}
-                          </td>
-                          {resultKeys.slice(0, 5).map(k => (
-                            <td key={k} className="px-4 py-2 max-w-[200px] truncate"
-                              style={{ color: 'var(--text-1)' }}>
-                              {String(data[k] ?? '—')}
+                        <>
+                          <tr key={i} className="border-b transition-colors cursor-pointer"
+                            style={{ borderColor: 'var(--border)' }}
+                            onClick={() => setExpandedRow(isExp ? null : i)}
+                            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-bg)'}
+                            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}>
+                            <td className="px-4 py-2 font-mono" style={{ color: 'var(--accent)' }}>
+                              {data.hostname || `#${r.agent_id}`}
                             </td>
-                          ))}
-                        </tr>
+                            {resultKeys.slice(0, 5).map(k => (
+                              <td key={k} className="px-4 py-2 max-w-[200px] truncate"
+                                style={{ color: 'var(--text-1)' }}>
+                                {String(data[k] ?? '—')}
+                              </td>
+                            ))}
+                          </tr>
+                          {isExp && (
+                            <tr key={`${i}-exp`} style={{ borderColor: 'var(--border)' }}>
+                              <td colSpan={resultKeys.slice(0, 5).length + 1}
+                                className="px-4 py-3"
+                                style={{ background: 'var(--bg-0)' }}>
+                                <pre className="text-[10px] font-mono overflow-x-auto"
+                                  style={{ color: 'var(--text-2)' }}>
+                                  {JSON.stringify(data, null, 2)}
+                                </pre>
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       );
                     })}
                   </tbody>
@@ -271,6 +363,44 @@ export default function HuntPage() {
           </div>
         )}
       </div>
+      {/* Promote to rule modal */}
+      {promoteModal && (
+        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setPromoteModal(false)}>
+          <div className="g-modal" style={{ maxWidth: 440 }}>
+            <div className="flex items-center justify-between p-5"
+              style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4" style={{ color: '#a855f7' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Promote to Detection Rule
+                </p>
+              </div>
+              <button onClick={() => setPromoteModal(false)} style={{ color: 'var(--text-3)' }}>
+                <Search className="h-4 w-4 rotate-45" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-xl p-3 mono text-[11px]"
+                style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                {queryType}: {queryText}
+              </div>
+              <div>
+                <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>Rule Name</label>
+                <input value={promoteName} onChange={e => setPromoteName(e.target.value)}
+                  className="g-input w-full" placeholder="e.g. Detect Reverse Shell" />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setPromoteModal(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+                <button onClick={promoteToRule}
+                  className="g-btn flex-1 justify-center"
+                  style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)' }}>
+                  <Zap className="h-3.5 w-3.5" /> Create Rule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </RootLayout>
   );
 }

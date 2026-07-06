@@ -7,11 +7,58 @@ import { alertsAPI, aiAPI, agentsAPI, investigateAPI } from '@/lib/api';
 import { Alert, Agent, InvestigationContext, PlaybookRecommendation } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check } from 'lucide-react';
+import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check, Clock, Download, VolumeX, FileText } from 'lucide-react';
 import api from '@/lib/api';
 
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
 const PER_PAGE = 50;
+
+// SLA thresholds (hours until critical/high should be acknowledged)
+const SLA_HOURS: Record<string, number> = { critical: 1, high: 4, medium: 24, low: 72 };
+
+// MITRE kill-chain order for the stage strip
+const KILL_CHAIN = [
+  'Reconnaissance', 'Resource Development', 'Initial Access', 'Execution',
+  'Persistence', 'Privilege Escalation', 'Defense Evasion', 'Credential Access',
+  'Discovery', 'Lateral Movement', 'Collection', 'Command and Control',
+  'Exfiltration', 'Impact',
+];
+const KILL_CHAIN_SHORT: Record<string, string> = {
+  'Reconnaissance': 'Recon', 'Resource Development': 'Res Dev',
+  'Initial Access': 'Init', 'Execution': 'Exec',
+  'Persistence': 'Persist', 'Privilege Escalation': 'PrivEsc',
+  'Defense Evasion': 'DefEva', 'Credential Access': 'CredAcc',
+  'Discovery': 'Discov', 'Lateral Movement': 'LatMov',
+  'Collection': 'Collect', 'Command and Control': 'C2',
+  'Exfiltration': 'Exfil', 'Impact': 'Impact',
+};
+
+function isSlaBreach(a: Alert): boolean {
+  if (a.status !== 'open') return false;
+  const slaH = SLA_HOURS[a.severity];
+  if (!slaH) return false;
+  const ageH = (Date.now() - new Date(a.created_at).getTime()) / 3_600_000;
+  return ageH > slaH;
+}
+
+function exportCSV(alerts: Alert[]) {
+  const header = ['id','agent','rule','severity','tactic','technique','status','created_at'].join(',');
+  const rows = alerts.map(a => [
+    a.id,
+    `"${(a.hostname || String(a.agent_id)).replace(/"/g, '""')}"`,
+    `"${a.rule_name.replace(/"/g, '""')}"`,
+    a.severity,
+    a.mitre_tactic || '',
+    a.mitre_technique || '',
+    a.status || 'open',
+    a.created_at,
+  ].join(','));
+  const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `xcloak-alerts-${Date.now()}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
 
 interface PagedResult {
   alerts: Alert[];
@@ -58,6 +105,14 @@ export default function AlertsPage() {
   const [responsePID, setResponsePID] = useState('');
   const [responseFile, setResponseFile] = useState('');
   const [toast, setToast]         = useState<string | null>(null);
+
+  // Analyst note
+  const [noteText, setNoteText]   = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  // Rule suppression
+  const [suppressHours, setSuppressHours] = useState('4');
+  const [suppressing, setSuppressing]     = useState(false);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -131,10 +186,36 @@ export default function AlertsPage() {
     setTriage(null);
     setInvestigation(null);
     setPbRecs([]);
+    setNoteText(a.note || '');
     // Auto-triage if no AI data yet
     if (!a.ai_summary) runTriage(a.id);
     runInvestigation(a.id);
     loadPlaybookRecs(a.id);
+  };
+
+  const saveNote = async () => {
+    if (!selected) return;
+    setSavingNote(true);
+    try {
+      await api.patch(`/alerts/${selected.id}/note`, { note: noteText });
+      notify('Note saved');
+      setSelected({ ...selected, note: noteText });
+    } catch { notify('Failed to save note'); }
+    finally { setSavingNote(false); }
+  };
+
+  const suppressRule = async () => {
+    if (!selected) return;
+    setSuppressing(true);
+    try {
+      await api.post('/sigma-rules/suppress', {
+        rule_name: selected.rule_name,
+        agent_id: selected.agent_id,
+        hours: parseInt(suppressHours),
+      });
+      notify(`Rule muted for ${suppressHours}h`);
+    } catch { notify('Suppression failed — check rule config'); }
+    finally { setSuppressing(false); }
   };
 
   const runTriage = async (id: number) => {
@@ -267,6 +348,13 @@ export default function AlertsPage() {
               <X className="h-3 w-3" /> Clear filters
             </button>
           )}
+
+          {/* Export */}
+          <button onClick={() => exportCSV(filtered)}
+            className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+            style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </button>
         </div>
 
         {/* Bulk action bar */}
@@ -357,7 +445,10 @@ export default function AlertsPage() {
                 {a.mitre_tactic || '—'}
               </span>
               <span className={sevClass(a.severity)}>{a.severity}</span>
-              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</span>
+              <span className="flex items-center gap-1 text-[11px]" style={{ color: isSlaBreach(a) ? 'var(--red)' : 'var(--text-3)' }}>
+                {isSlaBreach(a) && <span title={`SLA breach — ${SLA_HOURS[a.severity]}h unacknowledged`}><Clock className="h-3 w-3" /></span>}
+                {timeAgo(a.created_at)}
+              </span>
               <ChevronRight className="h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
             </div>
           ))}
@@ -481,6 +572,101 @@ export default function AlertsPage() {
                   </div>
                 </div>
               )}
+
+              {/* SLA breach banner */}
+              {selected.status === 'open' && isSlaBreach(selected) && (
+                <div className="rounded-xl px-3 py-2.5 flex items-center gap-2"
+                  style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)' }}>
+                  <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--red)' }} />
+                  <p className="text-[11px]" style={{ color: 'var(--red)' }}>
+                    SLA breach — {selected.severity} alerts must be acknowledged within {SLA_HOURS[selected.severity]}h.
+                  </p>
+                </div>
+              )}
+
+              {/* MITRE Kill-Chain stage strip */}
+              {selected.mitre_tactic && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+                    Kill-Chain Position
+                  </p>
+                  <div className="flex gap-0.5 overflow-x-auto pb-1">
+                    {KILL_CHAIN.map((stage, i) => {
+                      const active = stage.toLowerCase() === selected.mitre_tactic?.toLowerCase();
+                      return (
+                        <div key={stage} title={stage}
+                          className="flex flex-col items-center shrink-0"
+                          style={{ minWidth: 34 }}>
+                          <div className="w-full h-5 flex items-center justify-center rounded text-[8px] font-bold transition-all"
+                            style={{
+                              background: active ? 'var(--red)' : i < KILL_CHAIN.indexOf(selected.mitre_tactic || '') ? 'rgba(248,81,73,0.2)' : 'var(--glass-bg)',
+                              border: `1px solid ${active ? 'var(--red)' : 'var(--border)'}`,
+                              color: active ? '#fff' : 'var(--text-3)',
+                            }}>
+                            {KILL_CHAIN_SHORT[stage] ?? stage.slice(0, 4)}
+                          </div>
+                          {i < KILL_CHAIN.length - 1 && (
+                            <div style={{ width: '100%', height: 1, background: 'var(--border)', marginTop: 8 }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Analyst Note */}
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-4 py-3 flex items-center gap-2"
+                  style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                  <FileText className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Analyst Note</p>
+                </div>
+                <div className="p-3 space-y-2">
+                  <textarea
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    placeholder="Add investigation notes, timeline, or remediation steps…"
+                    rows={3}
+                    className="g-input w-full text-xs resize-none"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  />
+                  <button onClick={saveNote} disabled={savingNote}
+                    className="g-btn g-btn-ghost text-xs flex items-center gap-1">
+                    {savingNote ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Save Note
+                  </button>
+                </div>
+              </div>
+
+              {/* Rule Suppression */}
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                <div className="px-4 py-3 flex items-center gap-2"
+                  style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                  <VolumeX className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} />
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Suppress Rule</p>
+                </div>
+                <div className="p-3 flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>
+                      Mute "{selected.rule_name}" for
+                    </label>
+                    <select value={suppressHours} onChange={e => setSuppressHours(e.target.value)}
+                      className="g-select w-full text-xs">
+                      <option value="1">1 hour</option>
+                      <option value="4">4 hours</option>
+                      <option value="24">24 hours</option>
+                      <option value="72">72 hours</option>
+                    </select>
+                  </div>
+                  <button onClick={suppressRule} disabled={suppressing}
+                    className="g-btn text-xs flex items-center gap-1 shrink-0"
+                    style={{ background: 'rgba(251,146,60,0.1)', color: 'var(--orange)', border: '1px solid rgba(251,146,60,0.3)' }}>
+                    {suppressing ? <Loader2 className="h-3 w-3 animate-spin" /> : <VolumeX className="h-3 w-3" />}
+                    Mute
+                  </button>
+                </div>
+              </div>
 
               {/* AI Triage section */}
               <div>

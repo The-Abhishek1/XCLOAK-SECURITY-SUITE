@@ -7,7 +7,7 @@ import { agentsAPI, tasksAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart, Key, Copy, Check, Terminal, ShieldCheck, ArrowRight, RefreshCw } from 'lucide-react';
+import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart, Key, Copy, Check, Terminal, ShieldCheck, ArrowRight, RefreshCw, Activity, ShieldOff, Monitor } from 'lucide-react';
 
 interface AgentHealth {
   agent_id: number;
@@ -56,6 +56,8 @@ export default function AgentsPage() {
   const [tasks, setTasks]       = useState<TaskItem[]>([{ id: '1', task_type: 'collect_processes', payload_value: '' }]);
   const [dispatching, setDispatching] = useState(false);
   const [toast, setToast]       = useState<string | null>(null);
+  const [statusTab, setStatusTab] = useState<'all' | 'online' | 'offline'>('all');
+  const [isolating, setIsolating] = useState<number | null>(null);
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
@@ -108,10 +110,24 @@ export default function AgentsPage() {
     setTasks([{ id: '1', task_type: 'collect_processes', payload_value: '' }]);
   };
 
-  const filtered = agents.filter(a =>
-    !search || a.hostname?.toLowerCase().includes(search.toLowerCase())
-      || a.ip_address?.includes(search) || a.os?.toLowerCase().includes(search.toLowerCase())
-  );
+  const isolateAgent = async (agent: Agent) => {
+    if (!confirm(`Isolate ${agent.hostname}? This will block all network traffic except to the XCloak server.`)) return;
+    setIsolating(agent.id);
+    try {
+      await tasksAPI.create({ agent_id: agent.id, task_type: 'isolate_host', payload: {} });
+      notify(`Isolation task dispatched to ${agent.hostname}`);
+    } catch { notify('Isolation dispatch failed'); }
+    finally { setIsolating(null); }
+  };
+
+  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 4000); };
+
+  const filtered = agents
+    .filter(a => statusTab === 'all' ? true : statusTab === 'online' ? a.status === 'online' : a.status !== 'online')
+    .filter(a =>
+      !search || a.hostname?.toLowerCase().includes(search.toLowerCase())
+        || a.ip_address?.includes(search) || a.os?.toLowerCase().includes(search.toLowerCase())
+    );
 
   const online = agents.filter(a => a.status === 'online').length;
 
@@ -128,10 +144,31 @@ export default function AgentsPage() {
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)', minWidth: 240 }}>{toast}</div>}
 
       <div className="space-y-4">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search hostname, IP, OS…" className="g-input pl-9" />
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search hostname, IP, OS…" className="g-input pl-9" />
+          </div>
+
+          {/* Status tabs */}
+          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {(['all', 'online', 'offline'] as const).map(tab => {
+              const count = tab === 'all' ? agents.length : agents.filter(a => tab === 'online' ? a.status === 'online' : a.status !== 'online').length;
+              return (
+                <button key={tab} onClick={() => setStatusTab(tab)}
+                  className="px-3 py-1.5 text-[11px] font-semibold capitalize transition-all flex items-center gap-1.5"
+                  style={{
+                    background: statusTab === tab ? 'var(--accent)' : 'transparent',
+                    color: statusTab === tab ? '#fff' : 'var(--text-3)',
+                  }}>
+                  {tab === 'online' && <span className="h-1.5 w-1.5 rounded-full bg-green-400" />}
+                  {tab === 'offline' && <span className="h-1.5 w-1.5 rounded-full bg-gray-500" />}
+                  {tab} <span className="opacity-70">({count})</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {loading ? (
@@ -189,26 +226,39 @@ export default function AgentsPage() {
                         )}
                       </div>
                     )}
-                    {/* Health score */}
+                    {/* Health score + alert rate */}
                     {health.has(agent.id) && (() => {
                       const h = health.get(agent.id)!;
                       const color = h.health_score >= 80 ? 'var(--green)' : h.health_score >= 50 ? 'var(--orange)' : 'var(--red)';
                       return (
-                        <div className="flex justify-between items-center mt-2 pt-2"
-                          style={{ borderTop: '1px solid var(--border)' }}>
-                          <div className="flex items-center gap-1">
-                            <Heart className="h-3 w-3" style={{ color }} />
-                            <span style={{ color: 'var(--text-3)' }}>Health</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                              <div className="h-full rounded-full transition-all"
-                                style={{ width: `${h.health_score}%`, background: color }} />
+                        <div className="space-y-1.5 mt-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-1">
+                              <Heart className="h-3 w-3" style={{ color }} />
+                              <span style={{ color: 'var(--text-3)' }}>Health</span>
                             </div>
-                            <span className="font-bold tabular-nums text-[11px]" style={{ color }}>
-                              {h.health_score}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                                <div className="h-full rounded-full transition-all"
+                                  style={{ width: `${h.health_score}%`, background: color }} />
+                              </div>
+                              <span className="font-bold tabular-nums text-[11px]" style={{ color }}>
+                                {h.health_score}
+                              </span>
+                            </div>
                           </div>
+                          {h.alert_rate_1h > 0 && (
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-1">
+                                <Activity className="h-3 w-3" style={{ color: 'var(--orange)' }} />
+                                <span style={{ color: 'var(--text-3)' }}>Alert rate</span>
+                              </div>
+                              <span className="text-[11px] font-bold tabular-nums"
+                                style={{ color: h.alert_rate_1h > 10 ? 'var(--red)' : 'var(--orange)' }}>
+                                {h.alert_rate_1h}/h
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -219,6 +269,16 @@ export default function AgentsPage() {
                     className="g-btn g-btn-ghost text-xs" style={{ fontSize: 11 }}>
                     <Play className="h-3 w-3" /> Tasks
                   </button>
+                  {agent.status === 'online' && (
+                    <button
+                      onClick={() => isolateAgent(agent)}
+                      disabled={isolating === agent.id}
+                      title="Network isolate this agent"
+                      className="g-btn text-xs"
+                      style={{ background: 'rgba(248,81,73,0.08)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.25)', fontSize: 11 }}>
+                      <ShieldOff className="h-3 w-3" />
+                    </button>
+                  )}
                   <div className="flex-1" />
                   <Link href={`/agents/${agent.id}`}
                     className="g-btn text-xs"

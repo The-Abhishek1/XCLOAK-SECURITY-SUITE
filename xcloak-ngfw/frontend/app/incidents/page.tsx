@@ -9,8 +9,25 @@ import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import Link from 'next/link';
 import {
   AlertTriangle, X, Clock, Bot, Loader2,
-  MessageSquare, Send, ChevronRight,
+  MessageSquare, Send, ChevronRight, Bell, TrendingUp,
 } from 'lucide-react';
+
+// SLA in hours per severity
+const INCIDENT_SLA: Record<string, number> = { critical: 4, high: 8, medium: 48, low: 120 };
+
+function incidentSlaBreach(inc: { severity: string; status: string; created_at: string }): boolean {
+  if (inc.status === 'resolved' || inc.status === 'closed') return false;
+  const slaH = INCIDENT_SLA[inc.severity];
+  if (!slaH) return false;
+  return (Date.now() - new Date(inc.created_at).getTime()) / 3_600_000 > slaH;
+}
+
+function slaLabel(sev: string, created_at: string): string {
+  const slaH = INCIDENT_SLA[sev] ?? 0;
+  const ageH = (Date.now() - new Date(created_at).getTime()) / 3_600_000;
+  const overH = Math.round(ageH - slaH);
+  return `SLA breached by ${overH}h (${slaH}h target for ${sev})`;
+}
 
 const STATUSES = ['open','investigating','resolved','closed'] as const;
 
@@ -39,6 +56,10 @@ export default function IncidentsPage() {
   const [total, setTotal]           = useState(0);
   const PER_PAGE = 25;
 
+  const [linkedAlerts, setLinkedAlerts] = useState<any[]>([]);
+  const [linkedLoading, setLinkedLoading] = useState(false);
+  const [escalating, setEscalating] = useState(false);
+
   const load = useCallback(async (p = page, status = filter, spin = false) => {
     if (spin) setRefreshing(true);
     try {
@@ -58,9 +79,33 @@ export default function IncidentsPage() {
     setSelected(inc);
     setAiSummary(null);
     setNote('');
+    setLinkedAlerts([]);
     setEvLoading(true);
-    try { const r = await incidentsAPI.getEvents(inc.id); setEvents(r.data || []); }
-    finally { setEvLoading(false); }
+    setLinkedLoading(true);
+    try {
+      const [evR, alR] = await Promise.allSettled([
+        incidentsAPI.getEvents(inc.id),
+        api.get(`/incidents/${inc.id}/alerts`).catch(() => ({ data: [] })),
+      ]);
+      if (evR.status === 'fulfilled') setEvents(evR.value.data || []);
+      if (alR.status === 'fulfilled') setLinkedAlerts(alR.value.data || []);
+    } finally { setEvLoading(false); setLinkedLoading(false); }
+  };
+
+  const escalateSeverity = async () => {
+    if (!selected) return;
+    const SEV = ['low','medium','high','critical'];
+    const idx = SEV.indexOf(selected.severity);
+    if (idx >= SEV.length - 1) return;
+    const next = SEV[idx + 1] as 'low' | 'medium' | 'high' | 'critical';
+    setEscalating(true);
+    try {
+      await api.patch(`/incidents/${selected.id}/severity`, { severity: next });
+      setSelected({ ...selected, severity: next });
+      setIncidents(p => p.map(i => i.id === selected.id ? { ...i, severity: next } : i));
+      notify(`Escalated to ${next}`);
+    } catch { notify('Escalation failed'); }
+    finally { setEscalating(false); }
   };
 
   const updateStatus = async (id: number, status: string) => {
@@ -196,7 +241,12 @@ export default function IncidentsPage() {
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
 
-              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(inc.created_at)}</span>
+              <span className="flex items-center gap-1 text-[11px]"
+                style={{ color: incidentSlaBreach(inc) ? 'var(--red)' : 'var(--text-3)' }}
+                title={incidentSlaBreach(inc) ? slaLabel(inc.severity, inc.created_at) : undefined}>
+                {incidentSlaBreach(inc) && <Clock className="h-3 w-3 shrink-0" />}
+                {timeAgo(inc.created_at)}
+              </span>
 
               <button onClick={() => openDetail(inc)} style={{ color: 'var(--text-3)' }}>
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -243,6 +293,56 @@ export default function IncidentsPage() {
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
                 {selected.description}
               </p>
+
+              {/* SLA breach banner */}
+              {incidentSlaBreach(selected) && (
+                <div className="rounded-xl px-3 py-2.5 flex items-center gap-2"
+                  style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)' }}>
+                  <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--red)' }} />
+                  <p className="text-[11px]" style={{ color: 'var(--red)' }}>
+                    {slaLabel(selected.severity, selected.created_at)}
+                  </p>
+                  {selected.severity !== 'critical' && (
+                    <button onClick={escalateSeverity} disabled={escalating}
+                      className="ml-auto g-btn text-[10px] flex items-center gap-1 shrink-0"
+                      style={{ background: 'rgba(248,81,73,0.15)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.4)' }}>
+                      {escalating ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
+                      Escalate
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Linked Alerts */}
+              {(linkedLoading || linkedAlerts.length > 0) && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <div className="px-4 py-3 flex items-center gap-2"
+                    style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                    <Bell className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                      Linked Alerts {linkedAlerts.length > 0 ? `(${linkedAlerts.length})` : ''}
+                    </p>
+                  </div>
+                  <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                    {linkedLoading ? (
+                      <div className="px-4 py-3 text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
+                    ) : linkedAlerts.slice(0, 6).map((a: any, i: number) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-2">
+                        <span className="h-1.5 w-1.5 rounded-full shrink-0"
+                          style={{ background: a.severity === 'critical' ? 'var(--red)' : a.severity === 'high' ? 'var(--orange)' : 'var(--yellow)' }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] truncate" style={{ color: 'var(--text-1)' }}>{a.rule_name}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</p>
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase"
+                          style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                          {a.severity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Status update */}
               <div>
@@ -297,6 +397,23 @@ export default function IncidentsPage() {
                       <div className="rounded-xl p-3" style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
                         <p className="text-[10px] mb-1" style={{ color: 'var(--text-3)' }}>Root Cause Hypothesis</p>
                         <p className="text-xs" style={{ color: 'var(--accent)' }}>{aiSummary.root_cause_hint}</p>
+                      </div>
+                    )}
+                    {aiSummary.timeline?.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+                          AI-Inferred Attack Timeline
+                        </p>
+                        <div className="relative pl-4 space-y-2">
+                          <div className="absolute left-1.5 top-0 bottom-0 w-px" style={{ background: 'var(--border)' }} />
+                          {aiSummary.timeline.map((step, i) => (
+                            <div key={i} className="relative">
+                              <div className="absolute -left-3 top-1 h-2 w-2 rounded-full"
+                                style={{ background: 'var(--accent)' }} />
+                              <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>{step}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {aiSummary.recommended_steps?.length > 0 && (

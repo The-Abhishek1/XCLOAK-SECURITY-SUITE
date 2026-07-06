@@ -72,9 +72,16 @@ func DeleteScheduledTask(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "deleted"})
 }
 
-// GetDashboardMetrics — GET /api/dashboard/metrics
+// GetDashboardMetrics — GET /api/dashboard/metrics?range=1h|24h|7d|30d
 func GetDashboardMetrics(c *gin.Context) {
-	metrics, err := services.GetDashboardMetrics(tenantIDFromContext(c))
+	r := c.DefaultQuery("range", "24h")
+	// Allowlist — prevent SQL injection via the interval string interpolation.
+	switch r {
+	case "1h", "24h", "7d", "30d":
+	default:
+		r = "24h"
+	}
+	metrics, err := services.GetDashboardMetrics(tenantIDFromContext(c), r)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
