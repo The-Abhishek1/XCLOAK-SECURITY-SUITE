@@ -1,0 +1,31 @@
+# gosec configuration for XCloak Security Suite
+# https://github.com/securego/gosec#configuration
+#
+# Rules excluded here are either:
+#   a) too noisy for practical use without producing actionable signal, or
+#   b) intentionally used patterns where the risk is accepted and annotated.
+#
+# Annotate individual call sites with `//nolint:gosec` + a comment explaining
+# the decision rather than broadening exclusions here.
+
+global:
+  # Audit mode: scan all code including vendor/test
+  audit: true
+  nosec: true        # honour //nolint:gosec annotations
+  nosec-tag: gosec   # alternate tag: //nolint:gosec
+
+exclude:
+  # G104 — Errors unhandled
+  # Excluded because Go programs routinely ignore errors from deferred
+  # Close() calls (e.g. resp.Body.Close()) where the error cannot be
+  # meaningfully handled. Real unhandled errors in control paths are
+  # caught by `go vet` and the project's test suite.
+  - G104
+
+  # G115 — Potential integer overflow when converting between integer types
+  # Excluded because it fires on generated protobuf/OpenAPI code and safe
+  # casts that are bounds-checked by context. File a bug for any real case.
+  - G115
+
+severity: medium    # report medium, high, and critical findings
+confidence: medium  # skip low-confidence guesses

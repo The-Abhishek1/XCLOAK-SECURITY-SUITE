@@ -1,0 +1,121 @@
+name: security-scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly full scan — Monday 03:00 UTC
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+  security-events: write   # SARIF upload to GitHub Security tab
+
+# ── Secret scanning ───────────────────────────────────────────────────────────
+
+jobs:
+  gitleaks:
+    name: Secret Scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — gitleaks scans all commits
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# ── Go vulnerability check ────────────────────────────────────────────────────
+
+  govulncheck-backend:
+    name: Vuln Check — backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: xcloak-ngfw/backend/go.sum
+
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          work-dir: xcloak-ngfw/backend
+          go-version-input: '1.25'
+
+  govulncheck-agent:
+    name: Vuln Check — Go agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: xcloak-agent/go.sum
+
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          work-dir: xcloak-agent
+          go-version-input: '1.25'
+
+# ── Static security analysis ──────────────────────────────────────────────────
+
+  gosec-backend:
+    name: SAST — backend (gosec)
+    runs-on: ubuntu-latest
+    # Advisory on first introduction: findings surface in GitHub Security tab
+    # without blocking CI. Remove continue-on-error once findings are triaged.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: xcloak-ngfw/backend/go.sum
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec (SARIF output)
+        working-directory: xcloak-ngfw/backend
+        run: gosec -conf ../../.gosec.yaml -fmt sarif -out gosec-backend.sarif -stdout -verbose=text ./...
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: xcloak-ngfw/backend/gosec-backend.sarif
+          category: gosec-backend
+
+  gosec-agent:
+    name: SAST — Go agent (gosec)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: xcloak-agent/go.sum
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec (SARIF output)
+        working-directory: xcloak-agent
+        run: gosec -conf ../.gosec.yaml -fmt sarif -out gosec-agent.sarif -stdout -verbose=text ./...
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: xcloak-agent/gosec-agent.sarif
+          category: gosec-agent

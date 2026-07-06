@@ -1,0 +1,33 @@
+# gitleaks configuration for XCloak Security Suite
+# https://github.com/gitleaks/gitleaks#configuration
+#
+# Add allowlist entries here for patterns that are intentionally
+# placeholder/example values, not real credentials.
+
+title = "XCloak gitleaks config"
+
+[extend]
+# Extend the default ruleset — don't replace it
+useDefault = true
+
+[[allowlists]]
+description = "CI/test placeholder secrets"
+regexes = [
+  # JWT_SECRET value used only in GitHub Actions CI environment
+  '''ci-test-secret-do-not-use-in-prod''',
+  # Metrics token used only in CI
+  '''ci-test-metrics-token''',
+  # Example env values in documentation and .env.example files
+  '''your_password''',
+  '''your_app_password''',
+  '''<openssl rand -hex 32>''',
+  '''xcloak_ci_password''',
+]
+
+[[allowlists]]
+description = "Example and documentation files"
+paths = [
+  '''\.env\.example$''',
+  '''docs/.*\.md$''',
+  '''README\.md$''',
+]
