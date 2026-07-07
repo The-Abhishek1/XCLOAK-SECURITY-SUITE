@@ -727,6 +727,90 @@ Agents built without `-ldflags` skip signature verification (development builds 
 
 ---
 
+## Mobile Agent Deployment (Android)
+
+### Prerequisites
+
+- Flutter 3.24.5 and Java 21 on the build machine
+- Android SDK with a connected device or emulator (API 26+ recommended)
+- A running XCloak backend reachable from the device network
+
+### Build the APK
+
+```bash
+cd xcloak-agent-mobile
+flutter pub get
+flutter build apk --release
+# APK at: build/app/outputs/flutter-apk/app-release.apk
+```
+
+> **Java compatibility**: Flutter 3.24.5 requires Java ≤ 21.
+> `flutter config --jdk-dir=/usr/lib/jvm/java-21-openjdk-amd64`
+
+### Generate an enrollment token
+
+```bash
+curl -X POST http://localhost:8080/api/mdm/enrollment-tokens \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"ttl_hours": 24, "owner_email": "user@company.com"}'
+# Returns: {"token": "enrl_...", "expires_at": "..."}
+```
+
+### Enroll a device
+
+1. Install the APK on the Android device (`adb install app-release.apk`)
+2. Open XCloak Agent → tap **Enroll Device**
+3. Enter the Server URL and the enrollment token
+4. Tap **Enroll** — the device posts a full posture snapshot and receives an agent token
+
+On successful enrollment the backend receives: UDID, model, manufacturer, hardware, OS version, SDK int, security patch, build fingerprint, encryption status, root status, developer options, USB debugging, battery level, storage stats, RAM, network type.
+
+### MDM check-in intervals
+
+| Timer | Default | Env override |
+|-------|---------|-------------|
+| Device check-in | 5 min | not configurable on-device |
+| Command poll | 2 min | not configurable on-device |
+| Log forward | 10 min | not configurable on-device |
+| App inventory | 30 min | not configurable on-device |
+| Threat scan | 15 min | not configurable on-device |
+
+All timers apply up to 30 s of random jitter on their first tick to avoid thundering-herd on fleet-wide reboots.
+
+### Dispatch MDM commands
+
+```bash
+# Trigger an immediate posture refresh
+curl -X POST http://localhost:8080/api/mdm/devices/<device-id>/commands \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"command_type": "collect_posture"}'
+
+# Push a message to the device user
+curl -X POST http://localhost:8080/api/mdm/devices/<device-id>/commands \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"command_type": "message", "payload": {"text": "Please update your OS."}}'
+
+# Rotate the device agent token
+curl -X POST http://localhost:8080/api/mdm/devices/<device-id>/commands \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"command_type": "rotate_token"}'
+```
+
+### Unenroll a device remotely
+
+```bash
+curl -X DELETE http://localhost:8080/api/mdm/devices/<device-id> \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+The device receives a 403 on its next check-in and automatically wipes its credentials from Android Keystore.
+
+---
+
 ## Troubleshooting
 
 ### Backend won't start — migration error

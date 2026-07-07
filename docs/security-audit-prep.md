@@ -168,6 +168,32 @@ All routes are defined in `backend/routes/routes.go`.
 
 - [x] **Heartbeat telemetry was thin** — Previously reported only version, uptime, mem_alloc, goroutines. Linux heartbeat now also includes `load_avg_1m/5m/15m` (from `/proc/loadavg`), `logged_in_users` (via `who`), `open_fds` (from `/proc/sys/fs/file-nr`). Windows heartbeat adds `logged_in_users` (via `query user`) and `cpu_load_pct` (via `wmic cpu`). Platform split via `heartbeat_linux.go` / `heartbeat_windows.go`.
 
+### Gaps — Phase 8 (all closed, 2026-07-07) — Mobile Agent enterprise upgrade
+
+- [x] **Mobile heartbeat was hardcoded / thin** — Background worker now ships an enriched heartbeat on every check-in: `battery_level`, `battery_charging`, `network_type`, `is_rooted`, `developer_mode`, `storage_free_gb`, `storage_total_gb`, `vpn_active`, `os_version`, `security_patch`. Replaces the previous hardcoded `'version': '1.0.0'` payload.
+
+- [x] **DevicePosture model was incomplete** — `DevicePosture` expanded from 8 to 24 fields: added `security_patch_level`, `android_sdk_version`, `manufacturer`, `hardware`, `usb_debugging_enabled`, `unknown_sources_enabled`, `vpn_active`, `battery_level`, `battery_charging`, `network_type`, `wifi_ssid`, `storage_total_gb`, `storage_free_gb`, `ram_total_mb`. All fields sent in check-in PUT and enrollment POST.
+
+- [x] **PostureCollector collected only root + developer mode** — Full rewrite: `_checkRooted()` now also checks for Magisk socket (`/dev/.magisk/mirror`); `_checkUsbDebugging()` reads `adb_enabled` system setting; `_checkUnknownSources()` reads `install_non_market_apps` (API < 26); `_batteryInfo()` parses `dumpsys battery` for level and charge status; `_storageStats()` parses `df /data` for total/free GB; `_ramMb()` reads `/proc/meminfo:MemTotal`; `_networkInfo()` uses `NetworkInterface.list()` for VPN detection + `Connectivity().checkConnectivity()` for type.
+
+- [x] **Enrollment sent minimal device metadata** — `EnrollmentService.enroll()` now sends all posture snapshot fields plus `security_patch_level`, `android_sdk_version`, `manufacturer`, `hardware`, `usb_debugging_enabled`, `unknown_sources_enabled`, `battery_level`, `network_type`, `storage_total_gb`, `storage_free_gb`, `ram_total_mb`, and `build_fingerprint`. Backend has complete device metadata from first check-in.
+
+- [x] **CommandService stubs were no-ops** — `collect_logs` now calls `LogForwarder.forwardBatch()`; `sync` now calls both `collect_posture` and `collect_apps`; new `collect_posture` performs an immediate posture refresh; new `scan_threats` calls `ThreatDetector.threatSummary()` and POSTs to `/api/mdm/devices/$id/threat-scan`; new `rotate_token` calls `/api/mdm/devices/$id/rotate-token` and stores the returned token via `SecureStore.storeAgentToken()`; new `update_agent` stores a pending message with the APK URL; new `message` stores text via `SecureStore.storePendingMessage()`. Every command returns a descriptive result string to the acknowledgment endpoint. Unknown command types return an error string rather than silently succeeding.
+
+- [x] **No retry / backoff in ApiClient** — `ApiClient` rewritten with per-request exponential backoff: up to 3 retries on `SocketException`, `TimeoutException`, HTTP 429, and HTTP 5xx. Each retry waits `500ms × 2^attempt + jitter`. HTTP 4xx are not retried. 30-second per-request timeout added. Response decoding now handles empty bodies and non-JSON responses without throwing.
+
+- [x] **No jitter on background timers — thundering herd** — `_schedulePeriodic()` now adds 0–30 s random jitter before the first tick of each of the 5 timers (checkin, cmdPoll, logs, inventory, threatScan). Prevents all devices rebooting simultaneously (e.g. after an OS update) from hitting the backend in a synchronized burst.
+
+- [x] **No consecutive-failure tracking** — `_consecutiveCheckinFailures` counter increments on each failed check-in. After `_maxConsecutiveFailures` (5), the foreground notification text changes to "Agent degraded — server unreachable". Counter resets on next successful check-in. 403/401 responses detect server-side unenroll and wipe credentials.
+
+- [x] **Threat scanner ran only at inventory time** — Added a dedicated `_threatScanInterval` (15 min) timer that calls `ThreatDetector.threatSummary()` and POSTs it to `/api/mdm/devices/$id/threat-scan` independently of the full app inventory (30 min). The summary includes `total_apps`, `sideloaded_count`, `system_app_count`, and the top-20 sideloaded package names.
+
+- [x] **Log forwarder had 4 tags and no severity parsing** — `LogForwarder` now captures 11 security-relevant tags (added `PackageInstaller`, `SELinux`, `Binder`, `WifiService`, `NetworkService`, `AccessibilityService`, `DevicePolicyManager`). Each log entry now includes a `severity` field parsed from the logcat line prefix (V/D/I/W/E/F → debug/info/warning/error/critical). Batch size increased to 200 lines.
+
+- [x] **No pending-message delivery to device user** — `SecureStore` adds `storePendingMessage()` / `pendingMessage()` / `clearPendingMessage()`. The `message` MDM command stores text there. `AgentShell._checkPendingMessage()` is called on `initState` and shows an `AlertDialog` if a pending message is present, then clears it.
+
+- [x] **Agent posture UI showed only root + developer mode + encryption** — `_PostureTab` now shows 10 posture checks: Root, Developer Mode, USB Debugging, Unknown Sources, Disk Encryption, Screen Lock, Battery, Storage, Network, VPN. Added a "Hardware & Environment" sub-score section. Device Information accordion expanded to show Security Patch, SDK, Manufacturer, Hardware, RAM, and Build Fingerprint. Overview tab adds a Device Status card showing battery progress bar, storage progress bar, and network type with VPN badge.
+
 ---
 
 ## Recommended Pentest Scope

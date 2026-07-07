@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter_background_service/flutter_background_service.dart';
 
@@ -11,17 +12,24 @@ import 'threat_detector.dart';
 import 'api_client.dart';
 
 // Background foreground service entry point.
-// The service runs continuously with a persistent notification. Timers inside
-// the isolate drive the agent's periodic tasks.
+// Timers drive all periodic agent tasks. Jitter is applied to each interval
+// to avoid thundering-herd issues on the backend when many devices start up
+// simultaneously (e.g. after an OS update reboot).
 
-const _checkinInterval  = Duration(minutes: 5);
-const _cmdPollInterval  = Duration(minutes: 2);
-const _logInterval      = Duration(minutes: 10);
+const _checkinInterval   = Duration(minutes: 5);
+const _cmdPollInterval   = Duration(minutes: 2);
+const _logInterval       = Duration(minutes: 10);
 const _inventoryInterval = Duration(minutes: 30);
+const _threatInterval    = Duration(minutes: 15);
+
+// Maximum jitter added to the first tick of each collector.
+const _maxJitterSeconds = 30;
+
+int _consecutiveCheckinFailures = 0;
+const _maxConsecutiveFailures = 5; // after this many failures → degrade notification
 
 Future<void> initializeBackgroundService() async {
   final service = FlutterBackgroundService();
-
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onServiceStart,
@@ -41,9 +49,7 @@ Future<void> initializeBackgroundService() async {
 }
 
 @pragma('vm:entry-point')
-Future<bool> onIosBackground(ServiceInstance service) async {
-  return true;
-}
+Future<bool> onIosBackground(ServiceInstance service) async => true;
 
 @pragma('vm:entry-point')
 void onServiceStart(ServiceInstance service) async {
@@ -53,22 +59,30 @@ void onServiceStart(ServiceInstance service) async {
 
   service.on('stop').listen((_) => service.stopSelf());
 
-  // Run immediately on start, then on schedule.
-  await _checkIn();
+  // Immediate first runs (no jitter on startup to confirm liveness quickly).
+  await _checkIn(service);
   await _pollCommands();
 
-  Timer.periodic(_checkinInterval, (_) => _checkIn());
-  Timer.periodic(_cmdPollInterval, (_) => _pollCommands());
-  Timer.periodic(_logInterval, (_) => LogForwarder.forwardBatch());
+  // Staggered periodic timers.
+  _schedulePeriodic(_checkinInterval,   () => _checkIn(service));
+  _schedulePeriodic(_cmdPollInterval,   _pollCommands);
+  _schedulePeriodic(_logInterval,       LogForwarder.forwardBatch);
+  _schedulePeriodic(_inventoryInterval, _runInventory);
+  _schedulePeriodic(_threatInterval,    _runThreatScan);
+}
 
-  // Stagger inventory scan to avoid startup spike.
-  Timer(const Duration(minutes: 1), () {
-    ThreatDetector.runInventoryScan();
-    Timer.periodic(_inventoryInterval, (_) => ThreatDetector.runInventoryScan());
+// Applies random jitter before the first tick, then uses a fixed interval.
+void _schedulePeriodic(Duration interval, Future<void> Function() fn) {
+  final jitterMs = Random().nextInt(_maxJitterSeconds * 1000);
+  Timer(Duration(milliseconds: jitterMs), () {
+    fn();
+    Timer.periodic(interval, (_) => fn());
   });
 }
 
-Future<void> _checkIn() async {
+// ── Check-in ─────────────────────────────────────────────────────────────────
+
+Future<void> _checkIn(ServiceInstance service) async {
   final enrolled = await SecureStore.isEnrolled();
   if (!enrolled) return;
 
@@ -80,25 +94,86 @@ Future<void> _checkIn() async {
 
     final posture = await PostureCollector.collect();
 
-    // Posture update — a 403 here means the device was unenrolled server-side
+    // MDM device posture update
     await client.put('/api/mdm/devices/$deviceId/checkin', posture.toJson());
 
-    // Agent heartbeat (keeps the agent record alive in the dashboard)
+    // Enriched agent heartbeat
     await client.post('/api/agents/heartbeat', {
-      'agent_id': agentId,
-      'version':  '1.0.0',
+      'agent_id':       agentId,
+      'version':        '1.0.0',
+      'platform':       'android',
+      'battery_level':  posture.batteryLevel,
+      'battery_charging': posture.batteryCharging,
+      'network_type':   posture.networkType,
+      'is_rooted':      posture.isRooted,
+      'developer_mode': posture.developerModeOn,
+      'storage_free_gb': posture.storageFreeGb,
+      'storage_total_gb': posture.storageTotalGb,
+      'vpn_active':     posture.vpnActive,
+      'os_version':     posture.osVersion,
+      'security_patch': posture.securityPatchLevel,
     });
+
+    _consecutiveCheckinFailures = 0;
+    _updateNotification(service, 'Monitoring device security…');
+
   } on ApiException catch (e) {
     if (e.statusCode == 403 || e.statusCode == 401) {
-      // Server rejected the check-in — device was unenrolled remotely.
-      // Wipe local credentials so the app shows the enrollment screen on next open.
+      // Server unenrolled this device — wipe credentials.
       await EnrollmentService.unenroll();
+      _updateNotification(service, 'Unenrolled — open app to re-enroll');
+    } else {
+      _onCheckinFailure(service, 'Check-in error: ${e.statusCode}');
     }
-  } catch (_) {}
+  } catch (e) {
+    _onCheckinFailure(service, 'Check-in failed');
+  }
 }
+
+void _onCheckinFailure(ServiceInstance service, String reason) {
+  _consecutiveCheckinFailures++;
+  if (_consecutiveCheckinFailures >= _maxConsecutiveFailures) {
+    _updateNotification(service, 'Agent degraded — server unreachable');
+  }
+}
+
+void _updateNotification(ServiceInstance service, String content) {
+  if (service is AndroidServiceInstance) {
+    service.setForegroundNotificationInfo(
+      title: 'XCloak Agent',
+      content: content,
+    );
+  }
+}
+
+// ── Command poll ──────────────────────────────────────────────────────────────
 
 Future<void> _pollCommands() async {
   final enrolled = await SecureStore.isEnrolled();
   if (!enrolled) return;
   await CommandService.pollAndExecute();
+}
+
+// ── Inventory scan (app list) ─────────────────────────────────────────────────
+
+Future<void> _runInventory() async {
+  final enrolled = await SecureStore.isEnrolled();
+  if (!enrolled) return;
+  await ThreatDetector.runInventoryScan();
+}
+
+// ── Threat scan (posture re-check + threat summary ship) ─────────────────────
+
+Future<void> _runThreatScan() async {
+  final enrolled = await SecureStore.isEnrolled();
+  if (!enrolled) return;
+
+  try {
+    final client   = await ApiClient.fromStorage();
+    final deviceId = await SecureStore.deviceId();
+    if (deviceId == null) return;
+
+    final summary = await ThreatDetector.threatSummary();
+    await client.post('/api/mdm/devices/$deviceId/threat-scan', summary);
+  } catch (_) {}
 }

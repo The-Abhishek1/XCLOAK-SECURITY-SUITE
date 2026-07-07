@@ -20,8 +20,9 @@ For SOC analysts and security engineers using the XCloak platform day-to-day.
 12. [Deception Technology](#deception-technology)
 13. [AI Tools](#ai-tools)
 14. [Compliance & Reporting](#compliance--reporting)
-15. [Integrations & Notifications](#integrations--notifications)
-16. [Account & Profile](#account--profile)
+15. [Mobile Device Management (MDM)](#mobile-device-management-mdm)
+16. [Integrations & Notifications](#integrations--notifications)
+17. [Account & Profile](#account--profile)
 
 ---
 
@@ -505,7 +506,104 @@ Audit logs are immutable — they are batch-exported to MinIO under Object Lock 
 
 ---
 
-## Integrations & Notifications
+## Mobile Device Management (MDM)
+
+XCloak includes a built-in MDM layer for Android devices via the **XCloak Agent** Flutter app. It supports BYOD and managed corporate device scenarios.
+
+### Enrolling a device
+
+1. Go to **MDM → Enrollment Tokens** and click **Generate Token**. Set an expiry (default 24 h) and optional owner email.
+2. On the target Android device, install the XCloak Agent APK and tap **Enroll Device**.
+3. Enter the server URL and the enrollment token. Tap **Enroll**.
+
+At enrollment the agent captures and sends a rich device snapshot to the backend:
+
+| Field | Description |
+|-------|-------------|
+| UDID (Android ID) | Stable per-device per-signing-key identifier |
+| Manufacturer / hardware | OEM and hardware board name |
+| OS version / SDK int | Android release string and API level |
+| Security patch level | Android monthly security patch date |
+| Build fingerprint | Cryptographic build fingerprint for forensic tracing |
+| Encryption status | Full-disk encryption (all Android 6+ devices) |
+| Root status | Heuristic — su binary paths + test-keys build tag + Magisk socket |
+| Developer options | `development_settings_enabled` system setting |
+| USB debugging | `adb_enabled` system setting |
+| Battery level | From `dumpsys battery` |
+| Network type | wifi / mobile / ethernet / none |
+| Storage (total / free) | From `df /data` |
+| RAM total | From `/proc/meminfo` |
+
+### Device list
+
+Go to **MDM → Devices** to see all enrolled devices.
+
+- **Status** — Online (check-in within 10 min) / Offline
+- **Posture score** — composite of root status, developer options, USB debugging, unknown-sources flag, sideloaded app count, screen lock
+- **Platform** — Android version and SDK
+
+Click a device to open its detail view with tabs: Posture, App Inventory, Command History, Check-in Timeline.
+
+### Device posture checks
+
+The agent re-evaluates and ships posture every 5 minutes (check-in). The posture tab shows a **pass/fail** for each control:
+
+| Check | Pass condition |
+|-------|---------------|
+| Root / Jailbreak | No su binary, no Magisk socket, no test-keys build |
+| Developer Mode | `development_settings_enabled` == 0 |
+| USB Debugging | `adb_enabled` == 0 |
+| Unknown Sources (API < 26) | `install_non_market_apps` == 0 |
+| Disk Encryption | Android 6+ enforces FBE — always pass |
+| Screen Lock | Requires Device Owner (DPC) — reported as null in BYOD mode |
+| Battery | ≥ 15% |
+| Storage | ≥ 1 GB free |
+| Network | Not offline |
+| VPN | Active VPN interface detected (`tun*`, `ppp*`, `vpn*`) |
+
+### App inventory
+
+The agent scans installed apps every 30 minutes. Go to **MDM → Devices → [Device] → App Inventory** to see:
+
+- All installed apps with package name, version, installer source, system app flag
+- **Sideloaded** — apps not installed via the Play Store and not system apps are flagged
+- **Sideloaded count** and **high-risk count** (sideloaded + sensitive permissions) are reported in each inventory submission
+
+### MDM commands
+
+Dispatch commands to a device from **MDM → Devices → [Device] → Actions**:
+
+| Command | What it does |
+|---------|-------------|
+| `collect_posture` | Immediate posture refresh and upload |
+| `collect_apps` | Immediate app inventory scan |
+| `scan_threats` | Summarises total / sideloaded / system app counts and ships to backend |
+| `collect_logs` | Forwards a fresh logcat batch (security-relevant tags) |
+| `sync` | Full sync — posture + app inventory in one operation |
+| `message` | Displays an in-app message to the device user on next app open |
+| `rotate_token` | Issues a new agent bearer token (old token invalidated) |
+| `update_agent` | Notifies the user of a new APK URL to install |
+| `lock_screen` | Requires Device Owner profile (BYOD: returns error with explanation) |
+| `wipe` | Requires Device Owner profile (intentionally rejected in BYOD mode) |
+
+The agent acknowledges every command (status: `executed` or `failed`) with a result string. Failed commands include the error reason so operators understand exactly why a command did not execute.
+
+### Log forwarding
+
+Every 10 minutes the agent collects security-relevant `logcat` lines and ships them to `/api/logs/ingest` with `log_source: android_agent`. Each log line includes a `severity` field (critical / error / warning / info / debug) parsed from the logcat prefix.
+
+Tags captured:
+
+`AndroidRuntime`, `ActivityManager`, `PackageManager`, `PackageInstaller`, `KeyStore`, `SELinux`, `Binder`, `WifiService`, `NetworkService`, `AccessibilityService`, `DevicePolicyManager`
+
+SELinux denials and AccessibilityService bind events are particularly useful for detecting privilege escalation and overlay-based malware.
+
+### Unenrolling a device
+
+- **User-initiated** — tap the menu (⋮) in the XCloak Agent app → **Unenroll Device**. Credentials are wiped from the device's encrypted storage.
+- **Admin-initiated** — go to **MDM → Devices → [Device] → Unenroll**. The device is deprovisioned. On the next check-in, the agent receives a 403 response and automatically wipes its credentials.
+
+---
 
 Go to **Settings → Integrations** to configure outbound alerting.
 

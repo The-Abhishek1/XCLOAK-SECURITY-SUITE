@@ -240,6 +240,26 @@ class _OverviewTabState extends State<_OverviewTab>
     _ringAnim = Tween(begin: 0.0, end: 0.0)
         .animate(CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOutCubic));
     _load();
+    _checkPendingMessage();
+  }
+
+  // Show any server-pushed message (e.g. from the 'message' MDM command)
+  // and clear it so it doesn't show again.
+  Future<void> _checkPendingMessage() async {
+    final msg = await SecureStore.pendingMessage();
+    if (msg == null || msg.isEmpty) return;
+    await SecureStore.clearPendingMessage();
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Message from Admin'),
+        content: Text(msg),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -347,8 +367,10 @@ class _OverviewTabState extends State<_OverviewTab>
   int get _postureScore {
     if (_posture == null) return 100;
     int s = 100;
-    if (_posture!.isRooted)        s -= 40;
-    if (_posture!.developerModeOn) s -= 20;
+    if (_posture!.isRooted)              s -= 40;
+    if (_posture!.developerModeOn)       s -= 15;
+    if (_posture!.usbDebuggingEnabled)   s -= 10;
+    if (_posture!.unknownSourcesEnabled) s -= 10;
     s -= (_sideloaded.length * 8).clamp(0, 30);
     return s.clamp(0, 100);
   }
@@ -485,7 +507,72 @@ class _OverviewTabState extends State<_OverviewTab>
               value: _summary['status']?.toString() ?? (_serverOnline ? 'Online' : 'Offline')),
             _InfoRow(label: 'Last Seen', value: _fmtTs(_summary['last_seen']?.toString())),
             _InfoRow(label: 'Platform',  value: Platform.isAndroid ? 'Android' : 'iOS'),
+            if (_posture != null) ...[
+              _InfoRow(label: 'OS',      value: _posture!.osVersion),
+              if (_posture!.manufacturer.isNotEmpty)
+                _InfoRow(label: 'Device', value: '${_posture!.manufacturer} (${_posture!.hardware})'),
+            ],
           ])),
+          const SizedBox(height: 12),
+
+          // ── Device status card ─────────────────────────────────────────
+          if (_posture != null)
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _SectionLabel('Device Status'),
+              const SizedBox(height: 10),
+              // Battery
+              _ProgressRow(
+                icon: _posture!.batteryCharging ? Icons.battery_charging_full : Icons.battery_std,
+                iconColor: _posture!.batteryLevel < 15 ? _kRed
+                  : _posture!.batteryLevel < 30 ? _kAmber : _kGreen,
+                label: _posture!.batteryLevel >= 0
+                  ? 'Battery ${_posture!.batteryLevel}%${_posture!.batteryCharging ? " ⚡" : ""}'
+                  : 'Battery',
+                value: _posture!.batteryLevel.clamp(0, 100) / 100,
+                color: _posture!.batteryLevel < 15 ? _kRed
+                  : _posture!.batteryLevel < 30 ? _kAmber : _kGreen,
+              ),
+              const SizedBox(height: 8),
+              // Storage
+              if (_posture!.storageTotalGb > 0)
+                _ProgressRow(
+                  icon: Icons.storage_rounded,
+                  iconColor: _kBlue,
+                  label: 'Storage — '
+                    '${_posture!.storageFreeGb.toStringAsFixed(1)} GB free of '
+                    '${_posture!.storageTotalGb.toStringAsFixed(1)} GB',
+                  value: 1 - (_posture!.storageFreeGb / _posture!.storageTotalGb)
+                             .clamp(0.0, 1.0),
+                  color: _posture!.storageFreeGb < 1 ? _kRed
+                    : _posture!.storageFreeGb < 3 ? _kAmber : _kBlue,
+                ),
+              const SizedBox(height: 8),
+              // Network
+              Row(children: [
+                Icon(
+                  _posture!.networkType == 'wifi' ? Icons.wifi
+                    : _posture!.networkType == 'mobile' ? Icons.signal_cellular_alt
+                    : Icons.signal_wifi_off,
+                  size: 16,
+                  color: _posture!.networkType == 'none' ? _kRed : _kBlue),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  _posture!.networkType == 'wifi'
+                    ? 'Wi-Fi${_posture!.wifiSsid.isNotEmpty ? " (${_posture!.wifiSsid})" : ""}'
+                    : _posture!.networkType == 'mobile' ? 'Mobile data'
+                    : _posture!.networkType == 'none' ? 'Offline' : _posture!.networkType,
+                  style: const TextStyle(fontSize: 12.5))),
+                if (_posture!.vpnActive)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _kGreen.withOpacity(.12),
+                      borderRadius: BorderRadius.circular(5)),
+                    child: const Text('VPN',
+                      style: TextStyle(fontSize: 10.5, color: _kGreen,
+                        fontWeight: FontWeight.w700))),
+              ]),
+            ])),
           const SizedBox(height: 12),
 
           // ── Latest alert preview ───────────────────────────────────────
@@ -758,10 +845,14 @@ class _PostureTabState extends State<_PostureTab>
   int get _score {
     if (_posture == null) return 100;
     int s = 100;
-    if (_posture!.isRooted)                     s -= 40;
-    if (_posture!.developerModeOn)               s -= 20;
+    if (_posture!.isRooted)                      s -= 40;
+    if (_posture!.developerModeOn)               s -= 15;
+    if (_posture!.usbDebuggingEnabled)           s -= 10;
+    if (_posture!.unknownSourcesEnabled)         s -= 10;
     if (!(_posture!.isEncrypted ?? true))        s -= 15;
-    if (!(_posture!.hasPasscode  ?? true))        s -= 10;
+    if (!(_posture!.hasPasscode  ?? true))       s -= 10;
+    final batt = _posture!.batteryLevel;
+    if (batt >= 0 && batt < 10)                 s -= 5;
     s -= (_sideloaded.length * 8).clamp(0, 25);
     return s.clamp(0, 100);
   }
@@ -772,8 +863,10 @@ class _PostureTabState extends State<_PostureTab>
 
   int get _deviceScore {
     int s = 100;
-    if (_posture?.isRooted == true)        s -= 60;
-    if (_posture?.developerModeOn == true) s -= 30;
+    if (_posture?.isRooted == true)             s -= 60;
+    if (_posture?.developerModeOn == true)      s -= 20;
+    if (_posture?.usbDebuggingEnabled == true)  s -= 10;
+    if (_posture?.unknownSourcesEnabled == true) s -= 10;
     return s.clamp(0, 100);
   }
 
@@ -786,12 +879,34 @@ class _PostureTabState extends State<_PostureTab>
 
   int get _appScore => (100 - (_sideloaded.length * 15).clamp(0, 100)).clamp(0, 100);
 
+  int get _hardwareScore {
+    final p = _posture;
+    if (p == null) return 100;
+    int s = 100;
+    if (p.batteryLevel >= 0 && p.batteryLevel < 10) s -= 20;
+    if (p.storageFreeGb > 0 && p.storageFreeGb < 1) s -= 15;
+    return s.clamp(0, 100);
+  }
+
   List<String> get _recommendations {
     final r = <String>[];
-    if (_posture?.isRooted == true)         r.add('Remove root access — device integrity compromised');
-    if (_posture?.developerModeOn == true)  r.add('Disable Developer Options in Settings → System');
-    if (!(_posture?.isEncrypted ?? true))   r.add('Enable full-disk encryption in Security settings');
-    if (!(_posture?.hasPasscode  ?? true))  r.add('Set a screen lock PIN, pattern, or biometric');
+    if (_posture?.isRooted == true)
+      r.add('Remove root access — device integrity compromised');
+    if (_posture?.developerModeOn == true)
+      r.add('Disable Developer Options in Settings → System');
+    if (_posture?.usbDebuggingEnabled == true)
+      r.add('Disable USB Debugging in Developer Options');
+    if (_posture?.unknownSourcesEnabled == true)
+      r.add('Disable "Install Unknown Apps" in Settings → Apps');
+    if (!(_posture?.isEncrypted ?? true))
+      r.add('Enable full-disk encryption in Security settings');
+    if (!(_posture?.hasPasscode  ?? true))
+      r.add('Set a screen lock PIN, pattern, or biometric');
+    final batt = _posture?.batteryLevel ?? -1;
+    if (batt >= 0 && batt < 15)
+      r.add('Battery critically low (${batt}%) — charge device to maintain monitoring');
+    if ((_posture?.storageFreeGb ?? 1) < 1)
+      r.add('Storage nearly full — free space to ensure agent can write logs');
     if (_sideloaded.isNotEmpty)
       r.add('Uninstall ${_sideloaded.length} sideloaded app(s) from unknown sources');
     return r;
@@ -849,10 +964,10 @@ class _PostureTabState extends State<_PostureTab>
               const SizedBox(height: 20),
               // Sub-scores row
               Row(children: [
-                _SubScore(label: 'Device',  score: _deviceScore),
-                _SubScore(label: 'Data',    score: _dataScore),
-                _SubScore(label: 'Apps',    score: _appScore),
-                const _SubScore(label: 'Network', score: 100),
+                _SubScore(label: 'Device',   score: _deviceScore),
+                _SubScore(label: 'Data',     score: _dataScore),
+                _SubScore(label: 'Apps',     score: _appScore),
+                _SubScore(label: 'Hardware', score: _hardwareScore),
               ]),
             ]),
           )),
@@ -869,6 +984,14 @@ class _PostureTabState extends State<_PostureTab>
               detail: p.developerModeOn
                 ? 'Developer options enabled — ADB access possible'
                 : 'Developer options are disabled'),
+            _CheckRow(label: 'USB Debugging', pass: !p.usbDebuggingEnabled,
+              detail: p.usbDebuggingEnabled
+                ? 'USB debugging on — ADB commands accepted when connected'
+                : 'USB debugging is disabled'),
+            _CheckRow(label: 'Unknown Sources', pass: !p.unknownSourcesEnabled,
+              detail: p.unknownSourcesEnabled
+                ? 'Install from unknown sources enabled — sideload risk elevated'
+                : 'Unknown app installation is blocked'),
             const SizedBox(height: 16),
 
             // Data Protection
@@ -881,6 +1004,36 @@ class _PostureTabState extends State<_PostureTab>
               detail: (p.hasPasscode ?? true)
                 ? 'Screen lock is configured'
                 : 'No screen lock — unauthorized access risk'),
+            const SizedBox(height: 16),
+
+            // Hardware & Environment
+            _GroupHeader(label: 'Hardware & Environment', score: _hardwareScore),
+            _CheckRow(
+              label: 'Battery',
+              pass: p.batteryLevel < 0 || p.batteryLevel >= 15,
+              detail: p.batteryLevel >= 0
+                ? '${p.batteryLevel}% — ${p.batteryCharging ? "charging" : "on battery"}'
+                : 'Battery level unavailable'),
+            _CheckRow(
+              label: 'Storage',
+              pass: p.storageFreeGb <= 0 || p.storageFreeGb >= 1,
+              detail: p.storageTotalGb > 0
+                ? '${p.storageFreeGb.toStringAsFixed(1)} GB free of ${p.storageTotalGb.toStringAsFixed(1)} GB'
+                : 'Storage stats unavailable'),
+            _CheckRow(
+              label: 'Network',
+              pass: p.networkType != 'none',
+              detail: p.networkType == 'wifi'
+                ? 'Wi-Fi${p.wifiSsid.isNotEmpty ? " (${p.wifiSsid})" : ""}'
+                : p.networkType == 'mobile'
+                  ? 'Mobile data'
+                  : p.networkType == 'none' ? 'Offline' : p.networkType),
+            _CheckRow(
+              label: 'VPN',
+              pass: p.vpnActive,
+              detail: p.vpnActive
+                ? 'VPN tunnel active — traffic is protected'
+                : 'No VPN — network traffic may be unencrypted'),
             const SizedBox(height: 16),
 
             // App Security
@@ -951,11 +1104,25 @@ class _PostureTabState extends State<_PostureTab>
               const SizedBox(height: 10),
               _InfoRow(label: 'OS',    value: p.osVersion),
               _InfoRow(label: 'Build', value: p.buildVersion),
+              if (p.securityPatchLevel.isNotEmpty)
+                _InfoRow(label: 'Security Patch',  value: p.securityPatchLevel),
+              if (p.androidSdkVersion > 0)
+                _InfoRow(label: 'SDK',             value: 'API ${p.androidSdkVersion}'),
+              if (p.manufacturer.isNotEmpty)
+                _InfoRow(label: 'Manufacturer',    value: p.manufacturer),
+              if (p.hardware.isNotEmpty)
+                _InfoRow(label: 'Hardware',        value: p.hardware),
+              if (p.ramTotalMb > 0)
+                _InfoRow(label: 'RAM',
+                  value: p.ramTotalMb >= 1024
+                    ? '${(p.ramTotalMb / 1024).toStringAsFixed(1)} GB'
+                    : '${p.ramTotalMb} MB'),
               if (_devInfo != null) ...[
-                _InfoRow(label: 'Model',          value: '${_devInfo!.manufacturer} ${_devInfo!.model}'),
-                _InfoRow(label: 'Android ID',     value: _devInfo!.id),
-                _InfoRow(label: 'SDK',            value: 'API ${_devInfo!.version.sdkInt}'),
-                _InfoRow(label: 'Security Patch', value: _devInfo!.version.securityPatch ?? '–'),
+                _InfoRow(label: 'Android ID',      value: _devInfo!.id),
+                _InfoRow(label: 'Fingerprint',
+                  value: _devInfo!.fingerprint.length > 36
+                    ? '${_devInfo!.fingerprint.substring(0, 36)}…'
+                    : _devInfo!.fingerprint),
               ],
               const SizedBox(height: 8),
             ],
@@ -1807,6 +1974,36 @@ class _InfoRow extends StatelessWidget {
         textAlign: TextAlign.end, overflow: TextOverflow.ellipsis)),
     ]),
   );
+}
+
+class _ProgressRow extends StatelessWidget {
+  final IconData icon;
+  final Color    iconColor;
+  final String   label;
+  final double   value; // 0.0–1.0
+  final Color    color;
+  const _ProgressRow({
+    required this.icon, required this.iconColor,
+    required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Icon(icon, size: 16, color: iconColor),
+    const SizedBox(width: 8),
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+      const SizedBox(height: 4),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: LinearProgressIndicator(
+          value: value.clamp(0.0, 1.0),
+          minHeight: 5,
+          backgroundColor: color.withOpacity(.15),
+          valueColor: AlwaysStoppedAnimation(color),
+        ),
+      ),
+    ])),
+  ]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

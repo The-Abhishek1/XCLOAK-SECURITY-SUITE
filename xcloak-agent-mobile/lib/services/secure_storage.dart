@@ -13,9 +13,10 @@ const _keyDeviceId    = 'xcloak_device_id';
 const _keyAgentId     = 'xcloak_agent_id';
 const _keyEnrolled    = 'xcloak_enrolled';
 const _keyApiKey      = 'xcloak_api_key';  // legacy — kept for backward compat
-const _keyAdminCookie = 'xcloak_admin_cookie';
-const _keyAdminEmail  = 'xcloak_admin_email';
-const _keyAdminRole   = 'xcloak_admin_role';
+const _keyAdminCookie    = 'xcloak_admin_cookie';
+const _keyAdminEmail     = 'xcloak_admin_email';
+const _keyAdminRole      = 'xcloak_admin_role';
+const _keyPendingMessage = 'xcloak_pending_message';
 
 class SecureStore {
   static Future<void> saveCredentials({
@@ -82,4 +83,16 @@ class SecureStore {
 
   static Future<void> saveApiKey(String key) => _storage.write(key: _keyApiKey, value: key);
   static Future<void> removeApiKey() => _storage.delete(key: _keyApiKey);
+
+  // Token rotation
+  static Future<void> storeAgentToken(String token) =>
+      _storage.write(key: _keyAgentToken, value: token);
+
+  // Pending server-pushed message shown on next app open
+  static Future<void> storePendingMessage(String text) =>
+      _storage.write(key: _keyPendingMessage, value: text);
+  static Future<String?> pendingMessage() =>
+      _storage.read(key: _keyPendingMessage);
+  static Future<void> clearPendingMessage() =>
+      _storage.delete(key: _keyPendingMessage);
 }

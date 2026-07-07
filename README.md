@@ -58,11 +58,39 @@ The XCloak Mobile Agent is a Flutter 3.24 Android app that brings endpoint monit
 
 ### Agent Mode (all enrolled devices)
 
-- **Background Service** — persistent foreground service survives app close; checks in to the backend every 60 seconds
-- **Device Posture Checks** — root/jailbreak detection, developer options status, sideloaded (non-Play-Store) app inventory
-- **MDM Check-in** — reports OS version, device fingerprint, enrollment status, posture to the NGFW backend
-- **Secure Storage** — agent token and API key stored in Android Keystore via `flutter_secure_storage`
-- **Alert & Agent View** — read-only view of live alerts (with severity filter) and enrolled agents without needing admin access
+**Background service** (5 timers, jitter-staggered to prevent thundering-herd on mass reboot):
+
+| Timer | Interval | What it does |
+|-------|----------|-------------|
+| Check-in | 5 min | Posture snapshot + enriched heartbeat → backend; 403 auto-unenrolls |
+| Command poll | 2 min | Fetches and executes pending MDM commands |
+| Log forward | 10 min | Ships `logcat` batch (11 security tags, severity-parsed) |
+| App inventory | 30 min | Full installed-app scan with sideload detection |
+| Threat scan | 15 min | Sideload summary + system-app count → `/api/mdm/devices/$id/threat-scan` |
+
+**Device posture checks** (collected and shipped on every check-in):
+
+| Check | Method |
+|-------|--------|
+| Root / Jailbreak | su binary paths + `test-keys` build tag + Magisk socket |
+| Developer Options | `settings get global development_settings_enabled` |
+| USB Debugging | `settings get global adb_enabled` |
+| Unknown Sources (API < 26) | `settings get secure install_non_market_apps` |
+| Battery level + charging | `dumpsys battery` |
+| Storage total / free | `df /data` |
+| RAM total | `/proc/meminfo:MemTotal` |
+| Network type | `Connectivity().checkConnectivity()` |
+| VPN active | `NetworkInterface.list()` — detects tun/ppp/vpn interfaces |
+| Security patch level | `AndroidDeviceInfo.version.securityPatch` |
+
+**MDM commands** the agent handles:
+
+`collect_posture`, `collect_apps`, `scan_threats`, `collect_logs`, `sync`, `message`, `rotate_token`, `update_agent`, `lock_screen` (Device Owner only), `wipe` (Device Owner only — intentionally rejected in BYOD)
+
+- **Retry with backoff** — ApiClient retries 5xx, 429, `SocketException`, and `TimeoutException` up to 3× (500 ms → 1 s → 2 s + jitter). 4xx not retried.
+- **Consecutive failure tracking** — foreground notification degrades to "Agent degraded" after 5 consecutive check-in failures.
+- **Pending message delivery** — `message` MDM command stores text in encrypted storage; shown as AlertDialog on next app open.
+- **Token rotation** — `rotate_token` command issues a new bearer token from the server and atomically stores it.
 
 ### Admin Console Mode (API key required)
 
