@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import 'command_service.dart';
+import 'enrollment_service.dart';
 import 'log_forwarder.dart';
 import 'posture_collector.dart';
 import 'secure_storage.dart';
@@ -79,7 +80,7 @@ Future<void> _checkIn() async {
 
     final posture = await PostureCollector.collect();
 
-    // Posture update
+    // Posture update — a 403 here means the device was unenrolled server-side
     await client.put('/api/mdm/devices/$deviceId/checkin', posture.toJson());
 
     // Agent heartbeat (keeps the agent record alive in the dashboard)
@@ -87,6 +88,12 @@ Future<void> _checkIn() async {
       'agent_id': agentId,
       'version':  '1.0.0',
     });
+  } on ApiException catch (e) {
+    if (e.statusCode == 403 || e.statusCode == 401) {
+      // Server rejected the check-in — device was unenrolled remotely.
+      // Wipe local credentials so the app shows the enrollment screen on next open.
+      await EnrollmentService.unenroll();
+    }
   } catch (_) {}
 }
 

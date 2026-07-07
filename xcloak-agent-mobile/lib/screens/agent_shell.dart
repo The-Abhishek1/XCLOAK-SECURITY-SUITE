@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/device_posture.dart';
 import '../services/api_client.dart';
+import '../services/enrollment_service.dart';
 import '../services/posture_collector.dart';
 import '../services/secure_storage.dart';
 import '../services/threat_detector.dart';
@@ -127,6 +128,47 @@ class _AgentShellState extends State<AgentShell> {
             onPressed: () => Navigator.pushReplacement(context,
               MaterialPageRoute(builder: (_) => const ModeSelectScreen())),
           ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) async {
+              if (v == 'unenroll') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Unenroll Device'),
+                    content: const Text(
+                      'This will remove the device from XCloak and stop all monitoring. Continue?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                      FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Unenroll'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && context.mounted) {
+                  await EnrollmentService.unenroll();
+                  if (context.mounted) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
+                      (_) => false,
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'unenroll',
+                child: Row(children: [
+                  Icon(Icons.link_off, size: 18, color: Colors.red),
+                  SizedBox(width: 10),
+                  Text('Unenroll Device', style: TextStyle(color: Colors.red)),
+                ])),
+            ],
+          ),
         ],
       ),
       body: IndexedStack(index: _tab, children: _pages),
@@ -225,7 +267,23 @@ class _OverviewTabState extends State<_OverviewTab>
   }
 
   Future<void> _fetchSummary(ApiClient c) async {
-    try { _summary = await c.get('/api/agents/self/summary'); } catch (_) {}
+    try {
+      _summary = await c.get('/api/agents/self/summary');
+    } on ApiException catch (e) {
+      if (e.statusCode == 403 || e.statusCode == 401) _handleUnenrolled();
+    } catch (_) {}
+  }
+
+  // Called when the server rejects a request because the device was unenrolled.
+  void _handleUnenrolled() {
+    EnrollmentService.unenroll().then((_) {
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
+        (_) => false,
+      );
+    });
   }
 
   Future<void> _fetchAlerts(ApiClient c) async {
@@ -489,6 +547,36 @@ class _OverviewTabState extends State<_OverviewTab>
                 icon: Icons.grid_view_rounded, label: 'Mode\nSelect', color: _kPurple,
                 onTap: () => Navigator.pushReplacement(context,
                   MaterialPageRoute(builder: (_) => const ModeSelectScreen()))),
+              const SizedBox(width: 8),
+              _ActionTile(
+                icon: Icons.link_off, label: 'Unenroll', color: _kRed,
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Unenroll Device'),
+                      content: const Text('Remove this device from XCloak and stop all monitoring?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Unenroll'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true && context.mounted) {
+                    await EnrollmentService.unenroll();
+                    if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
+                        (_) => false,
+                      );
+                    }
+                  }
+                }),
             ]),
           ])),
         ],
