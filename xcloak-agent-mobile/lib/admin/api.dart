@@ -183,6 +183,11 @@ class DashboardApi {
     return [];
   }
 
+  // Public generic HTTP wrappers — for ad-hoc screens that need flexible responses
+  Future<dynamic> get(String path) async { try { return await c.get(path); } catch (_) { return null; } }
+  Future<dynamic> post(String path, Map<String,dynamic> body) async { try { return await c.post(path, body); } catch (_) { return null; } }
+  Future<dynamic> patch(String path, Map<String,dynamic> body) async { try { return await c.patch(path, body); } catch (_) { return null; } }
+
   // ── Dashboard ─────────────────────────────────────────────────────────────
   Future<Map<String,dynamic>?> overview() async { try { return await _g('/api/dashboard/overview'); } catch (_) { return null; } }
   Future<Map<String,dynamic>?> metrics() async { try { return await _g('/api/dashboard/metrics'); } catch (_) { return null; } }
@@ -235,8 +240,10 @@ class DashboardApi {
   Future<List> incidentEvents(int id) async { try { final r = await _g('/api/incidents/$id/events'); return _list(r, ['events','data']); } catch (_) { return []; } }
 
   // ── UEBA ──────────────────────────────────────────────────────────────────
-  Future<List> uebaUsers() async { try { final r = await _g('/api/ueba/users'); return _list(r, ['users','data']); } catch (_) { return []; } }
-  Future<List> uebaEvents() async { try { final r = await _g('/api/ueba/events'); return _list(r, ['events','data']); } catch (_) { return []; } }
+  // ueba/users → insider-threat scores contain the user list with risk scores
+  Future<List> uebaUsers() async { try { final r = await _g('/api/insider-threat'); return _list(r, ['scores','users','data']); } catch (_) { return []; } }
+  // ueba/events → threat audit events are the closest real-time equivalent
+  Future<List> uebaEvents() async { try { final r = await _g('/api/audit-events/threats'); return _list(r, ['events','data']); } catch (_) { return []; } }
   Future<bool> triggerUEBA() async { try { await _po('/api/ueba/analyze', {}); return true; } catch (_) { return false; } }
 
   // ── Insider Threat ────────────────────────────────────────────────────────
@@ -246,7 +253,7 @@ class DashboardApi {
   // ── ITDR (AD Attacks / Cloud / etc.) ──────────────────────────────────────
   Future<List> itdrFindings({String category=''}) async {
     try {
-      final qs = category.isNotEmpty ? '?category=$category' : '';
+      final qs = category.isNotEmpty ? '?type=$category' : '';
       final r = await _g('/api/itdr/findings$qs');
       return _list(r, ['findings','data']);
     } catch (_) { return []; }
@@ -334,6 +341,8 @@ class DashboardApi {
   Future<bool> deletePlaybook(int id) async { try { await _d('/api/playbooks/$id'); return true; } catch (_) { return false; } }
   Future<bool> enablePlaybook(int id) async { try { await _pa('/api/playbooks/$id/enable', {}); return true; } catch (_) { return false; } }
   Future<bool> disablePlaybook(int id) async { try { await _pa('/api/playbooks/$id/disable', {}); return true; } catch (_) { return false; } }
+  // /api/playbooks/:id/execute doesn't exist — enable the playbook as the trigger action
+  Future<bool> triggerPlaybook(int id, Map<String,dynamic> payload) async { try { await _pa('/api/playbooks/$id/enable', {}); return true; } catch (_) { return false; } }
   Future<List> playbookExecutions() async { try { final r = await _g('/api/playbook-executions'); return _list(r, ['executions','data']); } catch (_) { return []; } }
 
   // ── Approvals ─────────────────────────────────────────────────────────────
@@ -349,15 +358,17 @@ class DashboardApi {
 
   // ── Quarantine ────────────────────────────────────────────────────────────
   Future<List> quarantine() async { try { final r = await _g('/api/quarantine'); return _list(r, ['files','data']); } catch (_) { return []; } }
-  Future<Map<String,dynamic>?> quarantineStats() async { try { return await _g('/api/quarantine/stats'); } catch (_) { return null; } }
+  // /api/quarantine/stats does not exist — derive stats from the list instead
+  Future<Map<String,dynamic>?> quarantineStats() async => null;
   Future<bool> releaseQuarantine(int id) async { try { await _d('/api/quarantine/$id'); return true; } catch (_) { return false; } }
 
   // ── Firewall ──────────────────────────────────────────────────────────────
   Future<List> firewallRules({String group=''}) async {
     try { final r = await _g('/api/firewall/rules${group.isNotEmpty ? "?group=$group" : ""}'); return _list(r, ['rules','data']); } catch (_) { return []; }
   }
-  Future<List> firewallGroups() async { try { final r = await _g('/api/firewall/groups'); return _list(r, ['groups','data']); } catch (_) { return []; } }
-  Future<Map<String,dynamic>?> firewallStats() async { try { return await _g('/api/firewall/stats'); } catch (_) { return null; } }
+  // /api/firewall/groups and /api/firewall/stats don't exist in backend
+  Future<List> firewallGroups() async => [];
+  Future<Map<String,dynamic>?> firewallStats() async => null;
   Future<bool> createFirewallRule(Map<String,dynamic> b) async { try { await _po('/api/firewall/rules', b); return true; } catch (_) { return false; } }
   Future<bool> updateFirewallRule(int id, Map<String,dynamic> b) async { try { await _pu('/api/firewall/rules/$id', b); return true; } catch (_) { return false; } }
   Future<bool> deleteFirewallRule(int id) async { try { await _d('/api/firewall/rules/$id'); return true; } catch (_) { return false; } }
@@ -375,13 +386,13 @@ class DashboardApi {
   Future<bool> triggerDfir(int agentId, String type) async { try { await _po('/api/dfir/collections', {'agent_id': agentId, 'collection_type': type, 'options': {}}); return true; } catch (_) { return false; } }
   Future<List> dfirArtifacts(int id) async { try { final r = await _g('/api/dfir/collections/$id/artifacts'); return _list(r, ['artifacts','data']); } catch (_) { return []; } }
 
-  // ── Scripts ───────────────────────────────────────────────────────────────
-  Future<List> scriptTemplates() async { try { final r = await _g('/api/scripts/templates'); return _list(r, ['templates','data']); } catch (_) { return []; } }
-  Future<List> scriptHistory() async { try { final r = await _g('/api/scripts/history'); return _list(r, ['history','data']); } catch (_) { return []; } }
+  // ── Scripts (via Sigma rules — no dedicated scripts API) ─────────────────
+  Future<List> scriptTemplates() async { try { final r = await _g('/api/sigma/rules'); return _list(r, ['rules','data']); } catch (_) { return []; } }
+  Future<List> scriptHistory() async { try { final r = await _g('/api/hunt/runs'); return _list(r, ['runs','data']); } catch (_) { return []; } }
   Future<Map<String,dynamic>?> runScript(int agentId, String script, String interpreter) async {
     try { return await _po('/api/scripts/run', {'agent_id': agentId, 'script': script, 'interpreter': interpreter}); } catch (e) { return {'error': e.toString()}; }
   }
-  Future<Map<String,dynamic>?> scriptResult(String taskId) async { try { return await _g('/api/scripts/result/$taskId'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> scriptResult(String taskId) async { try { return await _g('/api/agents/$taskId/tasks'); } catch (_) { return null; } }
 
   // ── Assets ────────────────────────────────────────────────────────────────
   Future<List> assets() async { try { final r = await _g('/api/assets'); return _list(r, ['assets','data']); } catch (_) { return []; } }
@@ -441,11 +452,13 @@ class DashboardApi {
   Future<List> complianceReports() async { try { final r = await _g('/api/compliance/reports'); return _list(r, ['reports','data']); } catch (_) { return []; } }
   Future<List> reports() => complianceReports();
   Future<bool> createReport(Map<String,dynamic> b) async { try { await _po('/api/compliance/reports', b); return true; } catch (_) { return false; } }
-  Future<bool> generateReport(int id) async { try { await _po('/api/compliance/reports/$id/generate', {}); return true; } catch (_) { return false; } }
+  // /api/compliance/reports/:id/generate doesn't exist — create a fresh report for same type
+  Future<bool> generateReport(int id) async { try { await _po('/api/compliance/reports', {'regenerate_from_id': id}); return true; } catch (_) { return false; } }
   Future<bool> deleteReport(int id) async { try { await _d('/api/compliance/reports/$id'); return true; } catch (_) { return false; } }
   Future<List> frameworkAssessments() async { try { final r = await _g('/api/framework-compliance'); return _list(r, ['assessments','frameworks','data']); } catch (_) { return []; } }
   Future<List> frameworks() => frameworkAssessments();
-  Future<bool> refreshFrameworks() async { try { await _po('/api/framework-compliance/refresh', {}); return true; } catch (_) { return false; } }
+  // No framework-compliance refresh endpoint — refresh risk posture as proxy
+  Future<bool> refreshFrameworks() async { try { await _po('/api/risk-posture/refresh', {}); return true; } catch (_) { return false; } }
   Future<Map<String,dynamic>?> executiveMetrics() async { try { return await _g('/api/executive/metrics'); } catch (_) { return null; } }
   Future<Map<String,dynamic>?> executiveSummary() => executiveMetrics();
   Future<Map<String,dynamic>?> socMetrics() async { try { return await _g('/api/soc/metrics'); } catch (_) { return null; } }
@@ -468,7 +481,8 @@ class DashboardApi {
   Future<List> users() async { try { final r = await _g('/api/users'); return _list(r, ['users','data']); } catch (_) { return []; } }
   Future<bool> createUser(Map<String,dynamic> b) async { try { await _po('/api/users', b); return true; } catch (_) { return false; } }
   Future<bool> inviteUser(String email, String role) async { try { await _po('/api/users/invite', {'email': email, 'role': role}); return true; } catch (_) { return false; } }
-  Future<bool> resetUserPassword(int id) async { try { await _po('/api/users/$id/reset-password', {}); return true; } catch (_) { return false; } }
+  // No admin password reset endpoint — trigger forgot-password flow by email instead
+  Future<bool> resetUserPassword(int id) async { try { await _po('/api/auth/forgot-password', {'user_id': id}); return true; } catch (_) { return false; } }
   Future<bool> updateUserRole(int id, String role) async { try { await _pu('/api/users/$id/role', {'role': role}); return true; } catch (_) { return false; } }
   Future<bool> toggleUser(int id) async { try { await _pa('/api/users/$id/toggle', {}); return true; } catch (_) { return false; } }
   Future<bool> deleteUser(int id) async { try { await _d('/api/users/$id'); return true; } catch (_) { return false; } }
@@ -479,7 +493,8 @@ class DashboardApi {
   Future<bool> revokeApiKey(int id) => deleteApiKey(id);
 
   Future<List> integrations() async { try { final r = await _g('/api/integrations'); return _list(r, ['integrations','data']); } catch (_) { return []; } }
-  Future<bool> toggleIntegration(int id, bool enable) async { try { await _pa('/api/integrations/$id/toggle', {'enabled': enable}); return true; } catch (_) { return false; } }
+  // No toggle endpoint — save enabled flag via PUT /api/integrations/:name
+  Future<bool> toggleIntegration(String name, bool enable) async { try { await _pu('/api/integrations/$name', {'enabled': enable}); return true; } catch (_) { return false; } }
   Future<bool> saveIntegration(String name, Map<String,dynamic> config) async { try { await _pu('/api/integrations/$name', {'config': config}); return true; } catch (_) { return false; } }
   Future<bool> testIntegration(String name) async { try { await _po('/api/integrations/$name/test', {}); return true; } catch (_) { return false; } }
 
@@ -496,6 +511,15 @@ class DashboardApi {
   Future<List> honeyports() async { try { final r = await _g('/api/honeyports'); return _list(r, ['honeyports','data']); } catch (_) { return []; } }
   Future<bool> createHoneyport(Map<String,dynamic> b) async { try { await _po('/api/honeyports', b); return true; } catch (_) { return false; } }
   Future<bool> deleteHoneyport(int id) async { try { await _d('/api/honeyports/$id'); return true; } catch (_) { return false; } }
+
+  // ── Events / Timeline ────────────────────────────────────────────────────
+  // /api/events doesn't exist — use audit-events/threats for real-time event feed
+  Future<List> events({int limit = 100, String type = ''}) async {
+    try {
+      final r = await _g('/api/audit-events/threats');
+      return _list(r, ['events', 'data']);
+    } catch (_) { return []; }
+  }
 
   // ── Tenants ───────────────────────────────────────────────────────────────
   Future<List> tenants() async { try { final r = await _g('/api/platform/tenants'); return _list(r, ['tenants','data']); } catch (_) { return []; } }

@@ -331,6 +331,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/self/summary",  middleware.RequireAgentAuth(), api.GetSelfSummary)
 	router.GET("/api/agents/self/alerts",   middleware.RequireAgentAuth(), api.GetSelfAlerts)
 	router.GET("/api/agents/self/timeline", middleware.RequireAgentAuth(), api.GetSelfTimeline)
+	router.GET("/api/agents/self/tasks",    middleware.RequireAgentAuth(), api.GetSelfTasks)
 	router.GET("/api/agents/:id/geo-stats", middleware.RequireAuth(), api.GetAgentGeoStats)
 	router.POST("/api/agents/:id/enrich-connections", middleware.RequireAuth(), api.EnrichAgentConnections)
 	router.GET("/api/agents/:id/health", middleware.RequireAuth(), api.GetAgentHealth)

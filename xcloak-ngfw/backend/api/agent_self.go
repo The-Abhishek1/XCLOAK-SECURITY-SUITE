@@ -77,3 +77,21 @@ func GetSelfTimeline(c *gin.Context) {
 	}
 	c.JSON(200, timeline)
 }
+
+// GetSelfTasks — GET /api/agents/self/tasks
+// Returns pending tasks queued for the calling agent.
+func GetSelfTasks(c *gin.Context) {
+	agent, ok := selfAgent(c)
+	if !ok {
+		return
+	}
+	tasks, err := services.GetPendingTasks(fmt.Sprintf("%d", agent.ID))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if tasks == nil {
+		tasks = []models.AgentTask{}
+	}
+	c.JSON(200, gin.H{"count": len(tasks), "tasks": tasks})
+}

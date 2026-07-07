@@ -1,5 +1,10 @@
+import 'dart:io';
+import 'dart:math';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/device_posture.dart';
 import '../services/api_client.dart';
@@ -7,124 +12,148 @@ import '../services/posture_collector.dart';
 import '../services/secure_storage.dart';
 import '../services/threat_detector.dart';
 import 'mode_select.dart';
-import 'setup_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shell
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _kGreen  = Color(0xFF22C55E);
+const _kBlue   = Color(0xFF3B82F6);
+const _kAmber  = Color(0xFFF59E0B);
+const _kOrange = Color(0xFFF97316);
+const _kRed    = Color(0xFFEF4444);
+const _kPurple = Color(0xFF8B5CF6);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Protection level enum
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _ProtLevel {
+  protected(label: 'PROTECTED',     color: _kGreen,  icon: Icons.verified_user,  arc: 1.00),
+  monitoring(label: 'MONITORING',   color: _kBlue,   icon: Icons.shield_outlined, arc: 0.72),
+  warning(label: 'WARNING',         color: _kAmber,  icon: Icons.warning_amber,   arc: 0.55),
+  alert(label: 'ALERT',             color: _kOrange, icon: Icons.crisis_alert,    arc: 0.38),
+  compromised(label: 'COMPROMISED', color: _kRed,    icon: Icons.gpp_bad,         arc: 0.20);
+
+  final String   label;
+  final Color    color;
+  final IconData icon;
+  final double   arc;
+  const _ProtLevel({required this.label, required this.color,
+    required this.icon, required this.arc});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Alert severity
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _Sev { critical, high, medium, low, info }
+
+extension _SevExt on _Sev {
+  Color  get color => switch (this) {
+    _Sev.critical => _kRed,
+    _Sev.high     => _kOrange,
+    _Sev.medium   => _kAmber,
+    _Sev.low      => _kBlue,
+    _Sev.info     => Colors.grey,
+  };
+  String get label => name.toUpperCase();
+}
+
+_Sev _parseSev(dynamic raw) {
+  final s = (raw ?? '').toString().toLowerCase();
+  if (s.contains('critical')) return _Sev.critical;
+  if (s.contains('high'))     return _Sev.high;
+  if (s.contains('medium'))   return _Sev.medium;
+  if (s.contains('low'))      return _Sev.low;
+  return _Sev.info;
+}
+
+String _timeAgo(String ts) {
+  try {
+    final diff = DateTime.now().difference(DateTime.parse(ts).toLocal());
+    if (diff.inSeconds < 60)  return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60)  return '${diff.inMinutes}m ago';
+    if (diff.inHours   < 24)  return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  } catch (_) { return ts; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shell scaffold
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AgentShell extends StatefulWidget {
   const AgentShell({super.key});
-  @override State<AgentShell> createState() => _AgentShellState();
+  @override
+  State<AgentShell> createState() => _AgentShellState();
 }
 
 class _AgentShellState extends State<AgentShell> {
   int _tab = 0;
 
-  Future<void> _unenroll() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Unenroll Device'),
-        content: const Text('This will remove all credentials and reset the app. Continue?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Unenroll')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await SecureStore.clear();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const SetupScreen()),
-          (_) => false,
-    );
-  }
+  static const _pages = <Widget>[
+    _OverviewTab(),
+    _ThreatsTab(),
+    _PostureTab(),
+    _NetworkTab(),
+    _TasksTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    final tabs = [
-      const _HomeTab(),
-      const _ThreatsTab(),
-      const _PostureTab(),
-      const _ActivityTab(),
-    ];
-
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 12,
-        title: Row(
-          children: [
-            Container(
-              width: 30, height: 30,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: cs.primary.withOpacity(.12),
-                border: Border.all(color: cs.primary.withOpacity(.25)),
-              ),
-              child: Icon(Icons.security, color: cs.primary, size: 17),
+        backgroundColor: cs.surface,
+        surfaceTintColor: Colors.transparent,
+        title: Row(children: [
+          Container(
+            width: 30, height: 30,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF0288D1)]),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('XCloak Agent', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, height: 1.2)),
-                Text('Mobile Security', style: TextStyle(fontSize: 10, color: Colors.grey, height: 1.2)),
-              ],
-            ),
-          ],
-        ),
+            child: const Icon(Icons.security, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 10),
+          const Text('XCloak Agent',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -.2)),
+        ]),
         actions: [
           IconButton(
             icon: const Icon(Icons.grid_view_rounded),
             tooltip: 'Mode Selection',
-            onPressed: () => Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
-            ),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (v) { if (v == 'unenroll') _unenroll(); },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'unenroll', child: Row(children: [
-                Icon(Icons.logout, size: 16, color: Colors.redAccent),
-                SizedBox(width: 8),
-                Text('Unenroll Device', style: TextStyle(color: Colors.redAccent)),
-              ])),
-            ],
+            onPressed: () => Navigator.pushReplacement(context,
+              MaterialPageRoute(builder: (_) => const ModeSelectScreen())),
           ),
         ],
       ),
-      body: tabs[_tab],
+      body: IndexedStack(index: _tab, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.warning_amber_outlined),
-            selectedIcon: Icon(Icons.warning_amber),
-            label: 'Threats',
-          ),
           NavigationDestination(
             icon: Icon(Icons.shield_outlined),
             selectedIcon: Icon(Icons.shield),
-            label: 'Posture',
-          ),
+            label: 'Overview'),
           NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'Activity',
-          ),
+            icon: Icon(Icons.warning_amber_rounded),
+            selectedIcon: Icon(Icons.warning_rounded),
+            label: 'Threats'),
+          NavigationDestination(
+            icon: Icon(Icons.health_and_safety_outlined),
+            selectedIcon: Icon(Icons.health_and_safety),
+            label: 'Posture'),
+          NavigationDestination(
+            icon: Icon(Icons.wifi_outlined),
+            selectedIcon: Icon(Icons.wifi),
+            label: 'Network'),
+          NavigationDestination(
+            icon: Icon(Icons.task_alt_outlined),
+            selectedIcon: Icon(Icons.task_alt),
+            label: 'Tasks'),
         ],
       ),
     );
@@ -132,233 +161,344 @@ class _AgentShellState extends State<AgentShell> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab 0 — Home
+// Tab 0 — Overview
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _HomeTab extends StatefulWidget {
-  const _HomeTab();
-  @override State<_HomeTab> createState() => _HomeTabState();
+class _OverviewTab extends StatefulWidget {
+  const _OverviewTab();
+  @override
+  State<_OverviewTab> createState() => _OverviewTabState();
 }
 
-class _HomeTabState extends State<_HomeTab> with AutomaticKeepAliveClientMixin {
-  @override bool get wantKeepAlive => true;
+class _OverviewTabState extends State<_OverviewTab>
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
+  @override
+  bool get wantKeepAlive => true;
 
-  bool _loading = true;
-  bool _serviceRunning = false;
-  bool _serverConnected = false;
+  late final AnimationController _ringCtrl;
+  late Animation<double>         _ringAnim;
+
+  bool   _loading = true;
+  Map<String, dynamic> _summary = {};
+  List   _alerts    = [];
+  List   _sideloaded = [];
   DevicePosture? _posture;
-  List<String> _sideloaded = [];
-  int? _agentId;
-  String? _serverUrl;
-  String? _deviceModel;
-  int _threatCount = 0;
+  int    _taskCount  = 0;
+  String? _agentVersion;
+  String? _serverVersion;
+  bool   _updateAvail   = false;
+  int?   _agentId;
+  int?   _pingMs;
+  bool   _serverOnline  = false;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _ringCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
+    _ringAnim = Tween(begin: 0.0, end: 0.0)
+        .animate(CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOutCubic));
+    _load();
+  }
+
+  @override
+  void dispose() { _ringCtrl.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    final c    = await ApiClient.fromStorage();
+    final id   = await SecureStore.agentId();
+    final info = await PackageInfo.fromPlatform();
+    _agentVersion = info.version;
+    _agentId = id;
+
+    await Future.wait([
+      _fetchSummary(c), _fetchAlerts(c), _fetchTasks(c),
+      _fetchSideloaded(), _fetchPosture(), _checkRelease(c), _ping(c),
+    ]);
+
+    if (!mounted) return;
+    final target = _level.arc;
+    _ringAnim = Tween(begin: _ringAnim.value, end: target)
+        .animate(CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOutCubic));
+    _ringCtrl.forward(from: 0);
+    setState(() => _loading = false);
+  }
+
+  Future<void> _fetchSummary(ApiClient c) async {
+    try { _summary = await c.get('/api/agents/self/summary'); } catch (_) {}
+  }
+
+  Future<void> _fetchAlerts(ApiClient c) async {
     try {
-      final running    = await FlutterBackgroundService().isRunning();
-      final posture    = await PostureCollector.collect();
-      final sideloaded = await ThreatDetector.sideloadedPackages();
-      final serverUrl  = await SecureStore.serverUrl();
-      final agentId    = await SecureStore.agentId();
-      final model      = await PostureCollector.model();
+      final r = await c.get('/api/agents/self/alerts');
+      _alerts = (r['alerts'] ?? []) as List;
+    } catch (_) {}
+  }
 
-      bool connected = false;
-      int threats    = 0;
-      if (serverUrl != null && agentId != null) {
-        try {
-          final c   = await ApiClient.fromStorage();
-          final res = await c.get('/api/agents/self/summary');
-          final alerts = (res['recent_alerts'] ?? res['alerts']) as List? ?? [];
-          threats   = alerts.length;
-          connected = true;
-        } catch (_) {}
+  Future<void> _fetchTasks(ApiClient c) async {
+    try {
+      final r = await c.get('/api/agents/self/tasks');
+      _taskCount = (r['count'] ?? 0) as int;
+    } catch (_) {}
+  }
+
+  Future<void> _fetchSideloaded() async {
+    _sideloaded = await ThreatDetector.sideloadedPackages();
+  }
+
+  Future<void> _fetchPosture() async {
+    _posture = await PostureCollector.collect();
+  }
+
+  Future<void> _checkRelease(ApiClient c) async {
+    try {
+      final r = await c.get('/api/agent-releases/android');
+      _serverVersion = r['version']?.toString();
+      if (_serverVersion != null && _agentVersion != null) {
+        _updateAvail = _serverVersion != _agentVersion;
       }
+    } catch (_) {}
+  }
 
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _serviceRunning = running;
-        _posture        = posture;
-        _sideloaded     = sideloaded;
-        _serverUrl      = serverUrl;
-        _agentId        = agentId;
-        _deviceModel    = model;
-        _serverConnected = connected;
-        _threatCount    = threats;
-      });
+  Future<void> _ping(ApiClient c) async {
+    try {
+      final sw = Stopwatch()..start();
+      await c.get('/api/agents/self/summary');
+      sw.stop();
+      _pingMs = sw.elapsedMilliseconds;
+      _serverOnline = true;
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      _serverOnline = false;
+      _pingMs = null;
     }
   }
 
-  _StatusLevel get _level {
-    if (_posture?.isRooted == true) return _StatusLevel.compromised;
-    if (_threatCount > 0) return _StatusLevel.alert;
-    if (_sideloaded.isNotEmpty || (_posture?.developerModeOn == true)) return _StatusLevel.warning;
-    if (!_serviceRunning || !_serverConnected) return _StatusLevel.monitoring;
-    return _StatusLevel.protected;
+  _ProtLevel get _level {
+    if (_posture?.isRooted == true)                          return _ProtLevel.compromised;
+    if (_criticalCount > 0)                                  return _ProtLevel.alert;
+    if (_alerts.isNotEmpty || _sideloaded.isNotEmpty)        return _ProtLevel.warning;
+    if (!_serverOnline)                                      return _ProtLevel.monitoring;
+    return _ProtLevel.protected;
+  }
+
+  int get _criticalCount => _alerts.where((a) {
+    final s = _parseSev(a['severity'] ?? a['level'] ?? '');
+    return s == _Sev.critical || s == _Sev.high;
+  }).length;
+
+  int get _postureScore {
+    if (_posture == null) return 100;
+    int s = 100;
+    if (_posture!.isRooted)        s -= 40;
+    if (_posture!.developerModeOn) s -= 20;
+    s -= (_sideloaded.length * 8).clamp(0, 30);
+    return s.clamp(0, 100);
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    final cs    = Theme.of(context).colorScheme;
-    final level = _level;
-    final color = level.color;
+    final cs = Theme.of(context).colorScheme;
+    final lv = _level;
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
-          // ── Protection ring ───────────────────────────────
-          Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 190, height: 190,
-                  child: CircularProgressIndicator(
-                    value: level.progress,
-                    backgroundColor: color.withOpacity(.12),
-                    valueColor: AlwaysStoppedAnimation(color),
-                    strokeWidth: 10,
-                    strokeCap: StrokeCap.round,
+
+          // ── Gradient header with protection ring ───────────────────────
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [lv.color.withOpacity(.09), cs.surface],
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 22),
+            child: Column(children: [
+              SizedBox(
+                width: 168, height: 168,
+                child: AnimatedBuilder(
+                  animation: _ringAnim,
+                  builder: (_, __) => CustomPaint(
+                    painter: _RingPainter(
+                      progress: _loading ? 0 : _ringAnim.value,
+                      color: lv.color, strokeWidth: 11),
+                    child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(lv.icon, color: lv.color, size: 34),
+                      const SizedBox(height: 6),
+                      Text(lv.label, style: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w900,
+                        color: lv.color, letterSpacing: 1.6)),
+                    ])),
                   ),
                 ),
-                Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(level.icon, color: color, size: 42),
-                  const SizedBox(height: 8),
-                  Text(level.label,
-                    style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1.8)),
-                  if (_agentId != null) ...[
-                    const SizedBox(height: 4),
-                    Text('ID: XCL-${_agentId!.toString().padLeft(4, '0')}',
-                      style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
-                  ],
+              ),
+              const SizedBox(height: 16),
+              // Server status pill
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (_serverOnline ? _kGreen : _kRed).withOpacity(.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: (_serverOnline ? _kGreen : _kRed).withOpacity(.3)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 7, height: 7,
+                    decoration: BoxDecoration(
+                      color: _serverOnline ? _kGreen : _kRed,
+                      shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    _serverOnline
+                      ? 'Server online${_pingMs != null ? " · ${_pingMs}ms" : ""}'
+                      : 'Server unreachable',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
+                      color: _serverOnline ? _kGreen : _kRed)),
                 ]),
-              ],
-            ),
+              ),
+            ]),
           ),
-          const SizedBox(height: 24),
 
-          // ── Stat chips ───────────────────────────────────
-          Row(children: [
-            _StatChip(value: '$_threatCount', label: 'Threats',
-              color: _threatCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF22C55E)),
-            const SizedBox(width: 8),
-            _StatChip(value: _complianceScore, label: 'Compliant',
-              color: _posture?.isRooted == true ? const Color(0xFFEF4444) : const Color(0xFF22C55E)),
-            const SizedBox(width: 8),
-            _StatChip(
-              value: _serviceRunning ? 'Active' : 'Stopped',
-              label: 'Service',
-              color: _serviceRunning ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+          // ── Update banner ──────────────────────────────────────────────
+          if (_updateAvail)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [
+                    _kPurple.withOpacity(.12),
+                    _kBlue.withOpacity(.06),
+                  ]),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kPurple.withOpacity(.3)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.system_update_alt, color: _kPurple, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('Update available — v$_serverVersion',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+                      color: _kPurple))),
+                ]),
+              ),
             ),
-          ]),
-          const SizedBox(height: 20),
 
-          // ── Status cards ─────────────────────────────────
-          _StatusCard(
-            icon: _serverConnected ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-            title: 'Server Connection',
-            value: _serverConnected
-              ? (_serverUrl?.replaceAll(RegExp(r'https?://'), '') ?? '—')
-              : 'Disconnected',
-            color: _serverConnected ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+          const SizedBox(height: 16),
+
+          // ── Stats row ──────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(children: [
+              _StatChip(
+                value: _loading ? '–' : '${_alerts.length}',
+                label: 'Threats',
+                color: _alerts.isEmpty ? _kGreen : _kRed),
+              const SizedBox(width: 8),
+              _StatChip(
+                value: _loading ? '–' : '$_postureScore',
+                label: 'Score',
+                color: _postureScore >= 80 ? _kGreen : _postureScore >= 60 ? _kAmber : _kRed),
+              const SizedBox(width: 8),
+              _StatChip(
+                value: _loading ? '–' : '$_taskCount',
+                label: 'Tasks',
+                color: _taskCount > 0 ? _kAmber : _kBlue),
+              const SizedBox(width: 8),
+              _StatChip(
+                value: _loading ? '–' : '${_sideloaded.length}',
+                label: 'Sideloaded',
+                color: _sideloaded.isEmpty ? _kGreen : _kOrange),
+            ]),
           ),
-          const SizedBox(height: 8),
-          _StatusCard(
-            icon: _serviceRunning ? Icons.shield : Icons.shield_outlined,
-            title: 'Background Protection',
-            value: _serviceRunning ? 'Running' : 'Stopped — tap to start',
-            color: _serviceRunning ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
-            onTap: _serviceRunning ? null : () async {
-              await FlutterBackgroundService().startService();
-              _load();
-            },
-          ),
-          const SizedBox(height: 8),
-          if (_deviceModel != null)
-            _StatusCard(
-              icon: Icons.phone_android_outlined,
-              title: 'Device',
-              value: _deviceModel!,
-              color: cs.primary,
-            ),
-          const SizedBox(height: 8),
-          if (_posture != null)
-            _StatusCard(
-              icon: Icons.android,
-              title: 'OS Version',
-              value: _posture!.osVersion,
-              color: cs.primary,
-            ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // ── Quick actions ─────────────────────────────────
-          Text('Quick Actions',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.onSurfaceVariant, letterSpacing: 1.2)),
-          const SizedBox(height: 10),
-          Row(children: [
-            _ActionButton(
-              icon: Icons.send_outlined,
-              label: 'Force Check-in',
-              onTap: () async {
-                try {
-                  final c = await ApiClient.fromStorage();
-                  await c.post('/api/agents/heartbeat', {});
+          // ── Agent identity card ────────────────────────────────────────
+          _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _SectionLabel('Agent Identity'),
+            const SizedBox(height: 10),
+            _InfoRow(label: 'Agent ID',  value: _agentId != null ? '#$_agentId' : '–'),
+            _InfoRow(label: 'Version',   value: _agentVersion ?? '–'),
+            _InfoRow(label: 'Status',
+              value: _summary['status']?.toString() ?? (_serverOnline ? 'Online' : 'Offline')),
+            _InfoRow(label: 'Last Seen', value: _fmtTs(_summary['last_seen']?.toString())),
+            _InfoRow(label: 'Platform',  value: Platform.isAndroid ? 'Android' : 'iOS'),
+          ])),
+          const SizedBox(height: 12),
+
+          // ── Latest alert preview ───────────────────────────────────────
+          if (_alerts.isNotEmpty) ...[
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const _SectionLabel('Latest Alert'),
+                const Spacer(),
+                Text('${_alerts.length} total',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ]),
+              const SizedBox(height: 10),
+              _AlertCard(alert: _alerts.first as Map<String, dynamic>, compact: true),
+            ])),
+            const SizedBox(height: 12),
+          ],
+
+          // ── Quick actions ──────────────────────────────────────────────
+          _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _SectionLabel('Quick Actions'),
+            const SizedBox(height: 10),
+            Row(children: [
+              _ActionTile(
+                icon: Icons.sync_rounded, label: 'Force\nSync', color: _kBlue,
+                onTap: () async {
+                  try {
+                    final c = await ApiClient.fromStorage();
+                    await c.post('/api/agents/heartbeat', {});
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Check-in sent'), backgroundColor: _kGreen));
+                    _load();
+                  } catch (_) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Check-in failed'), backgroundColor: _kRed));
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              _ActionTile(
+                icon: Icons.bug_report_outlined, label: 'Scan\nThreats', color: _kOrange,
+                onTap: () async {
+                  final apps = await ThreatDetector.sideloadedPackages();
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Check-in sent'), backgroundColor: Color(0xFF22C55E)));
-                } catch (_) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Check-in failed'), backgroundColor: Color(0xFFEF4444)));
-                }
-              },
-            ),
-            const SizedBox(width: 8),
-            _ActionButton(
-              icon: Icons.bug_report_outlined,
-              label: 'Scan Threats',
-              onTap: () async {
-                final apps = await ThreatDetector.sideloadedPackages();
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(apps.isEmpty
-                      ? 'No threats detected locally'
-                      : '${apps.length} sideloaded app(s) detected'),
-                  backgroundColor: apps.isEmpty ? const Color(0xFF22C55E) : const Color(0xFFF59E0B),
-                ));
-                _load();
-              },
-            ),
-            const SizedBox(width: 8),
-            _ActionButton(
-              icon: Icons.refresh,
-              label: 'Refresh',
-              onTap: _load,
-            ),
-          ]),
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(apps.isEmpty
+                      ? 'No threats detected' : '${apps.length} sideloaded app(s) found'),
+                    backgroundColor: apps.isEmpty ? _kGreen : _kAmber));
+                  _load();
+                },
+              ),
+              const SizedBox(width: 8),
+              _ActionTile(
+                icon: Icons.refresh_rounded, label: 'Refresh\nAll', color: _kGreen,
+                onTap: _load),
+              const SizedBox(width: 8),
+              _ActionTile(
+                icon: Icons.grid_view_rounded, label: 'Mode\nSelect', color: _kPurple,
+                onTap: () => Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => const ModeSelectScreen()))),
+            ]),
+          ])),
         ],
       ),
     );
   }
 
-  String get _complianceScore {
-    if (_posture == null) return '—';
-    int score = 100;
-    if (_posture!.isRooted) score -= 40;
-    if (_posture!.developerModeOn) score -= 20;
-    if (_sideloaded.isNotEmpty) score -= _sideloaded.length * 10;
-    return '${score.clamp(0, 100)}%';
+  String _fmtTs(String? ts) {
+    if (ts == null || ts.isEmpty) return '–';
+    return _timeAgo(ts);
   }
 }
 
@@ -368,131 +508,147 @@ class _HomeTabState extends State<_HomeTab> with AutomaticKeepAliveClientMixin {
 
 class _ThreatsTab extends StatefulWidget {
   const _ThreatsTab();
-  @override State<_ThreatsTab> createState() => _ThreatsTabState();
+  @override
+  State<_ThreatsTab> createState() => _ThreatsTabState();
 }
 
 class _ThreatsTabState extends State<_ThreatsTab> {
-  bool _loading = true;
-  List _alerts  = [];
-  List<String> _sideloaded = [];
+  bool  _loading    = true;
+  List  _alerts     = [];
+  List  _sideloaded = [];
+  _Sev? _filter;
+  bool  _sideExpanded = true;
+  final Set<int> _expanded = {};
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final sideloaded = await ThreatDetector.sideloadedPackages();
-    List serverAlerts = [];
+    List sa = [], sl = [];
     try {
-      final c = await ApiClient.fromStorage();
-      final r = await c.get('/api/agents/self/alerts');
-      serverAlerts = (r['alerts'] ?? r['data'] ?? r['items'] ?? []) as List;
+      final r = await (await ApiClient.fromStorage()).get('/api/agents/self/alerts');
+      sa = (r['alerts'] ?? []) as List;
     } catch (_) {}
+    sl = await ThreatDetector.sideloadedPackages();
     if (!mounted) return;
-    setState(() { _loading = false; _alerts = serverAlerts; _sideloaded = sideloaded; });
+    setState(() { _loading = false; _alerts = sa; _sideloaded = sl; });
   }
+
+  List get _filtered => _filter == null
+    ? _alerts
+    : _alerts.where((a) => _parseSev(a['severity'] ?? a['level']) == _filter).toList();
+
+  int _count(_Sev s) =>
+    _alerts.where((a) => _parseSev(a['severity'] ?? a['level']) == s).length;
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    final cs       = Theme.of(context).colorScheme;
+    final filtered = _filtered;
 
-    final localThreats = [
-      for (final app in _sideloaded)
-        {'title': 'Sideloaded App: $app', 'severity': 'high', 'description': 'Installed outside official app store'}
-    ];
-    final all = [...localThreats, ..._alerts];
-
-    if (all.isEmpty) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.verified_user, size: 72, color: const Color(0xFF22C55E).withOpacity(.4)),
-          const SizedBox(height: 16),
-          const Text('No Threats Detected', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text('This device is clean', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-        ]),
-      );
+    if (_alerts.isEmpty && _sideloaded.isEmpty) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.verified_user_outlined, size: 72, color: _kGreen.withOpacity(.5)),
+        const SizedBox(height: 16),
+        const Text('No Threats Detected',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text('Your device is clean.', style: TextStyle(color: cs.onSurface.withOpacity(.5))),
+        const SizedBox(height: 24),
+        TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh),
+          label: const Text('Refresh')),
+      ]));
     }
 
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: all.length + 1,
-        itemBuilder: (_, i) {
-          if (i == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Filter bar
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              _FilterChip(label: 'All', count: _alerts.length,
+                selected: _filter == null, color: Colors.grey,
+                onTap: () => setState(() => _filter = null)),
+              ..._Sev.values.map((s) => Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: _FilterChip(label: s.label, count: _count(s),
+                  selected: _filter == s, color: s.color,
+                  onTap: () => setState(() => _filter = _filter == s ? null : s)),
+              )),
+            ]),
+          ),
+          const SizedBox(height: 14),
+
+          // Alert list
+          if (filtered.isNotEmpty) ...[
+            Text('${filtered.length} alert${filtered.length == 1 ? "" : "s"}',
+              style: TextStyle(fontSize: 11.5, color: cs.onSurface.withOpacity(.5),
+                fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ...List.generate(filtered.length, (i) {
+              final a = filtered[i] as Map<String, dynamic>;
+              final exp = _expanded.contains(i);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _AlertCard(
+                  alert: a, expanded: exp,
+                  onTap: () => setState(() => exp ? _expanded.remove(i) : _expanded.add(i)),
+                ),
+              );
+            }),
+          ] else if (_filter != null)
+            Center(child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Text('No ${_filter!.label} alerts',
+                style: TextStyle(color: cs.onSurface.withOpacity(.4))),
+            )),
+
+          // Sideloaded apps
+          if (_sideloaded.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => setState(() => _sideExpanded = !_sideExpanded),
               child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withOpacity(.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFEF4444).withOpacity(.3)),
-                  ),
-                  child: Text('${all.length} active ${all.length == 1 ? 'threat' : 'threats'}',
-                    style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
-              ]),
-            );
-          }
-          final t   = all[i - 1] as Map<String, dynamic>;
-          final sev = (t['severity'] ?? 'low').toString().toLowerCase();
-          final col = _sevColor(sev);
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              leading: Container(
-                width: 42, height: 42,
-                decoration: BoxDecoration(
-                  color: col.withOpacity(.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: col.withOpacity(.3)),
-                ),
-                child: Icon(Icons.warning_amber, color: col, size: 22),
-              ),
-              title: Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: col.withOpacity(.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(sev.toUpperCase(),
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: col, letterSpacing: .8)),
-                ),
+                Container(width: 3, height: 16,
+                  decoration: BoxDecoration(color: _kOrange,
+                    borderRadius: BorderRadius.circular(2))),
                 const SizedBox(width: 8),
-                Expanded(child: Text(
-                  (t['title'] ?? t['name'] ?? t['rule_name'] ?? 'Threat Detected').toString(),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                )),
+                Text('Sideloaded Apps (${_sideloaded.length})',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Icon(_sideExpanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18, color: Colors.grey),
               ]),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Text(
-                  (t['description'] ?? t['message'] ?? '').toString(),
-                  style: const TextStyle(fontSize: 11.5),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              isThreeLine: true,
             ),
-          );
-        },
+            if (_sideExpanded) ...[
+              const SizedBox(height: 8),
+              ..._sideloaded.map((pkg) => Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _kOrange.withOpacity(.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kOrange.withOpacity(.2))),
+                child: Row(children: [
+                  const Icon(Icons.android, color: _kOrange, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(pkg.toString(),
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
+                  _Pill(label: 'RISK', color: _kOrange),
+                ]),
+              )),
+            ],
+          ],
+          const SizedBox(height: 12),
+        ],
       ),
     );
   }
-
-  Color _sevColor(String s) => switch (s) {
-    'critical' => const Color(0xFFEF4444),
-    'high'     => const Color(0xFFF97316),
-    'medium'   => const Color(0xFFF59E0B),
-    _          => const Color(0xFF22C55E),
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -501,442 +657,1136 @@ class _ThreatsTabState extends State<_ThreatsTab> {
 
 class _PostureTab extends StatefulWidget {
   const _PostureTab();
-  @override State<_PostureTab> createState() => _PostureTabState();
+  @override
+  State<_PostureTab> createState() => _PostureTabState();
 }
 
-class _PostureTabState extends State<_PostureTab> {
+class _PostureTabState extends State<_PostureTab>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late Animation<double>         _anim;
+
   bool _loading     = true;
-  DevicePosture? _posture;
-  List<String> _sideloaded = [];
+  bool _devExpanded = false;
+  DevicePosture?     _posture;
+  List<String>       _sideloaded = [];
+  AndroidDeviceInfo? _devInfo;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+    _anim = Tween(begin: 0.0, end: 0.0)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _load();
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final p = await PostureCollector.collect();
-    final s = await ThreatDetector.sideloadedPackages();
+    final p  = await PostureCollector.collect();
+    final sl = await ThreatDetector.sideloadedPackages();
+    AndroidDeviceInfo? di;
+    try { di = await DeviceInfoPlugin().androidInfo; } catch (_) {}
     if (!mounted) return;
-    setState(() { _loading = false; _posture = p; _sideloaded = s; });
+    setState(() { _posture = p; _sideloaded = sl; _devInfo = di; _loading = false; });
+    _anim = Tween(begin: 0.0, end: _score / 100)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _ctrl.forward(from: 0);
   }
 
   int get _score {
-    if (_posture == null) return 0;
+    if (_posture == null) return 100;
     int s = 100;
-    if (_posture!.isRooted) s -= 40;
-    if (_posture!.developerModeOn) s -= 20;
-    if (_sideloaded.isNotEmpty) s -= (_sideloaded.length * 10).clamp(0, 30);
+    if (_posture!.isRooted)                     s -= 40;
+    if (_posture!.developerModeOn)               s -= 20;
+    if (!(_posture!.isEncrypted ?? true))        s -= 15;
+    if (!(_posture!.hasPasscode  ?? true))        s -= 10;
+    s -= (_sideloaded.length * 8).clamp(0, 25);
     return s.clamp(0, 100);
   }
 
-  Color get _scoreColor {
-    final s = _score;
-    if (s >= 90) return const Color(0xFF22C55E);
-    if (s >= 70) return const Color(0xFFF59E0B);
-    return const Color(0xFFEF4444);
+  Color  get _scoreColor  => _score >= 85 ? _kGreen : _score >= 65 ? _kAmber : _kRed;
+  String get _scoreLabel  => _score >= 85 ? 'Excellent' : _score >= 65 ? 'Fair'
+      : _score >= 40 ? 'At Risk' : 'Critical';
+
+  int get _deviceScore {
+    int s = 100;
+    if (_posture?.isRooted == true)        s -= 60;
+    if (_posture?.developerModeOn == true) s -= 30;
+    return s.clamp(0, 100);
+  }
+
+  int get _dataScore {
+    int s = 100;
+    if (!(_posture?.isEncrypted ?? true)) s -= 50;
+    if (!(_posture?.hasPasscode  ?? true)) s -= 40;
+    return s.clamp(0, 100);
+  }
+
+  int get _appScore => (100 - (_sideloaded.length * 15).clamp(0, 100)).clamp(0, 100);
+
+  List<String> get _recommendations {
+    final r = <String>[];
+    if (_posture?.isRooted == true)         r.add('Remove root access — device integrity compromised');
+    if (_posture?.developerModeOn == true)  r.add('Disable Developer Options in Settings → System');
+    if (!(_posture?.isEncrypted ?? true))   r.add('Enable full-disk encryption in Security settings');
+    if (!(_posture?.hasPasscode  ?? true))  r.add('Set a screen lock PIN, pattern, or biometric');
+    if (_sideloaded.isNotEmpty)
+      r.add('Uninstall ${_sideloaded.length} sideloaded app(s) from unknown sources');
+    return r;
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     final p = _posture;
-    final cs = Theme.of(context).colorScheme;
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Score card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('POSTURE SCORE', style: TextStyle(fontSize: 11, letterSpacing: 1.2, color: Colors.grey)),
-                    const SizedBox(height: 4),
-                    Text('$_score / 100',
-                      style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: _scoreColor)),
-                    Text(_score >= 90 ? 'Excellent' : _score >= 70 ? 'Fair' : 'At Risk',
-                      style: TextStyle(fontSize: 13, color: _scoreColor, fontWeight: FontWeight.w600)),
-                  ]),
-                  const Spacer(),
-                  SizedBox(
-                    width: 68, height: 68,
-                    child: Stack(alignment: Alignment.center, children: [
-                      CircularProgressIndicator(
-                        value: _score / 100,
-                        backgroundColor: _scoreColor.withOpacity(.15),
-                        valueColor: AlwaysStoppedAnimation(_scoreColor),
-                        strokeWidth: 7,
-                        strokeCap: StrokeCap.round,
-                      ),
-                      Text('$_score', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _scoreColor)),
-                    ]),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: _score / 100,
-                    minHeight: 6,
-                    backgroundColor: _scoreColor.withOpacity(.15),
-                    valueColor: AlwaysStoppedAnimation(_scoreColor),
+          // Score ring card
+          Card(child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(children: [
+              Row(children: [
+                SizedBox(
+                  width: 100, height: 100,
+                  child: AnimatedBuilder(
+                    animation: _anim,
+                    builder: (_, __) => CustomPaint(
+                      painter: _RingPainter(progress: _anim.value, color: _scoreColor, strokeWidth: 9),
+                      child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text('$_score',
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
+                            color: _scoreColor)),
+                        Text('/100', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                      ])),
+                    ),
                   ),
                 ),
+                const SizedBox(width: 20),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('POSTURE SCORE',
+                    style: TextStyle(fontSize: 10.5, letterSpacing: 1.2, color: Colors.grey,
+                      fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(_scoreLabel,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _scoreColor)),
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _score / 100, minHeight: 5,
+                      backgroundColor: _scoreColor.withOpacity(.15),
+                      valueColor: AlwaysStoppedAnimation(_scoreColor),
+                    ),
+                  ),
+                ])),
               ]),
-            ),
-          ),
+              const SizedBox(height: 20),
+              // Sub-scores row
+              Row(children: [
+                _SubScore(label: 'Device',  score: _deviceScore),
+                _SubScore(label: 'Data',    score: _dataScore),
+                _SubScore(label: 'Apps',    score: _appScore),
+                const _SubScore(label: 'Network', score: 100),
+              ]),
+            ]),
+          )),
           const SizedBox(height: 16),
 
-          // Checks
           if (p != null) ...[
-            _section('Security Checks'),
-            _check('Root / Jailbreak', !p.isRooted,
-              p.isRooted ? 'Device is rooted — HIGH RISK' : 'Device is not rooted'),
-            _check('Developer Mode', !p.developerModeOn,
-              p.developerModeOn ? 'Developer options active — policy violation' : 'Developer options disabled'),
-            _check('Disk Encryption', p.isEncrypted ?? true,
-              (p.isEncrypted ?? true) ? 'Full-disk encryption enabled' : 'Encryption not confirmed'),
-            _check('Screen Lock', p.hasPasscode ?? true,
-              (p.hasPasscode ?? true) ? 'Screen lock configured' : 'No screen lock set'),
+            // Device Integrity
+            _GroupHeader(label: 'Device Integrity', score: _deviceScore),
+            _CheckRow(label: 'Root / Jailbreak', pass: !p.isRooted,
+              detail: p.isRooted
+                ? 'Device is rooted — data isolation broken'
+                : 'Device has not been rooted'),
+            _CheckRow(label: 'Developer Mode', pass: !p.developerModeOn,
+              detail: p.developerModeOn
+                ? 'Developer options enabled — ADB access possible'
+                : 'Developer options are disabled'),
             const SizedBox(height: 16),
 
-            _section('Device Information'),
-            _info('OS Version',   p.osVersion),
-            _info('Build',        p.buildVersion),
-            if (p.osVersion.isNotEmpty) ...[
+            // Data Protection
+            _GroupHeader(label: 'Data Protection', score: _dataScore),
+            _CheckRow(label: 'Disk Encryption', pass: p.isEncrypted ?? true,
+              detail: (p.isEncrypted ?? true)
+                ? 'Full-disk encryption is active'
+                : 'Disk encryption not confirmed'),
+            _CheckRow(label: 'Screen Lock', pass: p.hasPasscode ?? true,
+              detail: (p.hasPasscode ?? true)
+                ? 'Screen lock is configured'
+                : 'No screen lock — unauthorized access risk'),
+            const SizedBox(height: 16),
+
+            // App Security
+            _GroupHeader(label: 'App Security', score: _appScore),
+            _CheckRow(label: 'Sideloaded Apps', pass: _sideloaded.isEmpty,
+              detail: _sideloaded.isEmpty
+                ? 'No apps installed outside official store'
+                : '${_sideloaded.length} app(s) from unknown sources'),
+            if (_sideloaded.isNotEmpty)
+              ..._sideloaded.map((pkg) => Container(
+                margin: const EdgeInsets.only(bottom: 4, left: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _kRed.withOpacity(.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _kRed.withOpacity(.15))),
+                child: Row(children: [
+                  const Icon(Icons.android, size: 14, color: _kRed),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(pkg,
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500))),
+                ]),
+              )),
+            const SizedBox(height: 16),
+
+            // Recommendations
+            if (_recommendations.isNotEmpty) ...[
+              _GroupHeader(label: 'Recommendations', score: null),
+              ..._recommendations.asMap().entries.map((e) => Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: _kAmber.withOpacity(.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _kAmber.withOpacity(.25))),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(
+                    width: 20, height: 20, alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _kAmber.withOpacity(.15),
+                      borderRadius: BorderRadius.circular(5)),
+                    child: Text('${e.key + 1}',
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
+                        color: _kAmber)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(e.value, style: const TextStyle(fontSize: 12.5))),
+                ]),
+              )),
               const SizedBox(height: 16),
             ],
-          ],
 
-          // Sideloaded apps
-          _section('Sideloaded Apps (${_sideloaded.length})'),
-          if (_sideloaded.isEmpty)
-            _check('App Sources', true, 'No sideloaded apps detected')
-          else
-            for (final app in _sideloaded)
-              _check(app, false, 'Installed outside app store', icon: Icons.android),
+            // Device info accordion
+            GestureDetector(
+              onTap: () => setState(() => _devExpanded = !_devExpanded),
+              child: Row(children: [
+                const Icon(Icons.phone_android, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text('Device Information',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade600)),
+                const Spacer(),
+                Icon(_devExpanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18, color: Colors.grey),
+              ]),
+            ),
+            if (_devExpanded) ...[
+              const SizedBox(height: 10),
+              _InfoRow(label: 'OS',    value: p.osVersion),
+              _InfoRow(label: 'Build', value: p.buildVersion),
+              if (_devInfo != null) ...[
+                _InfoRow(label: 'Model',          value: '${_devInfo!.manufacturer} ${_devInfo!.model}'),
+                _InfoRow(label: 'Android ID',     value: _devInfo!.id),
+                _InfoRow(label: 'SDK',            value: 'API ${_devInfo!.version.sdkInt}'),
+                _InfoRow(label: 'Security Patch', value: _devInfo!.version.securityPatch ?? '–'),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ],
           const SizedBox(height: 20),
         ],
       ),
     );
   }
-
-  Widget _section(String label) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(label, style: TextStyle(
-      fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.1,
-      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-  );
-
-  Widget _check(String label, bool ok, String detail, {IconData icon = Icons.check_circle}) {
-    final color = ok ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        leading: Icon(ok ? Icons.check_circle_outline : Icons.cancel_outlined, color: color, size: 22),
-        title: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-        subtitle: Text(detail, style: const TextStyle(fontSize: 11.5)),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: color.withOpacity(.1),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: color.withOpacity(.3)),
-          ),
-          child: Text(ok ? 'PASS' : 'FAIL',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color, letterSpacing: .8)),
-        ),
-      ),
-    );
-  }
-
-  Widget _info(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(children: [
-      Text(label, style: const TextStyle(fontSize: 12.5, color: Colors.grey)),
-      const Spacer(),
-      Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-    ]),
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab 3 — Activity
+// Tab 3 — Network
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ActivityTab extends StatefulWidget {
-  const _ActivityTab();
-  @override State<_ActivityTab> createState() => _ActivityTabState();
+class _NetworkTab extends StatefulWidget {
+  const _NetworkTab();
+  @override
+  State<_NetworkTab> createState() => _NetworkTabState();
 }
 
-class _ActivityTabState extends State<_ActivityTab> {
+class _NetworkTabState extends State<_NetworkTab> {
   bool _loading = true;
-  List _events  = [];
+  List<ConnectivityResult> _conn = [];
+  int?   _pingMs;
+  bool   _serverReachable = false;
+  List   _netEvents = [];
+  String? _serverUrl;
 
   @override
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    List evts = [];
-    try {
-      final c = await ApiClient.fromStorage();
-      final r = await c.get('/api/agents/self/timeline');
-      evts = (r['events'] ?? r['data'] ?? r['items'] ?? []) as List;
-    } catch (_) {}
+    _serverUrl = await SecureStore.serverUrl();
+    await Future.wait([_checkConn(), _pingServer(), _fetchNetEvents()]);
     if (!mounted) return;
-    setState(() { _loading = false; _events = evts; });
+    setState(() => _loading = false);
+  }
+
+  Future<void> _checkConn() async {
+    try { _conn = await Connectivity().checkConnectivity(); }
+    catch (_) { _conn = [ConnectivityResult.none]; }
+  }
+
+  Future<void> _pingServer() async {
+    try {
+      final sw = Stopwatch()..start();
+      await (await ApiClient.fromStorage()).get('/api/agents/self/summary');
+      sw.stop();
+      _pingMs = sw.elapsedMilliseconds;
+      _serverReachable = true;
+    } catch (_) { _serverReachable = false; _pingMs = null; }
+  }
+
+  Future<void> _fetchNetEvents() async {
+    try {
+      final r = await (await ApiClient.fromStorage()).get('/api/agents/self/timeline');
+      final all = (r['events'] ?? r['data'] ?? []) as List;
+      _netEvents = all.where((e) {
+        final t = (e['event_type'] ?? e['type'] ?? '').toString();
+        return t.contains('connect') || t.contains('network') || t.contains('checkin');
+      }).take(12).toList();
+    } catch (_) {}
+  }
+
+  bool get _hasVpn    => _conn.contains(ConnectivityResult.vpn);
+  bool get _hasWifi   => _conn.contains(ConnectivityResult.wifi);
+  bool get _hasMobile => _conn.contains(ConnectivityResult.mobile);
+  bool get _offline   => _conn.isEmpty || _conn.every((r) => r == ConnectivityResult.none);
+
+  String get _connLabel {
+    if (_offline) return 'Offline';
+    final parts = <String>[];
+    if (_hasVpn)    parts.add('VPN');
+    if (_hasWifi)   parts.add('Wi-Fi');
+    if (_hasMobile) parts.add('Mobile');
+    if (_conn.contains(ConnectivityResult.ethernet)) parts.add('Ethernet');
+    return parts.isEmpty ? 'Unknown' : parts.join(' + ');
+  }
+
+  Color get _connColor {
+    if (_offline)  return _kRed;
+    if (_hasVpn)   return _kGreen;
+    if (_hasWifi)  return _kBlue;
+    return _kAmber;
+  }
+
+  int get _networkScore {
+    if (_offline) return 0;
+    int s = 50;
+    if (_hasVpn)          s += 30;
+    if (_hasWifi)         s += 10;
+    if (_hasMobile)       s += 15;
+    if (_serverReachable) s += 10;
+    return s.clamp(0, 100);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    if (_events.isEmpty) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.history, size: 64, color: Colors.grey.shade400),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Connection header card
+          Card(child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(children: [
+              Row(children: [
+                Container(
+                  width: 52, height: 52,
+                  decoration: BoxDecoration(
+                    color: _connColor.withOpacity(.12),
+                    borderRadius: BorderRadius.circular(14)),
+                  child: Icon(_connIcon(), color: _connColor, size: 26),
+                ),
+                const SizedBox(width: 16),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('CONNECTION',
+                    style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Colors.grey,
+                      fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(_connLabel,
+                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800,
+                      color: _connColor)),
+                ])),
+                _Pill(label: _offline ? 'OFFLINE' : 'ONLINE', color: _connColor),
+              ]),
+              if (_conn.any((r) => r != ConnectivityResult.none)) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8, runSpacing: 6,
+                  children: _conn.where((r) => r != ConnectivityResult.none)
+                    .map((r) => _ConnChip(result: r)).toList(),
+                ),
+              ],
+            ]),
+          )),
           const SizedBox(height: 12),
-          const Text('No Activity Yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text('Events will appear after the first check-in.',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-        ]),
-      );
-    }
+
+          // Server connection
+          _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _SectionLabel('Server Connection'),
+            const SizedBox(height: 10),
+            _InfoRow(label: 'Server',    value: _serverUrl ?? '–'),
+            _InfoRow(label: 'Reachable', value: _serverReachable ? 'Yes' : 'No'),
+            _InfoRow(label: 'Latency',   value: _pingMs != null ? '${_pingMs}ms' : '–'),
+            _InfoRow(label: 'Quality',   value: _latencyLabel()),
+          ])),
+          const SizedBox(height: 12),
+
+          // Security assessment
+          _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _SectionLabel('Security Assessment'),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Text('Network Score',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('$_networkScore / 100',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700,
+                      color: _riskColor(_networkScore))),
+                ]),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: _networkScore / 100, minHeight: 6,
+                    backgroundColor: _riskColor(_networkScore).withOpacity(.15),
+                    valueColor: AlwaysStoppedAnimation(_riskColor(_networkScore)),
+                  ),
+                ),
+              ])),
+            ]),
+            const SizedBox(height: 14),
+            _CheckRow(label: 'VPN Protection', pass: _hasVpn,
+              detail: _hasVpn ? 'Traffic routed through VPN' : 'No VPN — traffic may be intercepted'),
+            _CheckRow(label: 'Server Reachable', pass: _serverReachable,
+              detail: _serverReachable ? 'XCloak backend is accessible' : 'Cannot reach XCloak server'),
+            _CheckRow(label: 'Network Available', pass: !_offline,
+              detail: _offline ? 'Device is offline' : 'Network connectivity confirmed'),
+          ])),
+          const SizedBox(height: 12),
+
+          // Recent network events
+          if (_netEvents.isNotEmpty)
+            _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const _SectionLabel('Recent Network Events'),
+              const SizedBox(height: 10),
+              ..._netEvents.map((e) {
+                final type = (e['event_type'] ?? e['type'] ?? '').toString();
+                final ts   = (e['created_at'] ?? e['timestamp'] ?? '').toString();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Row(children: [
+                    Icon(_netEventIcon(type), size: 16, color: _kBlue),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(type.replaceAll('_', ' '),
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
+                    Text(_timeAgo(ts),
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ]),
+                );
+              }),
+            ])),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  IconData _connIcon() {
+    if (_hasVpn)    return Icons.vpn_lock;
+    if (_hasWifi)   return Icons.wifi;
+    if (_hasMobile) return Icons.signal_cellular_alt;
+    return Icons.signal_wifi_off;
+  }
+
+  String _latencyLabel() {
+    if (_pingMs == null) return '–';
+    if (_pingMs! < 100)  return 'Excellent (${_pingMs}ms)';
+    if (_pingMs! < 300)  return 'Good (${_pingMs}ms)';
+    if (_pingMs! < 600)  return 'Fair (${_pingMs}ms)';
+    return 'Poor (${_pingMs}ms)';
+  }
+
+  Color _riskColor(int score) =>
+    score >= 80 ? _kGreen : score >= 55 ? _kAmber : _kRed;
+
+  IconData _netEventIcon(String type) {
+    if (type.contains('checkin'))  return Icons.sync;
+    if (type.contains('connect'))  return Icons.cable;
+    return Icons.network_check;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab 4 — Tasks
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TasksTab extends StatefulWidget {
+  const _TasksTab();
+  @override
+  State<_TasksTab> createState() => _TasksTabState();
+}
+
+class _TasksTabState extends State<_TasksTab> {
+  bool _loading      = true;
+  List _tasks        = [];
+  int  _yaraCount    = 0;
+  List _taskHistory  = [];
+  String? _releasedVersion;
+  String? _localVersion;
+  bool _updateAvail  = false;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    _localVersion = (await PackageInfo.fromPlatform()).version;
+    final c = await ApiClient.fromStorage();
+    await Future.wait([
+      _fetchTasks(c), _fetchYara(c), _fetchHistory(c), _fetchRelease(c),
+    ]);
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  Future<void> _fetchTasks(ApiClient c) async {
+    try {
+      final r = await c.get('/api/agents/self/tasks');
+      _tasks = (r['tasks'] ?? []) as List;
+    } catch (_) {}
+  }
+
+  Future<void> _fetchYara(ApiClient c) async {
+    try {
+      final r = await c.get('/api/yara/rules/enabled');
+      final rules = r['rules'] ?? r['data'] ?? [];
+      _yaraCount = (rules as List).length;
+    } catch (_) {}
+  }
+
+  Future<void> _fetchHistory(ApiClient c) async {
+    try {
+      final r = await c.get('/api/agents/self/timeline');
+      final all = (r['events'] ?? r['data'] ?? []) as List;
+      _taskHistory = all.where((e) {
+        final t = (e['event_type'] ?? e['type'] ?? '').toString();
+        return t.contains('task') || t.contains('scan') || t.contains('command');
+      }).take(15).toList();
+    } catch (_) {}
+  }
+
+  Future<void> _fetchRelease(ApiClient c) async {
+    try {
+      final r = await c.get('/api/agent-releases/android');
+      _releasedVersion = r['version']?.toString();
+      if (_releasedVersion != null && _localVersion != null) {
+        _updateAvail = _releasedVersion != _localVersion;
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
 
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: _events.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 1),
-        itemBuilder: (_, i) {
-          final e    = _events[i] as Map<String, dynamic>;
-          final type = (e['event_type'] ?? e['type'] ?? 'event').toString();
-          final ts   = e['created_at'] ?? e['timestamp'] ?? '';
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        children: [
+          // Summary chips
+          Row(children: [
+            _StatChip(value: '${_tasks.length}', label: 'Pending',
+              color: _tasks.isEmpty ? _kGreen : _kAmber),
+            const SizedBox(width: 8),
+            _StatChip(value: '$_yaraCount', label: 'YARA Rules', color: _kPurple),
+            const SizedBox(width: 8),
+            _StatChip(value: '${_taskHistory.length}', label: 'Completed', color: _kBlue),
+          ]),
+          const SizedBox(height: 16),
+
+          // Update banner
+          if (_updateAvail)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  _kPurple.withOpacity(.14), _kBlue.withOpacity(.07)]),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kPurple.withOpacity(.3))),
+              child: Row(children: [
+                const Icon(Icons.system_update_alt, color: _kPurple, size: 22),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Agent Update Available',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700,
+                      color: _kPurple)),
+                  Text('v$_localVersion → v$_releasedVersion',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ])),
+                const Icon(Icons.arrow_forward_ios, size: 14, color: _kPurple),
+              ]),
             ),
-            child: Row(children: [
-              Container(
-                width: 32, height: 32,
+
+          // Pending tasks
+          const _SectionLabel('Pending Tasks'),
+          const SizedBox(height: 8),
+          if (_tasks.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              alignment: Alignment.center,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.task_alt, size: 48, color: _kGreen.withOpacity(.45)),
+                const SizedBox(height: 10),
+                const Text('All clear — no pending tasks',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                Text('Tasks dispatched from the admin console appear here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              ]),
+            )
+          else ..._tasks.map((t) => _TaskCard(task: t as Map<String, dynamic>)),
+
+          const SizedBox(height: 16),
+
+          // Detection rules status
+          _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const _SectionLabel('Detection Engine'),
+            const SizedBox(height: 10),
+            _InfoRow(label: 'YARA Rules Active', value: '$_yaraCount'),
+            _InfoRow(label: 'Agent Version',     value: _localVersion ?? '–'),
+            _InfoRow(label: 'Latest Release',    value: _releasedVersion ?? 'unknown'),
+            _InfoRow(label: 'Up to Date',
+              value: _updateAvail ? 'No — update available' : 'Yes'),
+          ])),
+
+          if (_taskHistory.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const _SectionLabel('Task History'),
+            const SizedBox(height: 8),
+            ..._taskHistory.map((e) {
+              final type = (e['event_type'] ?? e['type'] ?? '').toString();
+              final desc = (e['description'] ?? '').toString();
+              final ts   = (e['created_at'] ?? e['timestamp'] ?? '').toString();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: _eventColor(type).withOpacity(.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(_eventIcon(type), color: _eventColor(type), size: 16),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_eventLabel(type),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                if (e['description'] != null)
-                  Text(e['description'].toString(),
-                    style: const TextStyle(fontSize: 11.5, color: Colors.grey),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-              ])),
-              if (ts.isNotEmpty)
-                Text(_fmtTs(ts),
-                  style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
-            ]),
-          );
-        },
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant)),
+                child: Row(children: [
+                  Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: _kBlue.withOpacity(.1),
+                      borderRadius: BorderRadius.circular(9)),
+                    child: Icon(_taskHistIcon(type), color: _kBlue, size: 16),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(type.replaceAll('_', ' '),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    if (desc.isNotEmpty)
+                      Text(desc, style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ])),
+                  Text(_timeAgo(ts),
+                    style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                ]),
+              );
+            }),
+          ],
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
 
-  IconData _eventIcon(String t) => switch (t) {
-    'checkin'   || 'check_in'  => Icons.sync,
-    'alert'     || 'threat'    => Icons.warning_amber,
-    'command'   || 'task'      => Icons.terminal,
-    'scan'                     => Icons.bug_report_outlined,
-    'enrollment'               => Icons.phone_android,
-    _                          => Icons.circle_outlined,
-  };
-
-  Color _eventColor(String t) => switch (t) {
-    'alert' || 'threat'  => const Color(0xFFEF4444),
-    'checkin' || 'check_in' => const Color(0xFF22C55E),
-    'command' || 'task'  => const Color(0xFF3B82F6),
-    _                    => Colors.grey,
-  };
-
-  String _eventLabel(String t) => switch (t) {
-    'checkin' || 'check_in' => 'Check-in completed',
-    'alert'    => 'Alert generated',
-    'threat'   => 'Threat detected',
-    'command'  => 'Command received',
-    'task'     => 'Task executed',
-    'scan'     => 'Vulnerability scan',
-    'enrollment' => 'Device enrolled',
-    _          => t.replaceAll('_', ' '),
-  };
-
-  String _fmtTs(String ts) {
-    try {
-      final dt  = DateTime.parse(ts).toLocal();
-      final now = DateTime.now();
-      final diff = now.difference(dt);
-      if (diff.inMinutes < 1)  return 'just now';
-      if (diff.inHours   < 1)  return '${diff.inMinutes}m ago';
-      if (diff.inHours   < 24) return '${diff.inHours}h ago';
-      return '${diff.inDays}d ago';
-    } catch (_) { return ts; }
+  IconData _taskHistIcon(String t) {
+    if (t.contains('scan'))    return Icons.bug_report_outlined;
+    if (t.contains('command')) return Icons.terminal;
+    return Icons.assignment_turned_in_outlined;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared Widgets
+// Shared widgets
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _AlertCard extends StatelessWidget {
+  final Map<String, dynamic> alert;
+  final bool compact;
+  final bool expanded;
+  final VoidCallback? onTap;
+  const _AlertCard({required this.alert, this.compact = false,
+    this.expanded = false, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final sev   = _parseSev(alert['severity'] ?? alert['level']);
+    final rule  = (alert['rule_name'] ?? alert['name'] ?? 'Unknown Rule').toString();
+    final desc  = (alert['description'] ?? alert['message'] ?? '').toString();
+    final ts    = (alert['created_at'] ?? alert['timestamp'] ?? '').toString();
+    final mitre = (alert['mitre_technique'] ?? alert['technique'] ?? '').toString();
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: sev.color.withOpacity(.3)),
+          color: sev.color.withOpacity(.04)),
+        clipBehavior: Clip.hardEdge,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(width: 4, color: sev.color),
+          Expanded(child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(rule,
+                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                const SizedBox(width: 8),
+                _Pill(label: sev.label, color: sev.color),
+              ]),
+              if (desc.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(desc, style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  maxLines: compact ? 1 : (expanded ? null : 2),
+                  overflow: compact || !expanded ? TextOverflow.ellipsis : null),
+              ],
+              const SizedBox(height: 6),
+              Row(children: [
+                if (mitre.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _kPurple.withOpacity(.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _kPurple.withOpacity(.25))),
+                    child: Text(mitre,
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                        color: _kPurple)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text(_timeAgo(ts), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                if (!compact) ...[
+                  const Spacer(),
+                  Icon(expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16, color: Colors.grey),
+                ],
+              ]),
+              if (expanded && !compact) ...[
+                const Divider(height: 16),
+                ...alert.entries
+                  .where((kv) => !const {
+                    'rule_name', 'name', 'description', 'message',
+                    'severity', 'level', 'created_at', 'timestamp',
+                    'mitre_technique', 'technique',
+                  }.contains(kv.key) && kv.value != null)
+                  .map((kv) => Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${kv.key}:  ',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey,
+                          fontWeight: FontWeight.w600)),
+                      Expanded(child: Text(kv.value.toString(),
+                        style: const TextStyle(fontSize: 11))),
+                    ]),
+                  )),
+              ],
+            ]),
+          )),
+        ]),
+      ),
+    );
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  final Map<String, dynamic> task;
+  const _TaskCard({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final type   = (task['task_type'] ?? task['type'] ?? 'task').toString();
+    final status = (task['status'] ?? 'pending').toString();
+    final ts     = (task['created_at'] ?? '').toString();
+    final statusColor = switch (status.toLowerCase()) {
+      'pending'                  => _kAmber,
+      'running'                  => _kBlue,
+      'done' || 'completed'      => _kGreen,
+      _                          => Colors.grey,
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withOpacity(.3)),
+        color: statusColor.withOpacity(.05)),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(.12),
+            borderRadius: BorderRadius.circular(10)),
+          child: Icon(_taskIcon(type), color: statusColor, size: 20),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(type.replaceAll('_', ' '),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          if (ts.isNotEmpty)
+            Text('Queued ${_timeAgo(ts)}',
+              style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+        ])),
+        _Pill(label: status.toUpperCase(), color: statusColor),
+      ]),
+    );
+  }
+
+  IconData _taskIcon(String type) {
+    if (type.contains('scan'))     return Icons.bug_report_outlined;
+    if (type.contains('collect'))  return Icons.download_outlined;
+    if (type.contains('execute'))  return Icons.terminal;
+    if (type.contains('isolate'))  return Icons.block;
+    if (type.contains('update'))   return Icons.system_update_alt;
+    return Icons.assignment_outlined;
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  const _FilterChip({required this.label, required this.count,
+    required this.selected, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? color.withOpacity(.14) : Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? color : Colors.grey.withOpacity(.3),
+          width: selected ? 1.5 : 1)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+          color: selected ? color : Colors.grey)),
+        if (count > 0) ...[
+          const SizedBox(width: 5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: selected ? color : Colors.grey.withOpacity(.3),
+              borderRadius: BorderRadius.circular(10)),
+            child: Text('$count', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
+              color: selected ? Colors.white : Colors.grey)),
+          ),
+        ],
+      ]),
+    ),
+  );
+}
+
+class _ConnChip extends StatelessWidget {
+  final ConnectivityResult result;
+  const _ConnChip({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, color) = switch (result) {
+      ConnectivityResult.wifi      => ('Wi-Fi',     Icons.wifi,                _kBlue),
+      ConnectivityResult.mobile    => ('Mobile',    Icons.signal_cellular_alt, _kGreen),
+      ConnectivityResult.vpn       => ('VPN',       Icons.vpn_lock,            _kGreen),
+      ConnectivityResult.ethernet  => ('Ethernet',  Icons.settings_ethernet,   _kBlue),
+      ConnectivityResult.bluetooth => ('Bluetooth', Icons.bluetooth,           _kPurple),
+      _                            => ('Other',     Icons.device_unknown,      Colors.grey),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(.3))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+      ]),
+    );
+  }
+}
 
 class _StatChip extends StatelessWidget {
   final String value, label;
-  final Color color;
+  final Color  color;
   const _StatChip({required this.value, required this.label, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    return Expanded(child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(.2)),
-      ),
-      child: Column(children: [
-        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(fontSize: 10.5, color: color.withOpacity(.8))),
-      ]),
-    ));
-  }
+  Widget build(BuildContext context) => Expanded(child: Container(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    decoration: BoxDecoration(
+      color: color.withOpacity(.08),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withOpacity(.2))),
+    child: Column(children: [
+      Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
+      const SizedBox(height: 2),
+      Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(.8)),
+        textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ]),
+  ));
 }
 
-class _StatusCard extends StatelessWidget {
+class _ActionTile extends StatelessWidget {
   final IconData icon;
-  final String title, value;
+  final String label;
   final Color color;
-  final VoidCallback? onTap;
-  const _StatusCard({required this.icon, required this.title, required this.value, required this.color, this.onTap});
+  final VoidCallback onTap;
+  const _ActionTile({required this.icon, required this.label,
+    required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Expanded(child: InkWell(
+    borderRadius: BorderRadius.circular(12),
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(.25))),
+      child: Column(children: [
+        Container(
+          width: 38, height: 38,
+          decoration: BoxDecoration(
+            color: color.withOpacity(.12),
+            borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 7),
+        Text(label, style: TextStyle(fontSize: 10.5, color: color,
+          fontWeight: FontWeight.w700), textAlign: TextAlign.center),
+      ]),
+    ),
+  ));
+}
+
+class _SubScore extends StatelessWidget {
+  final String label;
+  final int score;
+  const _SubScore({required this.label, required this.score});
+
+  Color get _color => score >= 85 ? _kGreen : score >= 65 ? _kAmber : _kRed;
+
+  @override
+  Widget build(BuildContext context) => Expanded(child: Column(children: [
+    Stack(alignment: Alignment.center, children: [
+      SizedBox(
+        width: 44, height: 44,
+        child: CircularProgressIndicator(
+          value: score / 100, strokeWidth: 4,
+          backgroundColor: _color.withOpacity(.15),
+          valueColor: AlwaysStoppedAnimation(_color),
+          strokeCap: StrokeCap.round),
+      ),
+      Text('$score', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _color)),
+    ]),
+    const SizedBox(height: 4),
+    Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+  ]));
+}
+
+class _GroupHeader extends StatelessWidget {
+  final String label;
+  final int? score;
+  const _GroupHeader({required this.label, this.score});
+
+  Color _scoreColor(int s) => s >= 85 ? _kGreen : s >= 65 ? _kAmber : _kRed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(children: [
+      Container(width: 3, height: 14,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(2))),
+      const SizedBox(width: 8),
+      Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+        letterSpacing: .8,
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(.7))),
+      if (score != null) ...[
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: _scoreColor(score!).withOpacity(.12),
+            borderRadius: BorderRadius.circular(5)),
+          child: Text('$score%',
+            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
+              color: _scoreColor(score!))),
+        ),
+      ],
+    ]),
+  );
+}
+
+class _CheckRow extends StatelessWidget {
+  final String label, detail;
+  final bool   pass;
+  const _CheckRow({required this.label, required this.pass, required this.detail});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: cs.outlineVariant),
-          ),
-          child: Row(children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                color: color.withOpacity(.1),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(icon, color: color, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              Text(value,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis),
-            ])),
-            Icon(Icons.circle, size: 8, color: color),
-          ]),
-        ),
-      ),
+    final color = pass ? _kGreen : _kRed;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.04),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(.2))),
+      child: Row(children: [
+        Icon(pass ? Icons.check_circle_outline : Icons.cancel_outlined,
+          color: color, size: 20),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(detail, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+        ])),
+        _Pill(label: pass ? 'PASS' : 'FAIL', color: color),
+      ]),
     );
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
+class _Pill extends StatelessWidget {
   final String label;
-  final VoidCallback onTap;
-  const _ActionButton({required this.icon, required this.label, required this.onTap});
+  final Color  color;
+  const _Pill({required this.label, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Expanded(child: InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          color: cs.surfaceContainerLow,
-          border: Border.all(color: cs.outlineVariant),
-        ),
-        child: Column(children: [
-          Icon(icon, size: 22, color: cs.primary),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 10.5, color: cs.primary, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center),
-        ]),
-      ),
-    ));
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(.1),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: color.withOpacity(.25))),
+    child: Text(label, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800,
+      color: color, letterSpacing: .7)),
+  );
+}
+
+class _Card extends StatelessWidget {
+  final Widget child;
+  const _Card({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Card(child: Padding(padding: const EdgeInsets.all(16), child: child)),
+  );
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(text,
+    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+      letterSpacing: 1.1, color: Colors.grey));
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label, value;
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(children: [
+      Text(label, style: const TextStyle(fontSize: 12.5, color: Colors.grey)),
+      const SizedBox(width: 8),
+      Expanded(child: Text(value,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+        textAlign: TextAlign.end, overflow: TextOverflow.ellipsis)),
+    ]),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Protection level enum
+// Ring painter
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _StatusLevel {
-  protected(
-    label: 'PROTECTED',
-    color: Color(0xFF22C55E),
-    icon: Icons.verified_user,
-    progress: 1.0,
-  ),
-  monitoring(
-    label: 'MONITORING',
-    color: Color(0xFF3B82F6),
-    icon: Icons.shield_outlined,
-    progress: 0.7,
-  ),
-  warning(
-    label: 'WARNING',
-    color: Color(0xFFF59E0B),
-    icon: Icons.warning_amber,
-    progress: 0.55,
-  ),
-  alert(
-    label: 'ALERT',
-    color: Color(0xFFF97316),
-    icon: Icons.crisis_alert,
-    progress: 0.4,
-  ),
-  compromised(
-    label: 'COMPROMISED',
-    color: Color(0xFFEF4444),
-    icon: Icons.gpp_bad,
-    progress: 0.2,
-  );
-
-  final String label;
-  final Color color;
-  final IconData icon;
+class _RingPainter extends CustomPainter {
   final double progress;
-  const _StatusLevel({required this.label, required this.color, required this.icon, required this.progress});
+  final Color  color;
+  final double strokeWidth;
+  const _RingPainter({required this.progress, required this.color, this.strokeWidth = 10});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx   = size.width  / 2;
+    final cy   = size.height / 2;
+    final r    = min(cx, cy) - strokeWidth / 2;
+    final rect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
+
+    // Background track
+    canvas.drawArc(rect, -pi / 2, 2 * pi, false, Paint()
+      ..color       = color.withOpacity(.12)
+      ..style       = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap   = StrokeCap.round);
+
+    // Progress arc with soft glow
+    if (progress > 0) {
+      canvas.drawArc(rect, -pi / 2, 2 * pi * progress, false, Paint()
+        ..color       = color
+        ..style       = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap   = StrokeCap.round
+        ..maskFilter  = MaskFilter.blur(BlurStyle.solid, strokeWidth * 0.25));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+    old.progress != progress || old.color != color || old.strokeWidth != strokeWidth;
 }

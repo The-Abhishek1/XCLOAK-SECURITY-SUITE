@@ -879,3 +879,539 @@ class _ThreatHuntState extends State<ThreatHuntScreen> {
     );
   }
 }
+
+// ── ITDR Threat-Category Screen ───────────────────────────────────────────────
+
+class ItdrScreen extends StatefulWidget {
+  final DashboardApi api;
+  final String       category;
+  final String       title;
+  const ItdrScreen({super.key, required this.api, required this.category, required this.title});
+  @override State<ItdrScreen> createState() => _ItdrState();
+}
+
+class _ItdrState extends State<ItdrScreen> {
+  List _items   = [];
+  bool _loading = true;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r = await widget.api.get('/api/itdr/findings?type=${widget.category}');
+    if (!mounted) return;
+    final list = r is List ? r : (r is Map ? (r['data'] ?? r['items'] ?? []) : []);
+    setState(() { _items = list as List; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _loading ? xLoading() : _items.isEmpty
+      ? XEmptyState('No ${widget.title} detections', icon: Icons.radar_outlined)
+      : RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+            itemCount: _items.length,
+            itemBuilder: (_, i) {
+              final d = _items[i] as Map<String,dynamic>;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: SevChip(str(d['severity'])),
+                  title: Text(str(d['title'] ?? d['name']),
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                  subtitle: Text('${str(d['status'])}  ·  ${timeAgo(d['created_at'])}',
+                    style: const TextStyle(fontSize: 12)),
+                  trailing: StatusChip(str(d['status'])),
+                ),
+              );
+            },
+          ),
+        );
+  }
+}
+
+// ── Deception / Honeypots Screen ──────────────────────────────────────────────
+
+class DeceptionScreen extends StatefulWidget {
+  final DashboardApi api;
+  const DeceptionScreen({super.key, required this.api});
+  @override State<DeceptionScreen> createState() => _DeceptionState();
+}
+
+class _DeceptionState extends State<DeceptionScreen> {
+  List _traps   = [];
+  bool _loading = true;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r = await widget.api.get('/api/honeyports');
+    if (!mounted) return;
+    final list = r is List ? r : (r is Map ? (r['data'] ?? r['honeyports'] ?? []) : []);
+    setState(() { _traps = list as List; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+        child: SectionTitle('Honeypots & Deception Traps  (${_traps.length})'),
+      ),
+      Expanded(child: _loading ? xLoading() : _traps.isEmpty
+        ? const XEmptyState('No deception traps configured', icon: Icons.pest_control)
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
+              itemCount: _traps.length,
+              itemBuilder: (_, i) {
+                final t = _traps[i] as Map<String,dynamic>;
+                final active = t['active'] == true || t['enabled'] == true;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(Icons.pest_control,
+                      color: active ? const Color(0xFF6366F1) : Colors.grey),
+                    title: Text(str(t['name'] ?? t['hostname']),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text('Type: ${str(t['type'] ?? t['trap_type'])}  ·  '
+                      'Interactions: ${t['interactions'] ?? t['hit_count'] ?? 0}'),
+                    trailing: Switch(
+                      value: active,
+                      onChanged: (v) async {
+                        // honeyports have no toggle endpoint — create/delete to enable/disable
+                        _load();
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          )),
+    ]);
+  }
+}
+
+// ── Behavioral Analytics Screen ───────────────────────────────────────────────
+
+class BehavioralScreen extends StatefulWidget {
+  final DashboardApi api;
+  const BehavioralScreen({super.key, required this.api});
+  @override State<BehavioralScreen> createState() => _BehavioralState();
+}
+
+class _BehavioralState extends State<BehavioralScreen> {
+  Map  _summary = {};
+  List _baselines = [];
+  bool _loading   = true;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final bRes = await widget.api.get('/api/threat/baselines');
+    final aRes = await widget.api.get('/api/ai/anomalies');
+    if (!mounted) return;
+    final baselines = bRes is List ? bRes : (bRes is Map ? (bRes['baselines'] ?? bRes['data'] ?? []) : []);
+    final anomalies = aRes is List ? aRes : (aRes is Map ? (aRes['anomalies'] ?? aRes['data'] ?? []) : []);
+    final s = <String,dynamic>{
+      'anomalies_today': (anomalies as List).length,
+      'active_models': baselines is List ? baselines.length : 0,
+    };
+    setState(() { _summary = s; _baselines = baselines as List; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return xLoading();
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+        children: [
+          Row(children: [
+            Expanded(child: KpiCard(label: 'Baselines', value: '${_baselines.length}', icon: Icons.analytics, color: const Color(0xFF6366F1))),
+            const SizedBox(width: 8),
+            Expanded(child: KpiCard(label: 'Anomalies Today', value: '${_summary['anomalies_today'] ?? 0}', icon: Icons.warning_amber, color: const Color(0xFFF59E0B))),
+            const SizedBox(width: 8),
+            Expanded(child: KpiCard(label: 'Active Models', value: '${_summary['active_models'] ?? 0}', icon: Icons.model_training, color: const Color(0xFF22C55E))),
+          ]),
+          const SizedBox(height: 16),
+          SectionTitle('Behavioral Baselines'),
+          ..._baselines.map((b) {
+            final base = b as Map<String,dynamic>;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.timeline, color: Color(0xFF6366F1)),
+                title: Text(str(base['entity_type'] ?? base['type']),
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('Entity: ${str(base['entity_id'])}  ·  '
+                  'Last updated: ${timeAgo(base['updated_at'])}'),
+                trailing: Text('${base['deviation_score'] ?? '-'}',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+            );
+          }),
+          if (_baselines.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: Text('No behavioral baselines yet',
+                style: TextStyle(color: Colors.grey))),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Live Logs Screen ──────────────────────────────────────────────────────────
+
+class LiveLogsScreen extends StatefulWidget {
+  final DashboardApi api;
+  const LiveLogsScreen({super.key, required this.api});
+  @override State<LiveLogsScreen> createState() => _LiveLogsState();
+}
+
+class _LiveLogsState extends State<LiveLogsScreen> {
+  List _logs    = [];
+  bool _loading = true;
+  bool _live    = true;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    if (!_live) return;
+    setState(() => _loading = _logs.isEmpty);
+    final r = await widget.api.get('/api/logs/search?per_page=200&q=');
+    if (!mounted) return;
+    final list = r is List ? r : (r is Map ? (r['data'] ?? r['logs'] ?? []) : []);
+    setState(() { _logs = list as List; _loading = false; });
+    if (_live) Future.delayed(const Duration(seconds: 5), _load);
+  }
+
+  @override void dispose() { _live = false; super.dispose(); }
+
+  Color _levelColor(String level) => switch (level.toLowerCase()) {
+    'critical' || 'fatal' => const Color(0xFFEF4444),
+    'error'               => const Color(0xFFF97316),
+    'warn' || 'warning'   => const Color(0xFFF59E0B),
+    'debug'               => Colors.grey,
+    _                     => const Color(0xFF22C55E),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Row(children: [
+          Icon(_live ? Icons.wifi : Icons.wifi_off,
+            size: 14, color: _live ? const Color(0xFF22C55E) : Colors.grey),
+          const SizedBox(width: 6),
+          Text(_live ? 'Live' : 'Paused',
+            style: TextStyle(fontSize: 12, color: _live ? const Color(0xFF22C55E) : Colors.grey,
+              fontWeight: FontWeight.w700)),
+          const Spacer(),
+          TextButton(
+            onPressed: () { setState(() => _live = !_live); if (_live) _load(); },
+            child: Text(_live ? 'Pause' : 'Resume'),
+          ),
+        ]),
+      ),
+      Expanded(child: _loading ? xLoading() :
+        ListView.builder(
+          reverse: true,
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 80),
+          itemCount: _logs.length,
+          itemBuilder: (_, i) {
+            final log = _logs[i] as Map<String,dynamic>;
+            final level = str(log['level'] ?? log['severity'] ?? 'info');
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(.08)))),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(level.toUpperCase().padRight(5),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+                    color: _levelColor(level), fontFamily: 'monospace')),
+                const SizedBox(width: 8),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(str(log['message'] ?? log['msg']),
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                  Text(str(log['source'] ?? log['host'] ?? ''),
+                    style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                ])),
+                Text(timeAgo(log['timestamp'] ?? log['created_at']),
+                  style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ]),
+            );
+          },
+        )),
+    ]);
+  }
+}
+
+// ── Vulnerabilities Screen ────────────────────────────────────────────────────
+
+class VulnerabilitiesScreen extends StatefulWidget {
+  final DashboardApi api;
+  const VulnerabilitiesScreen({super.key, required this.api});
+  @override State<VulnerabilitiesScreen> createState() => _VulnerabilitiesState();
+}
+
+class _VulnerabilitiesState extends State<VulnerabilitiesScreen> {
+  List   _vulns    = [];
+  bool   _loading  = true;
+  String _sevFilter = '';
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r = await widget.api.get('/api/vulns/priority-queue${_sevFilter.isNotEmpty ? "?severity=$_sevFilter" : ""}');
+    if (!mounted) return;
+    final list = r is List ? r : (r is Map ? (r['data'] ?? r['vulnerabilities'] ?? []) : []);
+    setState(() { _vulns = list as List; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      FilterRow(
+        selected: _sevFilter,
+        onSelect: (v) { setState(() => _sevFilter = v); _load(); },
+        chips: const [
+          ('All', '', null), ('Critical', 'critical', null), ('High', 'high', null),
+          ('Medium', 'medium', null), ('Low', 'low', null),
+        ],
+      ),
+      Expanded(child: _loading ? xLoading() : _vulns.isEmpty
+        ? const XEmptyState('No vulnerabilities found', icon: Icons.verified_user_outlined)
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
+              itemCount: _vulns.length,
+              itemBuilder: (_, i) {
+                final v = _vulns[i] as Map<String,dynamic>;
+                final cvss = (v['cvss_score'] ?? v['score'] ?? 0.0);
+                final sev  = str(v['severity']);
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: SevChip(sev),
+                    title: Text(str(v['cve_id'] ?? v['vuln_id'] ?? v['title']),
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontFamily: 'monospace')),
+                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(str(v['title'] ?? v['description']),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12)),
+                      const SizedBox(height: 2),
+                      Text('CVSS: $cvss  ·  ${timeAgo(v['discovered_at'] ?? v['created_at'])}',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ]),
+                    trailing: SevChip(sev),
+                    isThreeLine: true,
+                  ),
+                );
+              },
+            ),
+          )),
+    ]);
+  }
+}
+
+// ── Firewall Rules Screen ─────────────────────────────────────────────────────
+
+class FirewallScreen extends StatefulWidget {
+  final DashboardApi api;
+  const FirewallScreen({super.key, required this.api});
+  @override State<FirewallScreen> createState() => _FirewallState();
+}
+
+class _FirewallState extends State<FirewallScreen> {
+  List _rules   = [];
+  bool _loading = true;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r = await widget.api.get('/api/firewall/rules');
+    if (!mounted) return;
+    final list = r is List ? r : (r is Map ? (r['data'] ?? r['rules'] ?? []) : []);
+    setState(() { _rules = list as List; _loading = false; });
+  }
+
+  Color _actionColor(String action) => switch (action.toLowerCase()) {
+    'block' || 'deny' || 'drop' => const Color(0xFFEF4444),
+    'allow' || 'accept'         => const Color(0xFF22C55E),
+    _                           => const Color(0xFFF59E0B),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => xSnack(context, 'Rule creation coming soon'),
+        child: const Icon(Icons.add),
+      ),
+      body: _loading ? xLoading() : _rules.isEmpty
+        ? const XEmptyState('No firewall rules configured', icon: Icons.fireplace_outlined)
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+              itemCount: _rules.length,
+              itemBuilder: (_, i) {
+                final rule = _rules[i] as Map<String, dynamic>;
+                final action = str(rule['action']);
+                final enabled = rule['enabled'] == true || rule['active'] == true;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: _actionColor(action).withOpacity(.12),
+                        borderRadius: BorderRadius.circular(8)),
+                      child: Icon(
+                        action.toLowerCase() == 'block' || action.toLowerCase() == 'deny'
+                          ? Icons.block : Icons.check_circle_outline,
+                        color: _actionColor(action), size: 20),
+                    ),
+                    title: Text(str(rule['name'] ?? rule['description'] ?? 'Rule ${rule['id']}'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                      '${str(rule['src_ip'] ?? rule['source'] ?? '*')} → '
+                      '${str(rule['dst_ip'] ?? rule['destination'] ?? '*')}  '
+                      'Port: ${rule['port'] ?? rule['dst_port'] ?? '*'}',
+                      style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace')),
+                    trailing: Switch(
+                      value: enabled,
+                      onChanged: (v) async {
+                        await widget.api.patch('/api/firewall/rules/${rule['id']}', {'enabled': v});
+                        _load();
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+    );
+  }
+}
+
+// ── Script Runner Screen ──────────────────────────────────────────────────────
+
+class ScriptRunnerScreen extends StatefulWidget {
+  final DashboardApi api;
+  const ScriptRunnerScreen({super.key, required this.api});
+  @override State<ScriptRunnerScreen> createState() => _ScriptRunnerState();
+}
+
+class _ScriptRunnerState extends State<ScriptRunnerScreen> {
+  List   _scripts = [];
+  List   _history = [];
+  bool   _loading = true;
+  String _tab     = 'scripts';
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final scripts = await widget.api.get('/api/sigma/rules');
+    final history = await widget.api.get('/api/hunt/runs');
+    if (!mounted) return;
+    final sl = scripts is List ? scripts : (scripts is Map ? (scripts['data'] ?? scripts['rules'] ?? []) : []);
+    final hl = history is List ? history : (history is Map ? (history['data'] ?? history['runs'] ?? []) : []);
+    setState(() { _scripts = sl as List; _history = hl as List; _loading = false; });
+  }
+
+  Future<void> _run(Map<String,dynamic> script) async {
+    xSnack(context, 'Running ${str(script['name'])}…');
+    final ok = await widget.api.post('/api/hunt/execute', {'rule_id': script['id'], 'agent_ids': []});
+    if (mounted) xSnack(context, ok == null ? 'Execution failed' : 'Hunt started', error: ok == null);
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(children: [
+          ChoiceChip(label: const Text('Scripts'), selected: _tab == 'scripts',
+            onSelected: (_) => setState(() => _tab = 'scripts')),
+          const SizedBox(width: 8),
+          ChoiceChip(label: const Text('History'), selected: _tab == 'history',
+            onSelected: (_) => setState(() => _tab = 'history')),
+        ]),
+      ),
+      Expanded(child: _loading ? xLoading() : _tab == 'scripts'
+        ? _scripts.isEmpty
+          ? const XEmptyState('No scripts configured', icon: Icons.code_off)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
+                itemCount: _scripts.length,
+                itemBuilder: (_, i) {
+                  final s = _scripts[i] as Map<String,dynamic>;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withOpacity(.1),
+                          borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.terminal, color: Color(0xFF6366F1), size: 20),
+                      ),
+                      title: Text(str(s['name']),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(str(s['description'] ?? s['language'] ?? ''),
+                        style: const TextStyle(fontSize: 12)),
+                      trailing: FilledButton(
+                        onPressed: () => _run(s),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)),
+                        child: const Text('Run', style: TextStyle(fontSize: 12.5)),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            )
+        : _history.isEmpty
+          ? const XEmptyState('No script history', icon: Icons.history_toggle_off)
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
+              itemCount: _history.length,
+              itemBuilder: (_, i) {
+                final h = _history[i] as Map<String,dynamic>;
+                final status = str(h['status']);
+                final ok = status == 'success' || status == 'completed';
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  child: ListTile(
+                    leading: Icon(ok ? Icons.check_circle : Icons.error_outline,
+                      color: ok ? const Color(0xFF22C55E) : const Color(0xFFEF4444)),
+                    title: Text(str(h['script_name'] ?? h['name']),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text('${str(h['executed_by'] ?? h['user'] ?? 'system')}  ·  ${timeAgo(h['executed_at'] ?? h['created_at'])}'),
+                    trailing: StatusChip(status),
+                  ),
+                );
+              },
+            )),
+    ]);
+  }
+}

@@ -123,7 +123,9 @@ class AdminApp extends StatefulWidget {
 }
 
 class _AdminAppState extends State<AdminApp> {
-  int _sel = 0;
+  int    _sel        = 0;
+  bool   _darkMode   = false;
+  int    _alertBadge = 0;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   String? _adminEmail;
   String? _adminRole;
@@ -132,6 +134,7 @@ class _AdminAppState extends State<AdminApp> {
   void initState() {
     super.initState();
     _loadProfile();
+    _pollAlertCount();
   }
 
   Future<void> _loadProfile() async {
@@ -139,6 +142,14 @@ class _AdminAppState extends State<AdminApp> {
     final role  = await SecureStore.adminRole();
     if (!mounted) return;
     setState(() { _adminEmail = email; _adminRole = role; });
+  }
+
+  Future<void> _pollAlertCount() async {
+    final alerts = await widget.api.alerts(status: 'open', per: 1);
+    if (!mounted) return;
+    final r = await widget.api.overview();
+    final count = (r?['open_alerts'] ?? r?['active_alerts'] ?? alerts.length);
+    setState(() => _alertBadge = count is int ? count : 0);
   }
 
   String get _title {
@@ -173,7 +184,7 @@ class _AdminAppState extends State<AdminApp> {
       17 => DeceptionScreen(api: api),
       18 => HuntWorkbenchScreen(api: api),
       19 => ThreatActorsScreen(api: api),
-      20 => NetBehaviorScreen(api: api),
+      20 => NBAScreen(api: api),
       21 => ThreatIntelScreen(api: api),
       22 => SigmaRulesScreen(api: api),
       23 => YaraRulesScreen(api: api),
@@ -183,12 +194,12 @@ class _AdminAppState extends State<AdminApp> {
       27 => LogSearchScreen(api: api),
       28 => LogSourcesScreen(api: api),
       29 => ThreatHuntScreen(api: api),
-      30 => AlertClustersScreen(api: api),
+      30 => ClustersScreen(api: api),
       31 => CorrelationScreen(api: api),
       32 => SuppressionScreen(api: api),
       33 => CasesScreen(api: api),
       34 => PlaybooksScreen(api: api),
-      35 => ApprovalQueueScreen(api: api),
+      35 => ApprovalsScreen(api: api),
       36 => VulnerabilitiesScreen(api: api),
       37 => VulnQueueScreen(api: api),
       38 => QuarantineScreen(api: api),
@@ -244,9 +255,31 @@ class _AdminAppState extends State<AdminApp> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final brightness = _darkMode ? Brightness.dark : Brightness.light;
+    final cs = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF1565C0), brightness: brightness);
 
-    return Scaffold(
+    return Theme(
+      data: ThemeData(
+        colorScheme: cs, useMaterial3: true,
+        brightness: brightness,
+        cardTheme: CardTheme(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: _darkMode ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))),
+          margin: EdgeInsets.zero),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: _darkMode ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14)),
+        appBarTheme: AppBarTheme(
+          centerTitle: false, elevation: 0, scrolledUnderElevation: 1,
+          backgroundColor: _darkMode ? const Color(0xFF0F172A) : null),
+        scaffoldBackgroundColor: _darkMode ? const Color(0xFF0F172A) : null,
+      ),
+      child: Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         leading: IconButton(
@@ -270,6 +303,16 @@ class _AdminAppState extends State<AdminApp> {
         ]),
         actions: [
           IconButton(
+            icon: Icon(_darkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+            tooltip: 'Toggle Theme',
+            onPressed: () => setState(() => _darkMode = !_darkMode),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh_outlined),
+            tooltip: 'Refresh alerts',
+            onPressed: _pollAlertCount,
+          ),
+          IconButton(
             icon: const Icon(Icons.phone_android_outlined),
             tooltip: 'Switch to Agent Mode',
             onPressed: _switchToAgent,
@@ -287,16 +330,23 @@ class _AdminAppState extends State<AdminApp> {
       body: _body(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _quickIdx < 0 ? 0 : _quickIdx,
-        onDestinationSelected: (i) => setState(() => _sel = _quickNav[i].$1),
+        onDestinationSelected: (i) {
+          setState(() => _sel = _quickNav[i].$1);
+          if (_quickNav[i].$1 == 5) _pollAlertCount();
+        },
         destinations: [
-          for (final q in _quickNav)
+          for (int i = 0; i < _quickNav.length; i++)
             NavigationDestination(
-              icon: Icon(q.$2),
-              label: q.$3,
+              icon: i == 1 && _alertBadge > 0
+                ? Badge(
+                    label: Text(_alertBadge > 99 ? '99+' : '$_alertBadge'),
+                    child: Icon(_quickNav[i].$2))
+                : Icon(_quickNav[i].$2),
+              label: _quickNav[i].$3,
             ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -329,8 +379,6 @@ class _AdminDrawerState extends State<_AdminDrawer> {
   final _searchCtrl = TextEditingController();
   // groups that are currently expanded; default all expanded
   final _expanded = <String>{};
-  bool _initialized = false;
-
   @override
   void initState() {
     super.initState();
@@ -368,8 +416,7 @@ class _AdminDrawerState extends State<_AdminDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final cs   = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
     return Drawer(
       child: Column(children: [

@@ -1,4 +1,6 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
@@ -314,6 +316,398 @@ Widget sheetHeader(String title) => Column(children: [
 ]);
 
 // ── Detail sheet ──────────────────────────────────────────────────────────────
+
+// ── KPI card ──────────────────────────────────────────────────────────────────
+
+class KpiCard extends StatelessWidget {
+  final String label, value;
+  final Color  color;
+  final IconData icon;
+  final String? trend;   // e.g. '+12%' or '-5%' — null = no trend
+  final VoidCallback? onTap;
+  const KpiCard({required this.label, required this.value, required this.color,
+    required this.icon, this.trend, this.onTap, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(.2)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 30, height: 30,
+              decoration: BoxDecoration(
+                color: color.withOpacity(.12),
+                borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: color, size: 16),
+            ),
+            const Spacer(),
+            if (trend != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (trend!.startsWith('-') ? const Color(0xFF22C55E) : const Color(0xFFEF4444)).withOpacity(.12),
+                  borderRadius: BorderRadius.circular(6)),
+                child: Text(trend!,
+                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
+                    color: trend!.startsWith('-') ? const Color(0xFF22C55E) : const Color(0xFFEF4444))),
+              ),
+          ]),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color, height: 1)),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(fontSize: 10.5, color: cs.onSurface.withOpacity(.5), letterSpacing: .1),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Section title ─────────────────────────────────────────────────────────────
+
+class SectionTitle extends StatelessWidget {
+  final String text;
+  final Widget? trailing;
+  const SectionTitle(this.text, {this.trailing, super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Container(width: 3, height: 14,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(2))),
+      const SizedBox(width: 8),
+      Text(text, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
+        letterSpacing: .8, color: Theme.of(context).colorScheme.onSurface.withOpacity(.65))),
+      if (trailing != null) ...[const Spacer(), trailing!],
+    ]),
+  );
+}
+
+// ── Ring gauge ────────────────────────────────────────────────────────────────
+
+class RingGauge extends StatelessWidget {
+  final double value;   // 0.0–1.0
+  final Color  color;
+  final double size;
+  final String label;
+  final String sublabel;
+  const RingGauge({required this.value, required this.color, this.size = 80,
+    this.label = '', this.sublabel = '', super.key});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size, height: size,
+    child: CustomPaint(
+      painter: _RingGaugePainter(value: value.clamp(0.0, 1.0), color: color),
+      child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (label.isNotEmpty)
+          Text(label, style: TextStyle(fontSize: size * .22,
+            fontWeight: FontWeight.w900, color: color, height: 1.1)),
+        if (sublabel.isNotEmpty)
+          Text(sublabel, style: TextStyle(fontSize: size * .13, color: Colors.grey)),
+      ])),
+    ),
+  );
+}
+
+class _RingGaugePainter extends CustomPainter {
+  final double value;
+  final Color  color;
+  const _RingGaugePainter({required this.value, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const sw = 7.0;
+    final r    = min(size.width, size.height) / 2 - sw / 2;
+    final rect = Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: r);
+    canvas.drawArc(rect, -pi / 2, 2 * pi, false, Paint()
+      ..color       = color.withOpacity(.13)
+      ..style       = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap   = StrokeCap.round);
+    if (value > 0) {
+      canvas.drawArc(rect, -pi / 2, 2 * pi * value, false, Paint()
+        ..color       = color
+        ..style       = PaintingStyle.stroke
+        ..strokeWidth = sw
+        ..strokeCap   = StrokeCap.round);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingGaugePainter old) => old.value != value || old.color != color;
+}
+
+// ── Typing indicator (animated 3 dots) ───────────────────────────────────────
+
+class TypingIndicator extends StatefulWidget {
+  const TypingIndicator({super.key});
+  @override State<TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _ctrl,
+    builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) {
+      final t = ((_ctrl.value * 3 - i) % 3).clamp(0.0, 1.0);
+      return Container(
+        width: 7, height: 7,
+        margin: const EdgeInsets.only(right: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(.3 + t * .5),
+          shape: BoxShape.circle),
+      );
+    })),
+  );
+}
+
+// ── Info pair ─────────────────────────────────────────────────────────────────
+
+class InfoPair extends StatelessWidget {
+  final String label, value;
+  final Color? valueColor;
+  const InfoPair(this.label, this.value, {this.valueColor, super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 110, child: Text(label,
+        style: TextStyle(fontSize: 12, color: Colors.grey.shade500))),
+      Expanded(child: Text(value,
+        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: valueColor))),
+    ]),
+  );
+}
+
+// ── Health bar ────────────────────────────────────────────────────────────────
+
+class HealthBar extends StatelessWidget {
+  final int score;
+  const HealthBar(this.score, {super.key});
+
+  Color get _color {
+    if (score >= 80) return const Color(0xFF22C55E);
+    if (score >= 55) return const Color(0xFFF59E0B);
+    return const Color(0xFFEF4444);
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Row(children: [
+        Expanded(child: ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: score / 100, minHeight: 4,
+            backgroundColor: _color.withOpacity(.15),
+            valueColor: AlwaysStoppedAnimation(_color)),
+        )),
+        const SizedBox(width: 6),
+        Text('$score', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _color)),
+      ]),
+    ],
+  );
+}
+
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+class BulkBar extends StatelessWidget {
+  final int count;
+  final List<(IconData, String, VoidCallback)> actions;
+  final VoidCallback onCancel;
+  const BulkBar({required this.count, required this.actions, required this.onCancel, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      color: cs.primaryContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(children: [
+        IconButton(onPressed: onCancel, icon: const Icon(Icons.close), padding: EdgeInsets.zero),
+        Text('$count selected', style: TextStyle(fontWeight: FontWeight.w700, color: cs.onPrimaryContainer)),
+        const Spacer(),
+        ...actions.map((a) => IconButton(
+          icon: Icon(a.$1), tooltip: a.$2, onPressed: a.$3,
+          style: IconButton.styleFrom(foregroundColor: cs.onPrimaryContainer),
+        )),
+      ]),
+    );
+  }
+}
+
+// ── Filter chip row ───────────────────────────────────────────────────────────
+
+class FilterRow extends StatelessWidget {
+  final List<(String label, String value, int? count)> chips;
+  final String selected;
+  final void Function(String) onSelect;
+  const FilterRow({required this.chips, required this.selected, required this.onSelect, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(children: chips.map((c) {
+        final active = selected == c.$2;
+        return Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: GestureDetector(
+            onTap: () => onSelect(c.$2),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: active ? cs.primary : cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: active ? cs.primary : cs.outlineVariant)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(c.$1, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+                  color: active ? cs.onPrimary : cs.onSurface)),
+                if (c.$3 != null) ...[
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: active ? cs.onPrimary.withOpacity(.2) : cs.outline.withOpacity(.3),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: Text('${c.$3}',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
+                        color: active ? cs.onPrimary : cs.onSurface)),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+        );
+      }).toList()),
+    );
+  }
+}
+
+// ── Timeline entry ────────────────────────────────────────────────────────────
+
+class TimelineEntry extends StatelessWidget {
+  final IconData icon;
+  final Color    color;
+  final String   title, subtitle, time;
+  final bool     isLast;
+  const TimelineEntry({required this.icon, required this.color, required this.title,
+    required this.subtitle, required this.time, this.isLast = false, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(width: 40, child: Column(children: [
+          Container(width: 32, height: 32,
+            decoration: BoxDecoration(color: color.withOpacity(.12), shape: BoxShape.circle),
+            child: Icon(icon, size: 15, color: color)),
+          if (!isLast) Expanded(child: Container(width: 1.5,
+            color: cs.outlineVariant.withOpacity(.5))),
+        ])),
+        Expanded(child: Padding(
+          padding: EdgeInsets.only(left: 10, bottom: isLast ? 0 : 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text(title,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+              Text(time, style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+            ]),
+            if (subtitle.isNotEmpty)
+              Text(subtitle, style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+          ]),
+        )),
+      ]),
+    );
+  }
+}
+
+// ── Swipe action card wrapper ─────────────────────────────────────────────────
+
+Widget swipeCard({
+  required Widget child,
+  required int key,
+  required String rightLabel,
+  required Color  rightColor,
+  required IconData rightIcon,
+  required String leftLabel,
+  required Color  leftColor,
+  required IconData leftIcon,
+  required VoidCallback onRight,
+  required VoidCallback onLeft,
+}) => Dismissible(
+  key: Key('swipe_$key'),
+  confirmDismiss: (dir) async {
+    if (dir == DismissDirection.startToEnd) onRight();
+    else onLeft();
+    return false;  // keep in list; screen reloads after action
+  },
+  background: Container(
+    alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.only(left: 20),
+    margin: const EdgeInsets.only(bottom: 8),
+    decoration: BoxDecoration(color: rightColor.withOpacity(.15),
+      borderRadius: BorderRadius.circular(12)),
+    child: Row(children: [
+      Icon(rightIcon, color: rightColor),
+      const SizedBox(width: 6),
+      Text(rightLabel, style: TextStyle(color: rightColor, fontWeight: FontWeight.w700)),
+    ]),
+  ),
+  secondaryBackground: Container(
+    alignment: Alignment.centerRight,
+    padding: const EdgeInsets.only(right: 20),
+    margin: const EdgeInsets.only(bottom: 8),
+    decoration: BoxDecoration(color: leftColor.withOpacity(.15),
+      borderRadius: BorderRadius.circular(12)),
+    child: Row(children: [
+      const Spacer(),
+      Text(leftLabel, style: TextStyle(color: leftColor, fontWeight: FontWeight.w700)),
+      const SizedBox(width: 6),
+      Icon(leftIcon, color: leftColor),
+    ]),
+  ),
+  child: child,
+);
+
+// ── Copy to clipboard helper ──────────────────────────────────────────────────
+
+void copyToClipboard(BuildContext context, String text) {
+  Clipboard.setData(ClipboardData(text: text));
+  xSnack(context, 'Copied to clipboard');
+}
 
 void showDetailSheet(BuildContext context, String title, List<(String, String)> rows, {List<Widget>? actions}) {
   final cs = Theme.of(context).colorScheme;
