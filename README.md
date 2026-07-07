@@ -1,532 +1,280 @@
 # XCloak Security Suite
 
-An open-core enterprise security platform combining NGFW, SIEM, EDR, and SOAR capabilities. Built with Go, PostgreSQL, Next.js, and Flutter — designed as a single solution for enterprises of all sizes.
+[![Build](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/actions/workflows/build.yml/badge.svg)](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/actions/workflows/build.yml)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-3.24-02569B?logo=flutter)](https://flutter.dev)
+[![Helm](https://img.shields.io/badge/Helm-v0.2.0-0F1689?logo=helm)](charts/xcloak)
+[![License](https://img.shields.io/badge/License-BSL_1.1-brightgreen)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/The-Abhishek1/XCLOAK-SECURITY-SUITE)](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases)
 
-![XCloak Dashboard](docs/dashboard.png)
+**Open-core enterprise security platform.** NGFW + SIEM + EDR + SOAR + MDM in a single stack — built with Go, PostgreSQL, Next.js, and Flutter.
+
+> **Single maintainer project.** This is not a commercial product with an SLA. See [Current Status](#current-status) for an honest picture of what works and what doesn't yet.
+
+---
+
+## Screenshots
+
+| Dashboard Overview | Alert Detail | Posture (Mobile) |
+|-------------------|--------------|-----------------|
+| ![dashboard](docs/dashboard.png) | *(coming soon)* | *(coming soon)* |
+
+---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                                XCloak Platform                                   │
-├──────────────┬──────────────┬──────────────┬────────────────┬────────────────────┤
-│   Frontend   │   Backend    │  Go Agent    │ Mobile Agent   │  Observability     │
-│  Next.js 14  │  Go / Gin    │  Go Binary   │  Flutter 3.24  │  Prometheus        │
-│  TypeScript  │  PostgreSQL  │  Linux/Win   │  Android       │  Grafana           │
-│  Port 3000   │  Port 8080   │  macOS       │  + Admin UI    │  Kafka             │
-└──────────────┴──────────────┴──────────────┴────────────────┴────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         XCloak Platform                              │
+│                                                                      │
+│  ┌─────────────┐   ┌──────────────────────────────────────────────┐ │
+│  │  Next.js 14 │   │           Go / Gin Backend                   │ │
+│  │  Dashboard  │◄──┤  Auth · SIEM · SOAR · MDM · Detection        │ │
+│  │  Port 3000  │   │  Port 8080                                   │ │
+│  └─────────────┘   └──────────┬───────────────────────────────────┘ │
+│                               │                                      │
+│         ┌─────────────────────┼──────────────────────┐              │
+│         ▼                     ▼                      ▼              │
+│  ┌─────────────┐   ┌─────────────────┐   ┌─────────────────────┐   │
+│  │ PostgreSQL  │   │     Redis       │   │  Kafka (optional)   │   │
+│  │ RLS Tenant  │   │  Rate limiting  │   │  Event bus / async  │   │
+│  │ Isolation   │   │  Sessions       │   │  7 consumer groups  │   │
+│  └─────────────┘   └─────────────────┘   └─────────────────────┘   │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                    Endpoints                                 │    │
+│  │                                                              │    │
+│  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │    │
+│  │  │   Go Agent   │    │   Go Agent   │    │ Flutter App  │  │    │
+│  │  │    Linux     │    │   Windows    │    │   Android    │  │    │
+│  │  │  15 collect. │    │  15 collect. │    │ Agent+Admin  │  │    │
+│  │  └──────────────┘    └──────────────┘    └──────────────┘  │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Detection Engines
-
-### Threat Detection
-- **Sigma Rules** — custom detection engine with field-level matching, tags, MITRE ATT&CK mapping; ships with **43 production-ready rules** across 12 tactics (Initial Access → Impact, Cloud/Container/Supply Chain) seeded automatically on first run
-- **YARA Rules** — malware signature scanning on endpoints, real-time match reporting
-- **IOC Engine** — IP, domain, hash, URL, email indicator matching; async-matched via Kafka consumer off the request path
-- **Threat Intel Ingestion** — STIX/TAXII, MISP, and AlienVault OTX feed connectors plus flat-file feeds
-
-### Network & Endpoint Behavioral Detectors (scheduled, per-tenant)
-
-| Detector | Patterns | MITRE |
-|----------|----------|-------|
-| **C2 Beacon Detector** | CV-based interval analysis on periodic outbound connections | T1071, T1571 |
-| **DNS Security** | DGA/Shannon entropy, DNS tunneling (payload length + query rate), flood detection | T1568.002, T1071.004 |
-| **Port Scan + Lateral Movement** | Vertical, horizontal, SYN sweep; SMB spray detection | T1046, T1021.002 |
-| **Data Exfiltration** | Volume flood (100MB+), session burst, cloud storage drain (S3/GDrive/OneDrive/Dropbox/Box/Mega), off-hours transfer | T1048, T1567.002 |
-| **TLS/JA3 Fingerprinting** | Match TLS ClientHello hashes against blocklist of 13+ known C2 tools (Cobalt Strike, TrickBot, Emotet, Dridex, Sliver, Havoc, BruteRatel, etc.) | T1071.001 |
-| **Credential Attacks** | SSH/RDP brute force per src_ip, password spray (≥5 usernames), credential stuffing (≥5 IPs/username), successful brute force | T1110, T1110.001, T1110.003, T1110.004 |
-| **Privilege Escalation** | Windows EventID 4728/4732/4756 (group add), 4720 (new user), 4672 (special privs); Linux sudo/su/SUID/sudoers | T1098, T1136.001, T1548 |
-| **Ransomware Behavior** | FIM mass-modification sweep + crypto extensions; kill-chain commands (vssadmin, wmic shadowcopy, bcdedit, wbadmin); security service kill (17 AV/EDR names) | T1486, T1490, T1562.001 |
-| **Living-off-the-Land (LotL)** | Suspicious parent→child process chains (Office→PowerShell); LOLBin abuse (certutil, regsvr32, mshta, bitsadmin, wmic, rundll32, odbcconf); encoded PowerShell (-enc, IEX, DownloadString) | T1059, T1218, T1027 |
-| **Impossible Travel** | GeoIP haversine distance (>900 km/h = suspicious); /16 subnet fallback for when GeoIP unavailable | T1078 |
-| **Network Behavior Analytics** | Baseline deviation, anomalous connection patterns, protocol abuse | T1095 |
-| **UEBA** | User and Entity Behavior Analytics — risk scoring across auth, file access, network | T1078, T1530 |
-
-### Identity & Context Enrichment
-- **AD/LDAP Identity Enrichment** — every alert auto-enriched with user display name, department, title from Active Directory; 3-tier cache (in-memory → DB → live LDAP)
-- **Alert Investigation Context** — IOC hits, similar historical alerts, suggested cases, correlated Sigma rules for each alert
-- **IP Enrichment** — GeoIP, ASN, proxy/hosting flags, port risk scoring
-
-### Agentless Log Ingestion
-- **Syslog Receiver** — UDP/TCP syslog ingest on port 5140; auto-parses CEF, LEEF, JSON, NDJSON, plain syslog
-- **HTTP Log Source API** — REST endpoint with per-source API key auth; accepts any log format
-- **Log Normalizer** — unified ParsedFields extraction across all formats: src_ip, dst_ip, user, auth_result, event_id, bytes_sent/recv, JA3 hash, command_line, parent_image, process name
-
-## Mobile Agent (Android)
-
-The XCloak Mobile Agent is a Flutter 3.24 Android app that brings endpoint monitoring and the full admin console to mobile devices.
-
-### Agent Mode (all enrolled devices)
-
-**Background service** (5 timers, jitter-staggered to prevent thundering-herd on mass reboot):
-
-| Timer | Interval | What it does |
-|-------|----------|-------------|
-| Check-in | 5 min | Posture snapshot + enriched heartbeat → backend; 403 auto-unenrolls |
-| Command poll | 2 min | Fetches and executes pending MDM commands |
-| Log forward | 10 min | Ships `logcat` batch (11 security tags, severity-parsed) |
-| App inventory | 30 min | Full installed-app scan with sideload detection |
-| Threat scan | 15 min | Sideload summary + system-app count → `/api/mdm/devices/$id/threat-scan` |
-
-**Device posture checks** (collected and shipped on every check-in):
-
-| Check | Method |
-|-------|--------|
-| Root / Jailbreak | su binary paths + `test-keys` build tag + Magisk socket |
-| Developer Options | `settings get global development_settings_enabled` |
-| USB Debugging | `settings get global adb_enabled` |
-| Unknown Sources (API < 26) | `settings get secure install_non_market_apps` |
-| Battery level + charging | `dumpsys battery` |
-| Storage total / free | `df /data` |
-| RAM total | `/proc/meminfo:MemTotal` |
-| Network type | `Connectivity().checkConnectivity()` |
-| VPN active | `NetworkInterface.list()` — detects tun/ppp/vpn interfaces |
-| Security patch level | `AndroidDeviceInfo.version.securityPatch` |
-
-**MDM commands** the agent handles:
-
-`collect_posture`, `collect_apps`, `scan_threats`, `collect_logs`, `sync`, `message`, `rotate_token`, `update_agent`, `lock_screen` (Device Owner only), `wipe` (Device Owner only — intentionally rejected in BYOD)
-
-- **Retry with backoff** — ApiClient retries 5xx, 429, `SocketException`, and `TimeoutException` up to 3× (500 ms → 1 s → 2 s + jitter). 4xx not retried.
-- **Consecutive failure tracking** — foreground notification degrades to "Agent degraded" after 5 consecutive check-in failures.
-- **Pending message delivery** — `message` MDM command stores text in encrypted storage; shown as AlertDialog on next app open.
-- **Token rotation** — `rotate_token` command issues a new bearer token from the server and atomically stores it.
-
-### Admin Console Mode (API key required)
-
-The same app doubles as a full admin console when an Admin API Key is provided. Covers all 53 sections of the NGFW dashboard:
-
-| Section Group | Screens |
-|---------------|---------|
-| **Overview** | Dashboard, Agents, Network Map, Attack Paths, Timeline |
-| **Detection** | Alerts, Incidents, UEBA, Insider Threat, ITDR, Deception (Canary/Honeyports) |
-| **Threat Intel** | Threat Actors, IOCs, Threat Feeds, Sigma Rules, YARA Rules, JA3 Fingerprints, Log Sources |
-| **Hunt** | Hunt Workbench (templates + runs) |
-| **Response** | Cases, Playbooks, Approval Queue, Firewall Rules, Scheduled Tasks, Forensics |
-| **Inventory** | Assets (CMDB), Vulnerabilities, Processes, Connections, Packages, File Hashes, Users, Auth Logs |
-| **Compliance** | Frameworks (SOC 2/NIST/PCI/ISO), Policies, Controls, Audit Trail, Reports |
-| **Platform** | Settings (Users, API Keys, Integrations, Roles), Tenants, AI Assistant |
-
-### Enrollment
-
-1. Open the app → tap **Enroll Device**
-2. Enter **Server URL** (e.g. `https://xcloak.yourdomain.com`) and **Enrollment Token** (generated from Settings → Install Tokens)
-3. Optionally enter an **Admin API Key** to enable the admin console
-4. The app registers the device, starts the background service, and stores the token securely
-
-### Building from Source
-
-```bash
-cd xcloak-agent-mobile
-
-# Requires Flutter 3.24.5, Java 21, Android SDK
-flutter pub get
-flutter run                       # debug build on connected device
-flutter build apk --release       # release APK
-```
-
-> **Java compatibility:** Flutter 3.24.5 requires Java ≤ 21. Set the JDK explicitly if your system default is newer:
-> ```bash
-> flutter config --jdk-dir=/usr/lib/jvm/java-21-openjdk-amd64
-> ```
+**Optional components:** Elasticsearch (dual-write log search), MinIO (WORM audit export), Grafana + Prometheus, HashiCorp Vault (TOTP + secret management)
 
 ---
 
-## Response (SOAR)
+## Current Status
 
-- **Playbooks** — automated response chains triggered by alert conditions, with human-in-the-loop approval gate before any destructive action dispatches to an agent
-- **AI Playbook Recommender** — Claude/Ollama suggests playbook chains based on MITRE technique and alert context
-- **Agent Tasks** — remote execution: kill process, isolate host, quarantine file, FIM scan, script execution
-- **Firewall Sync** — push firewall rules to agents from a central UI; agents apply them locally
-- **Script Runner** — run bash/python scripts on agents with real-time output
-- **Deception Technology** — honeypot management, canary token deployment, decoy file/user creation
+### What works (v0.2.0)
 
-## Investigation
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Backend API | ✅ Production-grade | Go/Gin, 56 migrations, RLS, httpOnly cookies, refresh rotation |
+| Detection engines | ✅ Working | 12 behavioral detectors, 43 Sigma rules seeded, YARA, IOC matching |
+| Go agent (Linux) | ✅ Production-grade | 15 autonomous collectors, slog, eBPF (optional) |
+| Go agent (Windows) | ✅ Working | Same collectors, Windows-native telemetry |
+| Mobile agent (Android) | ✅ Working | Posture, MDM, 10 commands, retry backoff, 53-section admin console |
+| SOAR / Playbooks | ✅ Working | AI-recommended, human-approval gate, FIM/YARA auto-quarantine |
+| Kafka event bus | ✅ Working | 7 consumer groups wired end-to-end |
+| Helm chart | ✅ Working | v0.2.0, tested on kind and GKE |
+| Multi-tenancy | ✅ Working | PostgreSQL RLS, custom roles, OIDC/SSO |
 
-- **Threat Hunt** — ad-hoc query across endpoint telemetry; Hunt Workbench for hypothesis tracking
-- **Incident Management** — correlation, timeline, AI deep-dive reports, DFIR artifact collection
-- **Network Map** — interactive force graph of agent connections with GeoIP
-- **AI Triage** — Ollama/Claude-powered alert and incident analysis with MITRE context
-- **Alert Clusters** — automatic grouping of related alerts by fingerprint and technique
-- **Correlation Engine** — cross-source pattern matching, multi-stage attack detection
-- **Threat Actor Intelligence** — threat actor profiles with TTPs, attribution, associated IOCs
-- **Timeline** — unified attack timeline across all agents and events
-- **Attack Paths** — visualize lateral movement and privilege escalation chains
+### Known Limitations
 
-## Risk & Compliance
+| Limitation | Detail |
+|------------|--------|
+| **Single maintainer** | Solo project — response times and release cadence reflect this |
+| **Frontend not open-source** | Next.js dashboard is open-core (not in this repo) |
+| **iOS mobile agent** | Does not exist yet — Android only |
+| **Screen lock detection** | Requires Device Owner / DPC profile; `has_passcode` is null in BYOD mode |
+| **PII in logs** | `parsed_fields` may contain emails/IPs — no automatic masking yet |
+| **No third-party pentest** | All security work is internal; external audit not yet scheduled |
+| **eBPF requires Linux 5.8+** | Degrades gracefully on older kernels |
+| **Certificate pinning off by default** | Can be embedded via ldflags for production builds |
 
-- **Risk Posture Score** — continuous tenant-level risk scoring across detection coverage, vulnerabilities, and alert trends
-- **SOC 2, NIST CSF, PCI-DSS, ISO 27001** — automated framework scoring
-- **SOC Metrics** — MTTD, MTTR, alert volume, analyst performance tracking
-- **Vulnerability Priority Queue** — EPSS + KEV + asset criticality weighted prioritization
-- **Audit Trail** — immutable log of all platform actions, batch-exported to MinIO under Object Lock (WORM/GOVERNANCE) so it can't be altered or deleted even by an admin
-- **Executive Reports** — PDF-ready risk summaries and compliance scoring
+---
 
-## Integrations
+## Quick Install
 
-| Integration | Purpose |
-|-------------|---------|
-| **Slack** | Real-time alert notifications |
-| **Webhook** | Generic outbound events for any SIEM/SOAR |
-| **Email** | Alert email delivery with severity filtering |
-| **PagerDuty** | Incident escalation |
-| **Microsoft Teams** | Alert cards via Incoming Webhook |
-| **Jira** | Auto-create tickets from alerts/incidents |
-| **ServiceNow** | Incident creation via Table API |
-| **Active Directory / LDAP** | Identity enrichment on all alerts |
-| **OIDC / SSO** | Per-tenant single sign-on |
+### Option A — Docker Compose (5 minutes)
 
-## Multi-Tenancy & Access Control
+```bash
+git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
+cd XCLOAK-SECURITY-SUITE
 
-- **Self-Serve Signup** — `POST /api/signup` (or `/signup` in the UI) provisions a new tenant + admin account without SMTP; the seeded Sigma rule library is copied in automatically so detection starts immediately
-- **Tenants** — every agent, alert, rule, playbook, and integration is scoped to a tenant
-- **Custom Roles** — fine-grained, additive RBAC (19 permissions) on top of built-in admin/analyst/viewer
-- **SSO (OIDC)** — per-tenant generic OpenID Connect login
-- **API Keys** — per-tenant, SHA-256-hashed keys scoped to a role
-- **TOTP 2FA** — RFC 4226, works with Google Authenticator/Authy
-- **Session Management** — active session listing and remote revocation
+# Start the observability stack + infra
+docker compose up -d
+
+# Backend
+cd xcloak-ngfw/backend
+cp .env.example .env
+# Set JWT_SECRET, DB_PASSWORD in .env
+go run ./main.go   # or: air (hot reload)
+
+# Frontend (separate terminal)
+cd xcloak-ngfw/frontend && npm install && npm run dev
+```
+
+Open http://localhost:3000 — first signup creates the admin account.
+
+### Option B — Kubernetes / Helm
+
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+# From this repo
+helm dependency update charts/xcloak
+helm install xcloak charts/xcloak \
+  --namespace xcloak --create-namespace \
+  --set global.ingress.host=xcloak.yourdomain.com \
+  --set backend.env.JWT_SECRET=$(openssl rand -hex 32) \
+  --set backend.env.METRICS_TOKEN=$(openssl rand -hex 32)
+```
+
+See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elasticsearch, and production hardening.
+
+### Option C — Pre-built binaries (GitHub Releases)
+
+Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases):
+- `xcloak-agent-linux-amd64`
+- `xcloak-agent-linux-arm64`
+- `xcloak-agent-windows-amd64.exe`
+- `xcloak-agent-android.apk`
+- `xcloak-*.tgz` (Helm chart)
+
+---
+
+## Feature Overview
+
+### Detection
+
+| Engine | Details |
+|--------|---------|
+| **Sigma Rules** | 43 production-ready rules seeded automatically; custom rules via UI import or direct migration |
+| **YARA Rules** | Malware signature scanning on endpoints; YARA matches auto-create quarantine tasks |
+| **IOC Engine** | IP, domain, hash, URL, email; async Kafka matching off the request path |
+| **Threat Intel** | STIX/TAXII, MISP, AlienVault OTX, flat-file feeds |
+| **C2 Beacon** | CV-based interval analysis on periodic outbound connections (T1071, T1571) |
+| **DNS Security** | DGA/entropy, DNS tunneling, flood detection (T1568.002, T1071.004) |
+| **Port Scan / LM** | Vertical, horizontal, SYN sweep; SMB spray (T1046, T1021.002) |
+| **Exfiltration** | Volume flood, cloud storage drain (S3/Drive/OneDrive/Dropbox/Box/Mega) (T1048, T1567.002) |
+| **TLS/JA3** | 13+ known C2 tool fingerprints (Cobalt Strike, Sliver, Havoc, BruteRatel, etc.) (T1071.001) |
+| **Credential Attacks** | SSH/RDP brute force, password spray, credential stuffing (T1110.x) |
+| **Privilege Escalation** | Windows EventID 4728/4732/4720/4672; Linux sudo/SUID/sudoers (T1098, T1548) |
+| **Ransomware** | FIM mass-modify + crypto extensions; kill-chain commands; AV/EDR kill detection (T1486, T1490) |
+| **LotL** | Office→PowerShell chains; 10 LOLBins; encoded PowerShell detection (T1059, T1218, T1027) |
+| **Impossible Travel** | Haversine distance >900 km/h (T1078) |
+| **UEBA** | Behavioral baseline, risk scoring across auth + file access + network |
+
+### Go Agent — Autonomous Collectors
+
+| Collector | Linux | Windows | Interval |
+|-----------|-------|---------|----------|
+| Processes | ✅ | ✅ | 30 s |
+| Connections (w/ PID) | ✅ `/proc/net` inode→PID | ✅ netstat+tasklist | 30 s |
+| Services | ✅ | ✅ | 60 s |
+| Users (groups, sudo, SSH, last login) | ✅ | ✅ | 10 min |
+| Packages (dpkg/rpm/pacman/snap/flatpak/pip3) | ✅ | ✅ WMIC/registry/winget | 6 h |
+| Auth logs | ✅ /var/log/auth.log | ✅ Windows Event Log | 2 min |
+| auditd events | ✅ | — | 30 s |
+| File hashes | ✅ | ✅ | 1 h |
+| FIM (hash+mode+uid+gid+mtime) | ✅ | ✅ | real-time |
+| Registry persistence keys | — | ✅ | 1 h |
+| Cron jobs / Scheduled Tasks | ✅ | ✅ | 1 h |
+| Kernel modules / Drivers | ✅ lsmod | ✅ driverquery | 30 min |
+| SUID/SGID binary scan | ✅ | — | 6 h |
+| Disk usage | ✅ /proc/mounts | ✅ WMIC/Get-PSDrive | 5 min |
+| eBPF TCP events | ✅ (kernel 5.8+) | — | real-time |
+| Firewall stats | ✅ iptables | — | 60 s |
+
+**Heartbeat:** load_avg_1m/5m/15m, logged_in_users, open_fds (Linux) · cpu_load_pct, logged_in_users (Windows)
+
+### Mobile Agent (Android)
+
+**Device Posture (24 fields sent on every check-in):**
+Root detection · Developer options · USB debugging · Unknown sources · Disk encryption · Battery level/charging · Storage total/free · RAM · Network type · WiFi SSID · VPN active · Security patch level · Manufacturer · Hardware · Android SDK · Build fingerprint
+
+**MDM Commands:** `collect_posture` · `collect_apps` · `scan_threats` · `collect_logs` · `sync` · `message` · `rotate_token` · `update_agent` · `lock_screen` (Device Owner) · `wipe` (Device Owner)
+
+**Background timers (all with ≤30 s jitter):** check-in 5 min · command poll 2 min · log forward 10 min · app inventory 30 min · threat scan 15 min
+
+### SOAR / Response
+
+- **Playbooks** — automated chains with human-approval gate before any destructive action
+- **AI Recommender** — Claude/Ollama suggests playbook chains from MITRE context
+- **FIM auto-quarantine** — critical path violations auto-create pending-approval tasks
+- **YARA auto-quarantine** — matched files go into the approval queue
+- **Script Runner** — bash/python3 on agents with real-time output
+- **Deception** — honeypots, canary tokens, decoy files/users
+- **Stale task expiry** — destructive tasks auto-expire after 15 minutes without approval
+
+---
+
+## Comparison
+
+| Feature | XCloak | Wazuh | Elastic Security | Splunk (free tier) |
+|---------|--------|-------|-----------------|-------------------|
+| SIEM | ✅ | ✅ | ✅ | ✅ |
+| EDR (Go agent) | ✅ | ✅ | ✅ | ❌ |
+| SOAR / Playbooks | ✅ | ⚠️ basic | ✅ | ⚠️ limited |
+| MDM (Android) | ✅ | ❌ | ❌ | ❌ |
+| Built-in NGFW rules | ✅ | ❌ | ❌ | ❌ |
+| AI triage (LLM) | ✅ Ollama/Claude | ❌ | ⚠️ Elastic AI | ❌ |
+| Multi-tenancy | ✅ PostgreSQL RLS | ⚠️ | ✅ | ✅ |
+| Helm / K8s | ✅ | ✅ | ✅ | ✅ |
+| No Java dependency | ✅ Go-only | ❌ Java/JVM | ❌ JVM | ❌ JVM |
+| Open source | ✅ open-core | ✅ | ✅ | ❌ |
+| License cost | Free (BSL 1.1) | Free (GPL) | Free tier + paid | Free tier limited |
+| Single-binary agent | ✅ | ❌ | ❌ | N/A |
+| eBPF support | ✅ | ⚠️ | ⚠️ | N/A |
+| Deception technology | ✅ | ❌ | ❌ | ❌ |
+
+> Comparisons are approximate and based on publicly available information as of mid-2026. Each product evolves rapidly.
+
+---
 
 ## Documentation
 
 | Guide | Audience |
 |-------|---------|
-| [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, detection rules, AI tools |
-| [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, backups |
-| [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing the Go agent (Linux/Windows/macOS) and the Android mobile agent |
-| [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps |
-| [OpenAPI Spec](xcloak-ngfw/backend/docs/generated/openapi.yaml) | Developers — full REST API reference (OpenAPI 3.0) |
+| [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, MDM |
+| [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, MDM, AI tools |
+| [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing the Go agent on Linux/Windows |
+| [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps (Phase 1–8) |
+| [Roadmap](roadmap.md) | Everyone — planned features and honest limitations |
+| [Changelog](CHANGELOG.md) | Everyone — what changed in each release |
+| [Contributing](CONTRIBUTING.md) | Contributors — dev setup, code guidelines, PR process |
+| [Security Policy](SECURITY.md) | Everyone — threat model, audit status, responsible disclosure |
 
 ---
-
-## Quick Start
-
-### Prerequisites
-- Go 1.21+
-- Node.js 18+
-- PostgreSQL 16
-- Redis (rate limiting + token revocation state)
-- Docker (for Kafka/Prometheus/Grafana/MinIO)
-
-### 1. Backend
-
-```bash
-cd xcloak-ngfw/backend
-
-# Copy and configure environment
-cp .env.example .env
-# Edit .env — set DB credentials, JWT_SECRET, METRICS_TOKEN, SMTP settings
-
-# Generate secure secrets
-openssl rand -hex 32  # paste as JWT_SECRET in .env
-openssl rand -hex 32  # paste as METRICS_TOKEN in .env — also set in prometheus/metrics_token
-
-# Migrations run automatically on startup (golang-migrate, 56 migrations)
-# Migration 056 seeds the Sigma rule library on first run
-# Start with hot reload
-air
-```
-
-### 2. Frontend
-
-```bash
-cd xcloak-ngfw/frontend
-npm install
-npm run dev
-```
-
-### 3. Observability Stack
-
-```bash
-cd XCLOAK-SECURITY-SUITE
-docker compose up -d
-```
-
-Services:
-- Grafana: http://localhost:3001 (admin/xcloak)
-- Prometheus: http://localhost:9090
-- Kafka UI: http://localhost:8090
-- MinIO Console: http://localhost:9001 (immutable audit log export target)
-
-### 4. Go Agent (Linux / Windows / macOS)
-
-```bash
-cd xcloak-agent
-go build -o xcloak-agent ./main.go
-
-# First run — will prompt for install token
-# Generate one: XCloak UI → Agents → Add Agent
-./xcloak-agent
-```
-
-After first registration, the agent token is saved to `~/.config/xcloak-agent/token` and reused on every subsequent start.
-
-### 5. Mobile Agent (Android)
-
-```bash
-cd xcloak-agent-mobile
-
-# Requires Flutter 3.24.5 + Java 21
-flutter pub get
-flutter run          # hot-reload on connected device
-# or: flutter build apk --release
-```
-
-Enroll from the app: enter your server URL + an Enrollment Token generated from **Settings → Install Tokens**.  
-Enable the admin console by entering an Admin API Key (Settings → API Keys → Create → role: `admin`).
-
-### 7. Agentless Log Sources (Syslog / HTTP)
-
-```bash
-# Syslog (UDP/TCP, port 5140) — configure your firewall/switch to forward here
-# CEF, LEEF, JSON, NDJSON, plain syslog all auto-detected
-
-# HTTP — create a log source in UI → Log Sources → Add → HTTP
-# Then POST logs with the generated API key:
-curl -X POST http://localhost:8080/api/ingest/http/<source-id> \
-  -H "Authorization: Bearer <api-key>" \
-  -H "Content-Type: application/json" \
-  -d '{"timestamp":"2026-06-29T12:00:00Z","src_ip":"10.0.0.1","event":"login_failed","user":"admin"}'
-```
-
-## Environment Variables
-
-### Backend (`xcloak-ngfw/backend/.env`)
-
-```env
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=xcloak
-DB_PASSWORD=your_password
-DB_NAME=ngfw
-DB_SSLMODE=disable           # set to require/verify-full in production
-
-# Security — REQUIRED
-JWT_SECRET=<openssl rand -hex 32>
-METRICS_TOKEN=<openssl rand -hex 32>
-CORS_ALLOWED_ORIGINS=http://localhost:3000
-
-# Agent ↔ backend TLS (optional)
-TLS_CERT_FILE=
-TLS_KEY_FILE=
-
-# AI (choose one)
-LLM_PROVIDER=ollama          # or: anthropic
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:3b
-ANTHROPIC_API_KEY=           # if using Claude
-
-# Redis — rate limiting + token revocation
-REDIS_ADDR=localhost:6379
-
-# MinIO — immutable audit log export
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=
-MINIO_SECRET_KEY=
-MINIO_AUDIT_BUCKET=xcloak-audit-log
-MINIO_USE_SSL=false
-AUDIT_EXPORT_RETENTION_DAYS=365
-
-# Kafka
-KAFKA_ENABLED=true
-KAFKA_BROKER=localhost:9092
-
-# Email alerts (optional)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@gmail.com
-SMTP_PASS=your_app_password
-SMTP_FROM=xcloak@yourdomain.com
-
-# Base URL for password-reset and invite email links (default: http://localhost:3000)
-APP_BASE_URL=https://xcloak.yourdomain.com
-```
-
-Per-tenant settings (OIDC SSO, LDAP, threat feed credentials, API keys, custom roles) are configured from the UI and stored in the database — see Settings → Integrations / API Keys / Roles.
-
-### Agent (`xcloak-agent/.env`)
-
-```env
-# Only needed for first-time registration
-XCLOAK_INSTALL_TOKEN=<generate from UI>
-
-# Override the backend URL (defaults to http://localhost:8080)
-SERVER_URL=http://localhost:8080
-
-# TLS to the backend (optional)
-XCLOAK_CA_CERT_PATH=
-XCLOAK_INSECURE_SKIP_VERIFY=false
-
-# Disable automatic binary self-update (e.g. change-controlled environments)
-XCLOAK_DISABLE_SELF_UPDATE=false
-
-# Logging
-LOG_LEVEL=info            # debug / info / warn / error
-LOG_FORMAT=text           # text (default) or json for log aggregators
-```
-
-## Security
-
-- JWT authentication (8h access / 7d refresh) with **refresh token rotation** — old refresh token is revoked on each use; `POST /api/auth/refresh` issues new pair
-- Redis-backed token blacklist on logout; rate limiting via atomic Lua sliding-window script (no TOCTOU race)
-- Agent registration requires one-time install tokens (single-use, claimed atomically); agent tokens rotatable via `POST /api/agents/:id/rotate-token`
-- TOTP 2FA (RFC 4226 — Google Authenticator, Authy)
-- Multi-tenancy: `tenant_id` scoping enforced across all resources; PostgreSQL RLS load-bearing for every query via `xcloak_app` role
-- RBAC — built-in admin/analyst/viewer plus custom roles with 19 granular permissions
-- Per-tenant SSO (OIDC) and per-tenant SHA-256-hashed API keys
-- SOAR destructive actions require human approval when triggered by playbooks; FIM+YARA auto-quarantine tasks enter the same approval queue
-- Immutable audit log to MinIO under Object Lock (GOVERNANCE retention)
-- TLS support for Postgres and agent↔backend (`DB_SSLMODE`, `TLS_CERT_FILE`/`TLS_KEY_FILE`)
-- Stale task expiry: destructive tasks expire after 15 min, others after 1h
-- Webhook/Slack/PagerDuty deliveries retry automatically on network errors and 5xx responses (immediate → 5s → 30s); 4xx failures are not retried
-- All 7 Kafka consumer loops have message-level panic isolation — a single malformed message cannot kill a consumer goroutine
-- Agent structured logging via `log/slog` — `LOG_FORMAT=json` produces machine-parseable output for any log aggregator; `LOG_LEVEL` controls verbosity at runtime without a rebuild
-
-## Backups
-
-```bash
-# Manual backup (reads DB_* from xcloak-ngfw/backend/.env)
-./scripts/backup_db.sh
-
-# Restore (DESTRUCTIVE — drops and recreates every table first)
-./scripts/restore_db.sh backups/ngfw_20260619_213343.sql.gz
-```
-
-For automated daily backups, add to crontab:
-```
-0 2 * * * /path/to/xcloak/scripts/backup_db.sh >> /var/log/xcloak-backup.log 2>&1
-```
-Backups land in `backups/` (gitignored) and are pruned after `RETENTION_DAYS` (default 14).
-
-## API
-
-Base URL: `http://localhost:8080`  
-Authentication: httpOnly cookie (`token`) set by `/api/auth/login` — no Authorization header needed. Agent endpoints use `X-Agent-Key` header instead. Full spec: [`docs/generated/openapi.yaml`](xcloak-ngfw/backend/docs/generated/openapi.yaml).
-
-Key endpoints:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/login` | Login — sets `token` + `logged_in` cookies (or 2FA prompt) |
-| POST | `/api/auth/refresh` | Rotate refresh token — issues new access + refresh pair; old refresh revoked |
-| POST | `/api/signup` | Self-serve org signup — creates tenant + admin, sets cookies |
-| GET | `/api/alerts/paginated` | Paginated alerts with status filter |
-| POST | `/api/alerts/:id/acknowledge` | Acknowledge alert |
-| GET | `/api/incidents/paginated` | Paginated incidents |
-| GET | `/api/agents` | List all agents (tenant-scoped) |
-| POST | `/api/agents/:id/rotate-token` | Rotate agent auth token (requires `manage_agents` permission) |
-| POST | `/api/scripts/run` | Execute script on agents |
-| POST | `/api/firewall/sync` | Push firewall rules to agents |
-| GET/POST | `/api/tasks/pending-approval` | SOAR approval queue — also receives FIM/YARA auto-quarantine tasks |
-| GET/POST/DELETE | `/api/sigma/rules` | Sigma rule management |
-| GET/POST/DELETE | `/api/yara/rules` | YARA rule management |
-| GET/POST/DELETE | `/api/ja3/fingerprints` | JA3 TLS fingerprint blocklist |
-| GET/POST/DELETE | `/api/log-sources` | Agentless log source management |
-| POST | `/api/ingest/http/:id` | HTTP log ingest endpoint |
-| GET | `/api/identity` | AD/LDAP identity cache viewer |
-| GET/POST | `/api/threat-feeds` | STIX·TAXII/MISP/OTX/flat-file feed management |
-| GET/POST/DELETE | `/api/api-keys` | Per-tenant API key management |
-| GET/POST/PUT/DELETE | `/api/custom-roles` | Granular custom role management |
-| GET/POST/PATCH | `/api/platform/tenants` | Tenant provisioning (platform-admin only) |
-| GET | `/api/audit/export/status` | Immutable audit export progress |
-| GET | `/metrics` | Prometheus metrics (bearer-gated) |
-
-## Kafka Topics
-
-Every topic has a dedicated consumer group running in the same backend process. Consumers are no-ops when `KAFKA_ENABLED=false`.
-
-All consumers have message-level panic isolation — `defer logRecover("process*Event")` inside each per-message handler ensures one bad message cannot kill the consumer loop.
-
-| Topic | Events | Consumer | Action |
-|-------|--------|----------|--------|
-| `xcloak.alerts` | Alert created | `xcloak-alert-consumer` | Index to `xcloak-alerts-<tenantID>` in Elasticsearch |
-| `xcloak.incidents` | Incident opened | `xcloak-incident-consumer` | Fire webhook/Slack delivery (with retry); push WS notification to dashboards |
-| `xcloak.agent_tasks` | Task dispatched / completed | `xcloak-task-consumer` | Track `AgentTasksPending` gauge; push WS notification on completion |
-| `xcloak.audit` | Admin actions | `xcloak-audit-consumer` | Stream 13 high-risk actions (ROLE_CHANGE, DELETE_USER, etc.) to Splunk HEC in real time; tenant configs cached 2 min |
-| `xcloak.fim_alerts` | File integrity violations | `xcloak-fim-consumer` | Auto-create `quarantine_file` task (pending approval) for critical system paths (`/bin/*`, `/etc/passwd`, `/etc/sudoers`, etc.) |
-| `xcloak.yara_matches` | YARA signature matches | `xcloak-yara-consumer` | Auto-create `quarantine_file` task (pending approval) for matched file |
-| `xcloak.ioc_match_jobs` | Async IOC matching jobs | `xcloak-ioc-matcher` | Run file hash and connection IOC matching off the ingest request path |
-
-## Agent Capabilities
-
-### Autonomous collectors (run on a schedule without server dispatch)
-
-| Collector | Linux interval | Windows interval | Data |
-|-----------|---------------|-----------------|------|
-| Processes | 5 min | 5 min | PID, PPID, name, cmdline, exe path (WMIC/CIM on Windows) |
-| Connections | 5 min | 5 min | /proc/net/tcp* → inode→PID map (Linux); netstat -ano + tasklist (Windows) — PID, process name per socket |
-| Services | 15 min | 15 min | systemctl list-units (Linux); SCM (Windows) |
-| Users | 30 min | 30 min | /etc/passwd + /etc/group + sudoers + SSH authorized_keys + last login (Linux); net user + Administrators group (Windows) |
-| Packages | 6 h | 6 h | dpkg→rpm→pacman→snap→flatpak→pip3 chain (Linux); WMIC→registry→winget (Windows); all tagged with `source` field |
-| Auth logs | 2 min | 2 min | Incremental tail of /var/log/auth.log (Linux) or Security Event Log (Windows) |
-| auditd | 30 s | — | Incremental parse of /var/log/audit/audit.log for execve events |
-| File hashes | 1 h | 1 h | SHA-256 + MD5 inventory |
-| Registry | — | 1 h | Windows Run/RunOnce persistence keys |
-| Cron jobs | 1 h | 1 h | /etc/crontab + /etc/cron.d/* + user crontabs (Linux); schtasks /fo CSV (Windows) |
-| Kernel modules | 30 min | 30 min | lsmod (Linux); driverquery /fo csv (Windows) |
-| SUID/SGID scan | 6 h | — | Walk /usr /bin /sbin /opt /home for SUID/SGID binaries with mode + UID/GID |
-| Disk usage | 5 min | 5 min | /proc/mounts + syscall.Statfs per mount (Linux); wmic logicaldisk / Get-PSDrive (Windows) |
-| Firewall stats | 60 s | — | iptables XCLOAK chain hit counters |
-| eBPF TCP events | real-time | — | Outbound TCP connect events via cilium/ebpf (Linux only) |
-
-### Heartbeat enrichment
-
-Every 30-second heartbeat now includes:
-- Linux: `load_avg_1m/5m/15m` from /proc/loadavg, `logged_in_users` (who), `open_fds` (/proc/sys/fs/file-nr)
-- Windows: `logged_in_users` (query user), `cpu_load_pct` (wmic cpu)
-
-### Server-dispatched task types
-
-| Task Type | Description |
-|-----------|-------------|
-| `collect_processes` | Snapshot running processes |
-| `collect_connections` | Active network connections with PID/process enrichment |
-| `collect_packages` | Installed packages (full fallback chain) |
-| `collect_users` | User inventory with groups, sudo, SSH keys |
-| `collect_services` | Running services |
-| `collect_auth_logs` | Read /var/log/auth.log |
-| `collect_file_hashes` | SHA256/MD5 file inventory |
-| `collect_cron_jobs` | Cron jobs / scheduled tasks |
-| `collect_kernel_modules` | Loaded kernel modules / drivers |
-| `collect_suid_binaries` | SUID/SGID binary scan |
-| `collect_disk_usage` | Disk capacity per mount point |
-| `fim_scan` | File integrity check — hash + mode + owner + mtime |
-| `vulnerability_scan` | Collect packages for server-side CVE matching |
-| `kill_process` | Kill a process by PID |
-| `isolate_host` | Block all traffic except XCloak server |
-| `quarantine_file` | Move file to quarantine directory |
-| `execute_script` | Run bash/sh/python3 script, return output |
-| `apply_firewall_rules` | Apply iptables rules from XCloak |
-| `restore_file` | Move a quarantined file back to its original path |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS |
-| Backend | Go 1.21, Gin, JWT |
-| Database | PostgreSQL 16 (golang-migrate, 56 migrations incl. partitioned `endpoint_logs`) |
-| Cache / State | Redis (rate limiting, token revocation) |
-| Go Agent | Go (single binary, no dependencies) — Linux / Windows / macOS |
-| Mobile Agent | Flutter 3.24.5 (Dart) — Android; Material 3 UI; admin console + MDM check-in |
-| Message Bus | Apache Kafka |
-| Object Storage | MinIO (immutable audit log, Object Lock) |
+| Backend | Go 1.25, Gin, golang-migrate (56 migrations) |
+| Database | PostgreSQL 16 with Row-Level Security (tenant isolation) |
+| Cache / State | Redis 7 (rate limiting, session revocation, Lua atomic scripts) |
+| Event bus | Apache Kafka (optional; 7 consumer groups) |
+| Object store | MinIO with Object Lock / WORM (audit export) |
+| Search | Elasticsearch / OpenSearch (optional dual-write) |
 | Metrics | Prometheus + Grafana |
-| AI | Ollama (local) / Anthropic Claude |
-| Auth | JWT + TOTP 2FA + per-tenant OIDC SSO + API keys |
-| Identity | Active Directory / LDAP (go-ldap/v3) |
-
-## License
-
-XCloak Security Suite is licensed under the
-[Business Source License 1.1](LICENSE).
-
-- **Free** for non-commercial use and self-hosted deployments up to 10 agents
-- **Commercial license required** for production SaaS or commercial deployments
-- Converts to Apache 2.0 on 2029-01-01
-
-For commercial licensing: abhishekn1003@gmail.com
+| Secrets | HashiCorp Vault (TOTP encryption, optional secret management) |
+| Frontend | Next.js 14 + TypeScript (open-core, not in this repo) |
+| Go Agent | Go 1.25, `golang.org/x/sys`, `github.com/cilium/ebpf` (optional) |
+| Mobile Agent | Flutter 3.24.5 (Dart), Android API 26+ |
+| Infrastructure | Docker Compose (dev), Helm v0.2.0 (production), GitHub Actions (CI/CD) |
 
 ---
 
-Built by [0xIdiot](https://github.com/The-Abhishek1)
+## License
+
+Business Source License 1.1 — see [LICENSE](LICENSE).
+
+The BSL converts to Apache 2.0 after 4 years (2029). Commercial use beyond the limits described in the LICENSE file requires a separate agreement.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and feature requests use the [issue templates](.github/ISSUE_TEMPLATE/).
+
+Security vulnerabilities → see [SECURITY.md](SECURITY.md). Do not open a public issue.
+
+---
+
+*Maintained by [Abhishek N](mailto:abhishekn1003@gmail.com)*

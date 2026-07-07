@@ -1,0 +1,87 @@
+name: Bug Report
+description: Report a bug in XCloak
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail as possible.
+        **For security vulnerabilities, do NOT open a public issue — see [SECURITY.md](../../SECURITY.md).**
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of XCloak is affected?
+      options:
+        - Backend API (Go/Gin)
+        - Go Agent (Linux)
+        - Go Agent (Windows)
+        - Mobile Agent (Android)
+        - Helm Chart
+        - Docker Compose
+        - Detection Engine (Sigma/YARA/IOC)
+        - SOAR / Playbooks
+        - MDM
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: XCloak version
+      description: Output of `git describe --tags` or the release tag
+      placeholder: v0.2.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste backend logs (LOG_FORMAT=json output) or agent logs here.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS, Go version, PostgreSQL version, deployment method (Docker Compose / Helm / bare metal)
+      placeholder: |
+        - OS: Ubuntu 22.04
+        - Go: 1.25.0
+        - PostgreSQL: 16.2
+        - Deployment: Docker Compose
+    validations:
+      required: true
