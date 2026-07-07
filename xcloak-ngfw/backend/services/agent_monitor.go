@@ -9,7 +9,7 @@ func MarkOfflineAgents() {
 	query := `
 	UPDATE agents
 	SET status = 'offline'
-	WHERE last_seen < NOW() - INTERVAL '2 minutes'
+	WHERE last_seen < NOW() - INTERVAL '8 minutes'
 	`
 
 	database.DB.Exec(query)

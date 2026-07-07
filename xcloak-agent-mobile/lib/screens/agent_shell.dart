@@ -547,36 +547,6 @@ class _OverviewTabState extends State<_OverviewTab>
                 icon: Icons.grid_view_rounded, label: 'Mode\nSelect', color: _kPurple,
                 onTap: () => Navigator.pushReplacement(context,
                   MaterialPageRoute(builder: (_) => const ModeSelectScreen()))),
-              const SizedBox(width: 8),
-              _ActionTile(
-                icon: Icons.link_off, label: 'Unenroll', color: _kRed,
-                onTap: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('Unenroll Device'),
-                      content: const Text('Remove this device from XCloak and stop all monitoring?'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                        FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Unenroll'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true && context.mounted) {
-                    await EnrollmentService.unenroll();
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
-                        (_) => false,
-                      );
-                    }
-                  }
-                }),
             ]),
           ])),
         ],
