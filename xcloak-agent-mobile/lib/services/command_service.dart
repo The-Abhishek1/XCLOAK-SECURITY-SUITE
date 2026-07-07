@@ -48,7 +48,7 @@ class CommandService {
   }
 
   static Future<String> _execute(
-      String type, Map cmd, ApiClient client, String deviceId) async {
+      String type, Map cmd, ApiClient client, int deviceId) async {
     switch (type) {
 
       // ── Read-only collection ─────────────────────────────────────────────

@@ -1,5 +1,7 @@
 # Contributing to XCloak
 
+**[xcloak.tech](https://xcloak.tech)** · [docs.xcloak.tech](https://docs.xcloak.tech) · [blog.xcloak.tech](https://blog.xcloak.tech)
+
 First off — thank you. XCloak is a solo-maintained project and every
 contribution matters.
 
@@ -130,6 +132,6 @@ Alternatively, add rules via the UI at **Detection → Sigma Rules → Import** 
 
 ## Current Maintainer
 
-**Abhishek N** — abhishekn1003@gmail.com
+**Abhishek N** — abhishekn1003@gmail.com · [xcloak.tech](https://xcloak.tech)
 
 This is a solo-maintained project. Response times may vary. If you are interested in becoming a regular contributor or co-maintainer, reach out directly.

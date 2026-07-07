@@ -1,5 +1,7 @@
 # Security Policy
 
+**[xcloak.tech](https://xcloak.tech)** · [docs.xcloak.tech](https://docs.xcloak.tech) · [GitHub](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE)
+
 ## Supported Versions
 
 | Version | Supported |
@@ -110,6 +112,8 @@ We credit reporters in the release notes unless you prefer to remain anonymous.
 ---
 
 ## Disclosure Policy
+
+Full security documentation is available at [docs.xcloak.tech](https://docs.xcloak.tech).
 
 XCloak follows **coordinated disclosure**:
 

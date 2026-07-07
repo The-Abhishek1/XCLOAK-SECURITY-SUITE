@@ -171,11 +171,11 @@ class DashboardApi {
   final ApiClient c;
 
   // ── helpers ───────────────────────────────────────────────────────────────
-  Future<Map<String,dynamic>> _g(String p) => c.get(p);
-  Future<Map<String,dynamic>> _po(String p, Map<String,dynamic> b) => c.post(p, b);
-  Future<Map<String,dynamic>> _pu(String p, Map<String,dynamic> b) => c.put(p, b);
-  Future<Map<String,dynamic>> _pa(String p, Map<String,dynamic> b) => c.patch(p, b);
-  Future<Map<String,dynamic>> _d(String p) => c.delete(p);
+  Future<Map<String,dynamic>> _g(String p) async => (await c.get(p)) as Map<String,dynamic>;
+  Future<Map<String,dynamic>> _po(String p, Map<String,dynamic> b) async => (await c.post(p, b)) as Map<String,dynamic>;
+  Future<Map<String,dynamic>> _pu(String p, Map<String,dynamic> b) async => (await c.put(p, b)) as Map<String,dynamic>;
+  Future<Map<String,dynamic>> _pa(String p, Map<String,dynamic> b) async => (await c.patch(p, b)) as Map<String,dynamic>;
+  Future<Map<String,dynamic>> _d(String p) async => (await c.delete(p)) as Map<String,dynamic>;
 
   List<dynamic> _list(Map<String,dynamic> r, List<String> keys) {
     for (final k in keys) { if (r[k] is List) return r[k] as List; }

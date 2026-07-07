@@ -20,7 +20,7 @@ class PostureCollector {
     return DevicePosture(
       osVersion:           'Android ${androidInfo.version.release}',
       buildVersion:        androidInfo.version.incremental,
-      securityPatchLevel:  androidInfo.version.securityPatch,
+      securityPatchLevel:  androidInfo.version.securityPatch ?? '',
       androidSdkVersion:   androidInfo.version.sdkInt,
       manufacturer:        androidInfo.manufacturer,
       hardware:            androidInfo.hardware,

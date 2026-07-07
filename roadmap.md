@@ -1,5 +1,7 @@
 # XCloak Roadmap
 
+**[xcloak.tech](https://xcloak.tech)** · [docs.xcloak.tech](https://docs.xcloak.tech) · [blog.xcloak.tech](https://blog.xcloak.tech)
+
 This is a living document. Items are not promises — they represent current priorities and intentions. As a solo-maintained project, timelines shift.
 
 ---
@@ -45,8 +47,8 @@ This is a living document. Items are not promises — they represent current pri
 
 📋 **macOS agent** — port heartbeat, packages (`brew`), processes, connections, FIM to macOS  
 📋 **iOS mobile agent** — minimal posture + MDM check-in (Android feature-parity is the target)  
-📋 **Live Demo instance** — self-hosted demo at `demo.xcloak.dev` on a cheap VPS with sample data  
-📋 **OpenAPI docs site** — Mintlify or Docusaurus site with API reference, rule examples, deployment tutorials  
+📋 **Live Demo instance** — self-hosted demo at `demo.xcloak.tech` on a cheap VPS with sample data  
+📋 **OpenAPI docs** — expand [docs.xcloak.tech](https://docs.xcloak.tech) with full API reference, rule examples, interactive tutorials  
 📋 **Agent fleet health dashboard** — backend overview of agent version distribution, offline count, disk/battery critical  
 
 ---
@@ -103,5 +105,5 @@ These are the current honest limitations of the platform:
 
 ---
 
-*Last updated: 2026-07-07*  
-*Maintainer: Abhishek N — abhishekn1003@gmail.com*
+*Last updated: 2026-07-08*  
+*Maintainer: Abhishek N — abhishekn1003@gmail.com · [xcloak.tech](https://xcloak.tech)*

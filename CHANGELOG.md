@@ -4,6 +4,8 @@ All notable changes to XCloak are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 XCloak uses [semantic versioning](https://semver.org/).
 
+Technical release posts and deep-dives at [blog.xcloak.tech](https://blog.xcloak.tech).
+
 ---
 
 ## [0.2.0] — 2026-07-07
@@ -120,3 +122,7 @@ XCloak uses [semantic versioning](https://semver.org/).
 ## [Unreleased]
 
 See [roadmap.md](roadmap.md) for planned features.
+
+---
+
+*[xcloak.tech](https://xcloak.tech) · [blog.xcloak.tech](https://blog.xcloak.tech) · [docs.xcloak.tech](https://docs.xcloak.tech)*

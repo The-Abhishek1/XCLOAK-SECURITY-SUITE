@@ -9,6 +9,8 @@
 
 **Open-core enterprise security platform.** NGFW + SIEM + EDR + SOAR + MDM in a single stack — built with Go, PostgreSQL, Next.js, and Flutter.
 
+**[xcloak.tech](https://xcloak.tech)** · **[docs.xcloak.tech](https://docs.xcloak.tech)** · **[blog.xcloak.tech](https://blog.xcloak.tech)**
+
 > **Single maintainer project.** This is not a commercial product with an SLA. See [Current Status](#current-status) for an honest picture of what works and what doesn't yet.
 
 ---
@@ -17,7 +19,7 @@
 
 | Dashboard Overview | Alert Detail | Posture (Mobile) |
 |-------------------|--------------|-----------------|
-| ![dashboard](docs/dashboard.png) | *(coming soon)* | *(coming soon)* |
+| ![dashboard](docs/dashboard.png) | (docs/alerts.png) | (docs/mobile.png) |
 
 ---
 
@@ -231,6 +233,8 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 | Guide | Audience |
 |-------|---------|
+| [docs.xcloak.tech](https://docs.xcloak.tech) | Full documentation site — getting started, API reference, all config |
+| [blog.xcloak.tech](https://blog.xcloak.tech) | Technical deep-dives and release posts |
 | [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, MDM |
 | [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, MDM, AI tools |
 | [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing the Go agent on Linux/Windows |
@@ -261,6 +265,19 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 ---
 
+## Community
+
+| | |
+|--|--|
+| Website | [xcloak.tech](https://xcloak.tech) |
+| Docs | [docs.xcloak.tech](https://docs.xcloak.tech) |
+| Blog | [blog.xcloak.tech](https://blog.xcloak.tech) |
+| GitHub | [The-Abhishek1/XCLOAK-SECURITY-SUITE](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE) |
+| Issues | [github.com/.../issues](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/issues) |
+| Security | [SECURITY.md](SECURITY.md) — do not open a public issue for vulnerabilities |
+
+---
+
 ## License
 
 Business Source License 1.1 — see [LICENSE](LICENSE).
@@ -277,4 +294,4 @@ Security vulnerabilities → see [SECURITY.md](SECURITY.md). Do not open a publi
 
 ---
 
-*Maintained by [Abhishek N](mailto:abhishekn1003@gmail.com)*
+*Maintained by [Abhishek N](mailto:abhishekn1003@gmail.com) · [xcloak.tech](https://xcloak.tech)*
