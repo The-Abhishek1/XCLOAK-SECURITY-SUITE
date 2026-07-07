@@ -36,16 +36,31 @@ class DashboardApi {
       throw ApiException(loginRes.statusCode, 'Login failed (${loginRes.statusCode})');
     }
 
-    // 2 — Extract session cookie
-    final setCookie = loginRes.headers['set-cookie'] ?? '';
-    final tokenMatch = RegExp(r'access_token=([^;,\s]+)').firstMatch(setCookie);
-    final token = tokenMatch?.group(1) ?? '';
-    if (token.isEmpty) throw Exception('Server did not return a session token');
-    final cookie = 'access_token=$token';
+    // 2 — Extract token from JSON body (backend returns it for Dart/mobile clients)
+    //     Fall back to parsing Set-Cookie header if the field is absent.
+    String rawToken = '';
+    try {
+      final json = jsonDecode(loginRes.body) as Map<String, dynamic>;
+      rawToken = (json['token'] ?? '').toString();
+    } catch (_) {}
+
+    if (rawToken.isEmpty) {
+      final setCookie = loginRes.headers['set-cookie'] ?? '';
+      final m = RegExp(r'(?:^|[\s,])token=([^;,\s]+)').firstMatch(setCookie);
+      rawToken = m?.group(1) ?? '';
+    }
+
+    if (rawToken.isEmpty) {
+      throw Exception(
+        'Server did not return an auth token.\n'
+        'Verify the server URL is reachable: $serverUrl',
+      );
+    }
+    final cookie = 'token=$rawToken';
 
     // 3 — Fetch user profile & verify admin role
     final meRes = await http.get(
-      Uri.parse('$serverUrl/api/auth/me'),
+      Uri.parse('$serverUrl/api/auth/profile'),
       headers: {'Cookie': cookie},
     ).timeout(const Duration(seconds: 10));
 
@@ -64,25 +79,78 @@ class DashboardApi {
     }
 
     // 4 — Persist session
+    final displayEmail = (profile['email'] ?? email).toString();
     await SecureStore.saveAdminSession(
       cookie: cookie,
-      email: (profile['email'] ?? email).toString(),
+      email: displayEmail,
       role: isPlatformAdmin ? 'Platform Admin' : 'Admin',
     );
 
     return DashboardApi._(ApiClient(baseUrl: serverUrl, cookie: cookie));
   }
 
-  /// Restore admin session from stored cookie. Returns null if none / expired.
+  /// Login with an API key (xck_...). Verifies admin role via /api/auth/profile.
+  static Future<DashboardApi> loginWithApiKey(String serverUrl, String apiKey) async {
+    final trimmed = apiKey.trim();
+    if (!trimmed.startsWith('xck_')) {
+      throw const AdminUnauthorizedException('API key must start with xck_');
+    }
+    final profileRes = await http.get(
+      Uri.parse('$serverUrl/api/auth/profile'),
+      headers: {'Authorization': 'Bearer $trimmed'},
+    ).timeout(const Duration(seconds: 10));
+
+    if (profileRes.statusCode == 401 || profileRes.statusCode == 403) {
+      throw const AdminUnauthorizedException('Invalid API key');
+    }
+    if (profileRes.statusCode != 200) {
+      throw ApiException(profileRes.statusCode, 'Could not verify API key (${profileRes.statusCode})');
+    }
+
+    final profile = jsonDecode(profileRes.body) as Map<String, dynamic>;
+    final role = (profile['role'] ?? '').toString().toLowerCase();
+    final isPlatformAdmin = profile['is_platform_admin'] == true;
+    final isAdmin = isPlatformAdmin || role == 'admin' || role == 'platform_admin';
+    if (!isAdmin) {
+      throw const AdminUnauthorizedException('API key does not have admin privileges');
+    }
+
+    await SecureStore.saveAdminSession(
+      cookie: '',
+      email: (profile['email'] ?? 'api-key').toString(),
+      role: isPlatformAdmin ? 'Platform Admin' : 'Admin',
+    );
+    await SecureStore.saveApiKey(trimmed);
+
+    return DashboardApi._(ApiClient(baseUrl: serverUrl, agentToken: trimmed));
+  }
+
+  /// Restore admin session from stored cookie or API key. Returns null if none / expired.
   static Future<DashboardApi?> createFromSession() async {
-    final url    = await SecureStore.serverUrl();
-    final cookie = await SecureStore.adminCookie();
-    if (url == null || url.isEmpty || cookie == null || cookie.isEmpty) return null;
+    final url = await SecureStore.serverUrl();
+    if (url == null || url.isEmpty) return null;
+
+    final cookie = await SecureStore.adminCookie() ?? '';
+    final apiKey = await SecureStore.apiKey() ?? '';
+
+    // Prefer cookie session; fall back to stored API key.
+    final Map<String, String> headers = {};
+    ApiClient? client;
+
+    if (cookie.isNotEmpty) {
+      headers['Cookie'] = cookie;
+      client = ApiClient(baseUrl: url, cookie: cookie);
+    } else if (apiKey.startsWith('xck_')) {
+      headers['Authorization'] = 'Bearer $apiKey';
+      client = ApiClient(baseUrl: url, agentToken: apiKey);
+    } else {
+      return null;
+    }
 
     try {
       final meRes = await http.get(
-        Uri.parse('$url/api/auth/me'),
-        headers: {'Cookie': cookie},
+        Uri.parse('$url/api/auth/profile'),
+        headers: headers,
       ).timeout(const Duration(seconds: 8));
 
       if (meRes.statusCode != 200) {
@@ -94,7 +162,7 @@ class DashboardApi {
           (profile['role'] ?? '').toString().toLowerCase() == 'admin';
       if (!isAdmin) { await SecureStore.clearAdminSession(); return null; }
 
-      return DashboardApi._(ApiClient(baseUrl: url, cookie: cookie));
+      return DashboardApi._(client!);
     } catch (_) {
       return null;
     }

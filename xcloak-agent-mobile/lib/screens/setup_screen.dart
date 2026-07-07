@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/enrollment_service.dart';
-import 'agent_shell.dart';
+import 'mode_select.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -15,10 +15,8 @@ class _SetupScreenState extends State<SetupScreen> {
   final _serverCtrl = TextEditingController();
   final _tokenCtrl  = TextEditingController();
   final _emailCtrl  = TextEditingController();
-  final _apiKeyCtrl = TextEditingController();
 
-  bool _loading  = false;
-  bool _advanced = false;
+  bool _loading = false;
   String? _error;
 
   @override
@@ -26,7 +24,6 @@ class _SetupScreenState extends State<SetupScreen> {
     _serverCtrl.dispose();
     _tokenCtrl.dispose();
     _emailCtrl.dispose();
-    _apiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -38,12 +35,11 @@ class _SetupScreenState extends State<SetupScreen> {
         serverUrl:   _serverCtrl.text.trim(),
         enrollToken: _tokenCtrl.text.trim(),
         ownerEmail:  _emailCtrl.text.trim(),
-        apiKey:      _apiKeyCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const AgentShell()),
+        MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
       );
     } catch (e) {
       setState(() => _error = e.toString());
@@ -163,36 +159,6 @@ class _SetupScreenState extends State<SetupScreen> {
                       ),
                       keyboardType: TextInputType.emailAddress,
                     ),
-
-                    // Advanced toggle
-                    const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: () => setState(() => _advanced = !_advanced),
-                      child: Row(children: [
-                        Icon(
-                          _advanced ? Icons.expand_less : Icons.expand_more,
-                          size: 18, color: cs.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text('Advanced — dashboard access',
-                            style: TextStyle(color: cs.primary, fontSize: 13, fontWeight: FontWeight.w500)),
-                      ]),
-                    ),
-
-                    if (_advanced) ...[
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _apiKeyCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'Admin API Key (optional)',
-                          hintText: 'xck_…',
-                          helperText: 'Create one under Settings → API Keys in the dashboard.',
-                          prefixIcon: Icon(Icons.admin_panel_settings_outlined, color: cs.primary),
-                        ),
-                        autocorrect: false,
-                        obscureText: true,
-                      ),
-                    ],
 
                     // Error
                     if (_error != null) ...[

@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,15 +14,21 @@ import (
 )
 
 // Login — POST /api/auth/login
+// Accepts { username, password } or { email, password } interchangeably.
 // Returns token directly, or needs_2fa+temp_token if TOTP is enabled.
 func Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
+	}
+	// Allow login with either username or email field.
+	if req.Username == "" {
+		req.Username = req.Email
 	}
 
 	if services.IsUsernameLocked(req.Username) {
@@ -40,7 +47,7 @@ func Login(c *gin.Context) {
 	var userID, tenantID int
 	var role string
 	database.DB.QueryRow(
-		`SELECT id, role, tenant_id FROM users WHERE username=$1`, req.Username,
+		`SELECT id, role, tenant_id FROM users WHERE username=$1 OR email=$1`, req.Username,
 	).Scan(&userID, &role, &tenantID)
 
 	if needs2FA {
@@ -56,6 +63,15 @@ func Login(c *gin.Context) {
 	go CreateSessionOnLogin(token, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), userID, tenantID)
 
 	setAuthCookie(c, token)
+
+	// Native mobile clients (Dart / okhttp) cannot reliably read httpOnly
+	// Set-Cookie headers — return the raw token in the body so they can use
+	// it as a Bearer token. Browser clients ignore this extra field.
+	ua := c.GetHeader("User-Agent")
+	if strings.Contains(ua, "Dart") || strings.Contains(ua, "okhttp") {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "token": token})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -158,7 +174,26 @@ func ChangePassword(c *gin.Context) {
 
 // GetProfile — GET /api/auth/profile
 func GetProfile(c *gin.Context) {
-	userID := int(c.MustGet("user_id").(float64))
+	userID := userIDFromContext(c)
+
+	// API key auth: user_id is 0 and username is "api-key:<label>".
+	// Return a synthetic profile from context rather than hitting the DB.
+	if userID == 0 {
+		role, _ := c.Get("role")
+		username, _ := c.Get("username")
+		tenantID := tenantIDFromContext(c)
+		c.JSON(200, gin.H{
+			"id":                0,
+			"username":          username,
+			"email":             username, // label serves as display name
+			"role":              role,
+			"is_active":         true,
+			"is_platform_admin": false,
+			"tenant_id":         tenantID,
+			"totp_enabled":      false,
+		})
+		return
+	}
 
 	profile, err := services.GetUserProfile(userID)
 	if err != nil {

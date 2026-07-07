@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'screens/agent_shell.dart';
+import 'screens/mode_select.dart';
 import 'screens/setup_screen.dart';
 import 'services/background_worker.dart';
 import 'services/secure_storage.dart';
@@ -93,8 +93,8 @@ class XCloakAgentApp extends StatelessWidget {
 }
 
 // Routes to:
-//  · SetupScreen  — not enrolled
-//  · AgentShell   — enrolled (always; admin mode is accessed by explicit login from within)
+//  · SetupScreen      — not enrolled yet
+//  · ModeSelectScreen — enrolled; user picks Agent Mode or Admin Console
 class _EntryPoint extends StatefulWidget {
   const _EntryPoint();
   @override State<_EntryPoint> createState() => _EntryPointState();
@@ -121,6 +121,6 @@ class _EntryPointState extends State<_EntryPoint> {
     if (!_resolved) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return _enrolled ? const AgentShell() : const SetupScreen();
+    return _enrolled ? const ModeSelectScreen() : const SetupScreen();
   }
 }

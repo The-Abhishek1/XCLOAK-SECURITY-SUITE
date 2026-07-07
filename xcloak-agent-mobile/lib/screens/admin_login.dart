@@ -1,6 +1,9 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../admin/api.dart';
 import '../admin/shell.dart';
+import '../services/api_client.dart';
 import '../services/secure_storage.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -8,35 +11,70 @@ class AdminLoginScreen extends StatefulWidget {
   @override State<AdminLoginScreen> createState() => _AdminLoginScreenState();
 }
 
-class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  final _email    = TextEditingController();
-  final _password = TextEditingController();
-  final _form     = GlobalKey<FormState>();
+class _AdminLoginScreenState extends State<AdminLoginScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 2, vsync: this);
 
-  bool _loading   = false;
-  bool _obscure   = true;
+  // Password tab
+  final _emailCtrl    = TextEditingController();
+  final _passCtrl     = TextEditingController();
+  final _serverCtrl   = TextEditingController();
+  final _pwForm       = GlobalKey<FormState>();
+
+  // API key tab
+  final _keyCtrl      = TextEditingController();
+  final _keyServerCtrl = TextEditingController();
+  final _keyForm      = GlobalKey<FormState>();
+
+  bool    _loading    = false;
+  bool    _obscure    = true;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _prefillServerUrl();
+  }
+
+  Future<void> _prefillServerUrl() async {
+    final url = await SecureStore.serverUrl() ?? '';
+    if (mounted) {
+      _serverCtrl.text    = url;
+      _keyServerCtrl.text = url;
+    }
+  }
+
+  @override
   void dispose() {
-    _email.dispose();
-    _password.dispose();
+    _tabs.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    _serverCtrl.dispose();
+    _keyCtrl.dispose();
+    _keyServerCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _signIn() async {
-    if (!(_form.currentState?.validate() ?? false)) return;
+  String _normalizeUrl(String raw) {
+    var url = raw.trim();
+    if (url.isEmpty) return url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
+    return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+  }
+
+  Future<void> _signInWithPassword() async {
+    if (!(_pwForm.currentState?.validate() ?? false)) return;
     setState(() { _loading = true; _error = null; });
 
+    final serverUrl = _normalizeUrl(_serverCtrl.text);
     try {
-      final serverUrl = await SecureStore.serverUrl() ?? '';
-      if (serverUrl.isEmpty) {
-        setState(() { _error = 'Server URL not configured. Re-enroll the device first.'; _loading = false; });
-        return;
-      }
-
-      final api = await DashboardApi.login(serverUrl, _email.text.trim(), _password.text);
-
+      final api = await DashboardApi.login(
+        serverUrl,
+        _emailCtrl.text.trim(),
+        _passCtrl.text,
+      );
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -46,8 +84,40 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       setState(() { _error = e.message; _loading = false; });
     } on ApiException catch (e) {
       setState(() { _error = 'Server error: ${e.message}'; _loading = false; });
+    } on SocketException catch (e) {
+      setState(() { _error = 'Cannot reach server at $serverUrl\n${e.message}'; _loading = false; });
+    } on TimeoutException {
+      setState(() { _error = 'Request timed out. Server may be unreachable.'; _loading = false; });
     } catch (e) {
-      setState(() { _error = 'Connection failed. Check server URL and network.'; _loading = false; });
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  Future<void> _signInWithApiKey() async {
+    if (!(_keyForm.currentState?.validate() ?? false)) return;
+    setState(() { _loading = true; _error = null; });
+
+    final serverUrl = _normalizeUrl(_keyServerCtrl.text);
+    try {
+      final api = await DashboardApi.loginWithApiKey(
+        serverUrl,
+        _keyCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => AdminApp(api: api)),
+      );
+    } on AdminUnauthorizedException catch (e) {
+      setState(() { _error = e.message; _loading = false; });
+    } on ApiException catch (e) {
+      setState(() { _error = 'Server error: ${e.message}'; _loading = false; });
+    } on SocketException catch (e) {
+      setState(() { _error = 'Cannot reach server at $serverUrl\n${e.message}'; _loading = false; });
+    } on TimeoutException {
+      setState(() { _error = 'Request timed out. Server may be unreachable.'; _loading = false; });
+    } catch (e) {
+      setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -58,170 +128,275 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     return Scaffold(
       backgroundColor: dark ? const Color(0xFF0A0F1E) : const Color(0xFFF0F4FF),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: cs.primary.withOpacity(.12),
-                      border: Border.all(color: cs.primary.withOpacity(.3), width: 1.5),
-                    ),
-                    child: Icon(Icons.admin_panel_settings, color: cs.primary, size: 36),
-                  ),
-                  const SizedBox(height: 20),
-                  Text('Admin Console',
-                    style: TextStyle(
-                      fontSize: 24, fontWeight: FontWeight.w800,
-                      color: dark ? Colors.white : const Color(0xFF0F172A),
-                    )),
-                  const SizedBox(height: 6),
-                  Text('XCloak Security Suite',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: dark ? Colors.white54 : Colors.grey.shade600,
-                      letterSpacing: .5,
-                    )),
-                  const SizedBox(height: 36),
+      body: CustomScrollView(
+        slivers: [
 
-                  // Form card
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: dark ? const Color(0xFF0F172A) : Colors.white,
-                      border: Border.all(
-                        color: dark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(dark ? .3 : .06),
-                          blurRadius: 20, offset: const Offset(0, 4),
+          // ── Hero header ──────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1A237E), Color(0xFF283593), Color(0xFF1565C0)],
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 28),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(.15),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
+                        child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('Admin Console',
+                            style: TextStyle(color: Colors.white, fontSize: 18,
+                                fontWeight: FontWeight.w700)),
+                        Text('XCloak Security Platform',
+                            style: TextStyle(color: Colors.white.withOpacity(.65), fontSize: 12)),
+                      ]),
+                    ]),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.withOpacity(.4)),
+                      ),
+                      child: Row(children: [
+                        Icon(Icons.lock_outline, color: Colors.amber.shade300, size: 14),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Restricted access. Only authorized platform administrators may log in. '
+                            'All attempts are logged and audited.',
+                            style: TextStyle(color: Colors.amber.shade200, fontSize: 11),
+                          ),
+                        ),
+                      ]),
                     ),
-                    padding: const EdgeInsets.all(24),
-                    child: Form(
-                      key: _form,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Error banner
-                          if (_error != null) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEF4444).withOpacity(.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFEF4444).withOpacity(.3)),
-                              ),
-                              child: Row(children: [
-                                const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(_error!,
-                                  style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13))),
-                              ]),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+                  ]),
+                ),
+              ),
+            ),
+          ),
 
-                          // Email
+          // ── Login form ───────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+              child: Column(children: [
+
+                // Tab bar
+                Container(
+                  decoration: BoxDecoration(
+                    color: dark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TabBar(
+                    controller: _tabs,
+                    onTap: (_) => setState(() => _error = null),
+                    indicator: BoxDecoration(
+                      color: cs.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: cs.onSurface.withOpacity(.55),
+                    labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(icon: Icon(Icons.password, size: 16), text: 'Email & Password'),
+                      Tab(icon: Icon(Icons.vpn_key, size: 16), text: 'API Key'),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Error banner
+                if (_error != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withOpacity(.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEF4444).withOpacity(.3)),
+                    ),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_error!,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444))),
+                      ),
+                      GestureDetector(
+                        onTap: () => setState(() => _error = null),
+                        child: const Icon(Icons.close, size: 14, color: Color(0xFFEF4444)),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                SizedBox(
+                  height: 360,
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      // ── Tab 1: Email + Password ──────────────────────────
+                      Form(
+                        key: _pwForm,
+                        child: Column(children: [
                           TextFormField(
-                            controller: _email,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Email',
-                              prefixIcon: Icon(Icons.email_outlined, size: 18),
+                            controller: _serverCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Server URL',
+                              hintText: 'https://xcloak.example.com',
+                              prefixIcon: Icon(Icons.dns_outlined, color: cs.primary),
+                              helperText: 'Pre-filled from enrollment — edit if different',
                             ),
+                            keyboardType: TextInputType.url,
+                            autocorrect: false,
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Email required';
-                              if (!v.contains('@')) return 'Enter a valid email';
+                              if (v == null || v.trim().isEmpty) return 'Required';
                               return null;
                             },
                           ),
                           const SizedBox(height: 14),
-
-                          // Password
                           TextFormField(
-                            controller: _password,
+                            controller: _emailCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Email or Username',
+                              hintText: 'admin@xcloak.local',
+                              prefixIcon: Icon(Icons.person_outline, color: cs.primary),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            autocorrect: false,
+                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _passCtrl,
                             obscureText: _obscure,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _signIn(),
                             decoration: InputDecoration(
                               labelText: 'Password',
-                              prefixIcon: const Icon(Icons.lock_outline, size: 18),
+                              prefixIcon: Icon(Icons.lock_outline, color: cs.primary),
                               suffixIcon: IconButton(
-                                icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
+                                icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
+                                    size: 18),
                                 onPressed: () => setState(() => _obscure = !_obscure),
                               ),
                             ),
+                            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: _loading ? null : _signInWithPassword,
+                            icon: _loading
+                                ? const SizedBox(width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.login, size: 18),
+                            label: Text(_loading ? 'Signing in…' : 'Sign In as Admin'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
+                              minimumSize: const Size(double.infinity, 48),
+                            ),
+                          ),
+                        ]),
+                      ),
+
+                      // ── Tab 2: API Key ───────────────────────────────────
+                      Form(
+                        key: _keyForm,
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          TextFormField(
+                            controller: _keyServerCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Server URL',
+                              hintText: 'https://xcloak.example.com',
+                              prefixIcon: Icon(Icons.dns_outlined, color: cs.primary),
+                            ),
+                            keyboardType: TextInputType.url,
+                            autocorrect: false,
+                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _keyCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'API Key',
+                              hintText: 'xck_…',
+                              prefixIcon: Icon(Icons.vpn_key_outlined, color: cs.primary),
+                              helperText: 'Generate from Settings → API Keys in the web dashboard',
+                            ),
+                            autocorrect: false,
+                            obscureText: true,
                             validator: (v) {
-                              if (v == null || v.isEmpty) return 'Password required';
-                              if (v.length < 4) return 'Password too short';
+                              if (v == null || v.trim().isEmpty) return 'Required';
+                              if (!v.trim().startsWith('xck_')) return 'API key must start with xck_';
                               return null;
                             },
                           ),
-                          const SizedBox(height: 22),
-
-                          // Sign In button
-                          FilledButton(
-                            onPressed: _loading ? null : _signIn,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: cs.primary,
-                              disabledBackgroundColor: cs.primary.withOpacity(.5),
-                              minimumSize: const Size.fromHeight(50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withOpacity(.06),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: cs.primary.withOpacity(.2)),
                             ),
-                            child: _loading
-                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                              : const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.lock_open, size: 18),
-                                    SizedBox(width: 8),
-                                    Text('Sign In to Admin Console', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                                  ],
+                            child: Row(children: [
+                              Icon(Icons.info_outline, size: 14, color: cs.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'The API key must have admin or platform_admin role. '
+                                  'Create one in the web dashboard under Settings → API Keys.',
+                                  style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(.6)),
                                 ),
+                              ),
+                            ]),
                           ),
-                        ],
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: _loading ? null : _signInWithApiKey,
+                            icon: _loading
+                                ? const SizedBox(width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.key, size: 18),
+                            label: Text(_loading ? 'Verifying…' : 'Connect with API Key'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
+                              minimumSize: const Size(double.infinity, 48),
+                            ),
+                          ),
+                        ]),
                       ),
-                    ),
+                    ],
                   ),
+                ),
 
-                  const SizedBox(height: 20),
-                  // Disclaimer
-                  Text(
-                    'Only authorized administrators can access the admin console.\nAll access attempts are logged and audited.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: dark ? Colors.white38 : Colors.grey.shade500,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Back
-                  TextButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, size: 16),
-                    label: const Text('Back to Agent Mode'),
-                    style: TextButton.styleFrom(foregroundColor: cs.primary),
-                  ),
-                ],
-              ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Back to Mode Selection'),
+                  style: TextButton.styleFrom(foregroundColor: cs.onSurface.withOpacity(.5)),
+                ),
+              ]),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

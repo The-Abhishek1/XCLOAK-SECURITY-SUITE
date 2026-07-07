@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../screens/agent_shell.dart';
+import '../screens/mode_select.dart';
 import '../services/secure_storage.dart';
 import 'api.dart';
 import 'screens/compliance.dart';
@@ -220,7 +220,7 @@ class _AdminAppState extends State<AdminApp> {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const AgentShell()),
+      MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
       (_) => false,
     );
   }
@@ -229,7 +229,7 @@ class _AdminAppState extends State<AdminApp> {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const AgentShell()),
+      MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
       (_) => false,
     );
   }

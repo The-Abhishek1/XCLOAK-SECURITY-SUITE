@@ -15,7 +15,7 @@ import {
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
   Cloud, Mail, Container, ShieldOff, Package,
-  EyeOff, Wrench, Smartphone,
+  EyeOff, Wrench, Smartphone, DatabaseZap,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -31,8 +31,9 @@ const NAV = [
     { href: '/agents',      label: 'Agents',      icon: Cpu },
     { href: '/timeline',    label: 'Timeline',    icon: Clock },
     { href: '/live-logs',   label: 'Live Logs',   icon: Radio },
-    { href: '/log-search',  label: 'Log Search',  icon: SearchCode },
-    { href: '/log-sources', label: 'Log Sources', icon: PlugZap },
+    { href: '/log-search',     label: 'Log Search',   icon: SearchCode },
+    { href: '/elastic-query',  label: 'ES Query',     icon: DatabaseZap },
+    { href: '/log-sources',    label: 'Log Sources',  icon: PlugZap },
   ]},
   { group: 'DETECTION', icon: AlertTriangle, items: [
     { href: '/alerts',           label: 'Alerts',          icon: Bell },

@@ -274,6 +274,12 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/logs/retention", middleware.RequireAuth(), api.GetRetentionPolicy)
 	router.PUT("/api/logs/retention", middleware.RequireAuth(), middleware.RequireRole("admin"), api.SetRetentionPolicy)
 
+	// ── Elasticsearch raw query interface ─────────────────────────
+	router.POST("/api/elastic/query", middleware.RequireAuth(), middleware.RateLimitAPI(), api.ElasticQueryHandler)
+	router.GET("/api/elastic/indices", middleware.RequireAuth(), api.ElasticIndicesHandler)
+	router.GET("/api/elastic/mappings/:index", middleware.RequireAuth(), api.ElasticMappingsHandler)
+	router.GET("/api/elastic/health", middleware.RequireAuth(), api.ElasticHealthHandler)
+
 	// ── WebSocket notification stream (registered in main.go) ────
 	// router.GET("/api/notifications/stream", ...) — kept in main.go
 
@@ -322,6 +328,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/kafka/status", middleware.RequireAuth(), api.GetKafkaStatus)
 	router.POST("/api/auth/logout", middleware.RequireAuth(), api.Logout)
 	router.GET("/api/agents/me", middleware.RequireAgentAuth(), api.GetCurrentAgent)
+	router.GET("/api/agents/self/summary",  middleware.RequireAgentAuth(), api.GetSelfSummary)
+	router.GET("/api/agents/self/alerts",   middleware.RequireAgentAuth(), api.GetSelfAlerts)
+	router.GET("/api/agents/self/timeline", middleware.RequireAgentAuth(), api.GetSelfTimeline)
 	router.GET("/api/agents/:id/geo-stats", middleware.RequireAuth(), api.GetAgentGeoStats)
 	router.POST("/api/agents/:id/enrich-connections", middleware.RequireAuth(), api.EnrichAgentConnections)
 	router.GET("/api/agents/:id/health", middleware.RequireAuth(), api.GetAgentHealth)

@@ -66,7 +66,7 @@ func RegisterUser(user models.User) error {
 // LoginUser validates credentials and returns a JWT.
 // Returns needs_2fa=true signal if the user has TOTP enabled.
 func LoginUser(username, password string) (string, bool, error) {
-	user, err := repositories.GetUserByUsername(username)
+	user, err := repositories.GetUserByUsernameOrEmail(username)
 	if err != nil {
 		return "", false, errors.New("invalid credentials")
 	}

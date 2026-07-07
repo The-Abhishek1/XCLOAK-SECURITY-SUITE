@@ -6,9 +6,7 @@ import '../services/api_client.dart';
 import '../services/posture_collector.dart';
 import '../services/secure_storage.dart';
 import '../services/threat_detector.dart';
-import '../admin/api.dart';
-import 'admin_login.dart';
-import '../admin/shell.dart';
+import 'mode_select.dart';
 import 'setup_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,23 +20,6 @@ class AgentShell extends StatefulWidget {
 
 class _AgentShellState extends State<AgentShell> {
   int _tab = 0;
-  bool _checkingAdmin = false;
-
-  Future<void> _openAdminConsole() async {
-    setState(() => _checkingAdmin = true);
-    try {
-      // Try to restore an existing valid session first
-      final api = await DashboardApi.createFromSession();
-      if (!mounted) return;
-      if (api != null) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => AdminApp(api: api)));
-      } else {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminLoginScreen()));
-      }
-    } finally {
-      if (mounted) setState(() => _checkingAdmin = false);
-    }
-  }
 
   Future<void> _unenroll() async {
     final ok = await showDialog<bool>(
@@ -58,7 +39,7 @@ class _AgentShellState extends State<AgentShell> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const SetupScreen()),
-      (_) => false,
+          (_) => false,
     );
   }
 
@@ -98,17 +79,14 @@ class _AgentShellState extends State<AgentShell> {
           ],
         ),
         actions: [
-          if (_checkingAdmin)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            IconButton(
-              icon: Icon(Icons.admin_panel_settings_outlined, color: cs.primary),
-              tooltip: 'Admin Console',
-              onPressed: _openAdminConsole,
+          IconButton(
+            icon: const Icon(Icons.grid_view_rounded),
+            tooltip: 'Mode Selection',
+            onPressed: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ModeSelectScreen()),
             ),
+          ),
           PopupMenuButton<String>(
             onSelected: (v) { if (v == 'unenroll') _unenroll(); },
             itemBuilder: (_) => [
@@ -193,7 +171,7 @@ class _HomeTabState extends State<_HomeTab> with AutomaticKeepAliveClientMixin {
       if (serverUrl != null && agentId != null) {
         try {
           final c   = await ApiClient.fromStorage();
-          final res = await c.get('/api/agents/$agentId/summary');
+          final res = await c.get('/api/agents/self/summary');
           final alerts = (res['recent_alerts'] ?? res['alerts']) as List? ?? [];
           threats   = alerts.length;
           connected = true;
@@ -333,12 +311,9 @@ class _HomeTabState extends State<_HomeTab> with AutomaticKeepAliveClientMixin {
               icon: Icons.send_outlined,
               label: 'Force Check-in',
               onTap: () async {
-                final agentId   = await SecureStore.agentId();
-                final serverUrl = await SecureStore.serverUrl();
-                if (agentId == null || serverUrl == null) return;
                 try {
                   final c = await ApiClient.fromStorage();
-                  await c.post('/api/agents/$agentId/checkin', {});
+                  await c.post('/api/agents/heartbeat', {});
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Check-in sent'), backgroundColor: Color(0xFF22C55E)));
@@ -354,15 +329,15 @@ class _HomeTabState extends State<_HomeTab> with AutomaticKeepAliveClientMixin {
               icon: Icons.bug_report_outlined,
               label: 'Scan Threats',
               onTap: () async {
-                final agentId = await SecureStore.agentId();
-                if (agentId == null) return;
-                try {
-                  final c = await ApiClient.fromStorage();
-                  await c.post('/api/agents/$agentId/tasks', {'task_type': 'vulnerability_scan'});
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Scan dispatched'), backgroundColor: Color(0xFF22C55E)));
-                } catch (_) {}
+                final apps = await ThreatDetector.sideloadedPackages();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(apps.isEmpty
+                      ? 'No threats detected locally'
+                      : '${apps.length} sideloaded app(s) detected'),
+                  backgroundColor: apps.isEmpty ? const Color(0xFF22C55E) : const Color(0xFFF59E0B),
+                ));
+                _load();
               },
             ),
             const SizedBox(width: 8),
@@ -407,15 +382,12 @@ class _ThreatsTabState extends State<_ThreatsTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final sideloaded = await ThreatDetector.sideloadedPackages();
-    final agentId    = await SecureStore.agentId();
     List serverAlerts = [];
-    if (agentId != null) {
-      try {
-        final c = await ApiClient.fromStorage();
-        final r = await c.get('/api/alerts?agent_id=$agentId&per_page=50');
-        serverAlerts = (r['data'] ?? r['alerts'] ?? r['items'] ?? []) as List;
-      } catch (_) {}
-    }
+    try {
+      final c = await ApiClient.fromStorage();
+      final r = await c.get('/api/agents/self/alerts');
+      serverAlerts = (r['alerts'] ?? r['data'] ?? r['items'] ?? []) as List;
+    } catch (_) {}
     if (!mounted) return;
     setState(() { _loading = false; _alerts = serverAlerts; _sideloaded = sideloaded; });
   }
@@ -626,8 +598,8 @@ class _PostureTabState extends State<_PostureTab> {
               p.isRooted ? 'Device is rooted — HIGH RISK' : 'Device is not rooted'),
             _check('Developer Mode', !p.developerModeOn,
               p.developerModeOn ? 'Developer options active — policy violation' : 'Developer options disabled'),
-            _check('Disk Encryption', p.isEncrypted,
-              p.isEncrypted ? 'Full-disk encryption enabled' : 'Encryption not confirmed'),
+            _check('Disk Encryption', p.isEncrypted ?? true,
+              (p.isEncrypted ?? true) ? 'Full-disk encryption enabled' : 'Encryption not confirmed'),
             _check('Screen Lock', p.hasPasscode ?? true,
               (p.hasPasscode ?? true) ? 'Screen lock configured' : 'No screen lock set'),
             const SizedBox(height: 16),
@@ -711,15 +683,12 @@ class _ActivityTabState extends State<_ActivityTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final agentId = await SecureStore.agentId();
     List evts = [];
-    if (agentId != null) {
-      try {
-        final c   = await ApiClient.fromStorage();
-        final r   = await c.get('/api/agents/$agentId/activity');
-        evts = (r['events'] ?? r['data'] ?? r['items'] ?? []) as List;
-      } catch (_) {}
-    }
+    try {
+      final c = await ApiClient.fromStorage();
+      final r = await c.get('/api/agents/self/timeline');
+      evts = (r['events'] ?? r['data'] ?? r['items'] ?? []) as List;
+    } catch (_) {}
     if (!mounted) return;
     setState(() { _loading = false; _events = evts; });
   }

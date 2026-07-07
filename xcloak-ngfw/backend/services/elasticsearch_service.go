@@ -260,6 +260,210 @@ func SearchLogsES(p LogSearchParams) (*LogSearchResult, error) {
 	}, nil
 }
 
+// ── Raw DSL query API ─────────────────────────────────────────────────────────
+
+// RawQueryResult is the full ES search response forwarded to the UI.
+type RawQueryResult struct {
+	Took     int              `json:"took"`
+	TimedOut bool             `json:"timed_out"`
+	Hits     json.RawMessage  `json:"hits"`
+	Aggs     json.RawMessage  `json:"aggregations,omitempty"`
+	Total    int              `json:"total"`
+	Error    string           `json:"error,omitempty"`
+}
+
+// ExecuteRawQuery sends an arbitrary DSL body to ES for the given index.
+// A tenant_id filter is always injected into the outermost bool.filter to
+// prevent cross-tenant data leakage regardless of what the caller sends.
+func ExecuteRawQuery(tenantID int, index string, rawDSL json.RawMessage) (*RawQueryResult, error) {
+	if esClient == nil {
+		return nil, fmt.Errorf("elasticsearch not configured (set ELASTICSEARCH_URL)")
+	}
+
+	// Parse the caller's DSL so we can inject the tenant filter.
+	var dsl map[string]any
+	if err := json.Unmarshal(rawDSL, &dsl); err != nil {
+		return nil, fmt.Errorf("invalid DSL JSON: %w", err)
+	}
+
+	// Ensure query.bool.filter contains a tenant_id term.
+	q, _ := dsl["query"].(map[string]any)
+	if q == nil {
+		q = map[string]any{}
+		dsl["query"] = q
+	}
+	b, _ := q["bool"].(map[string]any)
+	if b == nil {
+		b = map[string]any{}
+		q["bool"] = b
+	}
+	filterList, _ := b["filter"].([]any)
+	tenantFilter := map[string]any{"term": map[string]any{"tenant_id": tenantID}}
+	b["filter"] = append(filterList, tenantFilter)
+
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(dsl)
+
+	resp, err := esClient.doRequest("POST", "/"+index+"/_search", &buf)
+	if err != nil {
+		return nil, fmt.Errorf("elasticsearch execute: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	// ES error response
+	if resp.StatusCode >= 300 {
+		var errResp struct {
+			Error struct {
+				RootCause []struct {
+					Reason string `json:"reason"`
+				} `json:"root_cause"`
+				Reason string `json:"reason"`
+			} `json:"error"`
+		}
+		if jerr := json.Unmarshal(body, &errResp); jerr == nil && errResp.Error.Reason != "" {
+			reason := errResp.Error.Reason
+			if len(errResp.Error.RootCause) > 0 {
+				reason = errResp.Error.RootCause[0].Reason
+			}
+			return &RawQueryResult{Error: reason}, nil
+		}
+		return &RawQueryResult{Error: fmt.Sprintf("ES status %d: %s", resp.StatusCode, body)}, nil
+	}
+
+	var raw struct {
+		Took     int             `json:"took"`
+		TimedOut bool            `json:"timed_out"`
+		Hits     json.RawMessage `json:"hits"`
+		Aggs     json.RawMessage `json:"aggregations"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("parse ES response: %w", err)
+	}
+
+	// Extract total from hits.total.value
+	total := 0
+	var hitsEnv struct {
+		Total struct {
+			Value int `json:"value"`
+		} `json:"total"`
+	}
+	_ = json.Unmarshal(raw.Hits, &hitsEnv)
+	total = hitsEnv.Total.Value
+
+	return &RawQueryResult{
+		Took:     raw.Took,
+		TimedOut: raw.TimedOut,
+		Hits:     raw.Hits,
+		Aggs:     raw.Aggs,
+		Total:    total,
+	}, nil
+}
+
+// ListESIndices returns all index names visible to the client.
+func ListESIndices() ([]string, error) {
+	if esClient == nil {
+		return nil, fmt.Errorf("elasticsearch not configured")
+	}
+	resp, err := esClient.doRequest("GET", "/_cat/indices?format=json&h=index,docs.count,store.size,health", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	var rows []struct {
+		Index     string `json:"index"`
+		DocsCount string `json:"docs.count"`
+		StoreSize string `json:"store.size"`
+		Health    string `json:"health"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("parse indices: %w", err)
+	}
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r.Index)
+	}
+	return names, nil
+}
+
+// ESIndexMeta holds metadata about a single index.
+type ESIndexMeta struct {
+	Index     string `json:"index"`
+	DocsCount string `json:"docs_count"`
+	StoreSize string `json:"store_size"`
+	Health    string `json:"health"`
+}
+
+// ListESIndexMeta returns index metadata (docs count, size, health).
+func ListESIndexMeta() ([]ESIndexMeta, error) {
+	if esClient == nil {
+		return nil, fmt.Errorf("elasticsearch not configured")
+	}
+	resp, err := esClient.doRequest("GET", "/_cat/indices?format=json&h=index,docs.count,store.size,health&s=index", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	var rows []struct {
+		Index     string `json:"index"`
+		DocsCount string `json:"docs.count"`
+		StoreSize string `json:"store.size"`
+		Health    string `json:"health"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("parse indices: %w", err)
+	}
+	result := make([]ESIndexMeta, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, ESIndexMeta{
+			Index:     r.Index,
+			DocsCount: r.DocsCount,
+			StoreSize: r.StoreSize,
+			Health:    r.Health,
+		})
+	}
+	return result, nil
+}
+
+// GetESMappings returns the field mappings for the given index (raw JSON).
+func GetESMappings(index string) (json.RawMessage, error) {
+	if esClient == nil {
+		return nil, fmt.Errorf("elasticsearch not configured")
+	}
+	resp, err := esClient.doRequest("GET", "/"+index+"/_mapping", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("GET /%s/_mapping: status %d", index, resp.StatusCode)
+	}
+	return json.RawMessage(body), nil
+}
+
+// ESClusterHealth returns raw cluster health JSON from ES.
+func ESClusterHealth() (json.RawMessage, error) {
+	if esClient == nil {
+		return nil, fmt.Errorf("elasticsearch not configured")
+	}
+	resp, err := esClient.doRequest("GET", "/_cluster/health", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("cluster health: status %d", resp.StatusCode)
+	}
+	return json.RawMessage(body), nil
+}
+
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
 
 func (c *elasticsearchClient) put(path string, body any) error {
