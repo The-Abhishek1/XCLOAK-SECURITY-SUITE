@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../admin/api.dart';
 import '../admin/shell.dart';
+import '../services/api_client.dart';
+import '../services/enrollment_service.dart';
 import '../services/secure_storage.dart';
 import 'admin_login.dart';
 import 'agent_shell.dart';
+import 'setup_screen.dart';
 
 /// Entry point shown when the device is enrolled.
 /// The user chooses between Agent Mode (this device's monitoring) and
@@ -16,6 +19,7 @@ class ModeSelectScreen extends StatefulWidget {
 class _ModeSelectState extends State<ModeSelectScreen> {
   bool _checkingAdminSession = true;
   bool _hasAdminSession      = false;
+  bool _verifyingAgent       = false;
   String _adminEmail         = '';
   String _adminRole          = '';
 
@@ -47,11 +51,52 @@ class _ModeSelectState extends State<ModeSelectScreen> {
     return key != null && key.startsWith('xck_');
   }
 
-  void _goAgentMode() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const AgentShell()),
-    );
+  Future<void> _goAgentMode() async {
+    setState(() => _verifyingAgent = true);
+    try {
+      final client = await ApiClient.fromStorage();
+      await client.get('/api/agents/self/summary');
+      // Server confirmed the device is still enrolled — proceed.
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AgentShell()),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 403 || e.statusCode == 401) {
+        // Server rejected the request — device was unenrolled remotely.
+        await EnrollmentService.unenroll();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This device has been unenrolled. Please re-enroll to continue.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const SetupScreen()),
+        );
+      } else {
+        // Some other server error (500, etc.) — still let them in so
+        // temporary connectivity issues don't block the agent UI.
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AgentShell()),
+        );
+      }
+    } catch (_) {
+      // Network unreachable — allow access so offline scenarios still work.
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AgentShell()),
+      );
+    } finally {
+      if (mounted) setState(() => _verifyingAgent = false);
+    }
   }
 
   Future<void> _goAdminMode() async {
@@ -159,9 +204,9 @@ class _ModeSelectState extends State<ModeSelectScreen> {
                     'Threat alerts & activity log',
                     'No admin credentials required',
                   ],
-                  badgeText: 'ENROLLED',
-                  badgeColor: const Color(0xFF22C55E),
-                  onTap: _goAgentMode,
+                  badgeText: _verifyingAgent ? 'VERIFYING…' : 'ENROLLED',
+                  badgeColor: _verifyingAgent ? Colors.orange : const Color(0xFF22C55E),
+                  onTap: _verifyingAgent ? null : _goAgentMode,
                   dark: dark,
                 ),
 
