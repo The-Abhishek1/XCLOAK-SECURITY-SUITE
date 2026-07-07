@@ -19,7 +19,7 @@
 
 | Dashboard Overview | Alert Detail | Posture (Mobile) |
 |-------------------|--------------|-----------------|
-| ![dashboard](docs/dashboard.png) | (docs/alerts.png) | (docs/mobile.png) |
+| ![dashboard](docs/dashboard.png) | ![alers](docs/alerts.png) | ![mobile](docs/mobile.png) |
 
 ---
 
