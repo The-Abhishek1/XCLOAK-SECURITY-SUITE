@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ type RiskBreakdown struct {
 func countQuery(query string, agentID int) int {
 	var n int
 	if err := database.DB.QueryRow(query, agentID).Scan(&n); err != nil {
-		fmt.Printf("risk breakdown count query failed for agent %d: %v\n", agentID, err)
+		slog.Error("risk-breakdown: count query failed", "agent_id", agentID, "err", err)
 		return 0
 	}
 	return n
@@ -59,7 +60,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	// Get agent hostname
 	var hostname string
 	if err := database.DB.QueryRow(`SELECT hostname FROM agents WHERE id=$1`, agentID).Scan(&hostname); err != nil {
-		fmt.Printf("risk breakdown hostname lookup failed for agent %d: %v\n", agentID, err)
+		slog.Warn("risk-breakdown: hostname lookup failed", "agent_id", agentID, "err", err)
 	}
 
 	// Build factor breakdown by querying real data

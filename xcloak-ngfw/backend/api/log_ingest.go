@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -88,7 +88,7 @@ func IngestLogs(c *gin.Context) {
 	}
 
 	if err := services.SaveLogs(logs); err != nil {
-		fmt.Printf("[Ingest] save error (source=%s): %v\n", src.Name, err)
+		slog.Error("ingest: save error", "source", src.Name, "err", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "storing logs"})
 		return
 	}

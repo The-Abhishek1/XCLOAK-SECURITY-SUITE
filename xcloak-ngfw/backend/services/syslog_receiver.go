@@ -2,7 +2,7 @@ package services
 
 import (
 	"bufio"
-	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"time"
@@ -34,11 +34,11 @@ func StartSyslogReceiver() {
 func listenUDP(addr string) {
 	conn, err := net.ListenPacket("udp", addr)
 	if err != nil {
-		fmt.Printf("[Syslog] UDP bind %s failed: %v (try SYSLOG_UDP_ADDR=:5514 if non-root)\n", addr, err)
+		slog.Error("syslog: UDP bind failed (try SYSLOG_UDP_ADDR=:5514 if non-root)", "addr", addr, "err", err)
 		return
 	}
 	defer conn.Close()
-	fmt.Printf("[Syslog] UDP receiver listening on %s\n", addr)
+	slog.Info("syslog: UDP receiver listening", "addr", addr)
 
 	buf := make([]byte, 65536)
 	for {
@@ -57,11 +57,11 @@ func listenUDP(addr string) {
 func listenTCP(addr string) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		fmt.Printf("[Syslog] TCP bind %s failed: %v (try SYSLOG_TCP_ADDR=:5514 if non-root)\n", addr, err)
+		slog.Error("syslog: TCP bind failed (try SYSLOG_TCP_ADDR=:5514 if non-root)", "addr", addr, "err", err)
 		return
 	}
 	defer ln.Close()
-	fmt.Printf("[Syslog] TCP receiver listening on %s\n", addr)
+	slog.Info("syslog: TCP receiver listening", "addr", addr)
 
 	for {
 		conn, err := ln.Accept()
@@ -112,7 +112,7 @@ func dispatchSyslogMessage(raw, srcIP string) {
 	}
 
 	if err := SaveLogs([]models.Log{log}); err != nil {
-		fmt.Printf("[Syslog] save error (source=%s): %v\n", src.Name, err)
+		slog.Error("syslog: save error", "source", src.Name, "err", err)
 		return
 	}
 

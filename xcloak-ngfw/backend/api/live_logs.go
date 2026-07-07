@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -71,7 +71,7 @@ func LiveLogsWS(c *gin.Context) {
 
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		fmt.Printf("WS upgrade failed: %v\n", err)
+		slog.Error("live-logs: WS upgrade failed", "err", err)
 		return
 	}
 	defer conn.Close()
@@ -82,7 +82,7 @@ func LiveLogsWS(c *gin.Context) {
 	// Check if there are any logs; if not, auto-dispatch collect_auth_logs.
 	var logCount int
 	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM endpoint_logs WHERE agent_id = $1`, agentID).Scan(&logCount); err != nil {
-		fmt.Printf("log count query failed for agent %v: %v\n", agentID, err)
+		slog.Error("live-logs: log count query failed", "agent_id", agentID, "err", err)
 	}
 
 	if logCount == 0 {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -12,6 +13,11 @@ import (
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/secrets"
 )
+
+// webhookRetryBackoffs defines the wait times between delivery attempts.
+// Attempt 1 is immediate; retries 2 and 3 follow these delays.
+// Only network errors and 5xx responses are retried; 4xx are permanent failures.
+var webhookRetryBackoffs = []time.Duration{5 * time.Second, 30 * time.Second}
 
 // integrationSecretFields lists, per integration name, which config keys
 // hold credential material that belongs in Vault (when configured) rather
@@ -295,29 +301,66 @@ func deliver(integration, eventType, url string, body []byte, headers map[string
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		logDelivery(integration, eventType, body, 0, false, err.Error(), tenantID)
-		return
+
+	var (
+		lastCode int
+		lastErr  string
+		success  bool
+	)
+
+	for attempt := 0; attempt <= len(webhookRetryBackoffs); attempt++ {
+		if attempt > 0 {
+			time.Sleep(webhookRetryBackoffs[attempt-1])
+			slog.Debug("webhook: retrying delivery",
+				"integration", integration, "event_type", eventType,
+				"attempt", attempt+1, "url", url)
+		}
+
+		req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err.Error()
+			break // malformed request — no point retrying
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err.Error()
+			slog.Warn("webhook: delivery attempt failed",
+				"integration", integration, "attempt", attempt+1, "err", err)
+			continue // network error — retry
+		}
+		io.ReadAll(io.LimitReader(resp.Body, 512)) // drain body
+		resp.Body.Close()
+
+		lastCode = resp.StatusCode
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			success = true
+			lastErr = ""
+			break
+		}
+		if resp.StatusCode < 500 {
+			lastErr = fmt.Sprintf("status %d", resp.StatusCode)
+			break // 4xx is a permanent failure — don't retry
+		}
+		// 5xx — retryable
+		lastErr = fmt.Sprintf("status %d", resp.StatusCode)
+		slog.Warn("webhook: server error, will retry",
+			"integration", integration, "status", resp.StatusCode, "attempt", attempt+1)
 	}
 
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		logDelivery(integration, eventType, body, 0, false, err.Error(), tenantID)
-		return
-	}
-	defer resp.Body.Close()
-	io.ReadAll(resp.Body) // drain body
-
-	success := resp.StatusCode >= 200 && resp.StatusCode < 300
-	logDelivery(integration, eventType, body, resp.StatusCode, success, "", tenantID)
+	logDelivery(integration, eventType, body, lastCode, success, lastErr, tenantID)
 }
 
 func logDelivery(integration, eventType string, payload []byte, code int, success bool, errMsg string, tenantID int) {
+	outcome := "success"
+	if !success {
+		outcome = "failure"
+	}
+	WebhookDeliveriesTotal.WithLabelValues(integration, eventType, outcome).Inc()
+
 	database.DB.Exec(`
 		INSERT INTO webhook_deliveries (integration, event_type, payload, status_code, success, error_msg, tenant_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)

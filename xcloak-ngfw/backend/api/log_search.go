@@ -161,6 +161,10 @@ func SetRetentionPolicy(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
+	username, _ := c.Get("username")
+	services.LogEvent("LOG_RETENTION_CHANGE",
+		fmt.Sprintf("retention set to %d days", body.RetentionDays),
+		fmt.Sprintf("%v", username))
 	c.JSON(200, gin.H{"retention_days": body.RetentionDays})
 }
 

@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"xcloak-ngfw/database"
@@ -48,7 +49,7 @@ func autoBlockIOC(alert models.Alert) {
 
 	err := CreateFirewallRule(rule, tenantID)
 	if err != nil {
-		fmt.Printf("IOC auto-block failed for %s: %v\n", indicator, err)
+		slog.Error("ioc-autoblock: firewall rule creation failed", "indicator", indicator, "err", err)
 		return
 	}
 
@@ -64,7 +65,7 @@ func autoBlockIOC(alert models.Alert) {
 		"system",
 	)
 
-	fmt.Printf("IOC auto-blocked: %s\n", indicator)
+	slog.Info("ioc-autoblock: IP blocked", "indicator", indicator)
 }
 
 func extractIOCIndicator(logMsg string) string {

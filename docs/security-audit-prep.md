@@ -106,6 +106,46 @@ All routes are defined in `backend/routes/routes.go`.
 - [x] **Weak password policy** — `services.ValidatePasswordComplexity()` replaces all bare `len(password) < 8` checks. New policy: ≥8 chars, at least one uppercase, lowercase, digit, and special character. Applied at all four registration/reset paths: `api/auth.go:Register`, `services/user_service.go:ChangePassword`, `services/user_service.go:ResetPassword`, `services/tenant_service.go:SelfServeSignup`.
 - [x] **Detection engine test coverage** — Added unit tests for pure helper functions across 4 detectors previously without any test file: `c2_beacon_detector_test.go` (computeIntervals, meanF, stddevF, coefficientOfVariation, isBenignProcess, isSuspiciousPort, splitAddr, scoreBeacon edge cases), `exfil_detector_test.go` (ExtractBytesFromLogMessage, isCloudStorageDomain, cloudStorageDomains integrity), `port_scan_detector_test.go` (portScanScore, adminPortName), `lotl_detector_test.go` (exeName, suspiciousChains table, lolBinSigs table, encodedPSFlags). Also fixed a latent panic in `computeIntervals` (negative capacity make when called with < 2 elements).
 
+### Gaps — Phase 5 (all closed, 2026-07-07)
+
+- [x] **Rate limiter TOCTOU race** — `middleware/rate_limiter.go` rewrote the sliding-window check from a two-pipeline approach (check cardinality, then add — vulnerable to concurrent requests both passing the limit) to a single atomic Lua script (`ZREMRANGEBYSCORE` + `ZCARD` + conditional `ZADD` in one `EVAL`). No gap between read and write — concurrent requests cannot both slip through a full window.
+
+- [x] **Refresh token never issued** — `GenerateRefreshToken` was defined but never called. Now issued on every login as a 7-day `refresh_token` httpOnly cookie, path-scoped to `/api/auth/refresh` (inaccessible to JS on other paths). Old refresh token is revoked on each use (rotation). `POST /api/auth/refresh` validates type claim, checks revocation list, verifies user/tenant are still active, and issues a new pair. Mobile clients (Dart/OkHttp UA) additionally receive the token in the response body.
+
+- [x] **No agent token revocation path** — `POST /api/agents/:id/rotate-token` generates a new token and atomically replaces the old one. Old token is immediately invalid. Requires `manage_agents` permission. Every rotation is audit-logged as `AGENT_TOKEN_ROTATED`.
+
+- [x] **Kafka consumers — dead publish paths** — Five publish functions (`PublishIncident`, `PublishTaskDispatched`, `PublishTaskCompleted`, `PublishAuditEvent`, `PublishFIMAlert`, `PublishYARAMatch`) were defined but never called, so no events were flowing through the bus. All five are now wired into their respective service functions. Six new consumer files implement the downstream actions — see below.
+
+- [x] **`FireIncidentWebhook` never called** — Defined in `webhook_service.go` but not invoked anywhere. Now called from `incident_consumer.go` for every `incident.created` Kafka event.
+
+- [x] **No real-time incident/task WS notifications** — WS broadcast was alert-only. Added `PublishEventBroadcast` in `ws_broadcast_service.go` and updated `api.BroadcastRaw` to forward pre-typed events directly (detects `"type"` field; falls back to alert-wrapping for backward compatibility). Incident and task-completion events now push real-time WS notifications.
+
+- [x] **FIM violations had no automated response** — `fim_consumer.go` auto-creates a `quarantine_file` task in `pending_approval` when a critical system path (`/bin/*`, `/etc/passwd`, `/etc/sudoers`, etc.) is modified or deleted. Goes through the human-approval queue — not dispatched without operator review.
+
+- [x] **YARA matches had no automated response** — `yara_consumer.go` auto-creates a `quarantine_file` task in `pending_approval` for each YARA-matched file path. Same approval-queue gate as FIM.
+
+- [x] **High-risk audit actions not forwarded to SIEM in real time** — `audit_consumer.go` streams 13 high-risk actions (ROLE_CHANGE, DELETE_USER, AGENT_TOKEN_ROTATED, SIGMA_RULE_DELETE, PERMISSION_CHANGE, etc.) to all configured Splunk HEC endpoints immediately. Previously, audit events only reached Splunk via the nightly MinIO export.
+
+- [x] **`APP_BASE_URL` hardcoded in emails** — Password-reset and invite email links used a hardcoded `http://localhost:3000` prefix. Replaced with `appBaseURL()` helper reading `APP_BASE_URL` env var, falling back to localhost for dev.
+
+- [x] **Unstructured goroutine panics** — `defer func() { recover() }()` in goroutines swallowed panics silently. Replaced with `defer logRecover("CallerName")` which logs via `slog.Error` with panic value and caller name, then resumes.
+
+### Gaps — Phase 6 (all closed, 2026-07-07)
+
+- [x] **Consumer panic isolation incomplete** — Three consumers (`fim_consumer.go`, `yara_consumer.go`, `ioc_match_consumer.go`) had no per-message recovery. All consumers now extract message processing into a dedicated `process*Event(raw []byte)` function with `defer logRecover("process*Event")` inside. A panic on one message is logged and discarded; the consumer loop continues without crashing. The outer `Start*Consumer` also defers `logRecover` for setup panics.
+
+- [x] **Silent `recover()` swallowing panics** — `correlation_service.go:fireCorrelationNotification` goroutine and `prometheus_service.go:RunDetector` both had `defer func() { recover() }()` that silently absorbed panics. Both now log via `slog.Error` with the panic value before recovering, making failures visible in structured logs and alertable in Loki/CloudWatch.
+
+- [x] **Webhook delivery with no retry** — All outbound deliveries (Slack, PagerDuty, Teams, Jira, ServiceNow, Splunk HEC, generic webhook) had no retry logic — a transient network error or 5xx caused permanent delivery failure silently. `webhook_service.go:deliver()` now retries with exponential backoff: immediate → 5s → 30s. Network errors and 5xx are retried; 4xx failures are treated as permanent. SSRF-blocked URLs fail immediately without retry.
+
+- [x] **No Prometheus visibility into webhook delivery failures** — Added `xcloak_webhook_deliveries_total` CounterVec (labels: `integration`, `event_type`, `outcome`) to `prometheus_service.go`. Incremented in `logDelivery()` for every outbound delivery attempt. This allows SLO alerting on delivery failure rates per integration.
+
+- [x] **Audit log gaps — LOG_RETENTION_CHANGE and SECURITY_POLICY_UPDATE** — `api/log_search.go:SetRetentionPolicy` and `api/sessions.go:UpdateSecurityPolicy` were modifying tenant-scoped security configuration without emitting audit log entries. Both now call `services.LogEvent()` immediately after a successful write. `LOG_RETENTION_CHANGE` and `SECURITY_POLICY_UPDATE` are now audited alongside the 13 existing high-risk action codes.
+
+- [x] **Splunk HEC streaming — DB query per event** — `audit_consumer.go:streamAuditToSplunk` queried `integrations WHERE name='splunk' AND enabled=true` on every high-risk audit event — a synchronous DB round-trip inside a Kafka consumer loop. Replaced with `loadSplunkConfigs()`: a `sync.Mutex`-protected in-process cache with a 2-minute TTL. Stale enough to be invisible under normal load; short enough that a newly added Splunk integration is visible within one cache window.
+
+- [x] **Unstructured logs throughout backend** — `fmt.Printf`/`fmt.Println` calls remained in 17+ files after the initial slog migration (partition manager, scheduler, MinIO client, syslog receiver, anomaly detection, vulnerability scanner, AI triage, IOC autoblock, KEV refresh, scheduled reports, audit export, correlation engine, api/live_logs, api/log_ingest, api/risk_score_breakdown, api/notifications_ws). All replaced with structured `slog.Info/Warn/Error/Debug` calls with typed key-value fields. The backend now emits zero unstructured log lines in production paths.
+
 ---
 
 ## Recommended Pentest Scope
@@ -157,15 +197,18 @@ psql $DATABASE_URL -c "SELECT relname, relrowsecurity FROM pg_class WHERE relnam
 |---|-------------|--------|
 | 2.1.1 | Passwords ≥ 8 chars + complexity | ✅ `ValidatePasswordComplexity()` in `services/user_service.go`; requires uppercase, lowercase, digit, special char |
 | 2.3.1 | Credentials not sent in URL | ✅ `?token=` removed (P1.6) |
+| 3.2.1 | Refresh token rotation | ✅ `POST /api/auth/refresh`; old refresh revoked on each use; `GenerateRefreshToken` now called on every login |
 | 3.3.1 | Session tokens invalidated on logout | ✅ Redis revocation list |
-| 3.4.1 | Cookie secure + httpOnly | ✅ P1.x cookie migration |
+| 3.4.1 | Cookie secure + httpOnly | ✅ access token + refresh token both httpOnly; refresh scoped to `/api/auth/refresh` path |
 | 4.1.1 | Access control on every resource | ✅ RequireAuth() on all routes |
-| 4.3.1 | Administrative functions isolated | ✅ RequireRole("admin") + platform_admin |
+| 4.3.1 | Administrative functions isolated | ✅ RequireRole("admin") + platform_admin; agent token rotation requires `manage_agents` |
 | 2.5.2 | Account lockout after failed attempts | ✅ per-username 5-failure/15-min lock in `login_guard.go` |
 | 5.2.1 | Input validation on all fields | ✅ KQL gated by `isSafeFieldName`; uploads 1 MiB/file; shell allowlisted |
 | 7.1.1 | Sensitive data not logged | ⚠️ `parsed_fields` may contain PII (email, IP, username) — operators should define a data-handling policy |
+| 7.2.1 | Audit log completeness | ✅ 15 high-risk action codes — 13 streamed to SIEM in real time + `LOG_RETENTION_CHANGE` and `SECURITY_POLICY_UPDATE` added (P6) |
 | 8.1.1 | RLS / tenant isolation | ✅ PostgreSQL RLS + `WithTenantTx` on writes (P1); `xcloak_app` granted all tables so RLS is load-bearing for every query (P4 migration 000057) |
 | 9.1.1 | TLS for all connections | ✅ configurable, enforced at ingress |
-| 10.2.1 | No hardcoded credentials | ✅ all secrets via env/Vault |
+| 10.2.1 | No hardcoded credentials | ✅ all secrets via env/Vault; `APP_BASE_URL` replaces hardcoded localhost in emails |
+| 11.1.4 | Rate limit correctness (no race) | ✅ atomic Lua script — TOCTOU race in sliding-window check closed (P5) |
 | 12.1.1 | File upload size limits | ✅ 1 MiB/file (YARA/Sigma), 200 MiB (vuln scan), 10 MiB (log ingest) |
 | 14.4.1 | Security headers on all responses | ✅ `SecurityHeaders()` middleware: CSP, HSTS, X-Content-Type-Options, X-Frame-Options |

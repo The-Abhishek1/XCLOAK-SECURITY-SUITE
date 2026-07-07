@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log/slog"
 
 	"github.com/segmentio/kafka-go"
 
@@ -18,6 +18,7 @@ import (
 // fleet size grow. No-ops if Kafka isn't enabled — callers fall back to
 // synchronous matching in that case (see SaveFileHashes / SaveConnections).
 func StartIOCMatchConsumer() {
+	defer logRecover("StartIOCMatchConsumer")
 	if !kafkaEnabled {
 		return
 	}
@@ -29,42 +30,46 @@ func StartIOCMatchConsumer() {
 	})
 	defer reader.Close()
 
-	fmt.Println("[Kafka] IOC match consumer started — topic:", TopicIOCMatchJobs)
+	slog.Info("kafka: IOC match consumer started", "topic", TopicIOCMatchJobs)
 
 	for {
 		msg, err := reader.ReadMessage(context.Background())
 		KafkaIOCConsumerLag.Set(float64(reader.Stats().Lag))
 		if err != nil {
-			fmt.Println("[Kafka] IOC match consumer read error:", err)
+			slog.Error("kafka: IOC consumer read error", "err", err)
 			continue
 		}
+		processIOCMatchEvent(msg.Value)
+	}
+}
 
-		var envelope KafkaEvent
-		if err := json.Unmarshal(msg.Value, &envelope); err != nil {
-			fmt.Println("[Kafka] IOC match consumer: bad envelope:", err)
-			continue
+func processIOCMatchEvent(raw []byte) {
+	defer logRecover("processIOCMatchEvent")
+
+	var envelope KafkaEvent
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		slog.Error("kafka: IOC consumer bad envelope", "err", err)
+		return
+	}
+
+	switch envelope.EventType {
+	case "filehash":
+		var hash models.FileHash
+		if err := json.Unmarshal(envelope.Payload, &hash); err != nil {
+			slog.Error("kafka: IOC consumer bad filehash payload", "err", err)
+			return
 		}
+		CheckFileHashIOC(hash)
 
-		switch envelope.EventType {
-
-		case "filehash":
-			var hash models.FileHash
-			if err := json.Unmarshal(envelope.Payload, &hash); err != nil {
-				fmt.Println("[Kafka] IOC match consumer: bad filehash payload:", err)
-				continue
-			}
-			CheckFileHashIOC(hash)
-
-		case "connection":
-			var conn models.Connection
-			if err := json.Unmarshal(envelope.Payload, &conn); err != nil {
-				fmt.Println("[Kafka] IOC match consumer: bad connection payload:", err)
-				continue
-			}
-			CheckConnectionIOC(conn)
-
-		default:
-			fmt.Println("[Kafka] IOC match consumer: unknown event_type:", envelope.EventType)
+	case "connection":
+		var conn models.Connection
+		if err := json.Unmarshal(envelope.Payload, &conn); err != nil {
+			slog.Error("kafka: IOC consumer bad connection payload", "err", err)
+			return
 		}
+		CheckConnectionIOC(conn)
+
+	default:
+		slog.Warn("kafka: IOC consumer unknown event_type", "event_type", envelope.EventType)
 	}
 }

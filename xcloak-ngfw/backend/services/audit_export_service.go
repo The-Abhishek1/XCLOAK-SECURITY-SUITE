@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -79,8 +80,9 @@ func ExportAuditBatch() (int, error) {
 		return 0, fmt.Errorf("advancing export cursor (object %q already written — will retry and skip duplicates next run): %w", objectKey, err)
 	}
 
-	fmt.Printf("[AuditExport] Exported %d row(s) (#%d-#%d) to %s, locked until %s\n",
-		len(logs), firstID, lastID, objectKey, retainUntil.Format(time.RFC3339))
+	slog.Info("audit-export: batch exported",
+		"rows", len(logs), "first_id", firstID, "last_id", lastID,
+		"object", objectKey, "locked_until", retainUntil.Format(time.RFC3339))
 
 	return len(logs), nil
 }
@@ -91,7 +93,7 @@ func StartAuditExportScheduler() {
 	for {
 		WithSingletonLock("audit_export", func() {
 			if _, err := ExportAuditBatch(); err != nil {
-				fmt.Println("[AuditExport] export failed:", err)
+				slog.Error("audit-export: batch failed", "err", err)
 			}
 		})
 		time.Sleep(5 * time.Minute)

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 
@@ -50,9 +51,9 @@ func InitMinIO() error {
 		if err := client.MakeBucket(ctx, auditBucket, minio.MakeBucketOptions{ObjectLocking: true}); err != nil {
 			return fmt.Errorf("creating audit bucket with object lock: %w", err)
 		}
-		fmt.Printf("[MinIO] Created bucket %q with Object Lock enabled\n", auditBucket)
+		slog.Info("minio: created audit bucket with Object Lock", "bucket", auditBucket)
 	}
 
-	fmt.Printf("[MinIO] Connected to %s, audit bucket %q\n", endpoint, auditBucket)
+	slog.Info("minio: connected", "endpoint", endpoint, "audit_bucket", auditBucket)
 	return nil
 }

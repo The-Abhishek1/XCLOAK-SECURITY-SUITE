@@ -110,7 +110,9 @@ Click any alert to open the detail panel.
 
 ## Incidents
 
-Incidents are created automatically by the correlation engine when multiple alerts match a correlation rule, or manually by an analyst.
+Incidents are created automatically by the correlation engine when multiple alerts match a correlation rule, or manually by an analyst. When a new incident is created, the platform immediately:
+- Sends a webhook/Slack notification to all configured integrations
+- Pushes a real-time notification to all connected dashboards (bell icon in the top bar)
 
 ### Incident list
 
@@ -254,13 +256,20 @@ From the agent detail page, click **Actions** to dispatch remote tasks:
 
 **Script runner** — go to **Scripts → Run**. Select the target agent(s), choose a template or write a custom bash/python3 script, and click **Run**. Output streams back in real time. All script runs are logged in the audit trail.
 
-**Destructive actions** (isolate host, kill process, memory dump) require admin approval if your playbook is configured with a human-in-the-loop gate. Pending approvals appear in **Tasks → Pending Approval**.
+**Destructive actions** (isolate host, kill process, quarantine file, memory dump) require admin approval before the agent acts. Pending approvals appear in **Tasks → Pending Approval**. This applies to:
+
+- Actions manually triggered by a playbook with a human-in-the-loop gate
+- `quarantine_file` tasks **automatically created** by the platform when a FIM or YARA detection matches a critical file — see the sections below
+
+Approve or reject tasks from **Tasks → Pending Approval** (`approve_soar_actions` permission). Unapproved destructive tasks expire after 15 minutes.
 
 ### File Integrity Monitoring (FIM)
 
 The agent monitors a configured set of paths for file creates, modifies, deletes, and permission changes.
 
 **Viewing FIM alerts** — go to the agent's **FIM** tab. Each alert shows the file path, change type, old/new hash, and the user that made the change.
+
+**Auto-quarantine for critical paths** — when a FIM violation is detected on a critical system path (`/bin/*`, `/sbin/*`, `/usr/bin/*`, `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, `/etc/ssh/*`, `/etc/cron*`), the platform automatically creates a `quarantine_file` task in **pending approval**. Review it at **Tasks → Pending Approval** and approve or reject. The agent only quarantines the file after explicit approval.
 
 **Accepting a baseline** — after initial deployment, the agent scans monitored paths and reports them as the baseline. Go to **FIM → Baseline** on the agent and click **Accept Baseline** to mark the current state as trusted. Future changes generate alerts. Requires `manage_detection_rules` permission.
 
@@ -336,6 +345,8 @@ YARA rules scan files on endpoints for malware signatures. The agent fetches ena
 **Create / import** — write rule text directly or click **Import** to upload `.yar` / `.yara` files.
 
 **Matches** — go to **Detection → YARA Matches** to see files that triggered a match, with the path, agent, and matching rule.
+
+**Auto-quarantine** — when a YARA match is reported, the platform automatically creates a `quarantine_file` task in **pending approval** for the matched file path. Review at **Tasks → Pending Approval**. Requires `approve_soar_actions` permission to approve or reject.
 
 ### Correlation Rules
 
@@ -499,7 +510,9 @@ Go to **Settings → Integrations** to configure outbound alerting.
 
 **Test** — after saving an integration, click **Test** to send a test payload and verify it works.
 
-**Delivery log** — click **Delivery Log** to see the last 100 webhook deliveries with status codes and response bodies.
+**Automatic retry** — all outbound deliveries (Slack, PagerDuty, Teams, Jira, ServiceNow, generic webhook) retry automatically on transient failures. The platform makes up to 3 attempts (immediate → 5 s → 30 s). HTTP 4xx responses are treated as permanent failures (configuration error — fix the URL/token, not a retry candidate). SSRF-blocked URLs fail immediately.
+
+**Delivery log** — click **Delivery Log** to see the last 100 webhook deliveries with status codes, response bodies, and error messages. The outcome shown is the final attempt — if all 3 retries failed, the entry shows `failed` with the last error.
 
 ### Email notification rules
 

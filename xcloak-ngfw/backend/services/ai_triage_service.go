@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ func TriageAlert(alert models.Alert) {
 
 	response, err := CallLLM(prompt)
 	if err != nil {
-		fmt.Printf("AI triage failed for alert %d: %v\n", alert.ID, err)
+		slog.Error("ai-triage: LLM call failed", "alert_id", alert.ID, "err", err)
 		return
 	}
 
@@ -31,7 +32,7 @@ func TriageAlert(alert models.Alert) {
 		WHERE id = $4
 	`, result.Summary, result.RecommendedAction, time.Now(), alert.ID)
 
-	fmt.Printf("AI triage complete for alert %d: %s\n", alert.ID, result.Summary)
+	slog.Info("ai-triage: complete", "alert_id", alert.ID, "summary_len", len(result.Summary))
 }
 
 // SummarizeIncident generates an AI narrative for an incident, scoped to

@@ -1,6 +1,8 @@
 package services
 
 import (
+	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -79,6 +81,30 @@ var (
 		Name: "xcloak_kafka_ioc_consumer_lag",
 		Help: "Unconsumed messages on xcloak.ioc_match_jobs (xcloak-ioc-matcher consumer group)",
 	})
+	KafkaAlertConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_alert_consumer_lag",
+		Help: "Unconsumed messages on xcloak.alerts (xcloak-alert-consumer group)",
+	})
+	KafkaIncidentConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_incident_consumer_lag",
+		Help: "Unconsumed messages on xcloak.incidents (xcloak-incident-consumer group)",
+	})
+	KafkaTaskConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_task_consumer_lag",
+		Help: "Unconsumed messages on xcloak.agent_tasks (xcloak-task-consumer group)",
+	})
+	KafkaAuditConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_audit_consumer_lag",
+		Help: "Unconsumed messages on xcloak.audit (xcloak-audit-consumer group)",
+	})
+	KafkaFIMConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_fim_consumer_lag",
+		Help: "Unconsumed messages on xcloak.fim_alerts (xcloak-fim-consumer group)",
+	})
+	KafkaYARAConsumerLag = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "xcloak_kafka_yara_consumer_lag",
+		Help: "Unconsumed messages on xcloak.yara_matches (xcloak-yara-consumer group)",
+	})
 )
 
 // ── Per-detector counters ────────────────────────────────────
@@ -127,6 +153,14 @@ var (
 		Name: "xcloak_agent_tasks_dispatched_total",
 		Help: "Agent tasks dispatched by type",
 	}, []string{"task_type"})
+
+	// WebhookDeliveriesTotal counts every outbound webhook/Slack/PagerDuty/etc.
+	// delivery attempt. Labels: integration name, event type, outcome (success|failure).
+	// Increment via logDelivery() in webhook_service.go.
+	WebhookDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "xcloak_webhook_deliveries_total",
+		Help: "Outbound webhook delivery attempts by integration, event type, and outcome",
+	}, []string{"integration", "event_type", "outcome"})
 )
 
 // RefreshMetrics queries the DB and updates all gauge metrics.
@@ -281,6 +315,7 @@ func RunDetector(name string, fn func()) {
 
 	defer func() {
 		if r := recover(); r != nil {
+			slog.Error("detector panic recovered", "detector", name, "panic", fmt.Sprintf("%v", r))
 			DetectorRunsTotal.WithLabelValues(name, "error").Inc()
 		}
 	}()

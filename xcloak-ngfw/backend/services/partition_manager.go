@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"xcloak-ngfw/database"
@@ -51,19 +52,16 @@ func EnsureEndpointLogPartitions() {
 		)
 
 		if _, err := database.DB.Exec(sql); err != nil {
-			fmt.Printf("[partition-manager] failed to ensure %s: %v\n", partName, err)
+			slog.Error("partition-manager: failed to ensure partition", "partition", partName, "err", err)
 			failed++
 		} else {
-			fmt.Printf("[partition-manager] ensured partition %s (%s → %s)\n",
-				partName,
-				monthStart.Format("2006-01"),
-				monthEnd.Format("2006-01"),
-			)
+			slog.Debug("partition-manager: ensured partition", "partition", partName,
+				"from", monthStart.Format("2006-01"), "to", monthEnd.Format("2006-01"))
 		}
 	}
 
 	if failed > 0 {
-		fmt.Printf("[partition-manager] WARNING: %d partition(s) could not be created — rows for those months will land in the DEFAULT partition\n", failed)
+		slog.Warn("partition-manager: some partitions could not be created — rows may land in DEFAULT partition", "failed", failed)
 	}
 }
 
@@ -90,7 +88,7 @@ func DropOldEndpointLogPartitions(retainMonths int) {
 		partitionTable+"_legacy",
 	)
 	if err != nil {
-		fmt.Printf("[partition-manager] drop scan failed: %v\n", err)
+		slog.Error("partition-manager: drop scan failed", "err", err)
 		return
 	}
 	defer rows.Close()
@@ -109,9 +107,9 @@ func DropOldEndpointLogPartitions(retainMonths int) {
 		partStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 		if partStart.Before(cutoff) {
 			if _, err := database.DB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", name)); err != nil {
-				fmt.Printf("[partition-manager] failed to drop %s: %v\n", name, err)
+				slog.Error("partition-manager: failed to drop partition", "partition", name, "err", err)
 			} else {
-				fmt.Printf("[partition-manager] dropped old partition %s (before %s)\n", name, cutoff.Format("2006-01"))
+				slog.Info("partition-manager: dropped old partition", "partition", name, "cutoff", cutoff.Format("2006-01"))
 			}
 		}
 	}
@@ -131,5 +129,5 @@ func StartPartitionManager() {
 			WithSingletonLock("partition_manager", EnsureEndpointLogPartitions)
 		}
 	}()
-	fmt.Println("Partition manager started (pre-creating endpoint_logs partitions)")
+	slog.Info("partition-manager: started (pre-creating endpoint_logs partitions)")
 }

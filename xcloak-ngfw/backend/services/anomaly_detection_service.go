@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ func RunAnomalyDetection(agentID int) ([]models.AnomalyFinding, error) {
 		saveAnomaly(f)
 	}
 
-	fmt.Printf("Anomaly detection: agent=%d findings=%d\n", agentID, len(findings))
+	slog.Info("anomaly-detection: scan complete", "agent_id", agentID, "findings", len(findings))
 
 	return findings, nil
 }

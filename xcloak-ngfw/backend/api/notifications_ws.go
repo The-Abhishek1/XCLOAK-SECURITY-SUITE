@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -50,8 +50,20 @@ func BroadcastAlert(alert models.Alert) {
 // BroadcastRaw delivers an already-marshalled payload to all WebSocket clients
 // connected to THIS replica. Registered with services.RegisterLocalBroadcastFn
 // so the Redis subscriber loop can call back into the hub without an import cycle.
+//
+// Two payload shapes are accepted:
+//   - Pre-built NotifPayload (has a non-empty "type" field) — broadcast directly.
+//     Used by Kafka consumers for incident/task/fim/yara events.
+//   - Raw models.Alert JSON (no "type" field) — wrapped into a NotifPayload{Type:"alert"}.
 func BroadcastRaw(data []byte) {
-	// Wrap raw alert JSON into our NotifPayload envelope.
+	var probe struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(data, &probe) == nil && probe.Type != "" {
+		notifHub.broadcast(data)
+		return
+	}
+
 	var alert models.Alert
 	if err := json.Unmarshal(data, &alert); err != nil {
 		return
@@ -117,7 +129,7 @@ func NotificationsWS(c *gin.Context) {
 
 	conn, err := notifUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		fmt.Printf("Notification WS upgrade failed: %v\n", err)
+		slog.Error("notifications-ws: upgrade failed", "err", err)
 		return
 	}
 

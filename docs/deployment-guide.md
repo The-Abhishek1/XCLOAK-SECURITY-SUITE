@@ -226,6 +226,7 @@ backend:
 | `JWT_SECRET` | HS256 signing key — minimum 32 bytes of entropy |
 | `METRICS_TOKEN` | Bearer token for `/metrics` endpoint |
 | `CORS_ALLOWED_ORIGINS` | Frontend URL (e.g. `https://xcloak.yourdomain.com`) |
+| `APP_BASE_URL` | Base URL for password-reset and invite email links (default: `http://localhost:3000`) — **must** be set to your public URL in production |
 
 ### Redis
 
@@ -383,17 +384,38 @@ The Helm chart configures:
 
 For an external cluster, use `kafkaExternal.enabled=true` and set `kafkaExternal.brokers` to your broker list.
 
-### Topics
+### Topics and consumer groups
 
-| Topic | Purpose |
-|-------|---------|
-| `xcloak.alerts` | New alert events |
-| `xcloak.incidents` | Incident creation |
-| `xcloak.agent_tasks` | Task dispatch and completion |
-| `xcloak.audit` | Admin action audit stream |
-| `xcloak.fim_alerts` | File integrity violations |
-| `xcloak.yara_matches` | YARA signature matches |
-| `xcloak.ioc_match_jobs` | Async IOC matching queue |
+Every topic has a dedicated consumer group that runs inside the backend process. All consumers are no-ops when `KAFKA_ENABLED=false`.
+
+**Panic isolation** — each consumer extracts per-message processing into a dedicated `process*Event()` function with its own `defer logRecover(...)`. A panic on a single malformed message is logged and discarded; the consumer loop continues. The outer `Start*Consumer` function also defers `logRecover` to catch setup panics.
+
+| Topic | Consumer group | What the consumer does |
+|-------|----------------|------------------------|
+| `xcloak.alerts` | `xcloak-alert-consumer` | Index alert into `xcloak-alerts-<tenantID>` in Elasticsearch |
+| `xcloak.incidents` | `xcloak-incident-consumer` | Fire webhook/Slack delivery (with retry); push WS notification to dashboards |
+| `xcloak.agent_tasks` | `xcloak-task-consumer` | Maintain `AgentTasksPending` Prometheus gauge; push WS notification on task completion |
+| `xcloak.audit` | `xcloak-audit-consumer` | Stream high-risk actions (ROLE_CHANGE, DELETE_USER, AGENT_TOKEN_ROTATED, etc.) to Splunk HEC in real time; Splunk tenant configs cached in-process for 2 minutes to reduce DB round-trips |
+| `xcloak.fim_alerts` | `xcloak-fim-consumer` | Auto-create `quarantine_file` task (pending_approval) when critical system paths are modified or deleted |
+| `xcloak.yara_matches` | `xcloak-yara-consumer` | Auto-create `quarantine_file` task (pending_approval) for each YARA-matched file |
+| `xcloak.ioc_match_jobs` | `xcloak-ioc-matcher` | Run file hash and connection IOC matching off the ingest request path |
+
+**FIM and YARA auto-quarantine notes:**
+- Tasks enter the `pending_approval` queue — an operator must approve before the agent acts
+- Destructive tasks that remain unapproved expire after 15 minutes (`ExpireStaleTasks`)
+- Critical FIM paths: `/bin/*`, `/sbin/*`, `/usr/bin/*`, `/usr/sbin/*`, `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, `/etc/ssh/*`, `/etc/cron*`, `/etc/ld.so.preload`
+
+### Webhook delivery reliability
+
+All outbound deliveries (Slack, PagerDuty, generic webhook, Splunk HEC, Jira, ServiceNow, Teams) go through `deliver()` in `webhook_service.go`, which applies exponential backoff retries:
+
+| Attempt | Delay |
+|---------|-------|
+| 1 | immediate |
+| 2 | 5 seconds |
+| 3 | 30 seconds |
+
+Network errors and 5xx responses are retried; 4xx failures are treated as permanent and not retried. SSRF-blocked URLs fail immediately without any retry. The final outcome (success/failure, HTTP status, error message) is recorded in the `webhook_deliveries` table and in `xcloak_webhook_deliveries_total` (see Prometheus metrics below).
 
 ---
 
@@ -404,7 +426,8 @@ Elasticsearch (or OpenSearch) is optional. When `ELASTICSEARCH_URL` is not set, 
 When ES is configured:
 - Logs are dual-written: Postgres remains the source of truth; ES is indexed asynchronously (non-blocking goroutine) after the Postgres commit
 - Log search routes to ES first; falls back to Postgres if ES returns an error
-- One index per tenant: `xcloak-logs-<tenant_id>`
+- One log index per tenant: `xcloak-logs-<tenant_id>`
+- One alert index per tenant: `xcloak-alerts-<tenant_id>` — alerts are indexed by the `xcloak-alert-consumer` Kafka consumer; requires `KAFKA_ENABLED=true`
 - Index template `xcloak-logs` is registered on startup (idempotent)
 
 ### OpenSearch compatibility
@@ -520,9 +543,39 @@ The Docker Compose stack includes a pre-configured Grafana at `http://localhost:
 
 In Kubernetes, configure Grafana via the `grafana` section of your `values.yaml`.
 
+### Prometheus metrics — Kafka consumer lag
+
+Seven gauges track per-consumer group message lag, each scraped from `reader.Stats().Lag`:
+
+| Metric | Consumer group |
+|--------|----------------|
+| `xcloak_kafka_alert_consumer_lag` | `xcloak-alert-consumer` |
+| `xcloak_kafka_incident_consumer_lag` | `xcloak-incident-consumer` |
+| `xcloak_kafka_task_consumer_lag` | `xcloak-task-consumer` |
+| `xcloak_kafka_audit_consumer_lag` | `xcloak-audit-consumer` |
+| `xcloak_kafka_fim_consumer_lag` | `xcloak-fim-consumer` |
+| `xcloak_kafka_yara_consumer_lag` | `xcloak-yara-consumer` |
+| `xcloak_kafka_ioc_consumer_lag` | `xcloak-ioc-matcher` |
+
+Alert if any consumer lag exceeds your SLA threshold (suggest: > 500 messages for more than 2 minutes).
+
+### Prometheus metrics — Webhook deliveries
+
+`xcloak_webhook_deliveries_total` is a CounterVec with three labels:
+
+| Label | Values |
+|-------|--------|
+| `integration` | `splunk_audit`, `slack`, `pagerduty`, `webhook`, `jira`, `servicenow`, `teams`, etc. |
+| `event_type` | e.g. `alert.created`, `incident.created`, `audit.ROLE_CHANGE` |
+| `outcome` | `success` or `failure` |
+
+Use this metric to build SLO dashboards on outbound delivery reliability. Example alert: failure rate > 5% for the `slack` integration over 5 minutes.
+
 ### Structured logs
 
 Set `LOG_FORMAT=json` for JSON-structured logs compatible with any log aggregator (Loki, CloudWatch, Datadog, Splunk). Each log line includes `level`, `msg`, `time`, and contextual fields (`tenant_id`, `agent_id`, etc. where applicable).
+
+All `fmt.Printf` / `fmt.Println` calls across the backend (services, API handlers, Kafka consumers) have been replaced with `log/slog` structured calls. There are no more unstructured log lines in the codebase — every operational event carries typed key-value fields that parse cleanly in any log aggregator.
 
 ---
 
@@ -678,7 +731,17 @@ Check that the backend logged `elasticsearch: connected` on startup. If the per-
 
 ### Kafka consumer lag growing
 
-Check Kafka UI at `http://localhost:8090`. If the `xcloak.ioc_match_jobs` consumer group is lagging, increase the number of backend replicas or tune `KAFKA_BROKERS` to include all 3 brokers.
+Check Kafka UI at `http://localhost:8090` and the Prometheus lag gauges. All 7 consumer groups run in the same backend process — if lag grows on any topic, check the relevant `xcloak_kafka_*_consumer_lag` metric and look for `slog.Error` log lines from that consumer.
+
+Common causes:
+- A single slow consumer blocks its topic; it does not block others — each runs in an independent goroutine
+- `xcloak-fim-consumer` and `xcloak-yara-consumer` write to the DB for every message; high ingest rate during a sweep may cause lag — monitor `AgentTasksPending` alongside consumer lag
+- Adding more backend replicas does **not** parallelize single-partition consumers — consider increasing topic partition count for `xcloak.fim_alerts` and `xcloak.yara_matches` if sustained lag is observed
+
+Verify all consumer groups are registered:
+```bash
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list | grep xcloak
+```
 
 ### JWT errors after key rotation
 

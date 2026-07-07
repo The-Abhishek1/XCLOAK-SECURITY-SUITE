@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -36,30 +37,30 @@ func runScheduledReports() {
 		}
 		metrics, err := BuildExecutiveMetrics(r.TenantID)
 		if err != nil {
-			fmt.Printf("[ScheduledReport] metrics error for report %d: %v\n", r.ID, err)
+			slog.Error("scheduled-report: metrics error", "report_id", r.ID, "err", err)
 			continue
 		}
 
 		var buf bytes.Buffer
 		if err := GenerateExecutivePDF(&buf, metrics, r.Name); err != nil {
-			fmt.Printf("[ScheduledReport] PDF error for report %d: %v\n", r.ID, err)
+			slog.Error("scheduled-report: PDF error", "report_id", r.ID, "err", err)
 			continue
 		}
 
 		cfg := loadSMTPConfig()
 		if cfg == nil || cfg.Host == "" {
-			fmt.Printf("[ScheduledReport] SMTP not configured, skipping report %d\n", r.ID)
+			slog.Warn("scheduled-report: SMTP not configured, skipping", "report_id", r.ID)
 			continue
 		}
 
 		subject := fmt.Sprintf("[XCLOAK] %s — %s", r.Name, now.Format("2006-01-02"))
 		body := buildReportEmailBody(metrics)
 		if err := sendEmailWithAttachment(cfg, r.Recipients, subject, body, "executive-report.pdf", buf.Bytes()); err != nil {
-			fmt.Printf("[ScheduledReport] email error for report %d: %v\n", r.ID, err)
+			slog.Error("scheduled-report: email error", "report_id", r.ID, "err", err)
 			continue
 		}
 		repositories.MarkReportSent(r.ID)
-		fmt.Printf("[ScheduledReport] sent report %d to %v\n", r.ID, r.Recipients)
+		slog.Info("scheduled-report: sent", "report_id", r.ID, "recipients", r.Recipients)
 	}
 }
 

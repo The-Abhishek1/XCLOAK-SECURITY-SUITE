@@ -1,8 +1,8 @@
 package services
 
 import (
-	"fmt"
 	"hash/fnv"
+	"log/slog"
 
 	"xcloak-ngfw/database"
 )
@@ -36,14 +36,14 @@ func lockKey(name string) int64 {
 func WithSingletonLock(name string, fn func()) {
 	tx, err := database.DB.Begin()
 	if err != nil {
-		fmt.Printf("[singleton-lock] %s: begin tx failed: %v\n", name, err)
+		slog.Error("singleton-lock: begin tx failed", "lock", name, "err", err)
 		return
 	}
 	defer tx.Rollback()
 
 	var acquired bool
 	if err := tx.QueryRow(`SELECT pg_try_advisory_xact_lock($1)`, lockKey(name)).Scan(&acquired); err != nil {
-		fmt.Printf("[singleton-lock] %s: lock query failed: %v\n", name, err)
+		slog.Error("singleton-lock: lock query failed", "lock", name, "err", err)
 		return
 	}
 	if !acquired {

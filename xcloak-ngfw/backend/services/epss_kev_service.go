@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -183,7 +184,7 @@ func RefreshKEVCatalog() error {
 		}
 	}
 
-	fmt.Printf("CISA KEV catalog refresh: %d entries\n", len(catalog.Vulnerabilities))
+	slog.Info("kev: catalog refreshed", "entries", len(catalog.Vulnerabilities))
 
 	return tx.Commit()
 }
@@ -222,7 +223,7 @@ func IsKEVCVE(cveID string) (isKEV bool, dateAdded *time.Time, ransomware bool) 
 func StartKEVRefreshScheduler() {
 	refresh := func() {
 		if err := RefreshKEVCatalog(); err != nil {
-			fmt.Printf("KEV catalog refresh failed: %v\n", err)
+			slog.Error("kev: catalog refresh failed", "err", err)
 		}
 	}
 

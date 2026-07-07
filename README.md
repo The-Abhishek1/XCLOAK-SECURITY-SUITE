@@ -309,6 +309,9 @@ SMTP_PORT=587
 SMTP_USER=your@gmail.com
 SMTP_PASS=your_app_password
 SMTP_FROM=xcloak@yourdomain.com
+
+# Base URL for password-reset and invite email links (default: http://localhost:3000)
+APP_BASE_URL=https://xcloak.yourdomain.com
 ```
 
 Per-tenant settings (OIDC SSO, LDAP, threat feed credentials, API keys, custom roles) are configured from the UI and stored in the database — see Settings → Integrations / API Keys / Roles.
@@ -329,16 +332,19 @@ XCLOAK_INSECURE_SKIP_VERIFY=false
 
 ## Security
 
-- JWT authentication (8h access / 7d refresh), Redis-backed token blacklist on logout
-- Agent registration requires one-time install tokens (single-use, claimed atomically, 24h expiry)
+- JWT authentication (8h access / 7d refresh) with **refresh token rotation** — old refresh token is revoked on each use; `POST /api/auth/refresh` issues new pair
+- Redis-backed token blacklist on logout; rate limiting via atomic Lua sliding-window script (no TOCTOU race)
+- Agent registration requires one-time install tokens (single-use, claimed atomically); agent tokens rotatable via `POST /api/agents/:id/rotate-token`
 - TOTP 2FA (RFC 4226 — Google Authenticator, Authy)
-- Multi-tenancy: `tenant_id` scoping enforced across all resources; platform provisioning is operator-only
+- Multi-tenancy: `tenant_id` scoping enforced across all resources; PostgreSQL RLS load-bearing for every query via `xcloak_app` role
 - RBAC — built-in admin/analyst/viewer plus custom roles with 19 granular permissions
 - Per-tenant SSO (OIDC) and per-tenant SHA-256-hashed API keys
-- SOAR destructive actions require human approval when triggered by playbooks
+- SOAR destructive actions require human approval when triggered by playbooks; FIM+YARA auto-quarantine tasks enter the same approval queue
 - Immutable audit log to MinIO under Object Lock (GOVERNANCE retention)
 - TLS support for Postgres and agent↔backend (`DB_SSLMODE`, `TLS_CERT_FILE`/`TLS_KEY_FILE`)
 - Stale task expiry: destructive tasks expire after 15 min, others after 1h
+- Webhook/Slack/PagerDuty deliveries retry automatically on network errors and 5xx responses (immediate → 5s → 30s); 4xx failures are not retried
+- All 7 Kafka consumer loops have message-level panic isolation — a single malformed message cannot kill a consumer goroutine
 
 ## Backups
 
@@ -366,14 +372,16 @@ Key endpoints:
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/auth/login` | Login — sets `token` + `logged_in` cookies (or 2FA prompt) |
+| POST | `/api/auth/refresh` | Rotate refresh token — issues new access + refresh pair; old refresh revoked |
 | POST | `/api/signup` | Self-serve org signup — creates tenant + admin, sets cookies |
 | GET | `/api/alerts/paginated` | Paginated alerts with status filter |
 | POST | `/api/alerts/:id/acknowledge` | Acknowledge alert |
 | GET | `/api/incidents/paginated` | Paginated incidents |
 | GET | `/api/agents` | List all agents (tenant-scoped) |
+| POST | `/api/agents/:id/rotate-token` | Rotate agent auth token (requires `manage_agents` permission) |
 | POST | `/api/scripts/run` | Execute script on agents |
 | POST | `/api/firewall/sync` | Push firewall rules to agents |
-| GET/POST | `/api/tasks/pending-approval` | SOAR human-approval queue |
+| GET/POST | `/api/tasks/pending-approval` | SOAR approval queue — also receives FIM/YARA auto-quarantine tasks |
 | GET/POST/DELETE | `/api/sigma/rules` | Sigma rule management |
 | GET/POST/DELETE | `/api/yara/rules` | YARA rule management |
 | GET/POST/DELETE | `/api/ja3/fingerprints` | JA3 TLS fingerprint blocklist |
@@ -389,15 +397,19 @@ Key endpoints:
 
 ## Kafka Topics
 
-| Topic | Events |
-|-------|--------|
-| `xcloak.alerts` | Alert created |
-| `xcloak.incidents` | Incident opened |
-| `xcloak.agent_tasks` | Task dispatched / completed |
-| `xcloak.audit` | Admin actions |
-| `xcloak.fim_alerts` | File integrity violations |
-| `xcloak.yara_matches` | YARA signature matches |
-| `xcloak.ioc_match_jobs` | Async IOC matching jobs |
+Every topic has a dedicated consumer group running in the same backend process. Consumers are no-ops when `KAFKA_ENABLED=false`.
+
+All consumers have message-level panic isolation — `defer logRecover("process*Event")` inside each per-message handler ensures one bad message cannot kill the consumer loop.
+
+| Topic | Events | Consumer | Action |
+|-------|--------|----------|--------|
+| `xcloak.alerts` | Alert created | `xcloak-alert-consumer` | Index to `xcloak-alerts-<tenantID>` in Elasticsearch |
+| `xcloak.incidents` | Incident opened | `xcloak-incident-consumer` | Fire webhook/Slack delivery (with retry); push WS notification to dashboards |
+| `xcloak.agent_tasks` | Task dispatched / completed | `xcloak-task-consumer` | Track `AgentTasksPending` gauge; push WS notification on completion |
+| `xcloak.audit` | Admin actions | `xcloak-audit-consumer` | Stream 13 high-risk actions (ROLE_CHANGE, DELETE_USER, etc.) to Splunk HEC in real time; tenant configs cached 2 min |
+| `xcloak.fim_alerts` | File integrity violations | `xcloak-fim-consumer` | Auto-create `quarantine_file` task (pending approval) for critical system paths (`/bin/*`, `/etc/passwd`, `/etc/sudoers`, etc.) |
+| `xcloak.yara_matches` | YARA signature matches | `xcloak-yara-consumer` | Auto-create `quarantine_file` task (pending approval) for matched file |
+| `xcloak.ioc_match_jobs` | Async IOC matching jobs | `xcloak-ioc-matcher` | Run file hash and connection IOC matching off the ingest request path |
 
 ## Agent Capabilities
 

@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -461,7 +462,7 @@ func fireCorrelationRule(rule repositories.EnabledCorrelationRule, alert models.
 
 	if rule.PlaybookID > 0 {
 		if err := ExecutePlaybookByID(rule.PlaybookID, tenantID, alert); err != nil {
-			fmt.Printf("correlation: playbook %d failed for rule %d: %v\n", rule.PlaybookID, rule.ID, err)
+			slog.Error("correlation: playbook execution failed", "playbook_id", rule.PlaybookID, "rule_id", rule.ID, "err", err)
 		}
 	}
 
@@ -530,7 +531,7 @@ func fireCorrelationNotification(rule repositories.EnabledCorrelationRule, alert
 		return
 	}
 	go func() {
-		defer func() { recover() }()
+		defer logRecover("fireCorrelationNotification")
 		_ = SendAlertEmail(alert, recipients)
 	}()
 }

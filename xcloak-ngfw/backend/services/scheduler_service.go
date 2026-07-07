@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ func StartScheduler() {
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		fmt.Println("Scheduler started — checking every 30s")
+		slog.Info("scheduler: started, checking every 30s")
 		for range ticker.C {
 			WithSingletonLock("scheduler", func() {
 				runDueScheduledTasks()
@@ -125,8 +126,7 @@ func dispatchScheduledTask(st models.ScheduledTask) {
 		SET last_run_at = now(), next_run_at = $1, run_count = run_count + 1
 		WHERE id = $2
 	`, next, st.ID)
-	fmt.Printf("Scheduler: dispatched '%s' to %d agents, next at %s\n",
-		st.Name, len(targets), next.Format("15:04:05"))
+	slog.Info("scheduler: dispatched task", "task", st.Name, "agents", len(targets), "next", next.Format("15:04:05"))
 }
 
 // filterAgentIDsByTenant returns only the ids that actually belong to

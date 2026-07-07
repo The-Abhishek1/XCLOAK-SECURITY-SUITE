@@ -1,7 +1,7 @@
 package services
 
 import (
-	"fmt"
+	"log/slog"
 	"time"
 
 	"xcloak-ngfw/database"
@@ -191,5 +191,5 @@ func StartHealthScheduler() {
 			WithSingletonLock("agent_health", ComputeAgentHealth)
 		}
 	}()
-	fmt.Println("Agent health scheduler started")
+	slog.Info("agent-health: scheduler started")
 }

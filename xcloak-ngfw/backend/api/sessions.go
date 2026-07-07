@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"xcloak-ngfw/auth"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
+	"xcloak-ngfw/services"
 )
 
 // GetMySessions — GET /api/auth/sessions
@@ -82,6 +84,8 @@ func UpdateSecurityPolicy(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	username, _ := c.Get("username")
+	services.LogEvent("SECURITY_POLICY_UPDATE", "security policy updated", fmt.Sprintf("%v", username))
 	c.JSON(http.StatusOK, gin.H{"message": "security policy updated"})
 }
 
