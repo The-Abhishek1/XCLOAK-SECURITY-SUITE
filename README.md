@@ -328,6 +328,13 @@ SERVER_URL=http://localhost:8080
 # TLS to the backend (optional)
 XCLOAK_CA_CERT_PATH=
 XCLOAK_INSECURE_SKIP_VERIFY=false
+
+# Disable automatic binary self-update (e.g. change-controlled environments)
+XCLOAK_DISABLE_SELF_UPDATE=false
+
+# Logging
+LOG_LEVEL=info            # debug / info / warn / error
+LOG_FORMAT=text           # text (default) or json for log aggregators
 ```
 
 ## Security
@@ -345,6 +352,7 @@ XCLOAK_INSECURE_SKIP_VERIFY=false
 - Stale task expiry: destructive tasks expire after 15 min, others after 1h
 - Webhook/Slack/PagerDuty deliveries retry automatically on network errors and 5xx responses (immediate → 5s → 30s); 4xx failures are not retried
 - All 7 Kafka consumer loops have message-level panic isolation — a single malformed message cannot kill a consumer goroutine
+- Agent structured logging via `log/slog` — `LOG_FORMAT=json` produces machine-parseable output for any log aggregator; `LOG_LEVEL` controls verbosity at runtime without a rebuild
 
 ## Backups
 
@@ -413,20 +421,55 @@ All consumers have message-level panic isolation — `defer logRecover("process*
 
 ## Agent Capabilities
 
+### Autonomous collectors (run on a schedule without server dispatch)
+
+| Collector | Linux interval | Windows interval | Data |
+|-----------|---------------|-----------------|------|
+| Processes | 5 min | 5 min | PID, PPID, name, cmdline, exe path (WMIC/CIM on Windows) |
+| Connections | 5 min | 5 min | /proc/net/tcp* → inode→PID map (Linux); netstat -ano + tasklist (Windows) — PID, process name per socket |
+| Services | 15 min | 15 min | systemctl list-units (Linux); SCM (Windows) |
+| Users | 30 min | 30 min | /etc/passwd + /etc/group + sudoers + SSH authorized_keys + last login (Linux); net user + Administrators group (Windows) |
+| Packages | 6 h | 6 h | dpkg→rpm→pacman→snap→flatpak→pip3 chain (Linux); WMIC→registry→winget (Windows); all tagged with `source` field |
+| Auth logs | 2 min | 2 min | Incremental tail of /var/log/auth.log (Linux) or Security Event Log (Windows) |
+| auditd | 30 s | — | Incremental parse of /var/log/audit/audit.log for execve events |
+| File hashes | 1 h | 1 h | SHA-256 + MD5 inventory |
+| Registry | — | 1 h | Windows Run/RunOnce persistence keys |
+| Cron jobs | 1 h | 1 h | /etc/crontab + /etc/cron.d/* + user crontabs (Linux); schtasks /fo CSV (Windows) |
+| Kernel modules | 30 min | 30 min | lsmod (Linux); driverquery /fo csv (Windows) |
+| SUID/SGID scan | 6 h | — | Walk /usr /bin /sbin /opt /home for SUID/SGID binaries with mode + UID/GID |
+| Disk usage | 5 min | 5 min | /proc/mounts + syscall.Statfs per mount (Linux); wmic logicaldisk / Get-PSDrive (Windows) |
+| Firewall stats | 60 s | — | iptables XCLOAK chain hit counters |
+| eBPF TCP events | real-time | — | Outbound TCP connect events via cilium/ebpf (Linux only) |
+
+### Heartbeat enrichment
+
+Every 30-second heartbeat now includes:
+- Linux: `load_avg_1m/5m/15m` from /proc/loadavg, `logged_in_users` (who), `open_fds` (/proc/sys/fs/file-nr)
+- Windows: `logged_in_users` (query user), `cpu_load_pct` (wmic cpu)
+
+### Server-dispatched task types
+
 | Task Type | Description |
 |-----------|-------------|
 | `collect_processes` | Snapshot running processes |
-| `collect_connections` | Active network connections |
-| `collect_packages` | Installed packages (for CVE scanning) |
+| `collect_connections` | Active network connections with PID/process enrichment |
+| `collect_packages` | Installed packages (full fallback chain) |
+| `collect_users` | User inventory with groups, sudo, SSH keys |
+| `collect_services` | Running services |
 | `collect_auth_logs` | Read /var/log/auth.log |
 | `collect_file_hashes` | SHA256/MD5 file inventory |
-| `fim_scan` | File integrity check against baseline |
+| `collect_cron_jobs` | Cron jobs / scheduled tasks |
+| `collect_kernel_modules` | Loaded kernel modules / drivers |
+| `collect_suid_binaries` | SUID/SGID binary scan |
+| `collect_disk_usage` | Disk capacity per mount point |
+| `fim_scan` | File integrity check — hash + mode + owner + mtime |
 | `vulnerability_scan` | Collect packages for server-side CVE matching |
 | `kill_process` | Kill a process by PID |
 | `isolate_host` | Block all traffic except XCloak server |
 | `quarantine_file` | Move file to quarantine directory |
 | `execute_script` | Run bash/sh/python3 script, return output |
 | `apply_firewall_rules` | Apply iptables rules from XCloak |
+| `restore_file` | Move a quarantined file back to its original path |
 
 ## Tech Stack
 

@@ -107,6 +107,19 @@ go build -o xcloak-agent ./main.go
 
 Generate an install token from **Settings → Integrations → Install Tokens** in the UI, then paste it when the agent prompts on first run. The token is single-use. After registration the agent saves its token and reconnects automatically.
 
+**Autonomous collectors** start immediately after registration. Expect an initial burst of telemetry as all 15 collectors fire their first run (staggered by up to 30 s of random jitter). After that, collection intervals settle to:
+
+| Collector | Interval |
+|-----------|---------|
+| Processes, connections, disk usage | 5 min |
+| Auth logs | 2 min |
+| auditd events | 30 s |
+| eBPF TCP connect events | real-time |
+| Services | 15 min |
+| Users, kernel modules | 30 min |
+| File hashes, cron jobs | 1 h |
+| Packages, SUID/SGID scan | 6 h |
+
 ---
 
 ## Production Deployment (Kubernetes / Helm)
@@ -302,7 +315,7 @@ echo "AGENT_RELEASE_SIGNING_KEY=$SEED"
 go run ./cmd/keygen/main.go  # if provided, or use the backend /api/platform/agent-releases key info
 ```
 
-### Logging
+### Logging (backend)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -310,6 +323,20 @@ go run ./cmd/keygen/main.go  # if provided, or use the backend /api/platform/age
 | `LOG_FORMAT` | `text` | `json` for structured production logging |
 
 Set `LOG_FORMAT=json` in production to integrate with log aggregators.
+
+### Agent (`xcloak-agent/.env`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `XCLOAK_INSTALL_TOKEN` | _(empty)_ | One-time install token for first registration (generate from UI → Settings → Install Tokens) |
+| `SERVER_URL` | `http://localhost:8080` | Backend base URL |
+| `XCLOAK_CA_CERT_PATH` | _(empty)_ | Path to PEM CA certificate for TLS verification against a private CA |
+| `XCLOAK_INSECURE_SKIP_VERIFY` | `false` | Disable TLS verification — dev only |
+| `XCLOAK_DISABLE_SELF_UPDATE` | `false` | Opt out of automatic binary self-update (for change-controlled environments) |
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `LOG_FORMAT` | `text` | `json` for structured output consumable by any log aggregator |
+
+The agent reads `.env` from its working directory on startup (same precedence rules as the backend). Environment variables set in the OS environment take precedence over `.env` values.
 
 ### Vault
 
@@ -576,6 +603,8 @@ Use this metric to build SLO dashboards on outbound delivery reliability. Exampl
 Set `LOG_FORMAT=json` for JSON-structured logs compatible with any log aggregator (Loki, CloudWatch, Datadog, Splunk). Each log line includes `level`, `msg`, `time`, and contextual fields (`tenant_id`, `agent_id`, etc. where applicable).
 
 All `fmt.Printf` / `fmt.Println` calls across the backend (services, API handlers, Kafka consumers) have been replaced with `log/slog` structured calls. There are no more unstructured log lines in the codebase — every operational event carries typed key-value fields that parse cleanly in any log aggregator.
+
+The Go agent has the same structured-log treatment: `InitLogger()` is called at startup and honours the same `LOG_LEVEL` / `LOG_FORMAT` env vars. Set `LOG_FORMAT=json` on agents deployed to hosts whose logs are shipped to a SIEM (Splunk, Elastic, Datadog).
 
 ---
 

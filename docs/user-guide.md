@@ -217,7 +217,7 @@ The **Health Score** (0–100) is a composite of heartbeat latency, error rate, 
 
 Click any agent to open its detail view.
 
-**Summary** — hostname, OS, IP, agent version, last seen, risk score.
+**Summary** — hostname, OS, IP, agent version, last seen, risk score. Heartbeat now also surfaces `load_avg_1m/5m/15m`, `logged_in_users`, and `open_fds` (Linux) or `cpu_load_pct` and `logged_in_users` (Windows).
 
 **Risk Score & Breakdown** — per-agent risk score with contributing factors (open critical alerts, failed auth events, anomaly score, unpatched CVEs).
 
@@ -226,17 +226,21 @@ Click any agent to open its detail view.
 **Tabs:**
 | Tab | What you see |
 |-----|-------------|
-| Processes | Running and recently-terminated processes with command lines |
-| Connections | Active and historical network connections with GeoIP |
+| Processes | Running processes — PID, PPID, name, cmdline, exe path |
+| Connections | Active network connections with **PID and process name** per socket (Linux: /proc/net inode mapping; Windows: netstat + tasklist) |
 | Auth Events | Login/logout events, sudo, privilege escalation |
-| File Hashes | SHA-256 inventory of monitored files |
+| File Hashes | SHA-256 + MD5 inventory |
 | Services | Running services and their status |
-| Packages | Installed packages (used for CVE matching) |
-| Users | Local user accounts |
-| Registry | Windows registry entries (Windows agents only) |
-| FIM | File integrity monitoring alerts and baseline |
+| Packages | Installed packages — tagged by source (dpkg/rpm/pip/snap/winget/etc.) |
+| Users | Local accounts — includes groups, sudo access, SSH key presence, last login, enabled/locked status |
+| Registry | Windows registry run/persistence keys (Windows agents only) |
+| FIM | File integrity monitoring — hash, mode, owner, mtime per file |
 | Vulnerabilities | CVEs matched against this agent's package inventory |
 | Auth Logs | Raw auth log lines |
+| Cron Jobs | Scheduled tasks from /etc/crontab + /etc/cron.d/* + user crontabs (Linux); Windows Scheduled Tasks (Windows) |
+| Kernel Modules | Loaded kernel modules (Linux) / drivers (Windows) — use to detect rootkits and unexpected persistence |
+| SUID Binaries | Files with SUID/SGID bit set — privilege escalation vector inventory (Linux only) |
+| Disk Usage | Capacity, used, and free per mount point / drive letter |
 
 ### Remote actions
 
@@ -245,6 +249,13 @@ From the agent detail page, click **Actions** to dispatch remote tasks:
 | Action | Permission required |
 |--------|-------------------|
 | Collect processes | Any authenticated user |
+| Collect connections | Any authenticated user |
+| Collect users | Any authenticated user |
+| Collect packages | Any authenticated user |
+| Collect cron jobs | Any authenticated user |
+| Collect kernel modules | Any authenticated user |
+| Collect SUID/SGID binaries | Any authenticated user |
+| Collect disk usage | Any authenticated user |
 | Kill process | `manage_agents` |
 | Isolate host (block all traffic) | `manage_agents` |
 | Quarantine file | `manage_agents` |

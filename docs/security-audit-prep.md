@@ -146,6 +146,28 @@ All routes are defined in `backend/routes/routes.go`.
 
 - [x] **Unstructured logs throughout backend** — `fmt.Printf`/`fmt.Println` calls remained in 17+ files after the initial slog migration (partition manager, scheduler, MinIO client, syslog receiver, anomaly detection, vulnerability scanner, AI triage, IOC autoblock, KEV refresh, scheduled reports, audit export, correlation engine, api/live_logs, api/log_ingest, api/risk_score_breakdown, api/notifications_ws). All replaced with structured `slog.Info/Warn/Error/Debug` calls with typed key-value fields. The backend now emits zero unstructured log lines in production paths.
 
+### Gaps — Phase 7 (all closed, 2026-07-07) — Agent enterprise upgrade
+
+- [x] **Agent unstructured logging** — All `fmt.Printf`/`fmt.Println`/`println()` calls across every agent file replaced with `log/slog` structured calls. `InitLogger()` honours `LOG_FORMAT=json` (production) and `LOG_LEVEL` at runtime. Agent now emits zero unstructured log lines — output integrates cleanly with any log aggregator (Splunk, Elastic, CloudWatch, Datadog).
+
+- [x] **Connection telemetry lacked process context** — `CollectConnections` reported raw socket tuples with no PID or process name. Linux: now uses `/proc/net/tcp*` + inode→PID mapping from `/proc/<pid>/fd/` + `/proc/<pid>/comm` — every connection carries `pid`, `process_name`, `process_path`. Windows: `netstat -ano` + `tasklist /fo csv` PID→name resolution. `Connection` model updated with three new fields.
+
+- [x] **User inventory was minimal** — Only username, UID, shell collected. Linux now also gathers: supplementary groups (`/etc/group`), sudo access (sudoers + wheel/sudo/admin group membership), SSH authorized_keys presence (`~/.ssh/authorized_keys`), most-recent login timestamp (`last`), account locked/disabled status (`/etc/shadow`), home directory. Windows: Administrators group membership mapped to `SudoAccess=true`. `User` model updated with GID, HomeDir, Groups, SudoAccess, HasSSHKey, LastLogin, PasswordExpiry, Enabled fields.
+
+- [x] **Package collection was dpkg-only on Linux** — Full fallback chain now: dpkg → rpm → pacman → snap → flatpak → pip3. All sources collected simultaneously (not first-wins). Windows: WMIC → registry (PowerShell) → winget. Every package tagged with a `source` field. `Package` model updated.
+
+- [x] **FIM tracked only hash + size** — `fimFileEntry` now also records file `mode` (permission string), `uid`, `gid`, and `mod_time`. Platform split: `fim_stat_linux.go` reads UID/GID via `syscall.Stat_t`; `fim_stat_windows.go` is a no-op. Extended `DefaultWatchPaths` with `/etc/ld.so.preload`, `/etc/pam.d`, `/etc/systemd/system` — critical persistence paths.
+
+- [x] **No cron job / scheduled task inventory** — New `cron_collector.go` (Linux) collects `/etc/crontab`, `/etc/cron.d/*`, and per-user crontabs from `/var/spool/cron/crontabs/*`. `cron_collector_windows.go` queries `schtasks /fo CSV`. Runs every hour autonomously; also dispatchable as `collect_cron_jobs` task.
+
+- [x] **No kernel module / driver inventory** — New `kernel_modules.go` (Linux) collects `lsmod` output (name, size, used-by). `kernel_modules_windows.go` uses `driverquery /fo csv`. Unexpected modules are a key rootkit/persistence indicator. Runs every 30 min autonomously; dispatchable as `collect_kernel_modules` task.
+
+- [x] **No SUID/SGID binary inventory** — New `suid_scan.go` walks `/usr`, `/bin`, `/sbin`, `/opt`, `/home` for files with SUID (04000) or SGID (02000) bit set. Reports file path, permission string, UID, GID. Runs every 6 h autonomously; dispatchable as `collect_suid_binaries` task. Windows stub (SUID is a UNIX concept).
+
+- [x] **No disk capacity monitoring** — New `disk_collector.go` (Linux) reads `/proc/mounts` and calls `syscall.Statfs` per mount, filtering pseudo-filesystems (proc, sysfs, devtmpfs, squashfs). `disk_collector_windows.go` uses `wmic logicaldisk` with PowerShell `Get-PSDrive` fallback. Reports total/used/free GB and used% per mount. Runs every 5 min autonomously; dispatchable as `collect_disk_usage` task.
+
+- [x] **Heartbeat telemetry was thin** — Previously reported only version, uptime, mem_alloc, goroutines. Linux heartbeat now also includes `load_avg_1m/5m/15m` (from `/proc/loadavg`), `logged_in_users` (via `who`), `open_fds` (from `/proc/sys/fs/file-nr`). Windows heartbeat adds `logged_in_users` (via `query user`) and `cpu_load_pct` (via `wmic cpu`). Platform split via `heartbeat_linux.go` / `heartbeat_windows.go`.
+
 ---
 
 ## Recommended Pentest Scope
