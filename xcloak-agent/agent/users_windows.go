@@ -4,34 +4,27 @@ package agent
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 
 	"xcloak-agent/models"
 )
 
-// CollectUsers on Windows enumerates local user accounts via `net user`
-// and marks which are enabled, administrators, or recently logged in.
-// Active Directory domain accounts are not enumerated (use identity provider
-// integration for that — a future XDR feature).
+// CollectUsers on Windows enumerates local user accounts via `net user`,
+// including enabled status and admin group membership.
 func CollectUsers(agentID int) {
-
-	// net user /domain would list domain users, but we scope to local only.
 	out, err := exec.Command("net", "user").Output()
 	if err != nil {
-		fmt.Println("[collector] users: net user failed:", err)
-		collectUsersViaCIM(agentID) // fallback
+		slog.Warn("net user failed, trying PowerShell CIM", "err", err)
+		collectUsersViaCIM(agentID)
 		return
 	}
 
 	var users []models.User
 	inUserSection := false
-
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimRight(line, "\r")
-
-		// The user list starts after the "----" separator.
 		if strings.Contains(line, "---") {
 			inUserSection = true
 			continue
@@ -39,13 +32,10 @@ func CollectUsers(agentID int) {
 		if !inUserSection {
 			continue
 		}
-		// Empty line or "command completed" ends the list.
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "The command") {
 			break
 		}
-
-		// Each line has up to 3 usernames separated by whitespace.
 		for _, username := range strings.Fields(trimmed) {
 			if username == "" {
 				continue
@@ -53,8 +43,8 @@ func CollectUsers(agentID int) {
 			users = append(users, models.User{
 				AgentID:  agentID,
 				Username: username,
-				UID:      0, // Windows SIDs not directly comparable to Unix UIDs
-				Shell:    "cmd", // default; PowerShell users may differ
+				Shell:    "cmd",
+				Enabled:  true,
 			})
 		}
 	}
@@ -64,26 +54,59 @@ func CollectUsers(agentID int) {
 		return
 	}
 
+	// Enrich with admin group membership
+	adminMembers := getLocalAdminMembers()
+	for i := range users {
+		if adminMembers[users[i].Username] {
+			users[i].SudoAccess = true
+		}
+	}
+
 	body, _ := json.Marshal(users)
 	resp, err := authPost("/api/agents/users", body)
 	if err != nil {
-		fmt.Println("[collector] users: send failed:", err)
+		slog.Error("users: send failed", "err", err)
 		return
 	}
 	defer resp.Body.Close()
-	fmt.Printf("[collector] users: sent %d\n", len(users))
+	slog.Info("users sent", "count", len(users))
+}
+
+// getLocalAdminMembers returns the set of usernames in the local Administrators group.
+func getLocalAdminMembers() map[string]bool {
+	m := make(map[string]bool)
+	out, err := exec.Command("net", "localgroup", "Administrators").Output()
+	if err != nil {
+		return m
+	}
+	inMembers := false
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.Contains(line, "---") {
+			inMembers = true
+			continue
+		}
+		if !inMembers {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "The command") {
+			break
+		}
+		m[trimmed] = true
+	}
+	return m
 }
 
 // collectUsersViaCIM is a PowerShell fallback for systems where net.exe
 // output format differs (localised Windows versions).
 func collectUsersViaCIM(agentID int) {
-
 	out, err := exec.Command(
 		"powershell", "-NoProfile", "-NonInteractive", "-Command",
-		`Get-LocalUser | Select-Object Name,Enabled | ConvertTo-Json -Compress`,
+		`Get-LocalUser | Select-Object Name,Enabled,Description | ConvertTo-Json -Compress`,
 	).Output()
 	if err != nil {
-		fmt.Println("[collector] users: CIM fallback failed:", err)
+		slog.Error("users: CIM fallback failed", "err", err)
 		return
 	}
 
@@ -107,29 +130,27 @@ func collectUsersViaCIM(agentID int) {
 		}
 	}
 
+	adminMembers := getLocalAdminMembers()
 	var users []models.User
 	for _, item := range items {
-		shell := "cmd"
-		if !item.Enabled {
-			shell = "disabled"
-		}
 		users = append(users, models.User{
-			AgentID:  agentID,
-			Username: item.Name,
-			UID:      0,
-			Shell:    shell,
+			AgentID:    agentID,
+			Username:   item.Name,
+			Shell:      "cmd",
+			Enabled:    item.Enabled,
+			SudoAccess: adminMembers[item.Name],
 		})
 	}
 
 	if len(users) == 0 {
 		return
 	}
-
 	body, _ := json.Marshal(users)
 	resp, err := authPost("/api/agents/users", body)
 	if err != nil {
+		slog.Error("users (CIM): send failed", "err", err)
 		return
 	}
 	defer resp.Body.Close()
-	fmt.Printf("[collector] users (CIM): sent %d\n", len(users))
+	slog.Info("users sent via CIM", "count", len(users))
 }

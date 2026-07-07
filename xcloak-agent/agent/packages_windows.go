@@ -4,7 +4,7 @@ package agent
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 
@@ -28,18 +28,18 @@ func CollectPackages(agentID int) {
 	packages = append(packages, collectViaWinget(agentID)...)
 
 	if len(packages) == 0 {
-		fmt.Println("[collector] packages: no packages found")
+		slog.Warn("no packages found on Windows")
 		return
 	}
 
 	body, _ := json.Marshal(packages)
 	resp, err := authPost("/api/agents/packages", body)
 	if err != nil {
-		fmt.Println("[collector] packages: send failed:", err)
+		slog.Error("packages: send failed", "err", err)
 		return
 	}
 	defer resp.Body.Close()
-	fmt.Printf("[collector] packages: sent %d\n", len(packages))
+	slog.Info("packages sent", "count", len(packages))
 }
 
 // collectPackagesViaWMIC uses `wmic product get Name,Version /FORMAT:CSV`.
@@ -101,6 +101,7 @@ func collectPackagesViaWMIC(agentID int) []models.Package {
 			AgentID:     agentID,
 			PackageName: name,
 			Version:     ver,
+			Source:      "wmic",
 		})
 	}
 	return packages
@@ -125,7 +126,7 @@ Get-ItemProperty $paths -ErrorAction SilentlyContinue |
 		"powershell", "-NoProfile", "-NonInteractive", "-Command", script,
 	).Output()
 	if err != nil {
-		fmt.Println("[collector] packages: registry fallback failed:", err)
+		slog.Error("packages: registry fallback failed", "err", err)
 		return nil
 	}
 
@@ -158,6 +159,7 @@ Get-ItemProperty $paths -ErrorAction SilentlyContinue |
 			AgentID:     agentID,
 			PackageName: item.Name,
 			Version:     item.Version,
+			Source:      "registry",
 		})
 	}
 	return packages
@@ -200,8 +202,9 @@ func collectViaWinget(agentID int) []models.Package {
 		}
 		packages = append(packages, models.Package{
 			AgentID:     agentID,
-			PackageName: "[winget] " + name,
+			PackageName: name,
 			Version:     ver,
+			Source:      "winget",
 		})
 	}
 	return packages

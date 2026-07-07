@@ -5,6 +5,7 @@ package agent
 import (
 	"bufio"
 	"encoding/json"
+	"log/slog"
 	"os/exec"
 	"strings"
 
@@ -12,67 +13,33 @@ import (
 )
 
 func CollectServices(agentID int) {
-
-	cmd := exec.Command(
-		"systemctl",
-		"list-units",
-		"--type=service",
-		"--no-pager",
-		"--no-legend",
-	)
-
+	cmd := exec.Command("systemctl", "list-units", "--type=service", "--no-pager", "--no-legend")
 	output, err := cmd.Output()
-
 	if err != nil {
-		println("Service collection failed")
+		slog.Error("service collection failed", "err", err)
 		return
 	}
 
 	var services []models.Service
-
-	scanner := bufio.NewScanner(
-		strings.NewReader(
-			string(output),
-		),
-	)
-
-	for scanner.Scan() {
-
-		fields := strings.Fields(
-			scanner.Text(),
-		)
-
+	sc := bufio.NewScanner(strings.NewReader(string(output)))
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
 		if len(fields) < 4 {
 			continue
 		}
-
-		service := models.Service{
+		services = append(services, models.Service{
 			AgentID:      agentID,
 			ServiceName:  fields[0],
 			ServiceState: fields[2],
-		}
-
-		services = append(
-			services,
-			service,
-		)
+		})
 	}
 
-	body, _ := json.Marshal(
-		services,
-	)
-
+	body, _ := json.Marshal(services)
 	resp, err := authPost("/api/agents/services", body)
-
 	if err != nil {
-		println("Failed sending services")
+		slog.Error("failed sending services", "err", err)
 		return
 	}
-
 	defer resp.Body.Close()
-
-	println(
-		"Services sent:",
-		len(services),
-	)
+	slog.Info("services sent", "count", len(services))
 }

@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"xcloak-agent/models"
@@ -21,7 +22,7 @@ const taskTimeout = 5 * time.Minute
 func ExecuteTask(task models.AgentTask) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("[executor] ExecuteTask panicked for task %d (%s): %v\n", task.ID, task.TaskType, r)
+			slog.Error("ExecuteTask panicked", "task_id", task.ID, "task_type", task.TaskType, "panic", r)
 		}
 	}()
 
@@ -30,7 +31,7 @@ func ExecuteTask(task models.AgentTask) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("[executor] task %d (%s) panicked: %v\n", task.ID, task.TaskType, r)
+				slog.Error("task panicked", "task_id", task.ID, "task_type", task.TaskType, "panic", r)
 				done <- fmt.Sprintf("task failed: panic: %v", r)
 			}
 		}()
@@ -43,7 +44,7 @@ func ExecuteTask(task models.AgentTask) {
 	case output = <-done:
 	case <-time.After(taskTimeout):
 		output = fmt.Sprintf("task timed out after %s", taskTimeout)
-		fmt.Printf("Task %d (%s) timed out\n", task.ID, task.TaskType)
+		slog.Warn("task timed out", "task_id", task.ID, "task_type", task.TaskType, "timeout", taskTimeout)
 	}
 
 	submitResult(task.ID, output)
@@ -145,6 +146,22 @@ func runTask(task models.AgentTask) string {
 	case "restore_file":
 		return RestoreQuarantinedFile(task)
 
+	case "collect_cron_jobs":
+		CollectCronJobs(task.AgentID)
+		return "cron job inventory collected"
+
+	case "collect_kernel_modules":
+		CollectKernelModules(task.AgentID)
+		return "kernel modules collected"
+
+	case "collect_suid_binaries":
+		CollectSUIDBinaries(task.AgentID)
+		return "SUID/SGID binary scan completed"
+
+	case "collect_disk_usage":
+		CollectDiskUsage(task.AgentID)
+		return "disk usage collected"
+
 	default:
 		return "unknown task type: " + task.TaskType
 	}
@@ -161,10 +178,10 @@ func submitResult(taskID int, output string) {
 
 	resp, err := authPost("/api/tasks/result", body)
 	if err != nil {
-		fmt.Println("Failed sending task result:", err)
+		slog.Error("failed sending task result", "task_id", taskID, "err", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("Task %d result submitted: %s\n", taskID, output)
+	slog.Info("task result submitted", "task_id", taskID, "result_preview", output[:min(len(output), 120)])
 }

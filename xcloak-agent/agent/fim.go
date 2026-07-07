@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -18,19 +19,29 @@ var DefaultWatchPaths = []string{
 	"/etc/hostname",
 	"/etc/resolv.conf",
 	"/etc/ld.so.conf",
+	"/etc/ld.so.preload",
+	"/etc/pam.d",
 	"/usr/bin/sudo",
 	"/usr/bin/passwd",
 	"/usr/bin/su",
 	"/bin/bash",
 	"/bin/sh",
 	"/usr/sbin/sshd",
+	"/usr/lib/systemd/system",
+	"/etc/systemd/system",
 }
 
 // fimFileEntry matches the server's FIMFileEntry JSON shape.
+// Mode, Owner, and Group enable permission/ownership change detection
+// in addition to hash-based integrity checks.
 type fimFileEntry struct {
 	FilePath string `json:"file_path"`
 	SHA256   string `json:"sha256_hash"`
 	FileSize int64  `json:"file_size"`
+	Mode     string `json:"mode,omitempty"`    // e.g. "-rwsr-xr-x"
+	UID      int    `json:"uid,omitempty"`
+	GID      int    `json:"gid,omitempty"`
+	ModTime  string `json:"mod_time,omitempty"` // RFC3339
 }
 
 type fimScanPayload struct {
@@ -43,12 +54,10 @@ type fimTaskPayload struct {
 }
 
 // RunFIMScan hashes all watched files and submits results to the server.
-// The server compares against the stored baseline and raises alerts on changes.
 func RunFIMScan(agentID int, taskPayload []byte) {
-
 	var taskPL fimTaskPayload
 	if err := json.Unmarshal(taskPayload, &taskPL); err != nil {
-		fmt.Println("FIM: invalid task payload, falling back to default watch paths:", err)
+		slog.Debug("FIM: using default watch paths", "err", err)
 	}
 
 	paths := DefaultWatchPaths
@@ -57,11 +66,10 @@ func RunFIMScan(agentID int, taskPayload []byte) {
 	}
 
 	var files []fimFileEntry
-
 	for _, path := range paths {
 		entries, err := fimScanPath(path)
 		if err != nil {
-			fmt.Printf("FIM: skipping %s: %v\n", path, err)
+			slog.Debug("FIM: skipping path", "path", path, "err", err)
 			continue
 		}
 		files = append(files, entries...)
@@ -72,25 +80,21 @@ func RunFIMScan(agentID int, taskPayload []byte) {
 
 	resp, err := authPost("/api/agents/fim", body)
 	if err != nil {
-		fmt.Println("FIM: failed to submit scan:", err)
+		slog.Error("FIM: failed to submit scan", "err", err)
 		return
 	}
 	defer resp.Body.Close()
-
-	fmt.Printf("FIM scan submitted: %d files\n", len(files))
+	slog.Info("FIM scan submitted", "files", len(files))
 }
 
 // fimScanPath returns fimFileEntry records for a file or directory tree.
-// It reuses the existing hashFile() from file_hashes.go (returns HashResult).
 func fimScanPath(path string) ([]fimFileEntry, error) {
-
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
-
 	if !info.IsDir() {
-		entry, err := fimHashFile(path)
+		entry, err := fimHashFile(path, info)
 		if err != nil {
 			return nil, err
 		}
@@ -98,7 +102,6 @@ func fimScanPath(path string) ([]fimFileEntry, error) {
 	}
 
 	var entries []fimFileEntry
-
 	filepath.Walk(path, func(fp string, fi os.FileInfo, err error) error {
 		if err != nil || fi.IsDir() {
 			return nil
@@ -106,34 +109,29 @@ func fimScanPath(path string) ([]fimFileEntry, error) {
 		if fi.Size() > 100*1024*1024 {
 			return nil
 		}
-		entry, err := fimHashFile(fp)
+		entry, err := fimHashFile(fp, fi)
 		if err == nil {
 			entries = append(entries, entry)
 		}
 		return nil
 	})
-
 	return entries, nil
 }
 
-// fimHashFile wraps the existing hashFile() from file_hashes.go.
-// We only need SHA256 for FIM (not MD5), and we also need file size.
-func fimHashFile(path string) (fimFileEntry, error) {
-
-	// hashFile is defined in file_hashes.go — returns (HashResult, error).
+// fimHashFile builds a fimFileEntry including hash + permissions + ownership.
+func fimHashFile(path string, info os.FileInfo) (fimFileEntry, error) {
 	hash, err := hashFile(path)
 	if err != nil {
 		return fimFileEntry{}, err
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		return fimFileEntry{}, err
-	}
-
-	return fimFileEntry{
+	entry := fimFileEntry{
 		FilePath: path,
 		SHA256:   hash.SHA256Hash,
 		FileSize: info.Size(),
-	}, nil
+		Mode:     info.Mode().String(),
+		ModTime:  fmt.Sprintf("%s", info.ModTime().UTC().Format("2006-01-02T15:04:05Z")),
+	}
+	fimFillStat(&entry, path)
+	return entry, nil
 }

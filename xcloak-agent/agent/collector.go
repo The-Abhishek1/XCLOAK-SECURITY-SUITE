@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"fmt"
+	"log/slog"
 	"math/rand"
 	"sync"
 	"time"
@@ -12,13 +12,17 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 
 const (
-	intervalProcesses   = 5 * time.Minute
-	intervalConnections = 5 * time.Minute
-	intervalServices    = 15 * time.Minute
-	intervalUsers       = 30 * time.Minute
-	intervalAuthLogs    = 2 * time.Minute // more frequent — feeds SIEM detections
-	intervalPackages    = 6 * time.Hour   // slow-changing, expensive to collect
-	intervalFileHashes  = 1 * time.Hour   // CPU-intensive directory walk
+	intervalProcesses     = 5 * time.Minute
+	intervalConnections   = 5 * time.Minute
+	intervalServices      = 15 * time.Minute
+	intervalUsers         = 30 * time.Minute
+	intervalAuthLogs      = 2 * time.Minute  // more frequent — feeds SIEM detections
+	intervalPackages      = 6 * time.Hour    // slow-changing, expensive to collect
+	intervalFileHashes    = 1 * time.Hour    // CPU-intensive directory walk
+	intervalCronJobs      = 1 * time.Hour
+	intervalKernelModules = 30 * time.Minute
+	intervalSUIDScan      = 6 * time.Hour    // expensive filesystem walk
+	intervalDiskUsage     = 5 * time.Minute
 )
 
 // maxJitter is added as a random delay before the first tick of each
@@ -46,7 +50,7 @@ var AuthLogState = &LogTailState{}
 // ─────────────────────────────────────────────────────────────────────────────
 
 func StartCollectors(agentID int) {
-	fmt.Printf("[collector] Starting autonomous collection for agent #%d\n", agentID)
+	slog.Info("starting autonomous collectors", "agent_id", agentID)
 
 	go runCollector("processes",   intervalProcesses,   maxJitter, func() { CollectProcesses(agentID) })
 	go runCollector("connections", intervalConnections, maxJitter, func() { CollectConnections(agentID) })
@@ -83,6 +87,26 @@ func StartCollectors(agentID int) {
 			SendFileHashes(hashes)
 		}
 	})
+
+	// Cron jobs / Windows Scheduled Tasks — persistence indicator.
+	go runCollector("cron_jobs", intervalCronJobs, maxJitter, func() {
+		CollectCronJobs(agentID)
+	})
+
+	// Loaded kernel modules (Linux) / drivers (Windows) — rootkit detection.
+	go runCollector("kernel_modules", intervalKernelModules, maxJitter, func() {
+		CollectKernelModules(agentID)
+	})
+
+	// SUID/SGID binary scan (Linux only) — privilege-escalation vector inventory.
+	go runCollector("suid_scan", intervalSUIDScan, maxJitter, func() {
+		CollectSUIDBinaries(agentID)
+	})
+
+	// Disk usage per mount point — capacity monitoring and anomaly detection.
+	go runCollector("disk_usage", intervalDiskUsage, maxJitter, func() {
+		CollectDiskUsage(agentID)
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,15 +120,14 @@ func StartCollectors(agentID int) {
 func runCollector(name string, interval, jitterMax time.Duration, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("[collector] %s panicked: %v — restarting in 60s\n", name, r)
+			slog.Error("collector panicked — restarting in 60s", "collector", name, "panic", r)
 			time.Sleep(60 * time.Second)
 			go runCollector(name, interval, jitterMax, fn)
 		}
 	}()
 
 	jitter := time.Duration(rand.Int63n(int64(jitterMax)))
-	fmt.Printf("[collector] %s: first run in %s, then every %s\n",
-		name, jitter.Round(time.Second), interval)
+	slog.Debug("collector scheduled", "collector", name, "first_run_in", jitter.Round(time.Second), "interval", interval)
 	time.Sleep(jitter)
 
 	// Run immediately after the jitter delay.
@@ -123,7 +146,7 @@ func runCollector(name string, interval, jitterMax time.Duration, fn func()) {
 func runSafe(name string, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("[collector] %s: recovered from panic: %v\n", name, r)
+			slog.Error("collector: recovered from panic", "collector", name, "panic", r)
 		}
 	}()
 	fn()

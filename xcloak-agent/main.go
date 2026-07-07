@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"time"
@@ -17,61 +17,46 @@ const (
 )
 
 // Version is set at build time via -ldflags "-X main.Version=1.2.3"
-// (build_windows.sh already passed this flag, but nothing declared the
-// variable it was meant to land in, so it silently did nothing). Defaults
-// to "dev" for unflagged builds. Propagated into package agent so
-// self-reported heartbeats and the self-update checker can read it.
 var Version = "dev"
 
 func main() {
+	agent.InitLogger()
 
 	agent.CurrentVersion = Version
 
-	// Seed the global RNG used for collection jitter.
 	rand.Seed(time.Now().UnixNano()) //nolint:staticcheck
 
 	var agentID int
 
-	// ── Check if already registered ───────────────────────────
-	// If a token is saved on disk, we're already registered.
-	// Try to resume using the saved token before attempting re-registration.
 	if existingToken := agent.LoadToken(); existingToken != "" {
 		id, err := agent.ResumeSession()
 		if err == nil {
 			agentID = id
-			fmt.Printf("✓ Resumed as agent #%d (token found on disk)\n", agentID)
+			slog.Info("resumed session", "agent_id", agentID)
 			goto startLoops
 		}
-		fmt.Printf("[WARN] Saved token invalid (%v) — re-registering...\n", err)
-		// Clear bad token so we re-register fresh
+		slog.Warn("saved token invalid — re-registering", "err", err)
 		agent.ClearToken()
 	}
 
-	// ── First-time registration with retry ────────────────────
 	for attempt := 1; attempt <= registerMaxRetry; attempt++ {
-
 		id, err := agent.Register()
-
 		if err == nil {
 			agentID = id
 			break
 		}
-
-		fmt.Printf("Register attempt %d/%d failed: %v\n", attempt, registerMaxRetry, err)
-
+		slog.Warn("registration attempt failed", "attempt", attempt, "max", registerMaxRetry, "err", err)
 		if attempt == registerMaxRetry {
-			fmt.Println("\nAll registration attempts failed. Exiting.")
-			fmt.Println("Fix: Generate a new install token at XCloak UI → Agents → Add Agent")
+			slog.Error("all registration attempts failed — exiting")
+			slog.Info("fix: generate a new install token at XCloak UI → Agents → Add Agent")
 			os.Exit(1)
 		}
-
 		time.Sleep(registerRetryWait)
 	}
 
 startLoops:
-	fmt.Printf("✓ Agent #%d running\n", agentID)
+	slog.Info("agent running", "agent_id", agentID, "version", Version)
 
-	// ── Heartbeat loop ─────────────────────────────────────────
 	go func() {
 		for {
 			agent.SendHeartbeat(agentID)
@@ -79,48 +64,28 @@ startLoops:
 		}
 	}()
 
-	// ── Autonomous collection loops ────────────────────────────
-	// Starts 7 independent goroutines that collect and ship telemetry on
-	// fixed intervals without requiring server-dispatched tasks.
-	// Each collector runs on its own schedule with random jitter on startup
-	// so they don't all hit the server simultaneously.
 	agent.StartCollectors(agentID)
-
-	// ── Self-update checker ─────────────────────────────────────
-	// Opt out via XCLOAK_DISABLE_SELF_UPDATE=true.
 	agent.StartSelfUpdateChecker()
-
-	// ── Firewall hit-count reporter ──────────────────────────────
-	// Parses iptables XCLOAK chain counters every 60s and ships to backend.
 	agent.StartFirewallStatsCollector()
 
-	// ── Task poll loop ─────────────────────────────────────────
-	// Server-dispatched tasks (isolate host, kill process, FIM scan, etc.)
-	// still run from this loop. Autonomous collection above covers the
-	// recurring telemetry that was previously task-dispatched.
 	consecutiveErrors := 0
 
 	for {
 		tasks, err := agent.FetchTasks(agentID)
-
 		if err != nil {
 			consecutiveErrors++
 			backoff := time.Duration(consecutiveErrors) * 5 * time.Second
 			if backoff > 2*time.Minute {
 				backoff = 2 * time.Minute
 			}
-			fmt.Printf("Poll error (%d consecutive): %v — waiting %s\n",
-				consecutiveErrors, err, backoff)
+			slog.Warn("task poll error", "consecutive", consecutiveErrors, "err", err, "backoff", backoff)
 			time.Sleep(backoff)
 			continue
 		}
-
 		consecutiveErrors = 0
-
 		for _, task := range tasks {
 			go agent.ExecuteTask(task)
 		}
-
 		time.Sleep(pollInterval)
 	}
 }

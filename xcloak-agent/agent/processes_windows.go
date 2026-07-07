@@ -5,7 +5,9 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"xcloak-agent/models"
@@ -21,24 +23,23 @@ func CollectProcesses(agentID int) {
 	processes, err := collectProcessesViaWMIC(agentID)
 	if err != nil || len(processes) == 0 {
 		// WMIC unavailable (Win11 22H2+ or restricted policy) — try PowerShell.
-		fmt.Println("[collector] processes: WMIC failed, trying PowerShell CIM")
+		slog.Warn("WMIC unavailable, falling back to PowerShell CIM")
 		processes = collectViaCIM(agentID)
 	}
 
 	if len(processes) == 0 {
-		fmt.Println("[collector] processes: no processes collected")
+		slog.Warn("no processes collected on Windows")
 		return
 	}
 
 	body, _ := json.Marshal(processes)
 	resp, err := authPost("/api/agents/processes", body)
 	if err != nil {
-		fmt.Println("[collector] processes: send failed:", err)
+		slog.Error("processes: send failed", "err", err)
 		return
 	}
 	defer resp.Body.Close()
-
-	fmt.Printf("[collector] processes: sent %d\n", len(processes))
+	slog.Info("processes sent", "count", len(processes))
 }
 
 // collectProcessesViaWMIC uses `wmic process get` to enumerate processes with rich fields.
@@ -125,7 +126,7 @@ Get-CimInstance Win32_Process |
 `
 	out, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
 	if err != nil {
-		fmt.Println("[collector] processes: CIM fallback failed:", err)
+		slog.Error("processes: CIM fallback failed", "err", err)
 		return nil
 	}
 
@@ -190,7 +191,6 @@ func splitCSV(line string) []string {
 
 // atoiSafe converts a string to int, returning 0 on error.
 func atoiSafe(s string) int {
-	n := 0
-	fmt.Sscanf(s, "%d", &n)
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
 	return n
 }

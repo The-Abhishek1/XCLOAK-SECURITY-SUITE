@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,10 +18,8 @@ type TaskResponse struct {
 	Tasks []models.AgentTask `json:"tasks"`
 }
 
-// FetchTasks polls the server for pending tasks for this agent. Uses the
-// agent's saved bearer token (RequireAgentAuth). On transient network errors
-// it retries up to maxRetries times with exponential backoff — so a brief
-// server restart doesn't permanently stop task delivery.
+// FetchTasks polls the server for pending tasks for this agent. Retries up to
+// maxRetries times with exponential backoff on transient network errors.
 func FetchTasks(agentID int) ([]models.AgentTask, error) {
 
 	const maxRetries = 3
@@ -29,20 +28,17 @@ func FetchTasks(agentID int) ([]models.AgentTask, error) {
 	var lastErr error
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-
 		if attempt > 0 {
 			delay := baseDelay * time.Duration(1<<uint(attempt-1))
-			fmt.Printf("FetchTasks: retry %d/%d in %s\n", attempt, maxRetries, delay)
+			slog.Debug("FetchTasks retry", "attempt", attempt, "max", maxRetries, "delay", delay)
 			time.Sleep(delay)
 		}
-
 		tasks, err := doFetchTasks(agentID)
 		if err == nil {
 			return tasks, nil
 		}
-
 		lastErr = err
-		fmt.Println("FetchTasks: transient error:", err)
+		slog.Warn("FetchTasks transient error", "attempt", attempt+1, "err", err)
 	}
 
 	return nil, lastErr
@@ -58,7 +54,6 @@ func doFetchTasks(agentID int) ([]models.AgentTask, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	req.Header.Set("Authorization", "Bearer "+LoadToken())
 
 	resp, err := Client().Do(req)
@@ -70,7 +65,6 @@ func doFetchTasks(agentID int) ([]models.AgentTask, error) {
 	if resp.StatusCode == 401 {
 		return nil, fmt.Errorf("agent not authorized (401) — check token")
 	}
-
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("unexpected status %d from task poll", resp.StatusCode)
 	}
@@ -85,7 +79,8 @@ func doFetchTasks(agentID int) ([]models.AgentTask, error) {
 		return nil, err
 	}
 
-	fmt.Println("Tasks found:", result.Count)
-
+	if result.Count > 0 {
+		slog.Info("tasks received", "count", result.Count)
+	}
 	return result.Tasks, nil
 }
