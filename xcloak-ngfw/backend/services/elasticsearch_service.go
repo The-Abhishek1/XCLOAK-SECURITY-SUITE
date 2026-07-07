@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 )
 
@@ -462,6 +463,50 @@ func ESClusterHealth() (json.RawMessage, error) {
 		return nil, fmt.Errorf("cluster health: status %d", resp.StatusCode)
 	}
 	return json.RawMessage(body), nil
+}
+
+// IndexAlertToES indexes a single alert into the tenant-scoped alert index.
+// The alert index is separate from xcloak-logs-* so alerts can have their
+// own ILM policy, retention, and field mappings without polluting the log index.
+// Called from alert_consumer.go — never blocks the create-alert path.
+func IndexAlertToES(alert models.Alert) {
+	if esClient == nil {
+		return
+	}
+	tenantID := alert.TenantID
+	if tenantID == 0 {
+		database.DB.QueryRow(`SELECT tenant_id FROM agents WHERE id=$1`, alert.AgentID).Scan(&tenantID)
+	}
+	if tenantID == 0 {
+		return
+	}
+	index := fmt.Sprintf("xcloak-alerts-%d", tenantID)
+	doc := map[string]any{
+		"id":              alert.ID,
+		"agent_id":        alert.AgentID,
+		"tenant_id":       tenantID,
+		"severity":        alert.Severity,
+		"rule_name":       alert.RuleName,
+		"log_message":     alert.LogMessage,
+		"mitre_tactic":    alert.MitreTactic,
+		"mitre_technique": alert.MitreTechnique,
+		"mitre_name":      alert.MitreName,
+		"fingerprint":     alert.Fingerprint,
+		"created_at":      alert.CreatedAt.UTC().Format(time.RFC3339),
+	}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(doc)
+	path := fmt.Sprintf("/%s/_doc/%d", index, alert.ID)
+	resp, err := esClient.doRequest("PUT", path, &buf)
+	if err != nil {
+		slog.Warn("elasticsearch: alert index failed", "alert_id", alert.ID, "err", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		slog.Warn("elasticsearch: alert index bad status", "status", resp.StatusCode, "body", string(body))
+	}
 }
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────

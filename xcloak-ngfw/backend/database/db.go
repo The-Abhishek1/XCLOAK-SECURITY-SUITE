@@ -98,12 +98,12 @@ func Connect() error {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		db, err = sql.Open("postgres", connStr)
 		if err != nil {
-			fmt.Printf("DB open error (attempt %d/%d): %v\n", attempt, maxRetries, err)
+			slog.Warn("db: open failed", "attempt", attempt, "max", maxRetries, "err", err)
 			time.Sleep(retryDelay)
 			continue
 		}
 		if err = db.Ping(); err != nil {
-			fmt.Printf("DB ping failed (attempt %d/%d): %v\n", attempt, maxRetries, err)
+			slog.Warn("db: ping failed", "attempt", attempt, "max", maxRetries, "err", err)
 			db.Close()
 			time.Sleep(retryDelay)
 			continue
@@ -112,7 +112,7 @@ func Connect() error {
 		db.SetMaxIdleConns(maxIdleConn)
 		db.SetConnMaxLifetime(connLifetime)
 		DB = db
-		fmt.Println("Database connected successfully")
+		slog.Info("db: connected", "user", appUser)
 		break
 	}
 	if DB == nil {
@@ -136,10 +136,10 @@ func Connect() error {
 				migDB.SetMaxIdleConns(1)
 				migDB.SetConnMaxLifetime(connLifetime)
 				MigrationDB = migDB
-				fmt.Printf("Migration DB connected as privileged owner (%s)\n", ownerUser)
+				slog.Info("db: migration pool connected", "owner_user", ownerUser)
 			} else {
 				migDB.Close()
-				fmt.Printf("Migration DB ping failed — falling back to app pool: %v\n", merr)
+				slog.Warn("db: migration pool ping failed, falling back to app pool", "err", merr)
 			}
 		}
 	}
@@ -192,7 +192,7 @@ func ConnectReadReplica() error {
 	db.SetMaxIdleConns(readMaxIdleConn)
 	db.SetConnMaxLifetime(readConnLifetime)
 	ReadDB = db
-	fmt.Printf("Read replica connected (%s)\n", readHost)
+	slog.Info("db: read replica connected", "host", readHost)
 	return nil
 }
 

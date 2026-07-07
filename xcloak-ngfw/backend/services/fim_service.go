@@ -104,6 +104,8 @@ func createFIMChange(agentID int, path, changeType, oldHash, newHash string) {
 		NewHash:    newHash,
 	})
 
+	go PublishFIMAlert(agentID, path, changeType, newHash)
+
 	severity := "high"
 	if changeType == "created" {
 		severity = "medium"

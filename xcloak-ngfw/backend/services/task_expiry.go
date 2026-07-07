@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"xcloak-ngfw/database"
@@ -60,7 +61,7 @@ func ExpireStaleTasks() {
 
 	if err == nil {
 		if n, _ := res.RowsAffected(); n > 0 {
-			fmt.Printf("[TaskExpiry] Expired %d unapproved destructive task(s)\n", n)
+			slog.Info("task expiry: expired unapproved destructive tasks", "count", n)
 		}
 	}
 
@@ -82,7 +83,7 @@ func ExpireStaleTasks() {
 
 	if err == nil {
 		if n, _ := res.RowsAffected(); n > 0 {
-			fmt.Printf("[TaskExpiry] Expired %d stale destructive task(s)\n", n)
+			slog.Info("task expiry: expired stale destructive tasks", "count", n)
 		}
 	}
 
@@ -98,7 +99,7 @@ func ExpireStaleTasks() {
 
 	if err == nil {
 		if n, _ := res.RowsAffected(); n > 0 {
-			fmt.Printf("[TaskExpiry] Expired %d stale standard task(s)\n", n)
+			slog.Info("task expiry: expired stale standard tasks", "count", n)
 		}
 	}
 }

@@ -18,9 +18,55 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"xcloak-ngfw/models"
 )
+
+// wsEvent is the generic typed notification envelope used for non-alert events
+// (incident.created, task.completed, fim.violation, yara.match, etc.).
+// api.BroadcastRaw checks for the "type" field and forwards these directly
+// to the hub without re-wrapping, so all WS clients receive them.
+type wsEvent struct {
+	Type      string    `json:"type"`
+	ID        int       `json:"id"`
+	Severity  string    `json:"severity"`
+	RuleName  string    `json:"rule_name"`
+	AgentID   int       `json:"agent_id"`
+	Message   string    `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// PublishEventBroadcast sends any typed event (incident, task result, FIM
+// violation, YARA match) to all WS clients via the same Redis broadcast
+// channel used by alerts. api.BroadcastRaw detects the "type" field and
+// forwards the payload directly instead of treating it as an alert.
+func PublishEventBroadcast(evtType string, id int, severity, ruleName string, agentID int, msg string) {
+	data, err := json.Marshal(wsEvent{
+		Type:      evtType,
+		ID:        id,
+		Severity:  severity,
+		RuleName:  ruleName,
+		AgentID:   agentID,
+		Message:   msg,
+		Timestamp: time.Now(),
+	})
+	if err != nil {
+		return
+	}
+	if RDB != nil {
+		if err := RDB.Publish(context.Background(), wsBroadcastChannel, data).Err(); err != nil {
+			slog.Warn("ws broadcast: event publish failed, falling back to local", "type", evtType, "err", err)
+			if broadcastLocalFn != nil {
+				broadcastLocalFn(data)
+			}
+		}
+		return
+	}
+	if broadcastLocalFn != nil {
+		broadcastLocalFn(data)
+	}
+}
 
 const wsBroadcastChannel = "xcloak:ws:alerts"
 

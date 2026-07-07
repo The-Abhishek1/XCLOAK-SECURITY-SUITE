@@ -29,6 +29,7 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Auth ──────────────────────────────────────────────────────
 	router.POST("/api/auth/register", middleware.RateLimitAuth(), api.Register)
 	router.POST("/api/auth/login", middleware.RateLimitAuth(), api.Login)
+	router.POST("/api/auth/refresh", middleware.RateLimitAuth(), api.RefreshToken)
 	router.POST("/api/signup", middleware.RateLimitAuth(), api.Signup)
 
 	// ── SSO (OIDC) ────────────────────────────────────────────────
@@ -86,6 +87,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/agents/:id/fim/baseline/accept", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.AcceptFIMBaseline)
 	router.GET("/api/agents/:id/fim/alerts", middleware.RequireAuth(), api.GetFIMAlerts)
 	router.GET("/api/agents/:id/logs/stream", api.LiveLogsWS) // WS — auth via ?ticket= (see IssueWSTicket)
+	router.POST("/api/agents/:id/rotate-token", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.RotateAgentTokenHandler)
 
 	// ── Dashboard ─────────────────────────────────────────────────
 	router.GET("/api/dashboard/overview", middleware.RequireAuth(), middleware.RateLimitAPI(), api.DashboardOverview)

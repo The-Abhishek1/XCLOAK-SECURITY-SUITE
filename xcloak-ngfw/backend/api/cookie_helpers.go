@@ -39,17 +39,44 @@ func setAuthCookie(c *gin.Context, token string) {
 	})
 }
 
-// clearAuthCookies expires both auth cookies so the browser discards them.
+// setRefreshCookie writes the long-lived refresh token as a separate httpOnly
+// cookie. It is distinct from the access "token" cookie so clients can tell
+// them apart and the refresh cookie's longer MaxAge doesn't leak into the
+// access token cookie.
+func setRefreshCookie(c *gin.Context, refreshToken string) {
+	secure := authCookieSecure()
+	//nolint:gosec // G124: httpOnly, SameSite, Secure are all set; longer MaxAge matches 7-day refresh window
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     "/api/auth/refresh",
+		MaxAge:   7 * 24 * 60 * 60,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// clearAuthCookies expires all three auth cookies so the browser discards them.
 func clearAuthCookies(c *gin.Context) {
 	secure := authCookieSecure()
-	for _, name := range []string{"token", "logged_in"} {
-		//nolint:gosec // G124: expiry cookie — MaxAge: -1 is correct for deletion; attributes match setAuthCookie
+	cookieDefs := []struct {
+		name     string
+		path     string
+		httpOnly bool
+	}{
+		{"token", "/", true},
+		{"logged_in", "/", false},
+		{"refresh_token", "/api/auth/refresh", true},
+	}
+	for _, cd := range cookieDefs {
+		//nolint:gosec // G124: expiry cookie — MaxAge: -1 is correct for deletion
 		http.SetCookie(c.Writer, &http.Cookie{
-			Name:     name,
+			Name:     cd.name,
 			Value:    "",
-			Path:     "/",
+			Path:     cd.path,
 			MaxAge:   -1,
-			HttpOnly: name == "token",
+			HttpOnly: cd.httpOnly,
 			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
 		})

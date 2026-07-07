@@ -143,3 +143,31 @@ func Heartbeat(c *gin.Context) {
 
 	c.JSON(200, gin.H{"message": "Heartbeat Received"})
 }
+
+// RotateAgentTokenHandler — POST /api/agents/:id/rotate-token (manage_agents)
+// Replaces the agent's auth token with a freshly-generated one. The old token
+// is immediately invalidated — the next agent heartbeat will fail until the
+// agent binary is reconfigured with the new token. Closing the gap: prior to
+// this endpoint, there was no way to revoke a compromised or leaked agent token.
+func RotateAgentTokenHandler(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id"})
+		return
+	}
+
+	username, _ := c.Get("username")
+	rotatedBy := fmt.Sprintf("%v", username)
+
+	newToken, err := services.RotateAgentToken(id, tenantIDFromContext(c), rotatedBy)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rotate token: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "agent token rotated — reconfigure the agent with the new token",
+		"new_token": newToken,
+		"agent_id":  id,
+	})
+}

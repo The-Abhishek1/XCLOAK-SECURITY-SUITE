@@ -1,11 +1,14 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 
 	"xcloak-ngfw/auth"
 	"xcloak-ngfw/database"
@@ -64,12 +67,107 @@ func Login(c *gin.Context) {
 
 	setAuthCookie(c, token)
 
+	// Issue a 7-day refresh token so browser sessions can silently extend
+	// themselves past the 8-hour access token lifetime without re-login.
+	// The refresh cookie is path-scoped to /api/auth/refresh so it is never
+	// sent to other endpoints.
+	if refreshToken, err := auth.GenerateRefreshToken(userID, req.Username, role, tenantID); err == nil {
+		setRefreshCookie(c, refreshToken)
+	}
+
 	// Native mobile clients (Dart / okhttp) cannot reliably read httpOnly
 	// Set-Cookie headers — return the raw token in the body so they can use
 	// it as a Bearer token. Browser clients ignore this extra field.
 	ua := c.GetHeader("User-Agent")
 	if strings.Contains(ua, "Dart") || strings.Contains(ua, "okhttp") {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "token": token})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// RefreshToken — POST /api/auth/refresh
+// Validates the httpOnly refresh_token cookie and issues a fresh access token.
+// The refresh token itself is rotated on success to bound the window in which
+// a stolen cookie remains usable.
+func RefreshToken(c *gin.Context) {
+	var refreshStr string
+
+	// Browser sends the refresh_token cookie; mobile clients send it as Bearer.
+	if cookie, err := c.Request.Cookie("refresh_token"); err == nil {
+		refreshStr = cookie.Value
+	}
+	if refreshStr == "" {
+		refreshStr = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	}
+	if refreshStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token required"})
+		return
+	}
+
+	if services.IsRevoked(refreshStr) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token has been revoked"})
+		return
+	}
+
+	tok, err := jwt.Parse(refreshStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return auth.JwtSecret(), nil
+	})
+	if err != nil || !tok.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
+		return
+	}
+
+	claims, ok := tok.Claims.(jwt.MapClaims)
+	if !ok || claims["type"] != "refresh" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not a refresh token"})
+		return
+	}
+
+	userID := int(claims["user_id"].(float64))
+	username, _ := claims["username"].(string)
+	role, _ := claims["role"].(string)
+	tenantID := int(claims["tenant_id"].(float64))
+
+	// Verify the user and tenant are still active before issuing a new token.
+	var isActive bool
+	var tenantActive bool
+	if err := database.DB.QueryRow(
+		`SELECT is_active FROM users WHERE id=$1`, userID,
+	).Scan(&isActive); err != nil || !isActive {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "account no longer active"})
+		return
+	}
+	if err := database.DB.QueryRow(
+		`SELECT is_active FROM tenants WHERE id=$1`, tenantID,
+	).Scan(&tenantActive); err != nil || !tenantActive {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "tenant has been suspended"})
+		return
+	}
+
+	// Revoke old refresh token and issue a fresh one (token rotation).
+	expClaim, _ := claims["exp"].(float64)
+	oldExpiry := time.Unix(int64(expClaim), 0)
+	services.RevokeToken(refreshStr, oldExpiry)
+
+	newToken, err := auth.GenerateJWT(userID, username, role, tenantID, false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue token"})
+		return
+	}
+
+	setAuthCookie(c, newToken)
+
+	if newRefresh, err := auth.GenerateRefreshToken(userID, username, role, tenantID); err == nil {
+		setRefreshCookie(c, newRefresh)
+	}
+
+	ua := c.GetHeader("User-Agent")
+	if strings.Contains(ua, "Dart") || strings.Contains(ua, "okhttp") {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "token": newToken})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

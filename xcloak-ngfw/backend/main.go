@@ -90,6 +90,12 @@ func main() {
 	services.InitKafka()
 	defer services.CloseKafka()
 	go services.StartIOCMatchConsumer()
+	go services.StartAlertConsumer()
+	go services.StartIncidentConsumer()
+	go services.StartTaskConsumer()
+	go services.StartAuditConsumer()
+	go services.StartFIMConsumer()
+	go services.StartYARAConsumer()
 
 	// Wire WebSocket broadcaster through Redis pub/sub so all API replicas
 	// deliver alerts to their own connected clients (multi-replica safety).

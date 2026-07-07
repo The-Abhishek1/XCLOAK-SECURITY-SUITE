@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 
 	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
@@ -71,6 +72,29 @@ func Heartbeat(req models.HeartbeatRequest) error {
 		}
 	}
 	return nil
+}
+
+// RotateAgentToken generates a new auth token for agentID (scoped to tenantID)
+// and replaces the existing one atomically. The old token becomes invalid
+// immediately — the next heartbeat from the agent will fail until the agent
+// is reconfigured with the new token. This is the endpoint that closes the
+// open gap: no rotation/revocation path existed before this.
+func RotateAgentToken(agentID, tenantID int, rotatedBy string) (string, error) {
+	newToken, err := generateToken()
+	if err != nil {
+		return "", err
+	}
+
+	_, err = database.DB.Exec(
+		`UPDATE agents SET token=$1 WHERE id=$2 AND tenant_id=$3`,
+		newToken, agentID, tenantID,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	LogEvent("AGENT_TOKEN_ROTATED", fmt.Sprintf("token rotated for agent #%d", agentID), rotatedBy)
+	return newToken, nil
 }
 
 // generateToken produces a cryptographically random 32-byte hex token (64 chars).

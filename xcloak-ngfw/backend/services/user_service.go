@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"xcloak-ngfw/auth"
@@ -12,6 +14,16 @@ import (
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
+
+// appBaseURL returns the externally-reachable base URL used in email links.
+// Defaults to http://localhost:3000 for local dev if APP_BASE_URL is not set.
+func appBaseURL() string {
+	u := os.Getenv("APP_BASE_URL")
+	if u == "" {
+		return "http://localhost:3000"
+	}
+	return strings.TrimRight(u, "/")
+}
 
 // ValidatePasswordComplexity returns an error when a password fails minimum
 // requirements: ≥8 chars, at least one uppercase, lowercase, digit, and
@@ -202,10 +214,10 @@ func InviteUser(username, email, role string, tenantID int) error {
 You've been invited to join XCloak Security Suite as a %s.
 
 Click the link below to set your password (expires in 24 hours):
-http://localhost:3000/reset-password?token=%s
+%s/reset-password?token=%s
 
 — XCloak Security Suite
-`, username, role, token)
+`, username, role, appBaseURL(), token)
 
 	if err := sendEmail(cfg, []string{email}, subject, body); err != nil {
 		// Don't leave a password-less account stranded with no way to claim
@@ -278,12 +290,12 @@ func RequestPasswordReset(email string) error {
 A password reset was requested for your XCloak account.
 
 Click the link below to reset your password (expires in 1 hour):
-http://localhost:3000/reset-password?token=%s
+%s/reset-password?token=%s
 
 If you didn't request this, you can safely ignore this email.
 
 — XCloak Security Suite
-`, username, token)
+`, username, appBaseURL(), token)
 
 	return sendEmail(cfg, []string{email}, subject, body)
 }

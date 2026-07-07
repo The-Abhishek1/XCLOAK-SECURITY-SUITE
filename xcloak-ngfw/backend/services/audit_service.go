@@ -7,10 +7,6 @@ func LogEvent(
 	details string,
 	username string,
 ) {
-
-	_ = repositories.CreateAuditLog(
-		action,
-		details,
-		username,
-	)
+	_ = repositories.CreateAuditLog(action, details, username)
+	go PublishAuditEvent(action, details, username)
 }

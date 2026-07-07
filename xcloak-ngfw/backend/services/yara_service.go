@@ -55,6 +55,7 @@ func SaveYaraMatches(
 		// (double-counting event_count rules, double-attempting incident
 		// creation).
 		CreateAlert(alert)
+		go PublishYARAMatch(match.AgentID, match.RuleName, match.FilePath)
 	}
 
 	return nil

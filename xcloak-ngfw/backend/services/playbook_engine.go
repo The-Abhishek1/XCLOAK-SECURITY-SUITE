@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,12 +33,11 @@ const (
 //	incident_created      — fires when a new incident is auto-created
 //	<exact rule name>     — fires when alert.RuleName matches exactly
 func ExecutePlaybooks(alert models.Alert) {
-	fmt.Printf("SOAR: evaluating alert rule=%q severity=%q agent=%d\n",
-		alert.RuleName, alert.Severity, alert.AgentID)
+	slog.Debug("soar eval", "rule", alert.RuleName, "severity", alert.Severity, "agent", alert.AgentID)
 
 	playbooks, err := repositories.GetEnabledPlaybooksForAgent(alert.AgentID)
 	if err != nil {
-		fmt.Println("SOAR: failed to load playbooks:", err)
+		slog.Error("soar: load playbooks failed", "agent", alert.AgentID, "err", err)
 		return
 	}
 
@@ -45,7 +45,7 @@ func ExecutePlaybooks(alert models.Alert) {
 		if !matchesTrigger(playbook.TriggerType, alert) {
 			continue
 		}
-		fmt.Printf("SOAR: playbook %q triggered (trigger=%q)\n", playbook.Name, playbook.TriggerType)
+		slog.Info("soar: playbook triggered", "playbook", playbook.Name, "trigger", playbook.TriggerType)
 		runPlaybookActions(playbook, alert)
 	}
 }
@@ -114,13 +114,13 @@ func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 		OverallStatus: "running",
 	})
 	if err != nil {
-		fmt.Printf("SOAR: failed to create execution record: %v\n", err)
+		slog.Error("soar: create execution record failed", "playbook", playbook.ID, "err", err)
 		execID = 0
 	}
 
 	actions, err := repositories.GetPlaybookActions(playbook.ID)
 	if err != nil {
-		fmt.Printf("SOAR: failed to load actions for playbook %d: %v\n", playbook.ID, err)
+		slog.Error("soar: load actions failed", "playbook", playbook.ID, "err", err)
 		return
 	}
 
@@ -224,10 +224,10 @@ func runPlaybookActions(playbook models.Playbook, alert models.Alert) {
 			groupIdx++
 		default:
 			if idx, ok := nameIndex[strings.ToLower(gotoTarget)]; ok {
-				fmt.Printf("SOAR: goto %q → group %d\n", gotoTarget, idx)
+				slog.Debug("soar: goto", "target", gotoTarget, "group", idx)
 				groupIdx = idx
 			} else {
-				fmt.Printf("SOAR: goto %q not found, stopping\n", gotoTarget)
+				slog.Warn("soar: goto target not found, stopping", "target", gotoTarget)
 				goto done
 			}
 		}
@@ -369,8 +369,7 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 			result.Output = "branch condition false"
 			result.GotoTaken = action.GotoOnFailure
 		}
-		fmt.Printf("SOAR: branch step %d (%q) → goto %q\n",
-			action.StepOrder, action.ConditionExpr, result.GotoTaken)
+		slog.Debug("soar: branch step", "order", action.StepOrder, "cond", action.ConditionExpr, "goto", result.GotoTaken)
 		if execID > 0 {
 			repositories.CreatePlaybookStepResult(*result)
 		}
@@ -385,8 +384,7 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 		if execID > 0 {
 			repositories.CreatePlaybookStepResult(*result)
 		}
-		fmt.Printf("SOAR: step %d (%s) skipped — condition: %q\n",
-			action.StepOrder, action.ActionType, action.ConditionExpr)
+		slog.Debug("soar: step skipped", "order", action.StepOrder, "type", action.ActionType, "cond", action.ConditionExpr)
 		return result
 	}
 
@@ -405,8 +403,7 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 				delay = 5 * time.Second
 			}
 			time.Sleep(delay)
-			fmt.Printf("SOAR: retry %d/%d — step %d (%s)\n",
-				attempt+1, action.MaxRetries, action.StepOrder, action.ActionType)
+			slog.Debug("soar: retry", "attempt", attempt+1, "max", action.MaxRetries, "order", action.StepOrder, "type", action.ActionType)
 		}
 		output, lastErr = dispatchActionAdvanced(rendered, alert)
 		result.RetriesUsed = attempt
@@ -424,15 +421,15 @@ func executeStep(action models.PlaybookAction, alert models.Alert, ctx map[strin
 		result.Status = "failed"
 		result.ErrorDetail = lastErr.Error()
 		result.GotoTaken = action.GotoOnFailure
-		fmt.Printf("SOAR: step %d (%s) failed: %v\n", action.StepOrder, action.ActionType, lastErr)
+		slog.Warn("soar: step failed", "order", action.StepOrder, "type", action.ActionType, "err", lastErr)
 	case output == "pending_approval":
 		result.Status = "pending_approval"
 		result.GotoTaken = action.GotoOnSuccess
-		fmt.Printf("SOAR: step %d (%s) → pending approval\n", action.StepOrder, action.ActionType)
+		slog.Info("soar: step pending approval", "order", action.StepOrder, "type", action.ActionType)
 	default:
 		result.Status = "success"
 		result.GotoTaken = action.GotoOnSuccess
-		fmt.Printf("SOAR: step %d (%s) ok: %s\n", action.StepOrder, action.ActionType, truncate(output, 120))
+		slog.Debug("soar: step ok", "order", action.StepOrder, "type", action.ActionType, "output", truncate(output, 120))
 	}
 
 	if execID > 0 {

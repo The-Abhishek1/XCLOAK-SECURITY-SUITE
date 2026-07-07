@@ -1,6 +1,7 @@
 package services
 
 import (
+	"xcloak-ngfw/database"
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
@@ -18,6 +19,7 @@ func CreateTask(task models.AgentTask) error {
 		task.TaskType,
 		"admin",
 	)
+	go PublishTaskDispatched(task)
 
 	return nil
 }
@@ -57,9 +59,13 @@ func CompleteTask(
 	agentID int,
 ) error {
 
-	return repositories.CompleteTask(
-		taskID,
-		result,
-		agentID,
-	)
+	var taskType string
+	database.DB.QueryRow(`SELECT task_type FROM agent_tasks WHERE id=$1`, taskID).Scan(&taskType)
+
+	if err := repositories.CompleteTask(taskID, result, agentID); err != nil {
+		return err
+	}
+
+	go PublishTaskCompleted(taskID, agentID, taskType, result)
+	return nil
 }

@@ -21,6 +21,9 @@ func CreateIncident(
 		return id, err
 	}
 
+	incident.ID = id
+	go PublishIncident(incident)
+
 	err = CalculateRiskScore(
 		incident.AgentID,
 	)

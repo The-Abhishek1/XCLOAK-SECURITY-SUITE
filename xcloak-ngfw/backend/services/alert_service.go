@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"regexp"
 	"strings"
@@ -10,6 +11,14 @@ import (
 	"xcloak-ngfw/models"
 	"xcloak-ngfw/repositories"
 )
+
+// logRecover is a deferred helper for goroutines: logs the recovered panic
+// via slog instead of silently swallowing it.
+func logRecover(caller string) {
+	if r := recover(); r != nil {
+		slog.Error("goroutine panic recovered", "caller", caller, "panic", fmt.Sprintf("%v", r))
+	}
+}
 
 // alertIPRE extracts IPv4 addresses from alert log messages for threat intel lookup.
 var alertIPRE = regexp.MustCompile(`\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b`)
@@ -157,7 +166,7 @@ func CreateAlert(alert models.Alert) error {
 
 	// Kafka — publish to xcloak.alerts topic.
 	go func() {
-		defer func() { recover() }()
+		defer logRecover("PublishAlert")
 		PublishAlert(alert)
 	}()
 
@@ -169,55 +178,48 @@ func CreateAlert(alert models.Alert) error {
 	// IOC auto-block if IOC rule matched.
 	if strings.Contains(strings.ToLower(alert.RuleName), "ioc") {
 		go func() {
-		defer func() { recover() }()
-		autoBlockIOC(alert)
-	}()
+			defer logRecover("autoBlockIOC")
+			autoBlockIOC(alert)
+		}()
 	}
 
 	// Webhook / Slack integrations.
 	go func() {
-		defer func() { recover() }()
+		defer logRecover("FireAlertWebhook")
 		FireAlertWebhook(alert)
 	}()
 
 	// Enterprise integrations: PagerDuty, Teams, Jira, ServiceNow.
 	go func() {
-		defer func() { recover() }()
+		defer logRecover("FireEnterpriseIntegrations")
 		FireEnterpriseIntegrations(alert)
 	}()
 
 	go func() {
-		defer func() { recover() }()
+		defer logRecover("ExecutePlaybooks")
 		ExecutePlaybooks(alert)
 	}()
 	go func() {
-		defer func() { recover() }()
+		defer logRecover("CorrelateAlert")
 		CorrelateAlert(alert)
 	}()
 
 	sev := strings.ToLower(alert.Severity)
 	if sev == "critical" || sev == "high" {
 		go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[TriageAlert] recovered panic: %v\n", r)
-			}
+			defer logRecover("TriageAlert")
+			TriageAlert(alert)
 		}()
-		TriageAlert(alert)
-	}()
 
-	// Email notifications for critical/high
-	if sev == "critical" || sev == "high" {
 		go func() {
-			defer func() { recover() }()
+			defer logRecover("SendAlertEmail")
 			recipients := GetEmailRecipients(alert.Severity, alert.AgentID)
 			if len(recipients) > 0 {
 				if err := SendAlertEmail(alert, recipients); err != nil {
-					fmt.Printf("[Email] Failed to send alert email: %v\n", err)
+					slog.Error("alert email failed", "rule", alert.RuleName, "err", err)
 				}
 			}
 		}()
-	}
 	}
 
 	CalculateRiskScore(alert.AgentID)
