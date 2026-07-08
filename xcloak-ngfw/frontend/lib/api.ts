@@ -24,11 +24,69 @@ const OPTIONAL_PATTERNS = [
   /\/quarantine/,
 ];
 
+// Lightweight DOM toast — used by the demo 403 interceptor without needing
+// React context (api.ts is not a component).
+function showDemoToast() {
+  if (typeof document === 'undefined') return;
+  const existing = document.getElementById('xcloak-demo-toast');
+  if (existing) { existing.remove(); }
+
+  const el = document.createElement('div');
+  el.id = 'xcloak-demo-toast';
+  el.innerHTML = `
+    <span style="font-size:16px">🔒</span>
+    <span><strong>Demo mode</strong> — this action is disabled in the live demo.
+    <a href="/signup" style="color:#60a5fa;text-decoration:underline;margin-left:6px">Sign up free →</a></span>
+  `;
+  Object.assign(el.style, {
+    position:     'fixed',
+    bottom:       '24px',
+    left:         '50%',
+    transform:    'translateX(-50%) translateY(12px)',
+    zIndex:       '99999',
+    display:      'flex',
+    alignItems:   'center',
+    gap:          '10px',
+    padding:      '12px 18px',
+    borderRadius: '10px',
+    background:   '#1e293b',
+    border:       '1px solid #334155',
+    color:        '#e2e8f0',
+    fontSize:     '13px',
+    fontFamily:   'inherit',
+    boxShadow:    '0 8px 32px rgba(0,0,0,0.5)',
+    opacity:      '0',
+    transition:   'opacity 0.2s ease, transform 0.2s ease',
+    maxWidth:     'calc(100vw - 32px)',
+    whiteSpace:   'nowrap',
+  });
+  document.body.appendChild(el);
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateX(-50%) translateY(0)';
+  });
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-50%) translateY(8px)';
+    setTimeout(() => el.remove(), 250);
+  }, 3500);
+}
+
 api.interceptors.response.use(
   response => response,
   error => {
     const url = error.config?.url || '';
     const isOptional = OPTIONAL_PATTERNS.some(p => p.test(url));
+
+    // Demo 403 — swallow the error and show a friendly toast so the UI
+    // doesn't crash or show a red error state.
+    if (error.response?.status === 403) {
+      const msg: string = error.response?.data?.error ?? '';
+      if (msg.includes('demo mode')) {
+        showDemoToast();
+        return Promise.resolve({ data: null, status: 403, _demo: true });
+      }
+    }
 
     if (error.response?.status === 401 && !isOptional) {
       // Clear the JS-readable presence flag (the httpOnly token cookie is
