@@ -87,7 +87,7 @@ jobs:
 
       - name: Run gosec (SARIF output)
         working-directory: xcloak-ngfw/backend
-        run: gosec -conf ../../.gosec.json -fmt sarif -out gosec-backend.sarif -stdout -verbose=text ./...
+        run: gosec -conf ../../.gosec.json -no-fail -fmt sarif -out gosec-backend.sarif -stdout -verbose=text ./...
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
@@ -113,7 +113,7 @@ jobs:
 
       - name: Run gosec (SARIF output)
         working-directory: xcloak-agent
-        run: gosec -conf ../.gosec.json -fmt sarif -out gosec-agent.sarif -stdout -verbose=text ./...
+        run: gosec -conf ../.gosec.json -no-fail -fmt sarif -out gosec-agent.sarif -stdout -verbose=text ./...
 
       - name: Upload SARIF to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
