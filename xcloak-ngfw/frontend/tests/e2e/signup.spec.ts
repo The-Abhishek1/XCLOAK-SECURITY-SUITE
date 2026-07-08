@@ -70,6 +70,9 @@ test.describe('Signup page', () => {
 
   test('successful signup posts to /api/signup and redirects', async ({ page }) => {
     const signupRequests: string[] = [];
+    // Register wildcard FIRST so the specific /api/signup handler (registered last)
+    // takes precedence — Playwright routes are evaluated in LIFO order.
+    await page.route('/api/**', route => route.fulfill({ status: 200, body: '{}' }));
     await page.route('/api/signup', async route => {
       signupRequests.push(JSON.stringify(await route.request().postDataJSON()));
       await route.fulfill({
@@ -78,8 +81,6 @@ test.describe('Signup page', () => {
         body: JSON.stringify({ message: 'created' }),
       });
     });
-    // After signup success the app redirects to /dashboard — stub the API calls it needs.
-    await page.route('/api/**', route => route.fulfill({ status: 200, body: '{}' }));
 
     await page.goto('/signup');
     await page.getByPlaceholder(/Acme Security|organization name/i).fill('Test Corp');
