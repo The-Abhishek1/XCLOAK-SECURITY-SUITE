@@ -1,10 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function OIDCCompletePage() {
+  return (
+    <Suspense>
+      <OIDCCompleteContent />
+    </Suspense>
+  );
+}
+
+function OIDCCompleteContent() {
   const searchParams = useSearchParams();
   const code     = searchParams.get('code') || '';
   const ssoError = searchParams.get('error') || '';

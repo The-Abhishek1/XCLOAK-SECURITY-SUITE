@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShieldCheck, Eye, EyeOff, Lock, User, AlertCircle, Mail, UserPlus, KeyRound, ArrowLeft, Building2, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -10,6 +10,14 @@ import { ssoAPI } from '@/lib/api';
 type Tab = 'login' | 'register' | 'forgot';
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { theme, toggle } = useTheme();
