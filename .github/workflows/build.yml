@@ -147,4 +147,4 @@ jobs:
         run: helm dependency update charts/xcloak
 
       - name: Lint chart
-        run: helm lint charts/xcloak --strict
+        run: helm lint charts/xcloak --values charts/xcloak/ci/smoke-values.yaml --strict
