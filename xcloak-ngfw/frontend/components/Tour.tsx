@@ -20,42 +20,42 @@ const STEPS: Step[] = [
   {
     title: 'Security Command Center',
     body: 'Your mission control. Real-time overview of active threats, alert severity distribution, agent health scores, and compliance posture — all live via WebSocket.',
-    path: '/dashboard', selector: 'a[href="/dashboard"]', side: 'right',
+    path: '/dashboard', selector: '[data-tour="dashboard"]', side: 'right',
   },
   {
     title: 'SIEM Alerts — 25 Active',
     body: 'Every security event is processed through a Sigma-compatible rule engine, MITRE ATT&CK mapped, and AI-triaged. Critical alerts like C2 beaconing and credential dumps are at the top.',
-    path: '/alerts', selector: 'a[href="/alerts"]', side: 'right',
+    path: '/alerts', selector: '[data-tour="alerts"]', side: 'right',
   },
   {
     title: 'Active Incidents',
     body: 'Three incidents are in progress — a Cobalt Strike C2 implant, an active credential dump + lateral movement chain, and a contained ransomware attack. Click any to see the full timeline.',
-    path: '/incidents', selector: 'a[href="/incidents"]', side: 'right',
+    path: '/incidents', selector: '[data-tour="incidents"]', side: 'right',
   },
   {
     title: 'Enrolled Endpoints',
     body: 'Four demo endpoints are live: two Linux servers, one Windows workstation, and an Android device. Each reports real-time processes, network connections, packages, and user activity.',
-    path: '/agents', selector: 'a[href="/agents"]', side: 'right',
+    path: '/agents', selector: '[data-tour="agents"]', side: 'right',
   },
   {
     title: 'SOAR — Automated Response',
     body: 'Two actions are waiting for human approval right now: isolating web-prod-01 and blocking an attacker IP. Playbooks automate response — destructive actions always need a human green-light.',
-    path: '/soar-approvals', selector: 'a[href="/soar-approvals"]', side: 'right',
+    path: '/soar-approvals', selector: '[data-tour="soar-approvals"]', side: 'right',
   },
   {
     title: 'NGFW — Firewall Rules',
     body: 'Dynamic rules enforce policy across all agents via iptables (Linux) and netsh (Windows). Rules propagate in under 500ms. GeoIP blocking and threat-feed-based denylisting are built in.',
-    path: '/firewall', selector: 'a[href="/firewall"]', side: 'right',
+    path: '/firewall', selector: '[data-tour="firewall"]', side: 'right',
   },
   {
     title: 'Mobile MDM',
     body: 'The Android agent reports 24 posture metrics per check-in — battery, storage, VPN, USB debugging, Magisk detection, app inventory. Remote commands dispatch in real time.',
-    path: '/mdm', selector: 'a[href="/mdm"]', side: 'right',
+    path: '/mdm', selector: '[data-tour="mdm"]', side: 'right',
   },
   {
     title: 'Compliance Scoring',
     body: 'Live scores against CIS Benchmarks (72%), NIST CSF (68%), and PCI-DSS (81%). Drill into any failing control to see affected endpoints and step-by-step remediation.',
-    path: '/compliance', selector: 'a[href="/compliance"]', side: 'right',
+    path: '/compliance', selector: '[data-tour="compliance"]', side: 'right',
   },
   {
     title: 'Ready to deploy?',
@@ -151,13 +151,6 @@ export default function Tour() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
-      // On mobile the sidebar is hidden — fall back to center modal
-      if (vw < 1024) {
-        setSpotRect(null);
-        setTooltipStyle(CENTER_STYLE);
-        return;
-      }
-
       const el = document.querySelector(selector);
       if (!el) {
         setSpotRect(null);
@@ -166,6 +159,13 @@ export default function Tour() {
       }
 
       const r = el.getBoundingClientRect();
+      // Element is hidden (collapsed group, off-screen drawer, or zero-size)
+      if (r.width < 4 || r.height < 4) {
+        setSpotRect(null);
+        setTooltipStyle(CENTER_STYLE);
+        return;
+      }
+
       const spot: SpotRect = {
         top:    r.top    - 6,
         left:   r.left   - 8,

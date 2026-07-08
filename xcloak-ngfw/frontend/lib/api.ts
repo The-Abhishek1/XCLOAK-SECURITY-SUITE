@@ -78,13 +78,20 @@ api.interceptors.response.use(
     const url = error.config?.url || '';
     const isOptional = OPTIONAL_PATTERNS.some(p => p.test(url));
 
-    // Demo 403 — swallow the error and show a friendly toast so the UI
-    // doesn't crash or show a red error state.
+    // In demo mode, swallow ALL 403s so pages never crash.
+    // - Mutations blocked by DemoReadOnly middleware → show toast
+    // - GET endpoints gated by RBAC (e.g. settings, roles) → silent null so
+    //   the component renders an empty state instead of throwing
     if (error.response?.status === 403) {
-      const msg: string = error.response?.data?.error ?? '';
-      if (msg.includes('demo mode')) {
-        showDemoToast();
-        return Promise.resolve({ data: null, status: 403, _demo: true });
+      const isDemo = typeof document !== 'undefined' &&
+        document.cookie.split(';').some(c => c.trim().startsWith('demo_mode='));
+      const isDemoMsg = (error.response?.data?.error ?? '').includes('demo mode');
+      if (isDemo || isDemoMsg) {
+        const method = (error.config?.method ?? 'get').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD') {
+          showDemoToast();
+        }
+        return Promise.resolve({ data: null, status: 403, headers: {}, config: error.config });
       }
     }
 

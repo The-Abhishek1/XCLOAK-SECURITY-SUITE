@@ -213,6 +213,7 @@ function NavContent({
                     const badge = badges[item.href] ?? 0;
                     return (
                       <Link key={item.href} href={item.href}
+                        data-tour={item.href.slice(1)}
                         onClick={onNavigate}
                         className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[12.5px] font-medium transition-all duration-100"
                         style={{

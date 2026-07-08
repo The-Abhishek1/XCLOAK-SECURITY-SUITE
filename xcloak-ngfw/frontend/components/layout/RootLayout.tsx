@@ -91,7 +91,7 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
         <Menu className="h-4 w-4" />
       </button>
 
-      <div className="min-w-0 flex-1 flex items-center gap-3">
+      <div className="min-w-0 flex-1">
         {title && (
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-[15px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{title}</h1>
@@ -103,11 +103,11 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
             )}
           </div>
         )}
-        <DemoBadge />
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
         {actions}
+        <DemoBadge />
 
         {/* Search — icon only on mobile, full pill on desktop */}
         <div className="hidden md:block"><GlobalSearch /></div>
@@ -251,11 +251,15 @@ function DemoBadge() {
   return (
     <a
       href="/signup"
-      className="hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shrink-0 transition-opacity hover:opacity-80"
+      title="Demo mode — click to sign up free"
+      className="flex items-center gap-1 rounded-full px-2 py-1 shrink-0 transition-opacity hover:opacity-80"
       style={{ background: 'rgba(250,204,21,0.15)', border: '1px solid rgba(250,204,21,0.4)', color: '#ca8a04' }}
     >
       <FlaskConical className="h-3 w-3" />
-      Demo mode · Sign up
+      {/* Text only on md+ to avoid pushing icons on tight viewports */}
+      <span className="hidden md:inline text-[10px] font-bold uppercase tracking-wide whitespace-nowrap">
+        Demo
+      </span>
     </a>
   );
 }
