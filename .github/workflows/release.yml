@@ -89,17 +89,45 @@ jobs:
 
             See [CHANGELOG.md](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/blob/main/CHANGELOG.md) for full details.
 
-            ### Quick install (Go agent)
+            ---
+
+            ### Docker images
 
             ```bash
-            # Linux
-            curl -Lo xcloak-agent https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-amd64
-            chmod +x xcloak-agent && ./xcloak-agent
-
-            # Windows — download xcloak-agent-windows-amd64.exe and run it
+            docker pull ghcr.io/the-abhishek1/xcloak-backend:${{ github.ref_name }}
+            docker pull ghcr.io/the-abhishek1/xcloak-frontend:${{ github.ref_name }}
+            docker pull ghcr.io/the-abhishek1/xcloak-agent:${{ github.ref_name }}
             ```
 
-            ### Helm
+            > The agent container requires elevated privileges for eBPF:
+            > `docker run --privileged ghcr.io/the-abhishek1/xcloak-agent:${{ github.ref_name }}`
+
+            ---
+
+            ### Go agent — binary install
+
+            ```bash
+            # Linux (amd64)
+            curl -Lo xcloak-agent https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-amd64
+            chmod +x xcloak-agent && sudo ./xcloak-agent
+
+            # Linux (arm64)
+            curl -Lo xcloak-agent https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-arm64
+            chmod +x xcloak-agent && sudo ./xcloak-agent
+
+            # Windows (amd64) — download xcloak-agent-windows-amd64.exe and run as Administrator
+            ```
+
+            ---
+
+            ### Mobile agent (Android)
+
+            Download `app-release.apk` from the assets below and sideload it, or distribute via MDM.
+            Minimum Android SDK: 21 (Android 5.0).
+
+            ---
+
+            ### Helm — self-hosted deployment
 
             ```bash
             helm install xcloak ./xcloak-*.tgz \
@@ -107,6 +135,10 @@ jobs:
               --set backend.env.JWT_SECRET=$(openssl rand -hex 32)
             ```
 
-            ### SHA-256 checksums
+            ---
 
-            See `SHA256SUMS.txt` attached to this release.
+            ### Verify checksums
+
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
