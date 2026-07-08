@@ -408,11 +408,16 @@ function LoginContent() {
           </div>
           <a
             href="/demo"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors hover:opacity-80"
-            style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'var(--bg-2)' }}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+              color: '#fff',
+              boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
+            }}
           >
-            <span>Try the live demo</span>
-            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
+            <ShieldCheck className="h-4 w-4" />
+            Try the live demo
+            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.2)' }}>
               No signup
             </span>
           </a>

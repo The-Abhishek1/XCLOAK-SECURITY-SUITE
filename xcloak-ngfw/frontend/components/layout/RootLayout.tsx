@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock, Menu } from 'lucide-react';
+import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock, Menu, FlaskConical } from 'lucide-react';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { timeAgo } from '@/lib/utils';
 
@@ -91,9 +91,9 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
         <Menu className="h-4 w-4" />
       </button>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex items-center gap-3">
         {title && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-[15px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{title}</h1>
             {subtitle && (
               <>
@@ -103,6 +103,7 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
             )}
           </div>
         )}
+        <DemoBadge />
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
@@ -238,5 +239,23 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
         )}
       </div>
     </header>
+  );
+}
+
+function DemoBadge() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    setShow(document.cookie.split(';').some(c => c.trim().startsWith('demo_mode=')));
+  }, []);
+  if (!show) return null;
+  return (
+    <a
+      href="/signup"
+      className="hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shrink-0 transition-opacity hover:opacity-80"
+      style={{ background: 'rgba(250,204,21,0.15)', border: '1px solid rgba(250,204,21,0.4)', color: '#ca8a04' }}
+    >
+      <FlaskConical className="h-3 w-3" />
+      Demo mode · Sign up
+    </a>
   );
 }

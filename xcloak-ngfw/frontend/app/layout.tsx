@@ -3,7 +3,6 @@ import './globals.css';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { UserProvider } from '@/context/UserContext';
-import DemoBanner from '@/components/DemoBanner';
 import Tour from '@/components/Tour';
 
 export const metadata: Metadata = {
@@ -35,7 +34,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <NotificationProvider>
             <UserProvider>
-              <DemoBanner />
               <Tour />
               {children}
             </UserProvider>
