@@ -75,7 +75,7 @@ func seedTenant(db *sql.DB) {
 		VALUES (9999, 'Demo Corp Security', 'demo-corp', true)
 		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, is_active = true
 	`)
-	mustExec(db, `SELECT setval('tenants_id_seq', GREATEST(currval('tenants_id_seq'), 10000), false)`)
+	mustExec(db, `SELECT setval('tenants_id_seq', (SELECT GREATEST(last_value, 10000) FROM tenants_id_seq))`)
 }
 
 func seedAgents(db *sql.DB) []int {
