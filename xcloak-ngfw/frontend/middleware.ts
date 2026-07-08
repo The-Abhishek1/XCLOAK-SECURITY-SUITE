@@ -17,8 +17,9 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isPublic(pathname)) {
-    // Bounce already-authenticated users away from /login.
-    if (pathname === '/login' && request.cookies.get('token')?.value) {
+    // Bounce already-authenticated users away from login/signup pages.
+    const authPages = new Set(['/login', '/signup']);
+    if (authPages.has(pathname) && request.cookies.get('token')?.value) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return NextResponse.next();

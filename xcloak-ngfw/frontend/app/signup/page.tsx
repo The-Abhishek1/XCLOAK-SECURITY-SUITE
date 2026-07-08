@@ -54,10 +54,14 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
     if (!orgName.trim()) { setError('Organization name is required.'); return; }
-    if (!slug)            { setError('Slug is required.'); return; }
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug) && slug.length > 1) {
+    // Derive slug synchronously in case the useEffect hasn't fired yet
+    // (can happen when the user submits immediately after typing the org name).
+    const effectiveSlug = slug || slugify(orgName.trim());
+    if (!effectiveSlug) { setError('Slug is required.'); return; }
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(effectiveSlug) && effectiveSlug.length > 1) {
       setError('Slug must be lowercase letters, numbers, and hyphens only.'); return;
     }
+    if (!slugEdited) setSlug(effectiveSlug);
     setStep(2);
   };
 
@@ -147,7 +151,7 @@ export default function SignupPage() {
 
           {/* ── Step 1: Org ── */}
           {step === 1 && (
-            <form onSubmit={goNext} className="space-y-4">
+            <form onSubmit={goNext} noValidate className="space-y-4">
               <Field label="Organization name">
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
@@ -195,7 +199,7 @@ export default function SignupPage() {
 
           {/* ── Step 2: Admin account ── */}
           {step === 2 && (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
               <div className="rounded-xl p-3 text-xs"
                 style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
                 This account will be the admin for <strong>{orgName}</strong>.
