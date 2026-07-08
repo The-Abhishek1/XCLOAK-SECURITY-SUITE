@@ -77,21 +77,23 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: nextjs-build
-          path: xcloak-ngfw/frontend
+          # No path: files land at their original workspace paths
+          # (xcloak-ngfw/frontend/.next, xcloak-ngfw/frontend/public)
 
       - name: Start Next.js server
-        # Run `next start` (production mode) in the background.
+        # output: standalone → serve via the standalone Node.js server.
         # All /api/* routes are stubbed in the tests via page.route(), so no
         # live backend is required.
         run: |
-          npm run start &
-          # Wait for the server to be ready (up to 30 s)
-          for i in $(seq 1 30); do
+          cp -r public .next/standalone/public
+          cp -r .next/static .next/standalone/.next/static
+          PORT=3000 node .next/standalone/server.js &
+          # Wait for the server to be ready (up to 60 s)
+          for i in $(seq 1 60); do
             curl -sf http://localhost:3000 && break
             sleep 1
           done
-        env:
-          PORT: 3000
+          curl -sf http://localhost:3000 || { echo "Server failed to start"; exit 1; }
 
       - name: Run Playwright tests
         run: npx playwright test

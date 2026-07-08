@@ -26,7 +26,7 @@ ThemeData _buildTheme(Brightness brightness) {
   return ThemeData(
     colorScheme: cs,
     useMaterial3: true,
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),

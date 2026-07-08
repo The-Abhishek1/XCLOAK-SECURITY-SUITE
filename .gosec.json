@@ -1,0 +1,10 @@
+{
+  "global": {
+    "audit": true,
+    "nosec": true,
+    "nosec-tag": "gosec"
+  },
+  "exclude": ["G104", "G115"],
+  "severity": "medium",
+  "confidence": "medium"
+}

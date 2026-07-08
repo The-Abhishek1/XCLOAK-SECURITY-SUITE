@@ -28,16 +28,16 @@ jobs:
           VERSION="${GITHUB_REF_NAME}"
           LDFLAGS="-X xcloak-agent/agent.Version=${VERSION}"
 
-          # Linux amd64
+          # Linux amd64 (native — CGO available for eBPF)
           GOOS=linux  GOARCH=amd64 go build -ldflags "$LDFLAGS" \
             -o xcloak-agent-linux-amd64 ./main.go
 
-          # Linux arm64
-          GOOS=linux  GOARCH=arm64 go build -ldflags "$LDFLAGS" \
+          # Linux arm64 (cross-compile — CGO disabled, eBPF stub active)
+          CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -ldflags "$LDFLAGS" \
             -o xcloak-agent-linux-arm64 ./main.go
 
-          # Windows amd64
-          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" \
+          # Windows amd64 (cross-compile — CGO disabled)
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" \
             -o xcloak-agent-windows-amd64.exe ./main.go
 
           # Checksums

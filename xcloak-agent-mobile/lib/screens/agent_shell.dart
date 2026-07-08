@@ -1460,7 +1460,7 @@ class _TasksTabState extends State<_TasksTab> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [
-                  _kPurple.withValues(alpha: .14), _kBlue.withOpacity(.07)]),
+                  _kPurple.withValues(alpha: .14), _kBlue.withValues(alpha: .07)]),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: _kPurple.withValues(alpha: .3))),
               child: Row(children: [

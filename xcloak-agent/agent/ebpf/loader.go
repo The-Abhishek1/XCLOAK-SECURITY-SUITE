@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && amd64
 
 // Package ebpf wraps the generated bpf2go bindings (bpf_x86_bpfel.go) behind
 // a small exported API, since bpf2go's own output (bpfObjects, bpfMaps, ...)

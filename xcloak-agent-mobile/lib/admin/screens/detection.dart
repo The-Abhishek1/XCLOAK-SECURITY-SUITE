@@ -211,7 +211,7 @@ class _AlertCardState extends State<_AlertCard> {
             color: widget.selected ? cs.primary : col.withValues(alpha: .28),
             width: widget.selected ? 2 : 1,
           ),
-          color: widget.selected ? cs.primary.withValues(alpha: .06) : col.withOpacity(.03),
+          color: widget.selected ? cs.primary.withValues(alpha: .06) : col.withValues(alpha: .03),
         ),
         clipBehavior: Clip.hardEdge,
         child: Column(children: [

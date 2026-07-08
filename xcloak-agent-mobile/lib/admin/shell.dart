@@ -263,7 +263,7 @@ class _AdminAppState extends State<AdminApp> {
       data: ThemeData(
         colorScheme: cs, useMaterial3: true,
         brightness: brightness,
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

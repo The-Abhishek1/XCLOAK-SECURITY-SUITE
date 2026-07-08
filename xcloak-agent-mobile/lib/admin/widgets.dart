@@ -598,7 +598,7 @@ class FilterRow extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: active ? cs.onPrimary.withValues(alpha: .2) : cs.outline.withOpacity(.3),
+                      color: active ? cs.onPrimary.withValues(alpha: .2) : cs.outline.withValues(alpha: .3),
                       borderRadius: BorderRadius.circular(10)),
                     child: Text('${c.$3}',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,

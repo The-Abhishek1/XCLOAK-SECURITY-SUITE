@@ -317,7 +317,7 @@ class _ModeCard extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: dark ? iconColor.withValues(alpha: .25) : iconColor.withOpacity(.35),
+              color: dark ? iconColor.withValues(alpha: .25) : iconColor.withValues(alpha: .35),
               width: 1.5,
             ),
             boxShadow: [

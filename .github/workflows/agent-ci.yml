@@ -56,12 +56,6 @@ jobs:
           - goos: windows
             goarch: amd64
             cgo: "0"            # CGO disabled for Windows cross-compile
-          - goos: darwin
-            goarch: amd64
-            cgo: "0"
-          - goos: darwin
-            goarch: arm64
-            cgo: "0"
           - goos: linux
             goarch: arm64
             cgo: "0"
@@ -110,12 +104,6 @@ jobs:
             cgo: "0"
           - goos: windows
             goarch: amd64
-            cgo: "0"
-          - goos: darwin
-            goarch: amd64
-            cgo: "0"
-          - goos: darwin
-            goarch: arm64
             cgo: "0"
 
     steps:
