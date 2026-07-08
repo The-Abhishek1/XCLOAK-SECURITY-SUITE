@@ -7,11 +7,13 @@ on:
     paths:
       - 'xcloak-ngfw/backend/**'
       - 'xcloak-ngfw/frontend/**'
+      - 'xcloak-agent/**'
       - '.github/workflows/docker-build.yml'
   pull_request:
     paths:
       - 'xcloak-ngfw/backend/**'
       - 'xcloak-ngfw/frontend/**'
+      - 'xcloak-agent/**'
       - '.github/workflows/docker-build.yml'
 
 permissions:
@@ -28,6 +30,8 @@ jobs:
             context: xcloak-ngfw/backend
           - name: frontend
             context: xcloak-ngfw/frontend
+          - name: agent
+            context: xcloak-agent
 
     steps:
       - uses: actions/checkout@v4
@@ -61,5 +65,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
