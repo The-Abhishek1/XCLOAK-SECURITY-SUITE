@@ -95,13 +95,15 @@ func RequireAuth() gin.HandlerFunc {
 		// missing/wrong-type claim defaults safely to false rather than
 		// rejecting the request.
 		isPlatformAdmin, _ := claims["is_platform_admin"].(bool)
+		isDemo, _ := claims["demo"].(bool)
 
-		c.Set("user_id",      claims["user_id"])
-		c.Set("username",     claims["username"])
-		c.Set("role",         claims["role"])
-		c.Set("tenant_id",    claims["tenant_id"])
+		c.Set("user_id",           claims["user_id"])
+		c.Set("username",          claims["username"])
+		c.Set("role",              claims["role"])
+		c.Set("tenant_id",         claims["tenant_id"])
 		c.Set("is_platform_admin", isPlatformAdmin)
-		c.Set("token_string", tokenString) // stored for logout
+		c.Set("is_demo",           isDemo)
+		c.Set("token_string",      tokenString) // stored for logout
 
 		c.Next()
 	}

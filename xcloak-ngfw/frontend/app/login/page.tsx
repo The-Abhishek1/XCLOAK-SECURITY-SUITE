@@ -400,7 +400,24 @@ function LoginContent() {
             </>
           )}
 
-          <p className="mt-5 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
+          {/* Demo entry point */}
+          <div className="mt-5 flex items-center gap-3">
+            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+            <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>or</span>
+            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+          </div>
+          <a
+            href="/demo"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors hover:opacity-80"
+            style={{ border: '1px solid var(--border)', color: 'var(--text-2)', background: 'var(--bg-2)' }}
+          >
+            <span>Try the live demo</span>
+            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
+              No signup
+            </span>
+          </a>
+
+          <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
             XCloak Security Suite · Enterprise Edition
           </p>
         </div>

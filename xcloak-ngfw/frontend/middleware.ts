@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 // Exact paths that do NOT require authentication.
 // Everything else is protected by default — new pages need no changes here.
-const PUBLIC_PATHS = new Set(['/login', '/signup', '/reset-password']);
+const PUBLIC_PATHS = new Set(['/login', '/signup', '/reset-password', '/demo']);
 // Path prefixes that are always public.
 // /api/ routes are proxied by app/api/[...path]/route.ts and carry their own auth.
 const PUBLIC_PREFIXES = ['/auth/oidc/', '/api/'];
@@ -18,7 +18,7 @@ export function middleware(request: NextRequest) {
 
   if (isPublic(pathname)) {
     // Bounce already-authenticated users away from login/signup pages.
-    const authPages = new Set(['/login', '/signup']);
+    const authPages = new Set(['/login', '/signup', '/demo']);
     if (authPages.has(pathname) && request.cookies.get('token')?.value) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }

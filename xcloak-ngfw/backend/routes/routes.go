@@ -26,6 +26,13 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/firewall/rules/:id", middleware.RequireAuth(), api.UpdateRule)
 	router.DELETE("/api/firewall/rules/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_firewall"), api.DeleteRule)
 
+	// ── Demo ──────────────────────────────────────────────────────
+	// No auth required — issues a short-lived read-only demo JWT.
+	router.GET("/api/demo/start", middleware.RateLimitAuth(), api.DemoStart)
+
+	// DemoReadOnly blocks mutations for demo sessions on all subsequent routes.
+	router.Use(middleware.DemoReadOnly())
+
 	// ── Auth ──────────────────────────────────────────────────────
 	router.POST("/api/auth/register", middleware.RateLimitAuth(), api.Register)
 	router.POST("/api/auth/login", middleware.RateLimitAuth(), api.Login)
