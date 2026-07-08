@@ -80,6 +80,24 @@ BEGIN
 END;
 $$;
 
+-- ── Step 4b: Mark collected_at NOT NULL on the legacy table ──────────────────
+-- PostgreSQL requires every partition key column to be NOT NULL before ATTACH.
+-- The original table declared collected_at as nullable; fill NULLs first so
+-- the constraint can be set without a table scan failure on existing rows.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'endpoint_logs_legacy'::regclass
+          AND attname   = 'collected_at'
+          AND NOT attnotnull
+    ) THEN
+        UPDATE endpoint_logs_legacy SET collected_at = now() WHERE collected_at IS NULL;
+        ALTER TABLE endpoint_logs_legacy ALTER COLUMN collected_at SET NOT NULL;
+    END IF;
+END;
+$$;
+
 -- ── Step 5: Attach legacy data as the default partition ───────────────────────
 DO $$
 BEGIN

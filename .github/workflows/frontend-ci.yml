@@ -49,6 +49,7 @@ jobs:
           path: |
             xcloak-ngfw/frontend/.next
             xcloak-ngfw/frontend/public
+          include-hidden-files: true   # .next dir starts with a dot — v4 skips it by default
           retention-days: 1
 
   e2e:
@@ -77,8 +78,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: nextjs-build
-          # No path: files land at their original workspace paths
-          # (xcloak-ngfw/frontend/.next, xcloak-ngfw/frontend/public)
+          path: xcloak-ngfw/frontend   # LCA stripped by v4; files land as .next/ and public/
 
       - name: Start Next.js server
         # output: standalone → serve via the standalone Node.js server.
