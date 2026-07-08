@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 // Exact paths that do NOT require authentication.
 // Everything else is protected by default — new pages need no changes here.
-const PUBLIC_PATHS = new Set(['/login', '/reset-password']);
+const PUBLIC_PATHS = new Set(['/login', '/signup', '/reset-password']);
 // Path prefixes that are always public.
 // /api/ routes are proxied by app/api/[...path]/route.ts and carry their own auth.
 const PUBLIC_PREFIXES = ['/auth/oidc/', '/api/'];

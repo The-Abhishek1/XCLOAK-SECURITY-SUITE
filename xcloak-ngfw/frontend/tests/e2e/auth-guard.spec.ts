@@ -36,10 +36,12 @@ test.describe('Auth guard — unauthenticated redirects', () => {
 
 test.describe('Auth guard — authenticated access', () => {
   test.beforeEach(async ({ page }) => {
-    // Simulate a logged-in session by adding the cookie before navigation
-    // and stubbing all API responses.
+    // Simulate a logged-in session with BOTH cookies:
+    // - token: checked by Next.js middleware (server-side); any truthy value passes
+    // - logged_in: checked by client-side useEffect on login/signup pages
     await page.context().addCookies([
-      { name: 'logged_in', value: '1', domain: 'localhost', path: '/' },
+      { name: 'token',     value: 'test-session-token', domain: 'localhost', path: '/' },
+      { name: 'logged_in', value: '1',                  domain: 'localhost', path: '/' },
     ]);
 
     await page.route('/api/users/me', route =>

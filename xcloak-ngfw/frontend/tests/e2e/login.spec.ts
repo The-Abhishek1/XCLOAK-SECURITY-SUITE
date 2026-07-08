@@ -17,14 +17,16 @@ test.describe('Login page', () => {
     await expect(page).toHaveTitle(/XCloak/i);
     await expect(page.getByPlaceholder(/username/i)).toBeVisible();
     await expect(page.getByPlaceholder(/password/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
+    // Use [type=submit] to avoid strict-mode violation — the page has multiple
+    // buttons with "Sign In" text (tab switcher + submit button + SSO button).
+    await expect(page.locator('button[type="submit"]')).toBeVisible();
   });
 
-  test('shows link to signup page', async ({ page }) => {
+  test('shows register tab', async ({ page }) => {
     await page.goto('/login');
 
-    const signupLink = page.getByRole('link', { name: /sign up|create.*(org|account)/i });
-    await expect(signupLink).toBeVisible();
+    // The login page uses a tab-based UI — "Register" is a tab button, not a link.
+    await expect(page.getByRole('button', { name: 'Register', exact: true })).toBeVisible();
   });
 
   test('displays error on failed login', async ({ page }) => {
@@ -32,7 +34,7 @@ test.describe('Login page', () => {
 
     await page.getByPlaceholder(/username/i).fill('bad-user');
     await page.getByPlaceholder(/password/i).fill('wrong-pass');
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.locator('button[type="submit"]').click();
 
     await expect(page.getByText(/invalid|incorrect|unauthorized/i)).toBeVisible({ timeout: 5_000 });
   });
