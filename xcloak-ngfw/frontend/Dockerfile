@@ -7,6 +7,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# NEXT_PUBLIC_ vars are baked at build time — pass "true" for the demo deployment
+ARG NEXT_PUBLIC_DEMO_ONLY=false
+ENV NEXT_PUBLIC_DEMO_ONLY=$NEXT_PUBLIC_DEMO_ONLY
 RUN npm run build
 
 # next.config.js sets output: 'standalone' — only .next/standalone +

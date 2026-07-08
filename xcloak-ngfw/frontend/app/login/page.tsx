@@ -10,10 +10,95 @@ import { ssoAPI } from '@/lib/api';
 type Tab = 'login' | 'register' | 'forgot';
 
 export default function LoginPage() {
+  if (IS_DEMO_ONLY) return <DemoOnlyLanding />;
   return (
     <Suspense>
       <LoginContent />
     </Suspense>
+  );
+}
+
+// Demo-only deployment: suite.xcloak.tech shows no login form at all.
+const IS_DEMO_ONLY = process.env.NEXT_PUBLIC_DEMO_ONLY === 'true';
+
+function DemoOnlyLanding() {
+  const { theme, toggle } = useTheme();
+  return (
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
+      style={{ background: 'var(--bg-0)' }}>
+      <div className="bg-mesh" />
+      <div className="grid-bg fixed inset-0 z-0 opacity-20" />
+      <div className="fixed z-0 pointer-events-none" style={{ top: '8%', left: '3%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,0.07) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+      <div className="fixed z-0 pointer-events-none" style={{ bottom: '8%', right: '3%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(14,165,233,0.05) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+
+      <button onClick={toggle} className="fixed top-4 right-4 z-20 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+        style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+        {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
+
+      <div className="relative z-10 w-full max-w-[420px] px-4">
+        <div className="g-panel p-8 text-center">
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-6">
+            <div className="relative mb-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl"
+                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', boxShadow: '0 0 40px var(--accent-glow)' }}>
+                <ShieldCheck className="h-8 w-8" style={{ color: 'var(--accent)' }} />
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+              XCloak <span style={{ color: 'var(--accent)' }}>Security Suite</span>
+            </h1>
+            <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              AI-powered enterprise SOC platform
+            </p>
+          </div>
+
+          {/* Feature pills */}
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+            {['SIEM · 25 alerts','3 Active incidents','eBPF agents','MITRE ATT&CK','SOAR playbooks','Mobile MDM'].map(f => (
+              <span key={f} className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
+                {f}
+              </span>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <a
+            href="/demo"
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-bold transition-all hover:opacity-90 active:scale-[0.98] mb-3"
+            style={{
+              background:  'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+              color:       '#fff',
+              boxShadow:   '0 4px 20px rgba(99,102,241,0.4)',
+            }}
+          >
+            <ShieldCheck className="h-5 w-5" />
+            Enter Live Demo
+            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'rgba(255,255,255,0.2)' }}>
+              No signup
+            </span>
+          </a>
+
+          <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+            Explore with real threat data. All actions are read-only.
+            <br />
+            Session expires after 2 hours.
+          </p>
+
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--border)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+              Want full access?{' '}
+              <a href="https://xcloak.tech" className="underline" style={{ color: 'var(--accent)' }}>
+                Visit xcloak.tech
+              </a>
+              {' '}· XCloak Security Suite · Enterprise Edition
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"os"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-ngfw/api"
@@ -34,10 +36,14 @@ func SetupRoutes(router *gin.Engine) {
 	router.Use(middleware.DemoReadOnly())
 
 	// ── Auth ──────────────────────────────────────────────────────
-	router.POST("/api/auth/register", middleware.RateLimitAuth(), api.Register)
-	router.POST("/api/auth/login", middleware.RateLimitAuth(), api.Login)
-	router.POST("/api/auth/refresh", middleware.RateLimitAuth(), api.RefreshToken)
-	router.POST("/api/signup", middleware.RateLimitAuth(), api.Signup)
+	// In DEMO_ONLY mode these routes are blocked at the route level so that
+	// the demo database stays free of real user accounts.
+	if os.Getenv("DEMO_ONLY") != "true" {
+		router.POST("/api/auth/register", middleware.RateLimitAuth(), api.Register)
+		router.POST("/api/auth/login", middleware.RateLimitAuth(), api.Login)
+		router.POST("/api/auth/refresh", middleware.RateLimitAuth(), api.RefreshToken)
+		router.POST("/api/signup", middleware.RateLimitAuth(), api.Signup)
+	}
 
 	// ── SSO (OIDC) ────────────────────────────────────────────────
 	// Unauthenticated — these ARE the login entry point for a tenant's
