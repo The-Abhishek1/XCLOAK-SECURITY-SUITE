@@ -240,7 +240,7 @@ export default function SignupPage() {
                     type={showPass ? 'text' : 'password'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Min 8 characters"
+                    placeholder="Password (min 8 chars)"
                     required
                     minLength={8}
                     className="g-input pl-9 pr-10"
