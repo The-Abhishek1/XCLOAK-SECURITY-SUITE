@@ -208,10 +208,10 @@ class _AlertCardState extends State<_AlertCard> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: widget.selected ? cs.primary : col.withOpacity(.28),
+            color: widget.selected ? cs.primary : col.withValues(alpha: .28),
             width: widget.selected ? 2 : 1,
           ),
-          color: widget.selected ? cs.primary.withOpacity(.06) : col.withOpacity(.03),
+          color: widget.selected ? cs.primary.withValues(alpha: .06) : col.withOpacity(.03),
         ),
         clipBehavior: Clip.hardEdge,
         child: Column(children: [
@@ -318,9 +318,9 @@ class _MitreTag extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: const Color(0xFF6366F1).withOpacity(.1),
+      color: const Color(0xFF6366F1).withValues(alpha: .1),
       borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: const Color(0xFF6366F1).withOpacity(.25))),
+      border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: .25))),
     child: Text(label, style: const TextStyle(fontSize: 10.5,
       color: Color(0xFF6366F1), fontWeight: FontWeight.w700)),
   );
@@ -402,9 +402,9 @@ class _AlertDetailSheetState extends State<_AlertDetailSheet> {
                   margin: const EdgeInsets.only(bottom: 14),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withOpacity(.07),
+                    color: const Color(0xFF6366F1).withValues(alpha: .07),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF6366F1).withOpacity(.2))),
+                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: .2))),
                   child: Row(children: [
                     const Icon(Icons.psychology, size: 16, color: Color(0xFF6366F1)),
                     const SizedBox(width: 8),
@@ -789,8 +789,8 @@ class _InsiderThreatState extends State<InsiderThreatScreen> {
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                color: col.withOpacity(.05),
-                border: Border.all(color: col.withOpacity(.2))),
+                color: col.withValues(alpha: .05),
+                border: Border.all(color: col.withValues(alpha: .2))),
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(str(score['username'] ?? score['user_id']),
@@ -876,8 +876,8 @@ class _NBAState extends State<NBAScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: col.withOpacity(.25)),
-                color: col.withOpacity(.04)),
+                border: Border.all(color: col.withValues(alpha: .25)),
+                color: col.withValues(alpha: .04)),
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
@@ -970,7 +970,7 @@ class _ClustersState extends State<ClustersScreen> {
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: const Color(0xFF6366F1).withOpacity(.12),
+                  backgroundColor: const Color(0xFF6366F1).withValues(alpha: .12),
                   child: Text('$cnt', style: const TextStyle(
                     fontWeight: FontWeight.w900, color: Color(0xFF6366F1)))),
                 title: Text(str(cl['cluster_name'] ?? cl['name'] ?? 'Cluster $id'),
@@ -1129,8 +1129,8 @@ class _ITDRState extends State<ITDRScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: col.withOpacity(.25)),
-                    color: col.withOpacity(.04)),
+                    border: Border.all(color: col.withValues(alpha: .25)),
+                    color: col.withValues(alpha: .04)),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
                       Expanded(child: Text(str(f['title'] ?? f['finding_type']),

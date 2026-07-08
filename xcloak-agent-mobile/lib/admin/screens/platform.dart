@@ -113,7 +113,7 @@ class _AIAssistantState extends State<AIAssistantScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withOpacity(.1),
+              color: const Color(0xFF6366F1).withValues(alpha: .1),
               borderRadius: BorderRadius.circular(20)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.psychology, size: 13, color: Color(0xFF6366F1)),
@@ -204,7 +204,7 @@ class _EmptyChat extends StatelessWidget {
         Center(child: Container(
           width: 64, height: 64,
           decoration: BoxDecoration(
-            color: const Color(0xFF6366F1).withOpacity(.12),
+            color: const Color(0xFF6366F1).withValues(alpha: .12),
             shape: BoxShape.circle),
           child: const Icon(Icons.psychology, size: 34, color: Color(0xFF6366F1)),
         )),
@@ -384,8 +384,8 @@ class _UsersTabState extends State<_UsersTab> with AutomaticKeepAliveClientMixin
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: active
-                        ? const Color(0xFF6366F1).withOpacity(.12)
-                        : Colors.grey.withOpacity(.12),
+                        ? const Color(0xFF6366F1).withValues(alpha: .12)
+                        : Colors.grey.withValues(alpha: .12),
                       child: Text((str(u['email'], 'U')[0]).toUpperCase(),
                         style: TextStyle(
                           color: active ? const Color(0xFF6366F1) : Colors.grey,
@@ -503,9 +503,9 @@ class _ApiKeysTabState extends State<_ApiKeysTab> with AutomaticKeepAliveClientM
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF22C55E).withOpacity(.07),
+              color: const Color(0xFF22C55E).withValues(alpha: .07),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF22C55E).withOpacity(.25))),
+              border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: .25))),
             child: Row(children: [
               const Icon(Icons.vpn_key, color: Color(0xFF22C55E), size: 16),
               const SizedBox(width: 8),
@@ -534,7 +534,7 @@ class _ApiKeysTabState extends State<_ApiKeysTab> with AutomaticKeepAliveClientM
                       leading: Container(
                         width: 38, height: 38,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(.1),
+                          color: const Color(0xFF6366F1).withValues(alpha: .1),
                           borderRadius: BorderRadius.circular(9)),
                         child: const Icon(Icons.vpn_key, size: 18, color: Color(0xFF6366F1))),
                       title: Text(str(k['name'] ?? k['label']),
@@ -634,7 +634,7 @@ class _IntegrationsTabState extends State<_IntegrationsTab> with AutomaticKeepAl
               leading: Container(
                 width: 38, height: 38,
                 decoration: BoxDecoration(
-                  color: (enabled ? const Color(0xFF22C55E) : Colors.grey).withOpacity(.1),
+                  color: (enabled ? const Color(0xFF22C55E) : Colors.grey).withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(9)),
                 child: Icon(_integIcon(name), size: 20,
                   color: enabled ? const Color(0xFF22C55E) : Colors.grey)),
@@ -725,7 +725,7 @@ class _RolesTabState extends State<_RolesTab> with AutomaticKeepAliveClientMixin
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(.1),
+                  color: Colors.grey.withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(8)),
                 child: const Text('Built-in', style: TextStyle(fontSize: 11, color: Colors.grey)),
               ),
@@ -843,7 +843,7 @@ class _TenantsState extends State<TenantsScreen> {
                     leading: Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: (active ? const Color(0xFF3B82F6) : Colors.grey).withOpacity(.1),
+                        color: (active ? const Color(0xFF3B82F6) : Colors.grey).withValues(alpha: .1),
                         borderRadius: BorderRadius.circular(10)),
                       child: Icon(Icons.business,
                         color: active ? const Color(0xFF3B82F6) : Colors.grey)),

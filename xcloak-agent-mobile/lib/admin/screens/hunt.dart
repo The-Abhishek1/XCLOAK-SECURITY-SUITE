@@ -1134,7 +1134,7 @@ class _LiveLogsState extends State<LiveLogsScreen> {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(.08)))),
+                border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: .08)))),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(level.toUpperCase().padRight(5),
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
@@ -1278,7 +1278,7 @@ class _FirewallState extends State<FirewallScreen> {
                     leading: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: _actionColor(action).withOpacity(.12),
+                        color: _actionColor(action).withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(8)),
                       child: Icon(
                         action.toLowerCase() == 'block' || action.toLowerCase() == 'deny'
@@ -1370,7 +1370,7 @@ class _ScriptRunnerState extends State<ScriptRunnerScreen> {
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(.1),
+                          color: const Color(0xFF6366F1).withValues(alpha: .1),
                           borderRadius: BorderRadius.circular(8)),
                         child: const Icon(Icons.terminal, color: Color(0xFF6366F1), size: 20),
                       ),

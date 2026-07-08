@@ -392,7 +392,7 @@ class _OverviewTabState extends State<_OverviewTab>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft, end: Alignment.bottomRight,
-                colors: [lv.color.withOpacity(.09), cs.surface],
+                colors: [lv.color.withValues(alpha: .09), cs.surface],
               ),
             ),
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 22),
@@ -420,10 +420,10 @@ class _OverviewTabState extends State<_OverviewTab>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  color: (_serverOnline ? _kGreen : _kRed).withOpacity(.1),
+                  color: (_serverOnline ? _kGreen : _kRed).withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: (_serverOnline ? _kGreen : _kRed).withOpacity(.3)),
+                    color: (_serverOnline ? _kGreen : _kRed).withValues(alpha: .3)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Container(
@@ -452,11 +452,11 @@ class _OverviewTabState extends State<_OverviewTab>
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(colors: [
-                    _kPurple.withOpacity(.12),
-                    _kBlue.withOpacity(.06),
+                    _kPurple.withValues(alpha: .12),
+                    _kBlue.withValues(alpha: .06),
                   ]),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _kPurple.withOpacity(.3)),
+                  border: Border.all(color: _kPurple.withValues(alpha: .3)),
                 ),
                 child: Row(children: [
                   const Icon(Icons.system_update_alt, color: _kPurple, size: 18),
@@ -566,7 +566,7 @@ class _OverviewTabState extends State<_OverviewTab>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: _kGreen.withOpacity(.12),
+                      color: _kGreen.withValues(alpha: .12),
                       borderRadius: BorderRadius.circular(5)),
                     child: const Text('VPN',
                       style: TextStyle(fontSize: 10.5, color: _kGreen,
@@ -695,12 +695,12 @@ class _ThreatsTabState extends State<_ThreatsTab> {
 
     if (_alerts.isEmpty && _sideloaded.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.verified_user_outlined, size: 72, color: _kGreen.withOpacity(.5)),
+        Icon(Icons.verified_user_outlined, size: 72, color: _kGreen.withValues(alpha: .5)),
         const SizedBox(height: 16),
         const Text('No Threats Detected',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        Text('Your device is clean.', style: TextStyle(color: cs.onSurface.withOpacity(.5))),
+        Text('Your device is clean.', style: TextStyle(color: cs.onSurface.withValues(alpha: .5))),
         const SizedBox(height: 24),
         TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh),
           label: const Text('Refresh')),
@@ -732,7 +732,7 @@ class _ThreatsTabState extends State<_ThreatsTab> {
           // Alert list
           if (filtered.isNotEmpty) ...[
             Text('${filtered.length} alert${filtered.length == 1 ? "" : "s"}',
-              style: TextStyle(fontSize: 11.5, color: cs.onSurface.withOpacity(.5),
+              style: TextStyle(fontSize: 11.5, color: cs.onSurface.withValues(alpha: .5),
                 fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             ...List.generate(filtered.length, (i) {
@@ -750,7 +750,7 @@ class _ThreatsTabState extends State<_ThreatsTab> {
             Center(child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Text('No ${_filter!.label} alerts',
-                style: TextStyle(color: cs.onSurface.withOpacity(.4))),
+                style: TextStyle(color: cs.onSurface.withValues(alpha: .4))),
             )),
 
           // Sideloaded apps
@@ -776,9 +776,9 @@ class _ThreatsTabState extends State<_ThreatsTab> {
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: _kOrange.withOpacity(.05),
+                  color: _kOrange.withValues(alpha: .05),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _kOrange.withOpacity(.2))),
+                  border: Border.all(color: _kOrange.withValues(alpha: .2))),
                 child: Row(children: [
                   const Icon(Icons.android, color: _kOrange, size: 18),
                   const SizedBox(width: 10),
@@ -955,7 +955,7 @@ class _PostureTabState extends State<_PostureTab>
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: _score / 100, minHeight: 5,
-                      backgroundColor: _scoreColor.withOpacity(.15),
+                      backgroundColor: _scoreColor.withValues(alpha: .15),
                       valueColor: AlwaysStoppedAnimation(_scoreColor),
                     ),
                   ),
@@ -1047,9 +1047,9 @@ class _PostureTabState extends State<_PostureTab>
                 margin: const EdgeInsets.only(bottom: 4, left: 16),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: _kRed.withOpacity(.05),
+                  color: _kRed.withValues(alpha: .05),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _kRed.withOpacity(.15))),
+                  border: Border.all(color: _kRed.withValues(alpha: .15))),
                 child: Row(children: [
                   const Icon(Icons.android, size: 14, color: _kRed),
                   const SizedBox(width: 8),
@@ -1066,14 +1066,14 @@ class _PostureTabState extends State<_PostureTab>
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 decoration: BoxDecoration(
-                  color: _kAmber.withOpacity(.06),
+                  color: _kAmber.withValues(alpha: .06),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _kAmber.withOpacity(.25))),
+                  border: Border.all(color: _kAmber.withValues(alpha: .25))),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(
                     width: 20, height: 20, alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: _kAmber.withOpacity(.15),
+                      color: _kAmber.withValues(alpha: .15),
                       borderRadius: BorderRadius.circular(5)),
                     child: Text('${e.key + 1}',
                       style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
@@ -1238,7 +1238,7 @@ class _NetworkTabState extends State<_NetworkTab> {
                 Container(
                   width: 52, height: 52,
                   decoration: BoxDecoration(
-                    color: _connColor.withOpacity(.12),
+                    color: _connColor.withValues(alpha: .12),
                     borderRadius: BorderRadius.circular(14)),
                   child: Icon(_connIcon(), color: _connColor, size: 26),
                 ),
@@ -1296,7 +1296,7 @@ class _NetworkTabState extends State<_NetworkTab> {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: _networkScore / 100, minHeight: 6,
-                    backgroundColor: _riskColor(_networkScore).withOpacity(.15),
+                    backgroundColor: _riskColor(_networkScore).withValues(alpha: .15),
                     valueColor: AlwaysStoppedAnimation(_riskColor(_networkScore)),
                   ),
                 ),
@@ -1460,9 +1460,9 @@ class _TasksTabState extends State<_TasksTab> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [
-                  _kPurple.withOpacity(.14), _kBlue.withOpacity(.07)]),
+                  _kPurple.withValues(alpha: .14), _kBlue.withOpacity(.07)]),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _kPurple.withOpacity(.3))),
+                border: Border.all(color: _kPurple.withValues(alpha: .3))),
               child: Row(children: [
                 const Icon(Icons.system_update_alt, color: _kPurple, size: 22),
                 const SizedBox(width: 12),
@@ -1485,7 +1485,7 @@ class _TasksTabState extends State<_TasksTab> {
               padding: const EdgeInsets.symmetric(vertical: 28),
               alignment: Alignment.center,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.task_alt, size: 48, color: _kGreen.withOpacity(.45)),
+                Icon(Icons.task_alt, size: 48, color: _kGreen.withValues(alpha: .45)),
                 const SizedBox(height: 10),
                 const Text('All clear — no pending tasks',
                   style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
@@ -1528,7 +1528,7 @@ class _TasksTabState extends State<_TasksTab> {
                   Container(
                     width: 34, height: 34,
                     decoration: BoxDecoration(
-                      color: _kBlue.withOpacity(.1),
+                      color: _kBlue.withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(9)),
                     child: Icon(_taskHistIcon(type), color: _kBlue, size: 16),
                   ),
@@ -1584,8 +1584,8 @@ class _AlertCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: sev.color.withOpacity(.3)),
-          color: sev.color.withOpacity(.04)),
+          border: Border.all(color: sev.color.withValues(alpha: .3)),
+          color: sev.color.withValues(alpha: .04)),
         clipBehavior: Clip.hardEdge,
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Container(width: 4, color: sev.color),
@@ -1611,9 +1611,9 @@ class _AlertCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: _kPurple.withOpacity(.1),
+                      color: _kPurple.withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: _kPurple.withOpacity(.25))),
+                      border: Border.all(color: _kPurple.withValues(alpha: .25))),
                     child: Text(mitre,
                       style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
                         color: _kPurple)),
@@ -1675,13 +1675,13 @@ class _TaskCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withOpacity(.3)),
-        color: statusColor.withOpacity(.05)),
+        border: Border.all(color: statusColor.withValues(alpha: .3)),
+        color: statusColor.withValues(alpha: .05)),
       child: Row(children: [
         Container(
           width: 40, height: 40,
           decoration: BoxDecoration(
-            color: statusColor.withOpacity(.12),
+            color: statusColor.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(10)),
           child: Icon(_taskIcon(type), color: statusColor, size: 20),
         ),
@@ -1724,10 +1724,10 @@ class _FilterChip extends StatelessWidget {
       duration: const Duration(milliseconds: 160),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: selected ? color.withOpacity(.14) : Colors.transparent,
+        color: selected ? color.withValues(alpha: .14) : Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: selected ? color : Colors.grey.withOpacity(.3),
+          color: selected ? color : Colors.grey.withValues(alpha: .3),
           width: selected ? 1.5 : 1)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
@@ -1737,7 +1737,7 @@ class _FilterChip extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
-              color: selected ? color : Colors.grey.withOpacity(.3),
+              color: selected ? color : Colors.grey.withValues(alpha: .3),
               borderRadius: BorderRadius.circular(10)),
             child: Text('$count', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
               color: selected ? Colors.white : Colors.grey)),
@@ -1765,9 +1765,9 @@ class _ConnChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(.1),
+        color: color.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(.3))),
+        border: Border.all(color: color.withValues(alpha: .3))),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 5),
@@ -1786,13 +1786,13 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) => Expanded(child: Container(
     padding: const EdgeInsets.symmetric(vertical: 10),
     decoration: BoxDecoration(
-      color: color.withOpacity(.08),
+      color: color.withValues(alpha: .08),
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: color.withOpacity(.2))),
+      border: Border.all(color: color.withValues(alpha: .2))),
     child: Column(children: [
       Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
       const SizedBox(height: 2),
-      Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(.8)),
+      Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: .8)),
         textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
     ]),
   ));
@@ -1813,14 +1813,14 @@ class _ActionTile extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(.07),
+        color: color.withValues(alpha: .07),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(.25))),
+        border: Border.all(color: color.withValues(alpha: .25))),
       child: Column(children: [
         Container(
           width: 38, height: 38,
           decoration: BoxDecoration(
-            color: color.withOpacity(.12),
+            color: color.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(10)),
           child: Icon(icon, color: color, size: 20),
         ),
@@ -1846,7 +1846,7 @@ class _SubScore extends StatelessWidget {
         width: 44, height: 44,
         child: CircularProgressIndicator(
           value: score / 100, strokeWidth: 4,
-          backgroundColor: _color.withOpacity(.15),
+          backgroundColor: _color.withValues(alpha: .15),
           valueColor: AlwaysStoppedAnimation(_color),
           strokeCap: StrokeCap.round),
       ),
@@ -1875,13 +1875,13 @@ class _GroupHeader extends StatelessWidget {
       const SizedBox(width: 8),
       Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
         letterSpacing: .8,
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(.7))),
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .7))),
       if (score != null) ...[
         const Spacer(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-            color: _scoreColor(score!).withOpacity(.12),
+            color: _scoreColor(score!).withValues(alpha: .12),
             borderRadius: BorderRadius.circular(5)),
           child: Text('$score%',
             style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800,
@@ -1904,9 +1904,9 @@ class _CheckRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: color.withOpacity(.04),
+        color: color.withValues(alpha: .04),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(.2))),
+        border: Border.all(color: color.withValues(alpha: .2))),
       child: Row(children: [
         Icon(pass ? Icons.check_circle_outline : Icons.cancel_outlined,
           color: color, size: 20),
@@ -1930,9 +1930,9 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withOpacity(.1),
+      color: color.withValues(alpha: .1),
       borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: color.withOpacity(.25))),
+      border: Border.all(color: color.withValues(alpha: .25))),
     child: Text(label, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800,
       color: color, letterSpacing: .7)),
   );
@@ -1998,7 +1998,7 @@ class _ProgressRow extends StatelessWidget {
         child: LinearProgressIndicator(
           value: value.clamp(0.0, 1.0),
           minHeight: 5,
-          backgroundColor: color.withOpacity(.15),
+          backgroundColor: color.withValues(alpha: .15),
           valueColor: AlwaysStoppedAnimation(color),
         ),
       ),
@@ -2025,7 +2025,7 @@ class _RingPainter extends CustomPainter {
 
     // Background track
     canvas.drawArc(rect, -pi / 2, 2 * pi, false, Paint()
-      ..color       = color.withOpacity(.12)
+      ..color       = color.withValues(alpha: .12)
       ..style       = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap   = StrokeCap.round);

@@ -49,9 +49,9 @@ class SevChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: c.withOpacity(.12),
+        color: c.withValues(alpha: .12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.withOpacity(.35), width: .8),
+        border: Border.all(color: c.withValues(alpha: .35), width: .8),
       ),
       child: Text(
         sev.toUpperCase(),
@@ -71,7 +71,7 @@ class StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: c.withOpacity(.12),
+        color: c.withValues(alpha: .12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -151,14 +151,14 @@ class XEmptyState extends StatelessWidget {
           Container(
             width: 72, height: 72,
             decoration: BoxDecoration(
-              color: cs.primary.withOpacity(.07),
+              color: cs.primary.withValues(alpha: .07),
               borderRadius: BorderRadius.circular(36),
             ),
-            child: Icon(icon, size: 30, color: cs.primary.withOpacity(.45)),
+            child: Icon(icon, size: 30, color: cs.primary.withValues(alpha: .45)),
           ),
           const SizedBox(height: 16),
           Text(label,
-              style: TextStyle(fontSize: 14, color: cs.onSurface.withOpacity(.45))),
+              style: TextStyle(fontSize: 14, color: cs.onSurface.withValues(alpha: .45))),
         ]),
       ),
     );
@@ -261,7 +261,7 @@ class _StatCard extends StatelessWidget {
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: color, height: 1.1)),
               const SizedBox(height: 2),
               Text(label,
-                  style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurface.withOpacity(.5), letterSpacing: .2),
+                  style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .5), letterSpacing: .2),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
             ]),
           ),
@@ -338,14 +338,14 @@ class KpiCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(.2)),
+          border: Border.all(color: color.withValues(alpha: .2)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Container(
               width: 30, height: 30,
               decoration: BoxDecoration(
-                color: color.withOpacity(.12),
+                color: color.withValues(alpha: .12),
                 borderRadius: BorderRadius.circular(8)),
               child: Icon(icon, color: color, size: 16),
             ),
@@ -354,7 +354,7 @@ class KpiCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (trend!.startsWith('-') ? const Color(0xFF22C55E) : const Color(0xFFEF4444)).withOpacity(.12),
+                  color: (trend!.startsWith('-') ? const Color(0xFF22C55E) : const Color(0xFFEF4444)).withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(6)),
                 child: Text(trend!,
                   style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
@@ -364,7 +364,7 @@ class KpiCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color, height: 1)),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 10.5, color: cs.onSurface.withOpacity(.5), letterSpacing: .1),
+          Text(label, style: TextStyle(fontSize: 10.5, color: cs.onSurface.withValues(alpha: .5), letterSpacing: .1),
             maxLines: 1, overflow: TextOverflow.ellipsis),
         ]),
       ),
@@ -389,7 +389,7 @@ class SectionTitle extends StatelessWidget {
           borderRadius: BorderRadius.circular(2))),
       const SizedBox(width: 8),
       Text(text, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800,
-        letterSpacing: .8, color: Theme.of(context).colorScheme.onSurface.withOpacity(.65))),
+        letterSpacing: .8, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .65))),
       if (trailing != null) ...[const Spacer(), trailing!],
     ]),
   );
@@ -433,7 +433,7 @@ class _RingGaugePainter extends CustomPainter {
     final r    = min(size.width, size.height) / 2 - sw / 2;
     final rect = Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: r);
     canvas.drawArc(rect, -pi / 2, 2 * pi, false, Paint()
-      ..color       = color.withOpacity(.13)
+      ..color       = color.withValues(alpha: .13)
       ..style       = PaintingStyle.stroke
       ..strokeWidth = sw
       ..strokeCap   = StrokeCap.round);
@@ -478,7 +478,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
         width: 7, height: 7,
         margin: const EdgeInsets.only(right: 4),
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(.3 + t * .5),
+          color: Colors.grey.withValues(alpha: .3 + t * .5),
           shape: BoxShape.circle),
       );
     })),
@@ -526,7 +526,7 @@ class HealthBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(
             value: score / 100, minHeight: 4,
-            backgroundColor: _color.withOpacity(.15),
+            backgroundColor: _color.withValues(alpha: .15),
             valueColor: AlwaysStoppedAnimation(_color)),
         )),
         const SizedBox(width: 6),
@@ -598,7 +598,7 @@ class FilterRow extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: active ? cs.onPrimary.withOpacity(.2) : cs.outline.withOpacity(.3),
+                      color: active ? cs.onPrimary.withValues(alpha: .2) : cs.outline.withOpacity(.3),
                       borderRadius: BorderRadius.circular(10)),
                     child: Text('${c.$3}',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
@@ -631,10 +631,10 @@ class TimelineEntry extends StatelessWidget {
       child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(width: 40, child: Column(children: [
           Container(width: 32, height: 32,
-            decoration: BoxDecoration(color: color.withOpacity(.12), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color.withValues(alpha: .12), shape: BoxShape.circle),
             child: Icon(icon, size: 15, color: color)),
           if (!isLast) Expanded(child: Container(width: 1.5,
-            color: cs.outlineVariant.withOpacity(.5))),
+            color: cs.outlineVariant.withValues(alpha: .5))),
         ])),
         Expanded(child: Padding(
           padding: EdgeInsets.only(left: 10, bottom: isLast ? 0 : 14),
@@ -678,7 +678,7 @@ Widget swipeCard({
     alignment: Alignment.centerLeft,
     padding: const EdgeInsets.only(left: 20),
     margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(color: rightColor.withOpacity(.15),
+    decoration: BoxDecoration(color: rightColor.withValues(alpha: .15),
       borderRadius: BorderRadius.circular(12)),
     child: Row(children: [
       Icon(rightIcon, color: rightColor),
@@ -690,7 +690,7 @@ Widget swipeCard({
     alignment: Alignment.centerRight,
     padding: const EdgeInsets.only(right: 20),
     margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(color: leftColor.withOpacity(.15),
+    decoration: BoxDecoration(color: leftColor.withValues(alpha: .15),
       borderRadius: BorderRadius.circular(12)),
     child: Row(children: [
       const Spacer(),
@@ -728,7 +728,7 @@ void showDetailSheet(BuildContext context, String title, List<(String, String)> 
           Container(
             width: 36, height: 4,
             decoration: BoxDecoration(
-              color: cs.onSurface.withOpacity(.2),
+              color: cs.onSurface.withValues(alpha: .2),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -740,7 +740,7 @@ void showDetailSheet(BuildContext context, String title, List<(String, String)> 
               if (actions != null) ...actions,
             ]),
           ),
-          Divider(height: 1, color: cs.outline.withOpacity(.2)),
+          Divider(height: 1, color: cs.outline.withValues(alpha: .2)),
           Expanded(
             child: ListView(
               controller: ctrl,
@@ -751,7 +751,7 @@ void showDetailSheet(BuildContext context, String title, List<(String, String)> 
                   SizedBox(
                     width: 110,
                     child: Text(r.$1,
-                        style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(.5))),
+                        style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: .5))),
                   ),
                   Expanded(child: Text(r.$2,
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),

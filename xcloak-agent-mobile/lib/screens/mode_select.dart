@@ -159,7 +159,7 @@ class _ModeSelectState extends State<ModeSelectScreen> {
                           Container(
                             width: 48, height: 48,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(.15),
+                              color: Colors.white.withValues(alpha: .15),
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: const Icon(Icons.security, color: Colors.white, size: 26),
@@ -170,12 +170,12 @@ class _ModeSelectState extends State<ModeSelectScreen> {
                                 style: TextStyle(color: Colors.white,
                                     fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.3)),
                             Text('Security Suite',
-                                style: TextStyle(color: Colors.white.withOpacity(.65), fontSize: 12)),
+                                style: TextStyle(color: Colors.white.withValues(alpha: .65), fontSize: 12)),
                           ]),
                         ]),
                         const SizedBox(height: 12),
                         Text('Select your mode',
-                            style: TextStyle(color: Colors.white.withOpacity(.7), fontSize: 13)),
+                            style: TextStyle(color: Colors.white.withValues(alpha: .7), fontSize: 13)),
                       ],
                     ),
                   ),
@@ -245,7 +245,7 @@ class _ModeSelectState extends State<ModeSelectScreen> {
                     'Agent mode only shows data for this enrolled device.\n'
                     'Admin console provides access to all platform data.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(.4),
+                    style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .4),
                         height: 1.5),
                   ),
                 ),
@@ -317,12 +317,12 @@ class _ModeCard extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: dark ? iconColor.withOpacity(.25) : iconColor.withOpacity(.35),
+              color: dark ? iconColor.withValues(alpha: .25) : iconColor.withOpacity(.35),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: iconColor.withOpacity(.12),
+                color: iconColor.withValues(alpha: .12),
                 blurRadius: 20,
                 offset: const Offset(0, 6),
               ),
@@ -337,9 +337,9 @@ class _ModeCard extends StatelessWidget {
                 Container(
                   width: 48, height: 48,
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(.15),
+                    color: iconColor.withValues(alpha: .15),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: iconColor.withOpacity(.3)),
+                    border: Border.all(color: iconColor.withValues(alpha: .3)),
                   ),
                   child: Icon(icon, color: iconColor, size: 26),
                 ),
@@ -355,9 +355,9 @@ class _ModeCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: badgeColor.withOpacity(.15),
+                    color: badgeColor.withValues(alpha: .15),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: badgeColor.withOpacity(.4)),
+                    border: Border.all(color: badgeColor.withValues(alpha: .4)),
                   ),
                   child: Text(badgeText,
                       style: TextStyle(color: badgeColor, fontSize: 9,
@@ -366,7 +366,7 @@ class _ModeCard extends StatelessWidget {
               ]),
 
               const SizedBox(height: 16),
-              Divider(color: iconColor.withOpacity(.15), height: 1),
+              Divider(color: iconColor.withValues(alpha: .15), height: 1),
               const SizedBox(height: 14),
 
               // Features
@@ -385,7 +385,7 @@ class _ModeCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(.06),
+                    color: Colors.white.withValues(alpha: .06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [

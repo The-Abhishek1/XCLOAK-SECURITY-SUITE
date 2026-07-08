@@ -89,7 +89,7 @@ class _ReportsState extends State<ReportsScreen> {
                     leading: Container(
                       width: 38, height: 38,
                       decoration: BoxDecoration(
-                        color: col.withOpacity(.1),
+                        color: col.withValues(alpha: .1),
                         borderRadius: BorderRadius.circular(9)),
                       child: Icon(Icons.description, size: 18, color: col)),
                     title: Text(str(r['title']), style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -205,7 +205,7 @@ class _FrameworksState extends State<FrameworksScreen> {
                           Container(
                             width: 40, height: 40,
                             decoration: BoxDecoration(
-                              color: col.withOpacity(.1),
+                              color: col.withValues(alpha: .1),
                               borderRadius: BorderRadius.circular(10)),
                             child: Icon(Icons.policy, color: col)),
                           const SizedBox(width: 12),
@@ -223,7 +223,7 @@ class _FrameworksState extends State<FrameworksScreen> {
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
                             value: score / 100, minHeight: 6,
-                            backgroundColor: col.withOpacity(.12),
+                            backgroundColor: col.withValues(alpha: .12),
                             valueColor: AlwaysStoppedAnimation(col)),
                         ),
                         if (f['last_assessed'] != null) ...[
@@ -387,7 +387,7 @@ class _TrendBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(3),
                 child: Container(
                   height: 60 * pct + 4,
-                  color: col.withOpacity(.7))),
+                  color: col.withValues(alpha: .7))),
               const SizedBox(height: 4),
               Text(
                 e.key < labels.length ? labels[e.key] : '${e.key + 1}',
@@ -617,8 +617,8 @@ class _RiskPostureState extends State<RiskPostureScreen> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  color: catCol.withOpacity(.05),
-                  border: Border.all(color: catCol.withOpacity(.2))),
+                  color: catCol.withValues(alpha: .05),
+                  border: Border.all(color: catCol.withValues(alpha: .2))),
                 child: Row(children: [
                   RingGauge(value: score / 100, color: catCol, size: 52,
                     label: '${score.toInt()}'),
@@ -655,8 +655,8 @@ class _RiskPostureState extends State<RiskPostureScreen> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: riskcol.withOpacity(.25)),
-                  color: riskcol.withOpacity(.04)),
+                  border: Border.all(color: riskcol.withValues(alpha: .25)),
+                  color: riskcol.withValues(alpha: .04)),
                 child: Row(children: [
                   Container(width: 4, height: 36, color: riskcol,
                     margin: const EdgeInsets.only(right: 10)),
@@ -685,7 +685,7 @@ class _RiskPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
     decoration: BoxDecoration(
-      color: color.withOpacity(.1),
+      color: color.withValues(alpha: .1),
       borderRadius: BorderRadius.circular(6)),
     child: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700)),
   );
@@ -754,8 +754,8 @@ class _VulnQueueState extends State<VulnQueueScreen> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: col.withOpacity(.25)),
-                      color: col.withOpacity(.04)),
+                      border: Border.all(color: col.withValues(alpha: .25)),
+                      color: col.withValues(alpha: .04)),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
                         Expanded(child: Text(str(v['cve_id'] ?? v['title'] ?? 'CVE-Unknown'),

@@ -80,14 +80,14 @@ class _DashboardState extends State<DashboardScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft, end: Alignment.bottomRight,
-                colors: [col.withOpacity(.15), cs.surface],
+                colors: [col.withValues(alpha: .15), cs.surface],
               ),
             ),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
             child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('RISK LEVEL', style: TextStyle(fontSize: 10, letterSpacing: 1.4,
-                  color: cs.onSurface.withOpacity(.45), fontWeight: FontWeight.w700)),
+                  color: cs.onSurface.withValues(alpha: .45), fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Row(children: [
                   Container(
@@ -103,7 +103,7 @@ class _DashboardState extends State<DashboardScreen> {
                   _lastRefreshed != null
                     ? 'Updated ${_fmtTime(_lastRefreshed!)}'
                     : 'Tap to refresh',
-                  style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(.4)),
+                  style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .4)),
                 ),
               ])),
               const SizedBox(width: 16),
@@ -205,10 +205,10 @@ class _DashboardState extends State<DashboardScreen> {
                         Container(
                           width: 34, height: 34,
                           decoration: BoxDecoration(
-                            color: (online ? const Color(0xFF22C55E) : Colors.grey).withOpacity(.1),
+                            color: (online ? const Color(0xFF22C55E) : Colors.grey).withValues(alpha: .1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: (online ? const Color(0xFF22C55E) : Colors.grey).withOpacity(.25))),
+                              color: (online ? const Color(0xFF22C55E) : Colors.grey).withValues(alpha: .25))),
                           child: Icon(_osIcon(str(a['os'] ?? a['platform'])),
                             size: 16,
                             color: online ? const Color(0xFF22C55E) : Colors.grey.shade400),
@@ -253,9 +253,9 @@ class _DashboardState extends State<DashboardScreen> {
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                     decoration: BoxDecoration(
-                      color: col.withOpacity(.06),
+                      color: col.withValues(alpha: .06),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: col.withOpacity(.25))),
+                      border: Border.all(color: col.withValues(alpha: .25))),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
                         Icon(Icons.bolt, size: 12, color: col),
@@ -336,8 +336,8 @@ class _AlertPreview extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: col.withOpacity(.3)),
-        color: col.withOpacity(.04)),
+        border: Border.all(color: col.withValues(alpha: .3)),
+        color: col.withValues(alpha: .04)),
       clipBehavior: Clip.hardEdge,
       child: Row(children: [
         Container(width: 4, color: col),
@@ -534,7 +534,7 @@ class _AgentCard extends StatelessWidget {
               Container(
                 width: 42, height: 42,
                 decoration: BoxDecoration(
-                  color: col.withOpacity(.1),
+                  color: col.withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(11)),
                 child: Icon(_osIcon(os), color: col, size: 22)),
               Positioned(right: -3, bottom: -3, child: OnlineDot(_online)),
@@ -634,9 +634,9 @@ class _QuickAction extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 7),
         decoration: BoxDecoration(
-          color: c.withOpacity(.07),
+          color: c.withValues(alpha: .07),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: c.withOpacity(.2))),
+          border: Border.all(color: c.withValues(alpha: .2))),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 15, color: c),
           const SizedBox(height: 3),
@@ -698,13 +698,13 @@ class _NetworkMapState extends State<NetworkMapScreen> {
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               decoration: BoxDecoration(
-                color: col.withOpacity(.04),
+                color: col.withValues(alpha: .04),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: col.withOpacity(.2))),
+                border: Border.all(color: col.withValues(alpha: .2))),
               child: Row(children: [
                 Container(width: 36, height: 36,
                   decoration: BoxDecoration(
-                    color: col.withOpacity(.1), borderRadius: BorderRadius.circular(9)),
+                    color: col.withValues(alpha: .1), borderRadius: BorderRadius.circular(9)),
                   child: Icon(_nodeIcon(type), color: col, size: 18)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -784,8 +784,8 @@ class _AttackPathsState extends State<AttackPathsScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: col.withOpacity(.25)),
-                color: col.withOpacity(.04)),
+                border: Border.all(color: col.withValues(alpha: .25)),
+                color: col.withValues(alpha: .04)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Expanded(child: Text(str(path['name'] ?? path['title'] ?? 'Attack Path'),

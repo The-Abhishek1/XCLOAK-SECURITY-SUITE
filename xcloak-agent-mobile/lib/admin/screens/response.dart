@@ -171,7 +171,7 @@ class _CaseCard extends StatelessWidget {
               if (_age > 0) Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (_age > 7 ? const Color(0xFFEF4444) : Colors.grey).withOpacity(.1),
+                  color: (_age > 7 ? const Color(0xFFEF4444) : Colors.grey).withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(6)),
                 child: Text('${_age}d old', style: TextStyle(
                   fontSize: 10, fontWeight: FontWeight.w700,
@@ -343,9 +343,9 @@ class _PlaybooksState extends State<PlaybooksScreen> {
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: col.withOpacity(.06),
+                        color: col.withValues(alpha: .06),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: col.withOpacity(.25))),
+                        border: Border.all(color: col.withValues(alpha: .25))),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Row(children: [
                           Icon(ok ? Icons.check_circle : Icons.cancel, size: 12, color: col),
@@ -404,7 +404,7 @@ class _PlaybookCard extends StatelessWidget {
             Container(
               width: 38, height: 38,
               decoration: BoxDecoration(
-                color: col.withOpacity(.1),
+                color: col.withValues(alpha: .1),
                 borderRadius: BorderRadius.circular(10)),
               child: Icon(Icons.auto_awesome, size: 20, color: col)),
             const SizedBox(width: 12),
@@ -668,7 +668,7 @@ class _ScheduledTasksState extends State<ScheduledTasksScreen> {
                     leading: Container(
                       width: 38, height: 38,
                       decoration: BoxDecoration(
-                        color: (enabled ? const Color(0xFF3B82F6) : Colors.grey).withOpacity(.1),
+                        color: (enabled ? const Color(0xFF3B82F6) : Colors.grey).withValues(alpha: .1),
                         borderRadius: BorderRadius.circular(9)),
                       child: Icon(Icons.schedule, size: 18,
                         color: enabled ? const Color(0xFF3B82F6) : Colors.grey)),
@@ -743,7 +743,7 @@ class _DFIRState extends State<DFIRScreen> {
               leading: Container(
                 width: 38, height: 38,
                 decoration: BoxDecoration(
-                  color: stCol.withOpacity(.1),
+                  color: stCol.withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(9)),
                 child: Icon(Icons.folder_zip, size: 18, color: stCol)),
               title: Text('$type — Agent ${str(col['agent_id'])}',
@@ -821,8 +821,8 @@ class _QuarantineState extends State<QuarantineScreen> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: const Color(0xFFEF4444).withOpacity(.04),
-                  border: Border.all(color: const Color(0xFFEF4444).withOpacity(.2))),
+                  color: const Color(0xFFEF4444).withValues(alpha: .04),
+                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: .2))),
                 child: Row(children: [
                   const Icon(Icons.insert_drive_file, color: Color(0xFFEF4444), size: 20),
                   const SizedBox(width: 12),

@@ -426,7 +426,7 @@ class _AgentTab extends StatelessWidget {
           Container(
             width: 48, height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(.12),
+              color: color.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -463,7 +463,7 @@ class _AgentTab extends StatelessWidget {
           Container(
             width: 40, height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(.12),
+              color: color.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -471,7 +471,7 @@ class _AgentTab extends StatelessWidget {
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: color, fontSize: 13)),
-            Text(sublabel, style: TextStyle(fontSize: 11, color: color.withOpacity(.7))),
+            Text(sublabel, style: TextStyle(fontSize: 11, color: color.withValues(alpha: .7))),
           ]),
         ]),
       ),
@@ -480,7 +480,7 @@ class _AgentTab extends StatelessWidget {
 
   Widget _infoRow(BuildContext context, IconData icon, String label, String value) {
     return Row(children: [
-      Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary.withOpacity(.6)),
+      Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary.withValues(alpha: .6)),
       const SizedBox(width: 10),
       Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
       const Spacer(),
@@ -497,7 +497,7 @@ class _AgentTab extends StatelessWidget {
         Container(
           width: 26, height: 26,
           decoration: BoxDecoration(
-            color: color.withOpacity(.12),
+            color: color.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(7),
           ),
           child: Icon(icon, size: 14, color: color),
@@ -517,7 +517,7 @@ class _AgentTab extends StatelessWidget {
     text,
     style: TextStyle(
       fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1,
-      color: Theme.of(context).colorScheme.primary.withOpacity(.75),
+      color: Theme.of(context).colorScheme.primary.withValues(alpha: .75),
     ),
   );
 }
@@ -715,7 +715,7 @@ class _AlertsTab extends StatelessWidget {
   Widget _sevPill(String sev, Color col) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
-      color: col.withOpacity(.12),
+      color: col.withValues(alpha: .12),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Text(sev.toUpperCase(),
@@ -791,7 +791,7 @@ class _AgentsTab extends StatelessWidget {
                   Container(
                     width: 40, height: 40,
                     decoration: BoxDecoration(
-                      color: (online ? const Color(0xFF22C55E) : Colors.grey).withOpacity(.1),
+                      color: (online ? const Color(0xFF22C55E) : Colors.grey).withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
@@ -867,21 +867,21 @@ class _NoApiKeyPlaceholder extends StatelessWidget {
           Container(
             width: 72, height: 72,
             decoration: BoxDecoration(
-              color: cs.primary.withOpacity(.07),
+              color: cs.primary.withValues(alpha: .07),
               borderRadius: BorderRadius.circular(36),
             ),
-            child: Icon(icon, size: 30, color: cs.primary.withOpacity(.4)),
+            child: Icon(icon, size: 30, color: cs.primary.withValues(alpha: .4)),
           ),
           const SizedBox(height: 16),
           Text(label,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500,
-                  color: cs.onSurface.withOpacity(.55))),
+                  color: cs.onSurface.withValues(alpha: .55))),
           const SizedBox(height: 8),
           Text(
             'Tap  to enter an Admin API Key.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(.35)),
+            style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: .35)),
           ),
         ]),
       ),

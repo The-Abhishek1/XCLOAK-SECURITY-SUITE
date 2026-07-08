@@ -150,7 +150,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                       Container(
                         width: 44, height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(.15),
+                          color: Colors.white.withValues(alpha: .15),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 24),
@@ -161,16 +161,16 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                             style: TextStyle(color: Colors.white, fontSize: 18,
                                 fontWeight: FontWeight.w700)),
                         Text('XCloak Security Platform',
-                            style: TextStyle(color: Colors.white.withOpacity(.65), fontSize: 12)),
+                            style: TextStyle(color: Colors.white.withValues(alpha: .65), fontSize: 12)),
                       ]),
                     ]),
                     const SizedBox(height: 20),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(.15),
+                        color: Colors.amber.withValues(alpha: .15),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.withOpacity(.4)),
+                        border: Border.all(color: Colors.amber.withValues(alpha: .4)),
                       ),
                       child: Row(children: [
                         Icon(Icons.lock_outline, color: Colors.amber.shade300, size: 14),
@@ -211,7 +211,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                     ),
                     indicatorSize: TabBarIndicatorSize.tab,
                     labelColor: Colors.white,
-                    unselectedLabelColor: cs.onSurface.withOpacity(.55),
+                    unselectedLabelColor: cs.onSurface.withValues(alpha: .55),
                     labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                     dividerColor: Colors.transparent,
                     tabs: const [
@@ -228,9 +228,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withOpacity(.08),
+                      color: const Color(0xFFEF4444).withValues(alpha: .08),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFEF4444).withOpacity(.3)),
+                      border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: .3)),
                     ),
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 16),
@@ -351,9 +351,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(.06),
+                              color: cs.primary.withValues(alpha: .06),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: cs.primary.withOpacity(.2)),
+                              border: Border.all(color: cs.primary.withValues(alpha: .2)),
                             ),
                             child: Row(children: [
                               Icon(Icons.info_outline, size: 14, color: cs.primary),
@@ -362,7 +362,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                                 child: Text(
                                   'The API key must have admin or platform_admin role. '
                                   'Create one in the web dashboard under Settings → API Keys.',
-                                  style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(.6)),
+                                  style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .6)),
                                 ),
                               ),
                             ]),
@@ -391,7 +391,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back, size: 16),
                   label: const Text('Back to Mode Selection'),
-                  style: TextButton.styleFrom(foregroundColor: cs.onSurface.withOpacity(.5)),
+                  style: TextButton.styleFrom(foregroundColor: cs.onSurface.withValues(alpha: .5)),
                 ),
               ]),
             ),

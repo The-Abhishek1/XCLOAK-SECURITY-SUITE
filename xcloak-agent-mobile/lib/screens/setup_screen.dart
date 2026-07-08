@@ -78,7 +78,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     Container(
                       width: 56, height: 56,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(.18),
+                        color: Colors.white.withValues(alpha: .18),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Icon(Icons.security, color: Colors.white, size: 30),
@@ -91,7 +91,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         )),
                     const SizedBox(height: 4),
                     Text('Endpoint Security Agent',
-                        style: TextStyle(color: Colors.white.withOpacity(.75), fontSize: 14)),
+                        style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 14)),
                   ]),
                 ),
               ),
@@ -114,7 +114,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         )),
                     const SizedBox(height: 4),
                     Text('Connect to your XCloak server to start monitoring.',
-                        style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(.55))),
+                        style: TextStyle(fontSize: 13, color: cs.onSurface.withValues(alpha: .55))),
                     const SizedBox(height: 24),
 
                     // Server URL
@@ -166,9 +166,9 @@ class _SetupScreenState extends State<SetupScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444).withOpacity(.08),
+                          color: const Color(0xFFEF4444).withValues(alpha: .08),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFEF4444).withOpacity(.3)),
+                          border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: .3)),
                         ),
                         child: Row(children: [
                           const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 16),
@@ -194,7 +194,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     Text(
                       'Your data stays on your server. XCloak never sends telemetry externally.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(.35)),
+                      style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .35)),
                     ),
                   ],
                 ),
