@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: xcloak-agent/go.mod
           cache-dependency-path: xcloak-agent/go.sum
 
       - name: go vet
@@ -71,7 +71,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: xcloak-agent/go.mod
           cache-dependency-path: xcloak-agent/go.sum
 
       - name: Cross-compile
@@ -123,7 +123,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: xcloak-agent/go.mod
           cache-dependency-path: xcloak-agent/go.sum
 
       - name: Build release binary

@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: xcloak-ngfw/backend/go.mod
-          cache: true
+          cache-dependency-path: xcloak-ngfw/backend/go.sum
 
       - name: Build
         run: go build ./...
@@ -48,7 +48,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: xcloak-agent/go.mod
-          cache: true
+          cache-dependency-path: xcloak-agent/go.sum
 
       - name: Build
         run: GOOS=linux GOARCH=amd64 go build -o xcloak-agent-linux-amd64 ./main.go
@@ -77,10 +77,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: xcloak-agent/go.mod
-          cache: true
+          cache-dependency-path: xcloak-agent/go.sum
 
       - name: Build (cross-compile)
-        run: GOOS=windows GOARCH=amd64 go build -o xcloak-agent-windows-amd64.exe ./main.go
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o xcloak-agent-windows-amd64.exe ./main.go
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -108,7 +108,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
 

@@ -16,8 +16,10 @@ tmp/
 *.dll
 *.so
 *.dylib
-# eBPF compiled objects
+# eBPF compiled objects (*.o excluded, but bpf2go-generated objects in
+# xcloak-agent/agent/ebpf/ must be committed — embedded at compile time)
 *.o
+!xcloak-agent/agent/ebpf/*.o
 # Go build output
 dist/
 **/dist/

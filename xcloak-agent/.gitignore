@@ -8,5 +8,8 @@ dist/
 *.exe
 *.out
 
-# eBPF compiled objects
+# eBPF compiled objects (*.o is excluded, but generated bpf2go objects must be
+# committed — they are embedded at compile time via //go:embed and cannot be
+# regenerated in CI without clang)
 *.o
+!agent/ebpf/*.o
