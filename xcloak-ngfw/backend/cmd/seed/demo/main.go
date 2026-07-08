@@ -164,16 +164,17 @@ func seedAlerts(db *sql.DB, agentIDs []int) {
 		{2, "medium", "Pass-the-Hash Attempt", "NTLM hash reuse from 10.0.2.55 to dc-01 — lateral movement", "Lateral Movement", "T1550.002", "Pass the Hash", "investigating", 400},
 	}
 
-	for _, a := range alerts {
+	for i, a := range alerts {
 		agentID := agentIDs[a.agentIdx%len(agentIDs)]
+		fingerprint := fmt.Sprintf("demo-%s-%d", a.technique, i)
 		mustExec(db, `
 			INSERT INTO alerts
 				(agent_id, severity, rule_name, log_message, created_at,
-				 mitre_tactic, mitre_technique, mitre_name, status, tenant_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,9999)`,
+				 mitre_tactic, mitre_technique, mitre_name, status, fingerprint, tenant_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,9999)`,
 			agentID, a.severity, a.rule, a.message,
 			now.Add(-time.Duration(a.minsAgo)*time.Minute),
-			a.tactic, a.technique, a.mitreName, a.status,
+			a.tactic, a.technique, a.mitreName, a.status, fingerprint,
 		)
 	}
 }
