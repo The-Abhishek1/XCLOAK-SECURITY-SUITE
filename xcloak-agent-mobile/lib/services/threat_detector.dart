@@ -13,31 +13,6 @@ import 'secure_storage.dart';
 // IOC feeds and known-malicious package lists.
 class ThreatDetector {
 
-  // Dangerous permissions that warrant flagging when granted to non-system,
-  // non-Play-Store apps. This is a subset of Android's "dangerous" permission
-  // group that have the highest abuse potential.
-  static const _sensitivePermissions = <String>[
-    'android.permission.READ_CONTACTS',
-    'android.permission.READ_CALL_LOG',
-    'android.permission.RECORD_AUDIO',
-    'android.permission.CAMERA',
-    'android.permission.ACCESS_FINE_LOCATION',
-    'android.permission.ACCESS_COARSE_LOCATION',
-    'android.permission.READ_SMS',
-    'android.permission.SEND_SMS',
-    'android.permission.RECEIVE_SMS',
-    'android.permission.READ_EXTERNAL_STORAGE',
-    'android.permission.WRITE_EXTERNAL_STORAGE',
-    'android.permission.PROCESS_OUTGOING_CALLS',
-    'android.permission.GET_ACCOUNTS',
-    'android.permission.USE_BIOMETRIC',
-    'android.permission.USE_FINGERPRINT',
-    'android.permission.BIND_ACCESSIBILITY_SERVICE',
-    'android.permission.SYSTEM_ALERT_WINDOW',      // overlay attack surface
-    'android.permission.BIND_DEVICE_ADMIN',         // device admin hijack
-    'android.permission.BIND_NOTIFICATION_LISTENER_SERVICE',
-  ];
-
   static Future<void> runInventoryScan() async {
     final apps = await _collectApps();
     if (apps.isEmpty) return;
@@ -66,7 +41,7 @@ class ThreatDetector {
         return AppInventoryItem(
           packageName: app.packageName,
           appName:     app.name,
-          version:     app.versionName ?? '',
+          version:     app.versionName,
           installer:   installer,
           isSystemApp: app.isSystemApp,
           // Permission collection requires PackageManager — not available

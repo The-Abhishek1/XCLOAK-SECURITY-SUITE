@@ -167,9 +167,7 @@ class PostureCollector {
 
     try {
       final result = await Connectivity().checkConnectivity();
-      // connectivity_plus returns List<ConnectivityResult>
-      final results = result is List ? result : [result];
-      if (results.contains(ConnectivityResult.wifi)) {
+      if (result.contains(ConnectivityResult.wifi)) {
         type = 'wifi';
         // SSID requires location permission on Android 8.1+; best-effort
         try {
@@ -177,9 +175,9 @@ class PostureCollector {
           final match = RegExp(r'SSID: ([^\n,]+)').firstMatch(p.stdout as String);
           if (match != null) ssid = match.group(1)!.trim().replaceAll('"', '');
         } catch (_) {}
-      } else if (results.contains(ConnectivityResult.mobile)) {
+      } else if (result.contains(ConnectivityResult.mobile)) {
         type = 'mobile';
-      } else if (results.contains(ConnectivityResult.ethernet)) {
+      } else if (result.contains(ConnectivityResult.ethernet)) {
         type = 'ethernet';
       }
     } catch (_) {}

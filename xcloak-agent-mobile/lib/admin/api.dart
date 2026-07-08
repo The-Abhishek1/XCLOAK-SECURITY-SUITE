@@ -162,7 +162,7 @@ class DashboardApi {
           (profile['role'] ?? '').toString().toLowerCase() == 'admin';
       if (!isAdmin) { await SecureStore.clearAdminSession(); return null; }
 
-      return DashboardApi._(client!);
+      return DashboardApi._(client);
     } catch (_) {
       return null;
     }
