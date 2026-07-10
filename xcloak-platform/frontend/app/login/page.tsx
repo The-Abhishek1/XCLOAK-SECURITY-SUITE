@@ -64,28 +64,6 @@ function DemoOnlyLanding() {
             ))}
           </div>
 
-          {/* CTA */}
-          <a
-            href="/demo"
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-bold transition-all hover:opacity-90 active:scale-[0.98] mb-3"
-            style={{
-              background:  'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
-              color:       '#fff',
-              boxShadow:   '0 4px 20px rgba(99,102,241,0.4)',
-            }}
-          >
-            <ShieldCheck className="h-5 w-5" />
-            Enter Live Demo
-            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'rgba(255,255,255,0.2)' }}>
-              No signup
-            </span>
-          </a>
-
-          <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
-            Explore with real threat data. All actions are read-only.
-            <br />
-            Session expires after 2 hours.
-          </p>
 
           <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--border)' }}>
             <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -485,27 +463,6 @@ function LoginContent() {
             </>
           )}
 
-          {/* Demo entry point */}
-          <div className="mt-5 flex items-center gap-3">
-            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-            <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>or</span>
-            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-          </div>
-          <a
-            href="/demo"
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{
-              background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
-              color: '#fff',
-              boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
-            }}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            Try the live demo
-            <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.2)' }}>
-              No signup
-            </span>
-          </a>
 
           <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
             XCloak Security Suite · Enterprise Edition
