@@ -7,7 +7,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$REPO_ROOT/xcloak-ngfw/backend/.env"
+ENV_FILE="$REPO_ROOT/xcloak-platform/backend/.env"
 
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 <backup-file.sql.gz>" >&2

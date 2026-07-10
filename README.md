@@ -102,13 +102,13 @@ cd XCLOAK-SECURITY-SUITE
 docker compose up -d
 
 # Backend
-cd xcloak-ngfw/backend
+cd xcloak-platform/backend
 cp .env.example .env
 # Set JWT_SECRET, DB_PASSWORD in .env
 go run ./main.go   # or: air (hot reload)
 
 # Frontend (separate terminal)
-cd xcloak-ngfw/frontend && npm install && npm run dev
+cd xcloak-platform/frontend && npm install && npm run dev
 ```
 
 Open http://localhost:3000 — first signup creates the admin account.

@@ -56,7 +56,7 @@ This starts PostgreSQL, Redis, Kafka, Prometheus, Grafana, and MinIO. Access:
 **Step 3 — Configure the backend:**
 
 ```bash
-cd xcloak-ngfw/backend
+cd xcloak-platform/backend
 cp .env.example .env
 ```
 
@@ -86,7 +86,7 @@ The backend runs 56 database migrations automatically on first start. Migration 
 **Step 5 — Start the frontend:**
 
 ```bash
-cd xcloak-ngfw/frontend
+cd xcloak-platform/frontend
 npm install && npm run dev
 ```
 
@@ -266,14 +266,14 @@ openssl rand 32 | base64 | tr '+/' '-_' | tr -d '='
 
 ```bash
 # Linux amd64
-curl -Lo xcloak-agent \
+curl -Lo xcloak-agent-desktop \
   https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/latest/download/xcloak-agent-linux-amd64
-chmod +x xcloak-agent
+chmod +x xcloak-agent-desktop
 
 # Linux arm64
-curl -Lo xcloak-agent \
+curl -Lo xcloak-agent-desktop \
   https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/latest/download/xcloak-agent-linux-arm64
-chmod +x xcloak-agent
+chmod +x xcloak-agent-desktop
 
 # Windows — download xcloak-agent-windows-amd64.exe
 ```
@@ -281,23 +281,23 @@ chmod +x xcloak-agent
 **Build from source:**
 
 ```bash
-cd xcloak-agent
-go build -o xcloak-agent ./main.go
+cd xcloak-agent-desktop
+go build -o xcloak-agent-desktop ./main.go
 ```
 
 **Windows cross-compile:**
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o xcloak-agent.exe ./main.go
+GOOS=windows GOARCH=amd64 go build -o xcloak-agent-desktop.exe ./main.go
 ```
 
 ### First Run
 
 ```bash
-XCLOAK_SERVER=https://xcloak.yourdomain.com ./xcloak-agent
+XCLOAK_SERVER=https://xcloak.yourdomain.com ./xcloak-agent-desktop
 ```
 
-On first run the agent prompts for an **install token** (generate one at **Agents → Add Agent → Install Token** in the UI). After registration the agent token is saved to `~/.config/xcloak-agent/token` and reused on every restart.
+On first run the agent prompts for an **install token** (generate one at **Agents → Add Agent → Install Token** in the UI). After registration the agent token is saved to `~/.config/xcloak-agent-desktop/token` and reused on every restart.
 
 ### Agent Environment Variables
 
@@ -780,7 +780,7 @@ curl https://xcloak.yourdomain.com/api/agents \
 | `GET` | `/api/health` | Health check |
 | `GET` | `/api/health/deep` | Deep health (DB, Redis, Kafka, ES) |
 
-Full OpenAPI specification: `xcloak-ngfw/backend/docs/generated/openapi.yaml`
+Full OpenAPI specification: `xcloak-platform/backend/docs/generated/openapi.yaml`
 
 ---
 

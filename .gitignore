@@ -4,6 +4,7 @@
 prometheus/metrics_token
 backups/
 .claude/
+.env.demo
 
 # ── Build artifacts ───────────────────────────────────────────────────────────
 **/tmp/main
@@ -17,9 +18,9 @@ tmp/
 *.so
 *.dylib
 # eBPF compiled objects (*.o excluded, but bpf2go-generated objects in
-# xcloak-agent/agent/ebpf/ must be committed — embedded at compile time)
+# xcloak-agent-desktop/agent/ebpf/ must be committed — embedded at compile time)
 *.o
-!xcloak-agent/agent/ebpf/*.o
+!xcloak-agent-desktop/agent/ebpf/*.o
 # Go build output
 dist/
 **/dist/

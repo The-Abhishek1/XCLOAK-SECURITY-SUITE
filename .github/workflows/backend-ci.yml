@@ -3,16 +3,16 @@ name: backend-ci
 on:
   push:
     paths:
-      - 'xcloak-ngfw/backend/**'
+      - 'xcloak-platform/backend/**'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     paths:
-      - 'xcloak-ngfw/backend/**'
+      - 'xcloak-platform/backend/**'
       - '.github/workflows/backend-ci.yml'
 
 defaults:
   run:
-    working-directory: xcloak-ngfw/backend
+    working-directory: xcloak-platform/backend
 
 jobs:
   build-and-test:
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-          cache-dependency-path: xcloak-ngfw/backend/go.sum
+          cache-dependency-path: xcloak-platform/backend/go.sum
 
       - name: go vet
         run: go vet ./...

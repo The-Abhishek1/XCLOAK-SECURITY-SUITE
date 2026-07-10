@@ -3,16 +3,16 @@ name: agent-ci
 on:
   push:
     paths:
-      - 'xcloak-agent/**'
+      - 'xcloak-agent-desktop/**'
       - '.github/workflows/agent-ci.yml'
   pull_request:
     paths:
-      - 'xcloak-agent/**'
+      - 'xcloak-agent-desktop/**'
       - '.github/workflows/agent-ci.yml'
 
 defaults:
   run:
-    working-directory: xcloak-agent
+    working-directory: xcloak-agent-desktop
 
 jobs:
   # ── Build + test on the native runner ──────────────────────────────────────
@@ -25,8 +25,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-agent/go.mod
-          cache-dependency-path: xcloak-agent/go.sum
+          go-version-file: xcloak-agent-desktop/go.mod
+          cache-dependency-path: xcloak-agent-desktop/go.sum
 
       - name: go vet
         run: go vet ./...
@@ -65,8 +65,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-agent/go.mod
-          cache-dependency-path: xcloak-agent/go.sum
+          go-version-file: xcloak-agent-desktop/go.mod
+          cache-dependency-path: xcloak-agent-desktop/go.sum
 
       - name: Cross-compile
         env:
@@ -78,7 +78,7 @@ jobs:
           [[ "$GOOS" == "windows" ]] && EXT=".exe"
           go build \
             -ldflags="-s -w -X main.Version=ci-${GITHUB_SHA::7}" \
-            -o /tmp/xcloak-agent-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} \
+            -o /tmp/xcloak-agent-desktop-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} \
             .
 
   # ── Release builds (tags only) ─────────────────────────────────────────────
@@ -111,8 +111,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-agent/go.mod
-          cache-dependency-path: xcloak-agent/go.sum
+          go-version-file: xcloak-agent-desktop/go.mod
+          cache-dependency-path: xcloak-agent-desktop/go.sum
 
       - name: Build release binary
         env:
@@ -123,7 +123,7 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/}"
           EXT=""
           [[ "$GOOS" == "windows" ]] && EXT=".exe"
-          ARTIFACT="xcloak-agent-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}"
+          ARTIFACT="xcloak-agent-desktop-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}"
           go build \
             -ldflags="-s -w -X main.Version=${VERSION}" \
             -o "${ARTIFACT}" \

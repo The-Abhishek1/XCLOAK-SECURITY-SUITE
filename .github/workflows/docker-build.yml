@@ -5,15 +5,15 @@ on:
     branches: [main]
     tags: ['v*']
     paths:
-      - 'xcloak-ngfw/backend/**'
-      - 'xcloak-ngfw/frontend/**'
-      - 'xcloak-agent/**'
+      - 'xcloak-platform/backend/**'
+      - 'xcloak-platform/frontend/**'
+      - 'xcloak-agent-desktop/**'
       - '.github/workflows/docker-build.yml'
   pull_request:
     paths:
-      - 'xcloak-ngfw/backend/**'
-      - 'xcloak-ngfw/frontend/**'
-      - 'xcloak-agent/**'
+      - 'xcloak-platform/backend/**'
+      - 'xcloak-platform/frontend/**'
+      - 'xcloak-agent-desktop/**'
       - '.github/workflows/docker-build.yml'
 
 permissions:
@@ -27,11 +27,11 @@ jobs:
       matrix:
         include:
           - name: backend
-            context: xcloak-ngfw/backend
+            context: xcloak-platform/backend
           - name: frontend
-            context: xcloak-ngfw/frontend
+            context: xcloak-platform/frontend
           - name: agent
-            context: xcloak-agent
+            context: xcloak-agent-desktop
 
     steps:
       - uses: actions/checkout@v4

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dumps the XCLOAK Postgres database to backups/, then deletes dumps older
-# than RETENTION_DAYS. Reads DB_* from xcloak-ngfw/backend/.env so this stays
+# than RETENTION_DAYS. Reads DB_* from xcloak-platform/backend/.env so this stays
 # in sync with whatever the backend is actually connecting to.
 #
 # Usage: ./scripts/backup_db.sh
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$REPO_ROOT/xcloak-ngfw/backend/.env"
+ENV_FILE="$REPO_ROOT/xcloak-platform/backend/.env"
 BACKUP_DIR="$REPO_ROOT/backups"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 

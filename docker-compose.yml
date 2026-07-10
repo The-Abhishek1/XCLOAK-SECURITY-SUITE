@@ -187,7 +187,7 @@ services:
 
   backend:
     build:
-      context: ./xcloak-ngfw/backend
+      context: ./xcloak-platform/backend
       dockerfile: Dockerfile
     container_name: xcloak-backend
     restart: unless-stopped
@@ -218,7 +218,7 @@ services:
 
   seeder:
     build:
-      context: ./xcloak-ngfw/backend
+      context: ./xcloak-platform/backend
       dockerfile: Dockerfile.seed
     container_name: xcloak-seeder
     restart: "no"
@@ -229,7 +229,7 @@ services:
 
   frontend:
     build:
-      context: ./xcloak-ngfw/frontend
+      context: ./xcloak-platform/frontend
       dockerfile: Dockerfile
     container_name: xcloak-frontend
     restart: unless-stopped

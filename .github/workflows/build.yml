@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: xcloak-ngfw/backend
+        working-directory: xcloak-platform/backend
 
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +21,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-ngfw/backend/go.mod
-          cache-dependency-path: xcloak-ngfw/backend/go.sum
+          go-version-file: xcloak-platform/backend/go.mod
+          cache-dependency-path: xcloak-platform/backend/go.sum
 
       - name: Build
         run: go build ./...
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: xcloak-agent
+        working-directory: xcloak-agent-desktop
 
     steps:
       - uses: actions/checkout@v4
@@ -47,8 +47,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-agent/go.mod
-          cache-dependency-path: xcloak-agent/go.sum
+          go-version-file: xcloak-agent-desktop/go.mod
+          cache-dependency-path: xcloak-agent-desktop/go.sum
 
       - name: Build
         run: GOOS=linux GOARCH=amd64 go build -o xcloak-agent-linux-amd64 ./main.go
@@ -60,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcloak-agent-linux-amd64
-          path: xcloak-agent/xcloak-agent-linux-amd64
+          path: xcloak-agent-desktop/xcloak-agent-linux-amd64
 
   # ── Go Agent — Windows ────────────────────────────────────────────────────
   agent-windows:
@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: xcloak-agent
+        working-directory: xcloak-agent-desktop
 
     steps:
       - uses: actions/checkout@v4
@@ -76,8 +76,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-agent/go.mod
-          cache-dependency-path: xcloak-agent/go.sum
+          go-version-file: xcloak-agent-desktop/go.mod
+          cache-dependency-path: xcloak-agent-desktop/go.sum
 
       - name: Build (cross-compile)
         run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o xcloak-agent-windows-amd64.exe ./main.go
@@ -86,7 +86,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcloak-agent-windows-amd64
-          path: xcloak-agent/xcloak-agent-windows-amd64.exe
+          path: xcloak-agent-desktop/xcloak-agent-windows-amd64.exe
 
   # ── Mobile Agent (Flutter / Android) ─────────────────────────────────────
   mobile:

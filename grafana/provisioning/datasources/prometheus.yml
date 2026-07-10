@@ -7,18 +7,19 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
-    editable: false
+    editable: true
 
   - name: PostgreSQL
+    uid: xcloak-postgres
     type: postgres
     access: proxy
     url: postgres:5432
-    database: ngfw
+    database: xcloak_demo
     user: xcloak
     secureJsonData:
-      password: xcloak
+      password: xcloak_demo_local
     jsonData:
       sslmode: disable
       postgresVersion: 1600
       timescaledb: false
-    editable: false
+    editable: true

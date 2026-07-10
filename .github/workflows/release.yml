@@ -20,13 +20,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: xcloak-agent/go.mod
+          go-version-file: xcloak-agent-desktop/go.mod
 
       - name: Build agent binaries
-        working-directory: xcloak-agent
+        working-directory: xcloak-agent-desktop
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          LDFLAGS="-X xcloak-agent/agent.Version=${VERSION}"
+          LDFLAGS="-X xcloak-agent-desktop/agent.Version=${VERSION}"
 
           # Linux amd64 (native — CGO available for eBPF)
           GOOS=linux  GOARCH=amd64 go build -ldflags "$LDFLAGS" \
@@ -78,10 +78,10 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            xcloak-agent/xcloak-agent-linux-amd64
-            xcloak-agent/xcloak-agent-linux-arm64
-            xcloak-agent/xcloak-agent-windows-amd64.exe
-            xcloak-agent/SHA256SUMS.txt
+            xcloak-agent-desktop/xcloak-agent-linux-amd64
+            xcloak-agent-desktop/xcloak-agent-linux-arm64
+            xcloak-agent-desktop/xcloak-agent-windows-amd64.exe
+            xcloak-agent-desktop/SHA256SUMS.txt
             xcloak-agent-mobile/build/app/outputs/flutter-apk/app-release.apk
             xcloak-*.tgz
           body: |
@@ -96,11 +96,11 @@ jobs:
             ```bash
             docker pull ghcr.io/the-abhishek1/xcloak-backend:${{ github.ref_name }}
             docker pull ghcr.io/the-abhishek1/xcloak-frontend:${{ github.ref_name }}
-            docker pull ghcr.io/the-abhishek1/xcloak-agent:${{ github.ref_name }}
+            docker pull ghcr.io/the-abhishek1/xcloak-agent-desktop:${{ github.ref_name }}
             ```
 
             > The agent container requires elevated privileges for eBPF:
-            > `docker run --privileged ghcr.io/the-abhishek1/xcloak-agent:${{ github.ref_name }}`
+            > `docker run --privileged ghcr.io/the-abhishek1/xcloak-agent-desktop:${{ github.ref_name }}`
 
             ---
 
@@ -108,12 +108,12 @@ jobs:
 
             ```bash
             # Linux (amd64)
-            curl -Lo xcloak-agent https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-amd64
-            chmod +x xcloak-agent && sudo ./xcloak-agent
+            curl -Lo xcloak-agent-desktop https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-amd64
+            chmod +x xcloak-agent-desktop && sudo ./xcloak-agent-desktop
 
             # Linux (arm64)
-            curl -Lo xcloak-agent https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-arm64
-            chmod +x xcloak-agent && sudo ./xcloak-agent
+            curl -Lo xcloak-agent-desktop https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/download/${{ github.ref_name }}/xcloak-agent-linux-arm64
+            chmod +x xcloak-agent-desktop && sudo ./xcloak-agent-desktop
 
             # Windows (amd64) — download xcloak-agent-windows-amd64.exe and run as Administrator
             ```

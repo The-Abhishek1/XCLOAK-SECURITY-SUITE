@@ -1,0 +1,16 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'xcloak-backend'
+    static_configs:
+      - targets: ['backend:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    authorization:
+      credentials: demo-local-metrics
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -55,7 +55,7 @@ For evaluation or small deployments.
 git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
 cd XCLOAK-SECURITY-SUITE
 
-cd xcloak-ngfw/backend
+cd xcloak-platform/backend
 cp .env.example .env
 ```
 
@@ -79,7 +79,7 @@ This starts PostgreSQL, Redis, Kafka, Kafka UI, Prometheus, Grafana, and MinIO.
 ### 3. Start the backend
 
 ```bash
-cd xcloak-ngfw/backend
+cd xcloak-platform/backend
 go run main.go
 # or with hot reload:
 air
@@ -90,7 +90,7 @@ Migrations run automatically on startup. On first start you will see ~55 migrati
 ### 4. Start the frontend
 
 ```bash
-cd xcloak-ngfw/frontend
+cd xcloak-platform/frontend
 npm install
 npm run dev
 ```
@@ -100,9 +100,9 @@ Open `http://localhost:3000`. The first registered user becomes the tenant admin
 ### 5. Enroll the first agent
 
 ```bash
-cd xcloak-agent
-go build -o xcloak-agent ./main.go
-./xcloak-agent
+cd xcloak-agent-desktop
+go build -o xcloak-agent-desktop ./main.go
+./xcloak-agent-desktop
 ```
 
 Generate an install token from **Settings → Integrations → Install Tokens** in the UI, then paste it when the agent prompts on first run. The token is single-use. After registration the agent saves its token and reconnects automatically.
@@ -324,7 +324,7 @@ go run ./cmd/keygen/main.go  # if provided, or use the backend /api/platform/age
 
 Set `LOG_FORMAT=json` in production to integrate with log aggregators.
 
-### Agent (`xcloak-agent/.env`)
+### Agent (`xcloak-agent-desktop/.env`)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -710,7 +710,7 @@ curl -X POST http://localhost:8080/api/platform/agent-releases \
     "version": "2.0.0",
     "sha256": "<sha256-of-binary>",
     "signature": "<base64url-ed25519-signature>",
-    "download_url": "https://releases.yourdomain.com/xcloak-agent-2.0.0-linux-amd64"
+    "download_url": "https://releases.yourdomain.com/xcloak-agent-desktop-2.0.0-linux-amd64"
   }'
 ```
 
@@ -719,8 +719,8 @@ curl -X POST http://localhost:8080/api/platform/agent-releases \
 ```bash
 PUBLIC_KEY=$(cat public_key.b64)  # base64url of the 32-byte ed25519 public key
 go build \
-  -ldflags "-X xcloak-agent/agent.AgentReleasePublicKey=${PUBLIC_KEY}" \
-  -o xcloak-agent ./main.go
+  -ldflags "-X xcloak-agent-desktop/agent.AgentReleasePublicKey=${PUBLIC_KEY}" \
+  -o xcloak-agent-desktop ./main.go
 ```
 
 Agents built without `-ldflags` skip signature verification (development builds only). Set `AGENT_RELEASE_REQUIRE_SIGNATURE=true` on the backend to reject any unsigned release upload.

@@ -67,7 +67,7 @@ services:
 
   backend:
     build:
-      context: ./xcloak-ngfw/backend
+      context: ./xcloak-platform/backend
       dockerfile: Dockerfile
     container_name: xcloak-demo-backend
     restart: unless-stopped
@@ -111,7 +111,7 @@ services:
 
   demo-seeder:
     build:
-      context: ./xcloak-ngfw/backend
+      context: ./xcloak-platform/backend
       dockerfile: Dockerfile.seed.demo
     container_name: xcloak-demo-seeder
     restart: "no"
@@ -131,7 +131,7 @@ services:
 
   frontend:
     build:
-      context: ./xcloak-ngfw/frontend
+      context: ./xcloak-platform/frontend
       dockerfile: Dockerfile
       args:
         # Baked at build time — hides login/register form, shows only "Try Demo"
@@ -159,7 +159,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus.demo.yml:/etc/prometheus/prometheus.yml:ro
       - demo_prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -191,7 +191,7 @@ services:
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/xcloak-overview.json
     volumes:
       - demo_grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning-demo:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     deploy:
       resources:

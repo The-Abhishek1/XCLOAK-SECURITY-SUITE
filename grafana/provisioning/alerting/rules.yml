@@ -6,7 +6,7 @@ groups:
     folder: XCloak Alerts
     interval: 1m
     rules:
-      - uid: xcloak-agent-offline-storm
+      - uid: xcloak-agent-desktop-offline-storm
         title: Agent offline storm
         condition: C
         data:

@@ -1,0 +1,25 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: xcloak-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: PostgreSQL
+    uid: xcloak-postgres
+    type: postgres
+    access: proxy
+    url: xcloak-demo-postgres:5432
+    database: xcloak_demo
+    user: xcloak
+    secureJsonData:
+      password: xcloak_demo_local
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    editable: true

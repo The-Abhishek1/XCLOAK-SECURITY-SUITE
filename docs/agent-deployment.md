@@ -70,9 +70,9 @@ curl -X POST http://xcloak.yourdomain.com/api/integrations/install-tokens \
 **Download the binary**
 
 ```bash
-curl -Lo xcloak-agent https://releases.yourdomain.com/xcloak-agent-latest-linux-amd64
-chmod +x xcloak-agent
-sudo mv xcloak-agent /usr/local/bin/xcloak-agent
+curl -Lo xcloak-agent-desktop https://releases.yourdomain.com/xcloak-agent-desktop-latest-linux-amd64
+chmod +x xcloak-agent-desktop
+sudo mv xcloak-agent-desktop /usr/local/bin/xcloak-agent-desktop
 ```
 
 **Register (first run)**
@@ -80,14 +80,14 @@ sudo mv xcloak-agent /usr/local/bin/xcloak-agent
 ```bash
 export SERVER_URL=https://xcloak.yourdomain.com
 export XCLOAK_INSTALL_TOKEN=<token-from-ui>
-sudo -E xcloak-agent
+sudo -E xcloak-agent-desktop
 ```
 
 The agent registers, saves its device token to `/etc/xcloak/token`, and begins sending telemetry. Press Ctrl+C after confirming it is online in the UI.
 
 **Install as a systemd service**
 
-Create `/etc/systemd/system/xcloak-agent.service`:
+Create `/etc/systemd/system/xcloak-agent-desktop.service`:
 
 ```ini
 [Unit]
@@ -97,7 +97,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/xcloak-agent
+ExecStart=/usr/local/bin/xcloak-agent-desktop
 Restart=always
 RestartSec=10
 Environment=SERVER_URL=https://xcloak.yourdomain.com
@@ -115,28 +115,28 @@ Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now xcloak-agent
-sudo systemctl status xcloak-agent
+sudo systemctl enable --now xcloak-agent-desktop
+sudo systemctl status xcloak-agent-desktop
 ```
 
 View logs:
 
 ```bash
-journalctl -u xcloak-agent -f
+journalctl -u xcloak-agent-desktop -f
 ```
 
 ### Windows
 
 **Download**
 
-Download `xcloak-agent-latest-windows-amd64.exe` from your releases URL.
+Download `xcloak-agent-desktop-latest-windows-amd64.exe` from your releases URL.
 
 **Register (first run — run as Administrator)**
 
 ```powershell
 $env:SERVER_URL = "https://xcloak.yourdomain.com"
 $env:XCLOAK_INSTALL_TOKEN = "<token-from-ui>"
-.\xcloak-agent.exe
+.\xcloak-agent-desktop.exe
 ```
 
 The agent saves its device token to `%ProgramData%\xcloak\token`.
@@ -144,7 +144,7 @@ The agent saves its device token to `%ProgramData%\xcloak\token`.
 **Install as a Windows service**
 
 ```powershell
-sc.exe create XCloakAgent binPath= "C:\Program Files\XCloak\xcloak-agent.exe" start= auto
+sc.exe create XCloakAgent binPath= "C:\Program Files\XCloak\xcloak-agent-desktop.exe" start= auto
 sc.exe description XCloakAgent "XCloak Security Agent"
 sc.exe start XCloakAgent
 ```
@@ -152,7 +152,7 @@ sc.exe start XCloakAgent
 Or use `nssm` (Non-Sucking Service Manager) for easier environment variable management:
 
 ```powershell
-nssm install XCloakAgent "C:\Program Files\XCloak\xcloak-agent.exe"
+nssm install XCloakAgent "C:\Program Files\XCloak\xcloak-agent-desktop.exe"
 nssm set XCloakAgent AppEnvironmentExtra "SERVER_URL=https://xcloak.yourdomain.com"
 nssm start XCloakAgent
 ```
@@ -162,9 +162,9 @@ nssm start XCloakAgent
 **Download**
 
 ```bash
-curl -Lo xcloak-agent https://releases.yourdomain.com/xcloak-agent-latest-darwin-arm64
-chmod +x xcloak-agent
-sudo mv xcloak-agent /usr/local/bin/xcloak-agent
+curl -Lo xcloak-agent-desktop https://releases.yourdomain.com/xcloak-agent-desktop-latest-darwin-arm64
+chmod +x xcloak-agent-desktop
+sudo mv xcloak-agent-desktop /usr/local/bin/xcloak-agent-desktop
 ```
 
 **Register**
@@ -172,7 +172,7 @@ sudo mv xcloak-agent /usr/local/bin/xcloak-agent
 ```bash
 export SERVER_URL=https://xcloak.yourdomain.com
 export XCLOAK_INSTALL_TOKEN=<token-from-ui>
-sudo -E xcloak-agent
+sudo -E xcloak-agent-desktop
 ```
 
 **Install as a launchd service**
@@ -189,7 +189,7 @@ Create `/Library/LaunchDaemons/com.xcloak.agent.plist`:
   <string>com.xcloak.agent</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/xcloak-agent</string>
+    <string>/usr/local/bin/xcloak-agent-desktop</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -201,9 +201,9 @@ Create `/Library/LaunchDaemons/com.xcloak.agent.plist`:
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/var/log/xcloak-agent.log</string>
+  <string>/var/log/xcloak-agent-desktop.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/xcloak-agent-error.log</string>
+  <string>/var/log/xcloak-agent-desktop-error.log</string>
 </dict>
 </plist>
 ```
@@ -329,7 +329,7 @@ The agent does **not** require DNS resolution beyond the backend hostname. If de
 ### Mass deployment with Ansible
 
 ```yaml
-# xcloak-agent.yml
+# xcloak-agent-desktop.yml
 - name: Deploy XCloak Agent
   hosts: all
   become: yes
@@ -340,8 +340,8 @@ The agent does **not** require DNS resolution beyond the backend hostname. If de
   tasks:
     - name: Download agent binary
       get_url:
-        url: "https://releases.yourdomain.com/xcloak-agent-{{ xcloak_version }}-linux-{{ ansible_architecture }}"
-        dest: /usr/local/bin/xcloak-agent
+        url: "https://releases.yourdomain.com/xcloak-agent-desktop-{{ xcloak_version }}-linux-{{ ansible_architecture }}"
+        dest: /usr/local/bin/xcloak-agent-desktop
         mode: '0755'
 
     - name: Generate install token
@@ -355,7 +355,7 @@ The agent does **not** require DNS resolution beyond the backend hostname. If de
       delegate_to: localhost
 
     - name: Register agent (if not already registered)
-      command: /usr/local/bin/xcloak-agent
+      command: /usr/local/bin/xcloak-agent-desktop
       environment:
         SERVER_URL: "{{ xcloak_server }}"
         XCLOAK_INSTALL_TOKEN: "{{ token_response.json.token }}"
@@ -364,13 +364,13 @@ The agent does **not** require DNS resolution beyond the backend hostname. If de
 
     - name: Install systemd service
       copy:
-        dest: /etc/systemd/system/xcloak-agent.service
+        dest: /etc/systemd/system/xcloak-agent-desktop.service
         content: |
           [Unit]
           Description=XCloak Security Agent
           After=network.target
           [Service]
-          ExecStart=/usr/local/bin/xcloak-agent
+          ExecStart=/usr/local/bin/xcloak-agent-desktop
           Restart=always
           RestartSec=10
           Environment=SERVER_URL={{ xcloak_server }}
@@ -380,7 +380,7 @@ The agent does **not** require DNS resolution beyond the backend hostname. If de
 
     - name: Enable and start agent service
       systemd:
-        name: xcloak-agent
+        name: xcloak-agent-desktop
         enabled: yes
         state: started
         daemon_reload: yes
@@ -388,9 +388,9 @@ The agent does **not** require DNS resolution beyond the backend hostname. If de
 
 ### Deployment via Group Policy (Windows)
 
-1. Place `xcloak-agent.exe` on a network share accessible by all machines.
+1. Place `xcloak-agent-desktop.exe` on a network share accessible by all machines.
 2. Create a GPO startup script that:
-   - Copies the binary to `C:\Program Files\XCloak\xcloak-agent.exe`
+   - Copies the binary to `C:\Program Files\XCloak\xcloak-agent-desktop.exe`
    - Calls a provisioning script that generates a token via the API and runs the agent with `XCLOAK_INSTALL_TOKEN` set
    - Installs the Windows service
 3. Apply the GPO to the relevant OUs.
@@ -403,7 +403,7 @@ For mass deployment where you need many tokens at once, call the API in a loop f
 for host in $(cat hosts.txt); do
   TOKEN=$(curl -s -X POST http://xcloak.yourdomain.com/api/integrations/install-tokens \
     -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r .token)
-  ssh $host "export XCLOAK_INSTALL_TOKEN=$TOKEN SERVER_URL=https://xcloak.yourdomain.com && sudo -E /usr/local/bin/xcloak-agent &"
+  ssh $host "export XCLOAK_INSTALL_TOKEN=$TOKEN SERVER_URL=https://xcloak.yourdomain.com && sudo -E /usr/local/bin/xcloak-agent-desktop &"
 done
 ```
 
@@ -414,11 +414,11 @@ done
 ### Linux
 
 ```bash
-sudo systemctl stop xcloak-agent
-sudo systemctl disable xcloak-agent
-sudo rm /etc/systemd/system/xcloak-agent.service
+sudo systemctl stop xcloak-agent-desktop
+sudo systemctl disable xcloak-agent-desktop
+sudo rm /etc/systemd/system/xcloak-agent-desktop.service
 sudo systemctl daemon-reload
-sudo rm /usr/local/bin/xcloak-agent
+sudo rm /usr/local/bin/xcloak-agent-desktop
 sudo rm -rf /etc/xcloak/
 ```
 
@@ -438,7 +438,7 @@ Remove-Item -Recurse "$env:ProgramData\xcloak"
 ```bash
 sudo launchctl unload /Library/LaunchDaemons/com.xcloak.agent.plist
 sudo rm /Library/LaunchDaemons/com.xcloak.agent.plist
-sudo rm /usr/local/bin/xcloak-agent
+sudo rm /usr/local/bin/xcloak-agent-desktop
 sudo rm -rf /etc/xcloak/
 ```
 

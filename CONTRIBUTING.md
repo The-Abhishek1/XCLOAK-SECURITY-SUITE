@@ -11,7 +11,7 @@ contribution matters.
 
 - **Bug reports** — open an issue with the [bug report template](.github/ISSUE_TEMPLATE/bug_report.yml)
 - **Feature requests** — open an issue with the [feature request template](.github/ISSUE_TEMPLATE/feature_request.yml)
-- **Detection rules** — add Sigma rules to `xcloak-ngfw/backend/database/migrations/` (see below)
+- **Detection rules** — add Sigma rules to `xcloak-platform/backend/database/migrations/` (see below)
 - **Code contributions** — pick up an open issue tagged `good first issue` or `help wanted`
 - **Documentation** — fix typos, add examples, improve the deployment guide
 - **Security vulnerabilities** — see [SECURITY.md](SECURITY.md) — do not open a public issue
@@ -35,7 +35,7 @@ contribution matters.
 ### Backend
 
 ```bash
-cd xcloak-ngfw/backend
+cd xcloak-platform/backend
 cp .env.example .env
 # Fill in DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET
 
@@ -52,11 +52,11 @@ go run ./main.go
 ### Go Agent
 
 ```bash
-cd xcloak-agent
-go build -o xcloak-agent ./main.go
+cd xcloak-agent-desktop
+go build -o xcloak-agent-desktop ./main.go
 
 # Run against your local backend
-XCLOAK_SERVER=http://localhost:8080 ./xcloak-agent
+XCLOAK_SERVER=http://localhost:8080 ./xcloak-agent-desktop
 ```
 
 ### Mobile Agent
@@ -110,7 +110,7 @@ Types: `Feature`, `Fix`, `Harden`, `Docs`, `Refactor`, `Test`, `Chore`
 
 Detection rules live in the database seed migration. To add a rule:
 
-1. Open `xcloak-ngfw/backend/database/migrations/000056_seed_sigma_rules.up.sql`
+1. Open `xcloak-platform/backend/database/migrations/000056_seed_sigma_rules.up.sql`
 2. Add a row in the `INSERT INTO sigma_rules` block
 3. Map to a MITRE ATT&CK technique if possible
 4. Test by running the backend against a log that should match

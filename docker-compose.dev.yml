@@ -1,7 +1,7 @@
 # Development — postgres, redis, kafka stack.
 # Run backend and frontend manually:
-#   cd xcloak-ngfw/backend && air
-#   cd xcloak-ngfw/frontend && npm run dev
+#   cd xcloak-platform/backend && air
+#   cd xcloak-platform/frontend && npm run dev
 #
 # Usage:
 #   docker compose -f docker-compose.dev.yml up -d
