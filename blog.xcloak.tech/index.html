@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>XCloak Blog — Technical notes, releases, and detection engineering</title>
+<meta name="description" content="Technical writeups, release notes, and detection engineering notes from the team building XCloak." />
+<link rel="canonical" href="https://blog.xcloak.tech/" />
+<link rel="alternate" type="application/rss+xml" title="XCloak Blog" href="https://blog.xcloak.tech/rss.xml" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-5 sm:px-8 py-16">
+  <div class="mb-14">
+    <span class="text-xs font-mono text-brand">BLOG</span>
+    <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4">Technical notes &amp; releases.</h1>
+    <p class="text-sub leading-relaxed max-w-xl">Detection engineering writeups, architecture decisions, and what shipped — written by the person building it, not a marketing team.</p>
+  </div>
+
+  <div class="space-y-4">
+    <a href="posts/kafka-optional-by-design.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-08-07</span>
+        <span>&middot;</span>
+        <span class="text-brand">Architecture</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Kafka is optional: designing for graceful degradation</h2>
+      <p class="text-sm text-sub leading-relaxed">Not every self-hosted deployment wants to run a Kafka cluster. Here's how XCloak treats it as an enhancement rather than a hard dependency, and where that tradeoff actually lives in the code.</p>
+    </a>
+    <a href="posts/soar-human-approval.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-31</span>
+        <span>&middot;</span>
+        <span class="text-brand">Engineering</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Why every destructive SOAR action needs a human click</h2>
+      <p class="text-sm text-sub leading-relaxed">Playbooks can isolate a host or kill a process automatically — except they can't, not without someone approving it first. Here's the design behind that gate, and why it's not configurable.</p>
+    </a>
+    <a href="posts/rls-multitenancy-audit.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-24</span>
+        <span>&middot;</span>
+        <span class="text-brand">Security</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Multi-tenancy and row-level security: what an internal audit found</h2>
+      <p class="text-sm text-sub leading-relaxed">A defense-in-depth layer we built but hadn't fully wired up — how we found it, why it mattered, and what changed.</p>
+    </a>
+    <a href="posts/sigma-engine-internals.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-17</span>
+        <span>&middot;</span>
+        <span class="text-brand">Engineering</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Why we built our own Sigma engine</h2>
+      <p class="text-sm text-sub leading-relaxed">Sigma is a spec, not a library. Here's what we implemented, what we deliberately left out, and why field-level matching plus logsource pre-filtering was the right subset to start with.</p>
+    </a>
+    <a href="posts/log-line-to-alert.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-10</span>
+        <span>&middot;</span>
+        <span class="text-brand">Architecture</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">How a log line becomes an alert</h2>
+      <p class="text-sm text-sub leading-relaxed">The full pipeline from agent telemetry to a dashboard notification — normalization, Sigma evaluation, correlation, and real-time delivery.</p>
+    </a>
+    <a href="posts/xcloak-v0-2-0.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-07</span>
+        <span>&middot;</span>
+        <span class="text-brand">Release</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">XCloak v0.2.0: Enterprise Security Hardening</h2>
+      <p class="text-sm text-sub leading-relaxed">v0.2.0 is the most significant XCloak release to date — httpOnly cookie auth, atomic rate limiting, PostgreSQL RLS now load-bearing, and Kafka wired end-to-end.</p>
+    </a>
+    <a href="posts/android-mdm-without-emm.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-06</span>
+        <span>&middot;</span>
+        <span class="text-brand">Engineering</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Building Enterprise Android MDM Without Google EMM</h2>
+      <p class="text-sm text-sub leading-relaxed">A Flutter foreground service that collects security telemetry and accepts management commands without requiring EMM enrollment or Device Owner mode.</p>
+    </a>
+    <a href="posts/proc-net-process-names.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-05</span>
+        <span>&middot;</span>
+        <span class="text-brand">Engineering</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">How XCloak Maps Linux /proc/net to Process Names</h2>
+      <p class="text-sm text-sub leading-relaxed">What process owns this network connection? On Linux the answer lives in /proc — the inode bridge from socket table to PID to process name.</p>
+    </a>
+    <a href="posts/redis-rate-limiter-toctou.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-07-03</span>
+        <span>&middot;</span>
+        <span class="text-brand">Security</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Closing the TOCTOU Gap in Redis Rate Limiting</h2>
+      <p class="text-sm text-sub leading-relaxed">Rate limiters look simple but contain a subtle concurrency trap. Here's how we found it and closed it with an atomic Lua script.</p>
+    </a>
+  </div>
+
+  <div class="mt-16 pt-10 border-t border-line text-center">
+    <p class="text-sm text-faint">Subscribe via <a href="rss.xml" class="text-brand hover:underline">RSS</a> to get new posts as they publish.</p>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

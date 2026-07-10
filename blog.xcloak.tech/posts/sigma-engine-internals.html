@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Why we built our own Sigma engine — XCloak Blog</title>
+<meta name="description" content="Sigma is a spec, not a library. Here's what we implemented, what we deliberately left out, and why field-level matching plus logsource pre-filtering was the right subset to start with." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/sigma-engine-internals.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Why we built our own Sigma engine" />
+<meta property="og:description" content="Sigma is a spec, not a library. Here's what we implemented, what we deliberately left out, and why field-level matching plus logsource pre-filtering was the right subset to start with." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/sigma-engine-internals.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 14px; display:block; overflow-x:auto; }
+  article th { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 8px 12px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; color: #94a3b8; }
+  article td { border-bottom: 1px solid #e2e8f0; padding: 8px 12px; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-17</span>
+    <span>&middot;</span>
+    <span class="text-brand">Engineering</span>
+    <span>&middot;</span>
+    <span>3 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">Why we built our own Sigma engine</h1>
+
+  <article>
+    <p><a href="https://github.com/SigmaHQ/sigma">Sigma</a> is the closest thing detection engineering has to a common rule format — plain YAML, vendor-neutral, with a large community-maintained rule library. What Sigma isn't is a single reference implementation. The spec defines syntax and semantics; every platform that "supports Sigma" has actually written its own evaluator, and each one covers a different subset of the full grammar. This post is about the subset we chose and why.</p>
+<h2>What a Sigma rule actually asks for</h2>
+<p>A rule has a <code>logsource</code> (what kind of log this applies to — product, service, category) and a <code>detection</code> block defining one or more named selections and a <code>condition</code> combining them:</p>
+<pre><code class="language-yaml">logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\regsvr32.exe'
+    CommandLine|contains|all:
+      - '/i:'
+      - 'scrobj.dll'
+  condition: selection
+</code></pre>
+<p>That's a field-match condition — check specific fields against specific values, with modifiers like <code>endswith</code>, <code>contains</code>, <code>all</code>. The full spec also supports aggregation conditions (<code>count() by field &gt; N</code>), timeframes, and near-term Sigma correlation rules that reference multiple base rules together.</p>
+<h2>What we implemented, and what we didn't</h2>
+<p>XCloak's engine handles field-level matching and logsource filtering completely — that's the majority of rules in the public Sigma rule repository, and it's the part that maps cleanly onto "does this one log line match this one condition," which is exactly the question we need answered on the synchronous ingest path described in <a href="log-line-to-alert.html">the previous post</a>.</p>
+<p>We do not implement Sigma's aggregation conditions (<code>count() by ... &gt; N over a timeframe</code>) inside the rule engine itself. That's not an oversight — aggregation conditions require state across multiple events over a window, which is a fundamentally different computational shape than "evaluate this one event against this one condition," and forcing it into the same code path would have meant either slowing down every field-match evaluation to accommodate stateful rules, or building two evaluators that pretend to be one. Instead, that class of detection is handled by the dedicated behavioral detectors — purpose-built, scheduled jobs for things like credential-stuffing (N failed logins from M source IPs) or port-scan detection (N distinct ports from one source in a window), which is a clearer way to express "this needs to track state over time" than shoehorning it into a rule format designed for single-event matching.</p>
+<h2>Logsource pre-filtering</h2>
+<p>Every rule declares a logsource. Before any field condition is even evaluated, we bucket the tenant's active ruleset by log format at cache-build time — so a rule tagged <code>product: windows</code> never gets considered against a line that normalized in as a Linux auth log. This sounds obvious in isolation, but it matters a lot in aggregate: a tenant with a few hundred active rules doesn't pay the cost of evaluating all of them against every log; they only pay for the subset that could plausibly match.</p>
+<h2>Why cache per tenant</h2>
+<p>Rules are tenant-scoped — every tenant can have a different active ruleset, with different custom rules layered on top of the 43 seeded ones. Re-parsing YAML and rebuilding the condition tree on every single log evaluation would be wasteful and pointless, since the ruleset only changes when someone edits a rule. So the cache is invalidated on write (rule created, updated, deleted) and otherwise reused across every log that tenant sends — meaning most ingest requests pay zero YAML-parsing cost at all.</p>
+<h2>What this buys you, and what to know before relying on it</h2>
+<p>If you're evaluating XCloak against a Sigma-native SIEM, the honest comparison point is: field-match and logsource-filter conditions work and are unit-tested, which covers a large share of publicly available Sigma rules. Full aggregation-condition support inside the rules engine itself isn't there — those detection patterns exist in XCloak, just implemented as dedicated detectors rather than as generic Sigma aggregation rules. If you're bringing over a large existing Sigma rule library from another platform, it's worth checking whether your rules lean on aggregation conditions before assuming a drop-in migration.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="log-line-to-alert.html" class="text-sub hover:text-brand transition-colors">&larr; How a log line becomes an alert</a><a href="rls-multitenancy-audit.html" class="text-brand hover:underline">Multi-tenancy and row-level security: what an internal audit found &rarr;</a></div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

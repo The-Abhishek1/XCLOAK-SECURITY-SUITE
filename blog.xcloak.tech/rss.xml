@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>XCloak Blog</title>
+  <link>https://blog.xcloak.tech/</link>
+  <description>Technical notes, releases, and detection engineering from XCloak.</description>
+  <language>en-us</language>
+  <item>
+    <title>Kafka is optional: designing for graceful degradation</title>
+    <link>https://blog.xcloak.tech/posts/kafka-optional-by-design.html</link>
+    <guid>https://blog.xcloak.tech/posts/kafka-optional-by-design.html</guid>
+    <description>Not every self-hosted deployment wants to run a Kafka cluster. Here's how XCloak treats it as an enhancement rather than a hard dependency, and where that tradeoff actually lives in the code.</description>
+    <pubDate>Fri, 07 Aug 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Why every destructive SOAR action needs a human click</title>
+    <link>https://blog.xcloak.tech/posts/soar-human-approval.html</link>
+    <guid>https://blog.xcloak.tech/posts/soar-human-approval.html</guid>
+    <description>Playbooks can isolate a host or kill a process automatically — except they can't, not without someone approving it first. Here's the design behind that gate, and why it's not configurable.</description>
+    <pubDate>Fri, 31 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Multi-tenancy and row-level security: what an internal audit found</title>
+    <link>https://blog.xcloak.tech/posts/rls-multitenancy-audit.html</link>
+    <guid>https://blog.xcloak.tech/posts/rls-multitenancy-audit.html</guid>
+    <description>A defense-in-depth layer we built but hadn't fully wired up — how we found it, why it mattered, and what changed.</description>
+    <pubDate>Fri, 24 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Why we built our own Sigma engine</title>
+    <link>https://blog.xcloak.tech/posts/sigma-engine-internals.html</link>
+    <guid>https://blog.xcloak.tech/posts/sigma-engine-internals.html</guid>
+    <description>Sigma is a spec, not a library. Here's what we implemented, what we deliberately left out, and why field-level matching plus logsource pre-filtering was the right subset to start with.</description>
+    <pubDate>Fri, 17 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>How a log line becomes an alert</title>
+    <link>https://blog.xcloak.tech/posts/log-line-to-alert.html</link>
+    <guid>https://blog.xcloak.tech/posts/log-line-to-alert.html</guid>
+    <description>The full pipeline from agent telemetry to a dashboard notification — normalization, Sigma evaluation, correlation, and real-time delivery.</description>
+    <pubDate>Fri, 10 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>XCloak v0.2.0: Enterprise Security Hardening</title>
+    <link>https://blog.xcloak.tech/posts/xcloak-v0-2-0.html</link>
+    <guid>https://blog.xcloak.tech/posts/xcloak-v0-2-0.html</guid>
+    <description>v0.2.0 is the most significant XCloak release to date — httpOnly cookie auth, atomic rate limiting, PostgreSQL RLS now load-bearing, and Kafka wired end-to-end.</description>
+    <pubDate>Tue, 07 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Building Enterprise Android MDM Without Google EMM</title>
+    <link>https://blog.xcloak.tech/posts/android-mdm-without-emm.html</link>
+    <guid>https://blog.xcloak.tech/posts/android-mdm-without-emm.html</guid>
+    <description>A Flutter foreground service that collects security telemetry and accepts management commands without requiring EMM enrollment or Device Owner mode.</description>
+    <pubDate>Mon, 06 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>How XCloak Maps Linux /proc/net to Process Names</title>
+    <link>https://blog.xcloak.tech/posts/proc-net-process-names.html</link>
+    <guid>https://blog.xcloak.tech/posts/proc-net-process-names.html</guid>
+    <description>What process owns this network connection? On Linux the answer lives in /proc — the inode bridge from socket table to PID to process name.</description>
+    <pubDate>Sun, 05 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Closing the TOCTOU Gap in Redis Rate Limiting</title>
+    <link>https://blog.xcloak.tech/posts/redis-rate-limiter-toctou.html</link>
+    <guid>https://blog.xcloak.tech/posts/redis-rate-limiter-toctou.html</guid>
+    <description>Rate limiters look simple but contain a subtle concurrency trap. Here's how we found it and closed it with an atomic Lua script.</description>
+    <pubDate>Fri, 03 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+</channel>
+</rss>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Building a real-time eBPF connection collector in Go — XCloak Blog</title>
+<meta name="description" content="How XCloak's Linux agent streams outbound-connection events through a kprobe and a ring buffer instead of polling, with a graceful fallback when eBPF isn't available." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/ebpf-connection-collector.html" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Building a real-time eBPF connection collector in Go" />
+<meta property="og:description" content="How XCloak's Linux agent streams outbound-connection events through a kprobe and a ring buffer instead of polling." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/ebpf-connection-collector.html" />
+<meta name="twitter:card" content="summary" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<style>
+  body { background:#fff; }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ul li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">All posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-03</span>
+    <span>·</span>
+    <span class="text-brand">Engineering</span>
+    <span>·</span>
+    <span>6 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">Building a real-time eBPF connection collector in Go</h1>
+
+  <article>
+    <p>Most endpoint agents watch network connections by polling — run <code>ss</code> or read <code>/proc/net/tcp</code> every few seconds and diff the results. It works, but it means a short-lived connection can open and close entirely between two polling intervals and never show up anywhere. For a security agent, that's exactly the kind of gap an attacker's tooling is likely to fall into — C2 beacons and scanning tools often make short, deliberate connections.</p>
+
+    <p>XCloak's Linux agent uses a different approach for its primary collection path: a kprobe on <code>tcp_v4_connect</code>, streaming events through an eBPF ring buffer as they happen, with a documented fallback to the polling approach when eBPF isn't usable. This post is about that design — what it buys you, what it costs, and where it breaks.</p>
+
+    <h2>Why not just poll faster?</h2>
+    <p>You can shrink the polling interval, but you're trading CPU and I/O for coverage, and you still can't observe anything shorter than your interval. Kernel-level instrumentation sidesteps the tradeoff entirely: the kernel tells you the moment a connection attempt happens, with the ordering intact.</p>
+
+    <h2>The kprobe/kretprobe approach</h2>
+    <p>The naive version of this — a single kprobe on <code>tcp_v4_connect</code> that reads the socket fields immediately — doesn't actually give you reliable process attribution, because the socket isn't fully populated yet at function entry. XCloak's collector instead uses a kprobe/kretprobe pair: the entry probe stashes the <code>sock*</code> pointer keyed by the calling thread's pid/tgid, and the return probe looks it back up and reads the now-populated address and port fields — but only if the connect actually succeeded.</p>
+
+    <pre><code>SEC("kprobe/tcp_v4_connect")
+int BPF_KPROBE(trace_tcp_v4_connect, struct sock *sk) {
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u64 skp = (__u64)sk;
+    bpf_map_update_elem(&sock_by_thread, &pid_tgid, &skp, BPF_ANY);
+    return 0;
+}
+
+SEC("kretprobe/tcp_v4_connect")
+int BPF_KRETPROBE(trace_tcp_v4_connect_ret, int ret) {
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u64 *skp = bpf_map_lookup_elem(&sock_by_thread, &pid_tgid);
+    if (!skp) return 0;
+
+    struct sock *sk = (struct sock *)(*skp);
+    bpf_map_delete_elem(&sock_by_thread, &pid_tgid);
+    if (ret != 0) return 0;  // connect() failed synchronously — nothing to report
+
+    struct event *ev = bpf_ringbuf_reserve(&events, sizeof(*ev), 0);
+    if (!ev) return 0;
+
+    ev->pid = pid_tgid >> 32;
+    ev->uid = (__u32)bpf_get_current_uid_gid();
+    ev->daddr = BPF_CORE_READ(sk, __sk_common.skc_daddr);
+    ev->dport = BPF_CORE_READ(sk, __sk_common.skc_dport);
+    bpf_get_current_comm(&ev->comm, sizeof(ev->comm));
+    bpf_ringbuf_submit(ev, 0);
+    return 0;
+}</code></pre>
+
+    <p>The <code>BPF_CORE_READ</code> macro (rather than a raw pointer dereference) is what makes this portable across kernel versions without recompiling per-target — it's the standard CO-RE (Compile Once, Run Everywhere) pattern for eBPF, relying on the kernel's own BTF type information to resolve struct field offsets at load time instead of baking them in at compile time.</p>
+
+    <p>On the Go side, a read loop drains the ring buffer and batches events (50 per batch, or every 5 seconds, whichever comes first) before sending them onward — the same pattern used elsewhere in the agent, avoiding a network round-trip per connection.</p>
+
+    <h2>Where this breaks</h2>
+    <p>Two things have to be true for this collector to run at all:</p>
+    <ul>
+      <li>The kernel needs <strong>BTF</strong> (BPF Type Format) support, which most distributions ship by default from roughly kernel 5.x onward, but older or heavily stripped kernels may lack it.</li>
+      <li>The process needs <strong>CAP_BPF</strong> and <strong>CAP_PERFMON</strong> (effectively root) — not something every deployment environment grants an agent process by default, especially in locked-down container runtimes.</li>
+    </ul>
+
+    <p>If either check fails, the agent logs it once and falls back to the existing periodic <code>ss</code>-based snapshot collector for that host — same host, same detection pipeline downstream, just without per-connection pid/uid attribution or the ability to see anything shorter than the poll interval.</p>
+
+    <blockquote>The fallback isn't a "lesser" data source bolted on as an afterthought — it's the collector that was already there, and the eBPF path is additive on top of it where the kernel allows it.</blockquote>
+
+    <h2>What this actually buys you</h2>
+    <p>In practice, the difference shows up most clearly on short-lived connections — a script making one outbound request and exiting, or a scanning tool cycling through ports quickly. The polling fallback will still catch sustained or repeated behavior (which is what most of XCloak's network detectors are looking for anyway — beaconing intervals, port-scan patterns), but the eBPF path catches the individual event as it happens, which matters more for exact timing correlation during incident investigation than for detection triggering itself.</p>
+
+    <h2>What I'd do differently</h2>
+    <p>If I were starting this over, I'd invest earlier in a shared test harness that runs the same detection assertions against both the eBPF and polling collectors in CI, rather than testing them somewhat independently. The event-shape parity constraint is enforced by convention right now, not by an automated check — which is the kind of thing that holds up fine until it quietly doesn't.</p>
+
+    <p>Code for both collectors is in the <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" class="text-brand hover:underline">XCloak repo</a>, under <code>xcloak-agent/agent/ebpf/</code> and <code>connect_events_linux.go</code>. If you've hit kernel versions where the BTF/capability detection itself is unreliable, I'd genuinely like to know — that's the part of this I trust the least.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between">
+    <a href="../index.html" class="text-sm text-brand hover:underline">&larr; All posts</a>
+    <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="text-sm text-sub hover:text-brand transition-colors">View on GitHub →</a>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-2xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

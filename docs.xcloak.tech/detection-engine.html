@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Detection Engine — XCloak Docs</title>
+<meta name="description" content="The Sigma-compatible rules engine, behavioral detectors, YARA scanning, JA3 fingerprinting, and threat intel ingestion." />
+<link rel="canonical" href="https://docs.xcloak.tech/detection-engine.html" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<meta name="theme-color" content="#2563eb" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<style>/* Shared docs prose + layout styles, loaded on every page alongside Tailwind CDN */
+:root { --ink:#0f172a; --sub:#475569; --faint:#94a3b8; --line:#e2e8f0; --brand:#2563eb; }
+body { background:#fff; color:var(--ink); }
+.sidebar-link { display:block; padding:6px 10px; border-radius:8px; font-size:13.5px; color:var(--sub); transition:background .15s,color .15s; }
+.sidebar-link:hover { background:#f1f5f9; color:var(--ink); }
+.sidebar-link.active { background:#eff6ff; color:var(--brand); font-weight:500; }
+.sidebar-group-title { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--faint); padding:0 10px; margin-top:22px; margin-bottom:6px; }
+.sidebar-group-title:first-child { margin-top:0; }
+
+.prose h1 { font-size:2.1rem; font-weight:600; letter-spacing:-0.02em; color:var(--ink); margin-bottom:0.75rem; }
+.prose > p.lead { font-size:1.05rem; color:var(--sub); margin-bottom:2.25rem; line-height:1.6; }
+.prose h2 { font-size:1.4rem; font-weight:600; color:var(--ink); margin-top:2.75rem; margin-bottom:1rem; letter-spacing:-0.01em; scroll-margin-top:90px; border-bottom:1px solid var(--line); padding-bottom:0.6rem; }
+.prose h3 { font-size:1.1rem; font-weight:600; color:var(--ink); margin-top:2rem; margin-bottom:0.75rem; scroll-margin-top:90px; }
+.prose p { color:#334155; line-height:1.75; margin-bottom:1.1rem; font-size:15px; }
+.prose ul, .prose ol { color:#334155; line-height:1.75; margin-bottom:1.1rem; padding-left:1.4rem; font-size:15px; }
+.prose ul { list-style:disc; }
+.prose ol { list-style:decimal; }
+.prose li { margin-bottom:0.4rem; }
+.prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:0.85em; background:#f1f5f9; padding:0.15em 0.4em; border-radius:4px; color:var(--ink); }
+.prose pre { background:#0f172a; color:#e2e8f0; border-radius:10px; padding:1.1rem 1.35rem; overflow-x:auto; margin-bottom:1.4rem; font-size:12.5px; line-height:1.7; }
+.prose pre code { background:none; padding:0; color:inherit; font-size:1em; }
+.prose table { width:100%; border-collapse:collapse; margin-bottom:1.5rem; font-size:13.5px; display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.prose code { word-break:break-word; }
+.prose th { text-align:left; font-family: ui-monospace, monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--faint); border-bottom:1px solid var(--line); padding:10px 12px; }
+.prose td { border-bottom:1px solid var(--line); padding:10px 12px; color:#334155; vertical-align:top; }
+.prose tr:last-child td { border-bottom:none; }
+.prose blockquote { border-left:3px solid var(--brand); padding-left:1rem; color:var(--sub); font-style:italic; margin-bottom:1.25rem; }
+.callout { border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.4rem; font-size:14px; line-height:1.6; }
+.callout.note { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
+.callout.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+.badge { display:inline-block; font-family: ui-monospace, monospace; font-size:11px; padding:2px 8px; border-radius:999px; }
+.badge.get { background:#eff6ff; color:#2563eb; }
+.badge.post { background:#ecfdf5; color:#059669; }
+.badge.put { background:#fffbeb; color:#b45309; }
+.badge.delete { background:#fef2f2; color:#dc2626; }
+</style>
+</head>
+<body class="antialiased">
+
+<header class="fixed top-0 inset-x-0 z-50 h-14 border-b border-line bg-white/90 backdrop-blur-md">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-6">
+      <a href="https://xcloak.tech" class="flex items-center gap-2 shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="font-semibold tracking-tight text-[14px] text-ink">XCloak</span>
+        <span class="text-faint font-mono text-xs">/ docs</span>
+      </a>
+      <button id="searchBtn" class="hidden sm:flex items-center gap-2 text-xs text-faint bg-slate-100 hover:bg-slate-200 transition-colors rounded-lg px-3 py-1.5 w-56">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+        Search docs...
+        <span class="ml-auto font-mono border border-slate-300 rounded px-1">/</span>
+      </button>
+    </div>
+    <nav class="flex items-center gap-4 text-[13px] text-sub">
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+      <a href="https://blog.xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Blog</a>
+      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<!-- search overlay -->
+<div id="searchOverlay" class="hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm px-4 pt-24">
+  <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-2xl border border-line overflow-hidden">
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+      <input id="searchInput" type="text" placeholder="Search documentation..." class="flex-1 outline-none text-sm" autocomplete="off" />
+      <kbd class="text-[10px] font-mono text-faint border border-line rounded px-1.5 py-0.5">Esc</kbd>
+    </div>
+    <div id="searchResults" class="max-h-80 overflow-y-auto p-2"></div>
+  </div>
+</div>
+
+<div class="max-w-[1400px] mx-auto px-4 sm:px-6 pt-14">
+  <div class="flex">
+
+    <!-- sidebar -->
+    <aside class="hidden lg:block w-60 shrink-0 border-r border-line h-[calc(100vh-56px)] sticky top-14 overflow-y-auto py-8 pr-4">
+      <div class="sidebar-group-title">Getting Started</div>
+<a href="index.html" class="sidebar-link">Overview</a>
+<a href="installation.html" class="sidebar-link">Installation</a>
+<div class="sidebar-group-title">Core Concepts</div>
+<a href="architecture.html" class="sidebar-link">Architecture</a>
+<a href="detection-engine.html" class="sidebar-link active">Detection Engine</a>
+<div class="sidebar-group-title">Guides</div>
+<a href="deployment.html" class="sidebar-link">Deployment</a>
+<a href="configuration.html" class="sidebar-link">Configuration</a>
+<a href="agent.html" class="sidebar-link">Agent</a>
+<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
+<div class="sidebar-group-title">Reference</div>
+<a href="api-reference.html" class="sidebar-link">API Reference</a>
+<div class="sidebar-group-title">Contributing</div>
+<a href="development.html" class="sidebar-link">Development Setup</a>
+    </aside>
+
+    <!-- mobile sidebar toggle -->
+    <div class="lg:hidden fixed bottom-5 right-5 z-40">
+      <button id="mobileNavBtn" class="w-12 h-12 rounded-full bg-ink text-white shadow-lg flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="mobileNav" class="hidden lg:hidden fixed inset-0 z-50 bg-white p-6 overflow-y-auto">
+      <div class="flex justify-between items-center mb-6">
+        <span class="font-semibold">Documentation</span>
+        <button id="mobileNavClose" class="p-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M6 18 18 6" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="sidebar-group-title">Getting Started</div>
+<a href="index.html" class="sidebar-link">Overview</a>
+<a href="installation.html" class="sidebar-link">Installation</a>
+<div class="sidebar-group-title">Core Concepts</div>
+<a href="architecture.html" class="sidebar-link">Architecture</a>
+<a href="detection-engine.html" class="sidebar-link active">Detection Engine</a>
+<div class="sidebar-group-title">Guides</div>
+<a href="deployment.html" class="sidebar-link">Deployment</a>
+<a href="configuration.html" class="sidebar-link">Configuration</a>
+<a href="agent.html" class="sidebar-link">Agent</a>
+<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
+<div class="sidebar-group-title">Reference</div>
+<a href="api-reference.html" class="sidebar-link">API Reference</a>
+<div class="sidebar-group-title">Contributing</div>
+<a href="development.html" class="sidebar-link">Development Setup</a>
+    </div>
+
+    <!-- content -->
+    <main class="flex-1 min-w-0 px-0 lg:px-10 py-10 max-w-3xl">
+      <div class="prose">
+        
+<h1>Detection Engine</h1>
+<p class="lead">Detection in XCloak comes from four independent, parallel sources — a rules engine, scheduled behavioral detectors, endpoint malware scanning, and threat intelligence matching.</p>
+
+<h2>Sigma-compatible rules engine</h2>
+<p>Rules are plain YAML, following the <a href="https://github.com/SigmaHQ/sigma" class="text-brand hover:underline">Sigma</a> format. On first run, 43 rules across 12 MITRE ATT&CK tactics (Initial Access through Impact, plus cloud/container/supply-chain coverage) are seeded automatically into every new tenant.</p>
+<p>The engine parses Sigma-style boolean conditions, filters by <code>logsource</code> product/service/category before evaluating field conditions — so a Windows-only rule never runs against a Linux syslog line — and caches the per-tenant ruleset bucketed by log format for fast pre-filtering on the ingest path.</p>
+
+<h3>Example rule</h3>
+<pre><code>title: Suspicious regsvr32 Scriptlet Execution (LOLBin)
+id: 7f2c1a4e-9b3d-4e11-9a2f-6c1d0e8b4f3a
+status: stable
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\regsvr32.exe'
+    CommandLine|contains|all:
+      - '/i:'
+      - 'scrobj.dll'
+  condition: selection
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.t1218.010</code></pre>
+
+<div class="callout note">This engine implements a deliberately narrower subset of full Sigma semantics — field-match and logsource-filter conditions are solid and unit-tested, but it doesn't claim full coverage of every aggregation-condition construct in the upstream spec.</div>
+
+<h2>Behavioral detectors</h2>
+<p>12 scheduled detectors run per-tenant, each applying statistical and heuristic analysis to your log stream:</p>
+
+<p><strong>C2 Beacon Detector</strong> — Analyzes outbound connection timing using coefficient of variation (CV). Connections with suspiciously regular intervals (CV &lt; 0.15 over 5+ samples) are flagged. Filters out known-benign processes and CDN destinations.</p>
+
+<p><strong>DNS Security</strong> — Three separate checks: DGA detection via Shannon entropy scoring on domain labels; DNS tunneling via payload length + query rate (long subdomains + high frequency); DNS flood (&gt;100 queries/min from one source).</p>
+
+<p><strong>Port Scan Detector</strong> — Detects vertical (many ports, one host), horizontal (one port, many hosts), and SYN sweep patterns. Also detects SMB port spray (445 to many hosts).</p>
+
+<p><strong>Data Exfiltration</strong> — Triggers on: single session &gt;100 MB, burst of &gt;10 large transfers, outbound connections to known cloud storage domains (S3, GDrive, OneDrive, Dropbox, Box, Mega, iCloud), large off-hours transfers.</p>
+
+<p><strong>TLS/JA3 Fingerprinting</strong> — Matches TLS ClientHello JA3 hashes against a blocklist of 13+ known-malicious fingerprints. Current list includes: Cobalt Strike, Sliver, Havoc, BruteRatel, TrickBot, Emotet, Dridex, Ursnif, AsyncRAT, NjRAT.</p>
+
+<p><strong>Credential Attacks</strong> — Four detection modes: brute force (≥10 failures in 5 min from same src_ip + username); password spray (same src_ip targeting ≥5 different usernames); credential stuffing (same username from ≥5 different src_ips); successful brute force (success preceded by ≥5 failures in 10 min).</p>
+
+<p><strong>Privilege Escalation</strong> — Windows: Event IDs 4728/4732/4756 (group add), 4720 (new user), 4672 (special privileges). Linux: sudo commands, su invocations, SUID file execution, sudoers file modifications.</p>
+
+<p><strong>Ransomware Behavior</strong> — Three kill-chain stages monitored simultaneously: FIM (≥20 file modifications with crypto extensions within 5 min); kill-chain commands (<code>vssadmin delete shadows</code>, <code>bcdedit /set recoveryenabled no</code>, <code>wmic shadowcopy delete</code>); security service kill (termination of 17 AV/EDR process names).</p>
+
+<p><strong>Living-off-the-Land</strong> — Suspicious parent→child chains (Word/Excel/Outlook spawning PowerShell/cmd) and 10 LOLBin abuses: <code>certutil -decode</code>, <code>regsvr32 /s /u /i</code>, <code>mshta vbscript:</code>, <code>bitsadmin /transfer</code>, and others. Also detects encoded PowerShell (<code>-enc</code>, <code>IEX</code>, <code>Invoke-Expression</code>, <code>DownloadString</code>).</p>
+
+<p><strong>Impossible Travel</strong> — Calculates haversine distance between consecutive login events for the same user. Flags when implied travel speed exceeds 900 km/h. Falls back to /16 subnet comparison when GeoIP is unavailable.</p>
+
+<p><strong>UEBA</strong> — Per-user behavioral baseline updated every 24 h. Anomaly scoring across login hours, login locations, data access volume, command patterns, and privilege usage. Alerts on significant deviation from the user's own baseline.</p>
+
+<p><strong>Network Behavior Analytics</strong> — Per-agent baseline of connection volumes, destination diversity, and protocol distribution. Alerts on significant deviation.</p>
+
+<h2>YARA scanning</h2>
+<p>Runs on the agent, not centrally — the agent needs to see the actual file bytes on the endpoint. Matches are streamed back to the backend for centralized alerting.</p>
+
+<h2>Threat intelligence</h2>
+<p>IOC matching (IP, domain, hash, URL, email) runs asynchronously via a dedicated Kafka consumer rather than inline on ingest. Feed connectors support STIX/TAXII, MISP, AlienVault OTX, and flat-file feeds.</p>
+
+<h2>Writing custom rules</h2>
+<p>Manage rules from the dashboard under <strong>Sigma Rules</strong>, or via the API — see <a href="api-reference.html#sigma" class="text-brand hover:underline">Sigma rule endpoints</a> in the API reference.</p>
+
+      </div>
+      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="architecture.html" class="text-sub hover:text-brand transition-colors">&larr; Architecture</a><a href="deployment.html" class="text-brand hover:underline">Deployment &rarr;</a></div>
+    </main>
+  </div>
+</div>
+
+<script>window.XCLOAK_SEARCH_INDEX = [{"title": "Overview", "url": "index.html", "section": "Documentation"}, {"title": "Where to go", "url": "index.html", "section": "Overview"}, {"title": "Tech stack, at a glance", "url": "index.html", "section": "Overview"}, {"title": "License", "url": "index.html", "section": "Overview"}, {"title": "Installation", "url": "installation.html", "section": "Documentation"}, {"title": "Prerequisites", "url": "installation.html", "section": "Installation"}, {"title": "1. Clone and configure", "url": "installation.html", "section": "Installation"}, {"title": "2. Generate secrets", "url": "installation.html", "section": "Installation"}, {"title": "3. Start the stack", "url": "installation.html", "section": "Installation"}, {"title": "4. Open the dashboard", "url": "installation.html", "section": "Installation"}, {"title": "5. Create your first account", "url": "installation.html", "section": "Installation"}, {"title": "6. Install an agent", "url": "installation.html", "section": "Installation"}, {"title": "Architecture", "url": "architecture.html", "section": "Documentation"}, {"title": "The four parts", "url": "architecture.html", "section": "Architecture"}, {"title": "Backend layering", "url": "architecture.html", "section": "Architecture"}, {"title": "Request flow: telemetry to alert", "url": "architecture.html", "section": "Architecture"}, {"title": "Multi-tenancy", "url": "architecture.html", "section": "Architecture"}, {"title": "Real-time delivery", "url": "architecture.html", "section": "Architecture"}, {"title": "Async work", "url": "architecture.html", "section": "Architecture"}, {"title": "Detection Engine", "url": "detection-engine.html", "section": "Documentation"}, {"title": "Sigma-compatible rules engine", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Behavioral detectors", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "YARA scanning", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Threat intelligence", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Writing custom rules", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Deployment", "url": "deployment.html", "section": "Documentation"}, {"title": "Docker Compose", "url": "deployment.html", "section": "Deployment"}, {"title": "Kubernetes / Helm", "url": "deployment.html", "section": "Deployment"}, {"title": "TLS", "url": "deployment.html", "section": "Deployment"}, {"title": "Agentless log ingestion", "url": "deployment.html", "section": "Deployment"}, {"title": "Backups", "url": "deployment.html", "section": "Deployment"}, {"title": "Configuration", "url": "configuration.html", "section": "Documentation"}, {"title": "Database", "url": "configuration.html", "section": "Configuration"}, {"title": "Security \u2014 required", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent \u2194 backend TLS (optional)", "url": "configuration.html", "section": "Configuration"}, {"title": "AI (choose one provider)", "url": "configuration.html", "section": "Configuration"}, {"title": "Redis", "url": "configuration.html", "section": "Configuration"}, {"title": "MinIO \u2014 immutable audit log export", "url": "configuration.html", "section": "Configuration"}, {"title": "Kafka", "url": "configuration.html", "section": "Configuration"}, {"title": "Email alerts (optional)", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent-side variables", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent", "url": "agent.html", "section": "Documentation"}, {"title": "Installing", "url": "agent.html", "section": "Agent"}, {"title": "What it collects", "url": "agent.html", "section": "Agent"}, {"title": "Remote task types", "url": "agent.html", "section": "Agent"}, {"title": "Self-update", "url": "agent.html", "section": "Agent"}, {"title": "Task expiry", "url": "agent.html", "section": "Agent"}, {"title": "Using the Dashboard", "url": "usage.html", "section": "Documentation"}, {"title": "Dashboard overview", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Alerts", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Incidents", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Playbooks (SOAR)", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Rules", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Threat Hunt", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Log Search", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Risk Posture &amp; Compliance", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Vulnerability Priority Queue", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "API Reference", "url": "api-reference.html", "section": "Documentation"}, {"title": "Authentication", "url": "api-reference.html", "section": "API Reference"}, {"title": "Auth", "url": "api-reference.html#auth", "section": "API Reference"}, {"title": "Signup", "url": "api-reference.html#signup", "section": "API Reference"}, {"title": "Agents", "url": "api-reference.html#agents", "section": "API Reference"}, {"title": "Alerts", "url": "api-reference.html#alerts", "section": "API Reference"}, {"title": "Incidents", "url": "api-reference.html#incidents", "section": "API Reference"}, {"title": "Sigma", "url": "api-reference.html#sigma", "section": "API Reference"}, {"title": "IOC", "url": "api-reference.html#ioc", "section": "API Reference"}, {"title": "YARA", "url": "api-reference.html#yara", "section": "API Reference"}, {"title": "Firewall", "url": "api-reference.html#firewall", "section": "API Reference"}, {"title": "Users", "url": "api-reference.html#users", "section": "API Reference"}, {"title": "Platform", "url": "api-reference.html#platform", "section": "API Reference"}, {"title": "Logs", "url": "api-reference.html#logs", "section": "API Reference"}, {"title": "Dashboard", "url": "api-reference.html#dashboard", "section": "API Reference"}, {"title": "Development Setup", "url": "development.html", "section": "Documentation"}, {"title": "Backend", "url": "development.html", "section": "Development Setup"}, {"title": "Frontend", "url": "development.html", "section": "Development Setup"}, {"title": "Observability stack (optional, for local testing)", "url": "development.html", "section": "Development Setup"}, {"title": "Running tests", "url": "development.html", "section": "Development Setup"}, {"title": "Where contributions help most", "url": "development.html", "section": "Development Setup"}, {"title": "Code style", "url": "development.html", "section": "Development Setup"}, {"title": "Reporting issues", "url": "development.html", "section": "Development Setup"}];</script>
+<script>
+  const searchBtn = document.getElementById('searchBtn');
+  const overlay = document.getElementById('searchOverlay');
+  const input = document.getElementById('searchInput');
+  const results = document.getElementById('searchResults');
+
+  function openSearch() { overlay.classList.remove('hidden'); input.focus(); renderResults(''); }
+  function closeSearch() { overlay.classList.add('hidden'); input.value=''; }
+
+  searchBtn?.addEventListener('click', openSearch);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); }
+    if (e.key === 'Escape') closeSearch();
+  });
+  overlay?.addEventListener('click', (e) => { if (e.target === overlay) closeSearch(); });
+
+  function renderResults(q) {
+    const items = (window.XCLOAK_SEARCH_INDEX || []).filter(it =>
+      !q || it.title.toLowerCase().includes(q.toLowerCase()) || it.section.toLowerCase().includes(q.toLowerCase())
+    ).slice(0, 8);
+    results.innerHTML = items.map(it => `
+      <a href="${it.url}" class="block px-3 py-2.5 rounded-lg hover:bg-slate-50">
+        <div class="text-sm font-medium text-ink">${it.title}</div>
+        <div class="text-xs text-faint font-mono">${it.section}</div>
+      </a>
+    `).join('') || '<div class="px-3 py-6 text-sm text-faint text-center">No results</div>';
+  }
+  input?.addEventListener('input', (e) => renderResults(e.target.value));
+
+  const mobileNavBtn = document.getElementById('mobileNavBtn');
+  const mobileNav = document.getElementById('mobileNav');
+  const mobileNavClose = document.getElementById('mobileNavClose');
+  mobileNavBtn?.addEventListener('click', () => mobileNav.classList.remove('hidden'));
+  mobileNavClose?.addEventListener('click', () => mobileNav.classList.add('hidden'));
+</script>
+
+</body>
+</html>

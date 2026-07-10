@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>API Reference — XCloak Docs</title>
+<meta name="description" content="Complete, generated API reference for the XCloak backend — every endpoint, pulled directly from the OpenAPI spec." />
+<link rel="canonical" href="https://docs.xcloak.tech/api-reference.html" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<meta name="theme-color" content="#2563eb" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<style>/* Shared docs prose + layout styles, loaded on every page alongside Tailwind CDN */
+:root { --ink:#0f172a; --sub:#475569; --faint:#94a3b8; --line:#e2e8f0; --brand:#2563eb; }
+body { background:#fff; color:var(--ink); }
+.sidebar-link { display:block; padding:6px 10px; border-radius:8px; font-size:13.5px; color:var(--sub); transition:background .15s,color .15s; }
+.sidebar-link:hover { background:#f1f5f9; color:var(--ink); }
+.sidebar-link.active { background:#eff6ff; color:var(--brand); font-weight:500; }
+.sidebar-group-title { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--faint); padding:0 10px; margin-top:22px; margin-bottom:6px; }
+.sidebar-group-title:first-child { margin-top:0; }
+
+.prose h1 { font-size:2.1rem; font-weight:600; letter-spacing:-0.02em; color:var(--ink); margin-bottom:0.75rem; }
+.prose > p.lead { font-size:1.05rem; color:var(--sub); margin-bottom:2.25rem; line-height:1.6; }
+.prose h2 { font-size:1.4rem; font-weight:600; color:var(--ink); margin-top:2.75rem; margin-bottom:1rem; letter-spacing:-0.01em; scroll-margin-top:90px; border-bottom:1px solid var(--line); padding-bottom:0.6rem; }
+.prose h3 { font-size:1.1rem; font-weight:600; color:var(--ink); margin-top:2rem; margin-bottom:0.75rem; scroll-margin-top:90px; }
+.prose p { color:#334155; line-height:1.75; margin-bottom:1.1rem; font-size:15px; }
+.prose ul, .prose ol { color:#334155; line-height:1.75; margin-bottom:1.1rem; padding-left:1.4rem; font-size:15px; }
+.prose ul { list-style:disc; }
+.prose ol { list-style:decimal; }
+.prose li { margin-bottom:0.4rem; }
+.prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:0.85em; background:#f1f5f9; padding:0.15em 0.4em; border-radius:4px; color:var(--ink); }
+.prose pre { background:#0f172a; color:#e2e8f0; border-radius:10px; padding:1.1rem 1.35rem; overflow-x:auto; margin-bottom:1.4rem; font-size:12.5px; line-height:1.7; }
+.prose pre code { background:none; padding:0; color:inherit; font-size:1em; }
+.prose table { width:100%; border-collapse:collapse; margin-bottom:1.5rem; font-size:13.5px; display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.prose code { word-break:break-word; }
+.prose th { text-align:left; font-family: ui-monospace, monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--faint); border-bottom:1px solid var(--line); padding:10px 12px; }
+.prose td { border-bottom:1px solid var(--line); padding:10px 12px; color:#334155; vertical-align:top; }
+.prose tr:last-child td { border-bottom:none; }
+.prose blockquote { border-left:3px solid var(--brand); padding-left:1rem; color:var(--sub); font-style:italic; margin-bottom:1.25rem; }
+.callout { border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.4rem; font-size:14px; line-height:1.6; }
+.callout.note { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
+.callout.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+.badge { display:inline-block; font-family: ui-monospace, monospace; font-size:11px; padding:2px 8px; border-radius:999px; }
+.badge.get { background:#eff6ff; color:#2563eb; }
+.badge.post { background:#ecfdf5; color:#059669; }
+.badge.put { background:#fffbeb; color:#b45309; }
+.badge.delete { background:#fef2f2; color:#dc2626; }
+</style>
+</head>
+<body class="antialiased">
+
+<header class="fixed top-0 inset-x-0 z-50 h-14 border-b border-line bg-white/90 backdrop-blur-md">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-6">
+      <a href="https://xcloak.tech" class="flex items-center gap-2 shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="font-semibold tracking-tight text-[14px] text-ink">XCloak</span>
+        <span class="text-faint font-mono text-xs">/ docs</span>
+      </a>
+      <button id="searchBtn" class="hidden sm:flex items-center gap-2 text-xs text-faint bg-slate-100 hover:bg-slate-200 transition-colors rounded-lg px-3 py-1.5 w-56">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+        Search docs...
+        <span class="ml-auto font-mono border border-slate-300 rounded px-1">/</span>
+      </button>
+    </div>
+    <nav class="flex items-center gap-4 text-[13px] text-sub">
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+      <a href="https://blog.xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Blog</a>
+      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<!-- search overlay -->
+<div id="searchOverlay" class="hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm px-4 pt-24">
+  <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-2xl border border-line overflow-hidden">
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+      <input id="searchInput" type="text" placeholder="Search documentation..." class="flex-1 outline-none text-sm" autocomplete="off" />
+      <kbd class="text-[10px] font-mono text-faint border border-line rounded px-1.5 py-0.5">Esc</kbd>
+    </div>
+    <div id="searchResults" class="max-h-80 overflow-y-auto p-2"></div>
+  </div>
+</div>
+
+<div class="max-w-[1400px] mx-auto px-4 sm:px-6 pt-14">
+  <div class="flex">
+
+    <!-- sidebar -->
+    <aside class="hidden lg:block w-60 shrink-0 border-r border-line h-[calc(100vh-56px)] sticky top-14 overflow-y-auto py-8 pr-4">
+      <div class="sidebar-group-title">Getting Started</div>
+<a href="index.html" class="sidebar-link">Overview</a>
+<a href="installation.html" class="sidebar-link">Installation</a>
+<div class="sidebar-group-title">Core Concepts</div>
+<a href="architecture.html" class="sidebar-link">Architecture</a>
+<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
+<div class="sidebar-group-title">Guides</div>
+<a href="deployment.html" class="sidebar-link">Deployment</a>
+<a href="configuration.html" class="sidebar-link">Configuration</a>
+<a href="agent.html" class="sidebar-link">Agent</a>
+<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
+<div class="sidebar-group-title">Reference</div>
+<a href="api-reference.html" class="sidebar-link active">API Reference</a>
+<div class="sidebar-group-title">Contributing</div>
+<a href="development.html" class="sidebar-link">Development Setup</a>
+    </aside>
+
+    <!-- mobile sidebar toggle -->
+    <div class="lg:hidden fixed bottom-5 right-5 z-40">
+      <button id="mobileNavBtn" class="w-12 h-12 rounded-full bg-ink text-white shadow-lg flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="mobileNav" class="hidden lg:hidden fixed inset-0 z-50 bg-white p-6 overflow-y-auto">
+      <div class="flex justify-between items-center mb-6">
+        <span class="font-semibold">Documentation</span>
+        <button id="mobileNavClose" class="p-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M6 18 18 6" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="sidebar-group-title">Getting Started</div>
+<a href="index.html" class="sidebar-link">Overview</a>
+<a href="installation.html" class="sidebar-link">Installation</a>
+<div class="sidebar-group-title">Core Concepts</div>
+<a href="architecture.html" class="sidebar-link">Architecture</a>
+<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
+<div class="sidebar-group-title">Guides</div>
+<a href="deployment.html" class="sidebar-link">Deployment</a>
+<a href="configuration.html" class="sidebar-link">Configuration</a>
+<a href="agent.html" class="sidebar-link">Agent</a>
+<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
+<div class="sidebar-group-title">Reference</div>
+<a href="api-reference.html" class="sidebar-link active">API Reference</a>
+<div class="sidebar-group-title">Contributing</div>
+<a href="development.html" class="sidebar-link">Development Setup</a>
+    </div>
+
+    <!-- content -->
+    <main class="flex-1 min-w-0 px-0 lg:px-10 py-10 max-w-3xl">
+      <div class="prose">
+        
+<h1>API Reference</h1>
+<p class="lead">Base URL: <code>http://localhost:8080</code>. Every endpoint below is generated directly from the backend's own OpenAPI 3.0 spec — 62 operations across 13 categories, not a curated subset. Raw spec: <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/blob/main/xcloak-ngfw/backend/docs/generated/openapi.yaml" class="text-brand hover:underline">openapi.yaml</a>.</p>
+
+<h2 style="border-bottom:none;margin-top:0;">Authentication</h2>
+<p>Browser sessions authenticate via an httpOnly <code>token</code> cookie set by <code>POST /api/auth/login</code> — no <code>Authorization</code> header needed for dashboard use. Protected endpoints read this cookie automatically. Agent endpoints authenticate with a per-agent key in the <code>X-Agent-Key</code> header instead. Endpoints marked <span class="text-faint text-xs">(no auth)</span> below are intentionally public (login, registration, password reset).</p>
+
+<div style="margin: 2rem 0;">
+  <p style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#94a3b8;margin-bottom:0.75rem;">Jump to category</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
+    <a href="#auth" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Auth</span><span class="text-xs font-mono text-faint">9</span></a><a href="#signup" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Signup</span><span class="text-xs font-mono text-faint">1</span></a><a href="#agents" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Agents</span><span class="text-xs font-mono text-faint">6</span></a><a href="#alerts" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Alerts</span><span class="text-xs font-mono text-faint">5</span></a><a href="#incidents" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Incidents</span><span class="text-xs font-mono text-faint">3</span></a><a href="#sigma" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Sigma</span><span class="text-xs font-mono text-faint">9</span></a><a href="#ioc" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">IOC</span><span class="text-xs font-mono text-faint">5</span></a><a href="#yara" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">YARA</span><span class="text-xs font-mono text-faint">3</span></a><a href="#firewall" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Firewall</span><span class="text-xs font-mono text-faint">7</span></a><a href="#users" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Users</span><span class="text-xs font-mono text-faint">4</span></a><a href="#platform" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Platform</span><span class="text-xs font-mono text-faint">3</span></a><a href="#logs" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Logs</span><span class="text-xs font-mono text-faint">4</span></a><a href="#dashboard" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Dashboard</span><span class="text-xs font-mono text-faint">3</span></a>
+  </div>
+</div>
+
+
+<h2 id="auth">Auth</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">User authentication and session management</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/login</code></td><td>Log in with username + password <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/login/2fa</code></td><td>Complete TOTP two-factor login <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/logout</code></td><td>Log out (clears auth cookies)</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/register</code></td><td>Register a new user (first user gets admin) <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/forgot-password</code></td><td>Request a password reset link via email <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/reset-password</code></td><td>Reset password with a token from email link <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/auth/profile</code></td><td>Get the current user's profile</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/auth/profile</code></td><td>Update profile (email)</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/auth/change-password</code></td><td>Change password (requires current password)</td></tr>
+  </tbody>
+</table>
+
+<h2 id="signup">Signup</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Self-serve tenant provisioning</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/signup</code></td><td>Self-serve tenant provisioning (no SMTP required) <span class="text-faint text-xs">(no auth)</span></td></tr>
+  </tbody>
+</table>
+
+<h2 id="agents">Agents</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Endpoint agent registration and telemetry</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/agents</code></td><td>List agents (optionally filtered by platform)</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/agents/register</code></td><td>Register a new endpoint agent <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/agents/{id}</code></td><td>Get a single agent by ID</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/agents/{id}/summary</code></td><td>Get a rich summary (health, risk, recent events) for an agent</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/agents/heartbeat</code></td><td>Agent heartbeat (agent-authenticated)</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/agents/logs</code></td><td>Submit log batch from an agent</td></tr>
+  </tbody>
+</table>
+
+<h2 id="alerts">Alerts</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Security alert lifecycle</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/alerts</code></td><td>List recent alerts</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/alerts/paginated</code></td><td>Paginated alert list</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/alerts/{id}</code></td><td>Get alert detail with AI triage result</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/alerts/{id}/acknowledge</code></td><td>Acknowledge an alert</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/alerts/{id}/resolve</code></td><td>Resolve an alert</td></tr>
+  </tbody>
+</table>
+
+<h2 id="incidents">Incidents</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Incident management and IR lifecycle</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/incidents</code></td><td>List incidents</td></tr><tr><td style="width:78px"><span class="badge put">PUT</span></td><td><code>/api/incidents/{id}/status</code></td><td>Update incident status</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/incidents/{id}/notes</code></td><td>Add analyst note to incident</td></tr>
+  </tbody>
+</table>
+
+<h2 id="sigma">Sigma</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Sigma detection rules</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/sigma/rules</code></td><td>List all Sigma detection rules for the tenant</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/sigma/rules</code></td><td>Create a new Sigma rule</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/sigma/rules/{id}</code></td><td>Get a Sigma rule by ID</td></tr><tr><td style="width:78px"><span class="badge put">PUT</span></td><td><code>/api/sigma/rules/{id}</code></td><td>Update a Sigma rule</td></tr><tr><td style="width:78px"><span class="badge delete">DELETE</span></td><td><code>/api/sigma/rules/{id}</code></td><td>Delete a Sigma rule</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/sigma/rules/{id}/enable</code></td><td>Enable a Sigma rule</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/sigma/rules/{id}/disable</code></td><td>Disable a Sigma rule</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/sigma/rules/test</code></td><td>Test Sigma rules against a sample log message</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/sigma/stats</code></td><td>Get Sigma rule statistics (total, enabled, by severity)</td></tr>
+  </tbody>
+</table>
+
+<h2 id="ioc">IOC</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Indicators of Compromise</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/iocs</code></td><td>List IOCs</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/iocs</code></td><td>Create an IOC</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/iocs/{id}/enable</code></td><td>Enable an IOC</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/iocs/{id}/disable</code></td><td>Disable an IOC</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/iocs/import</code></td><td>Bulk import IOCs from a text list</td></tr>
+  </tbody>
+</table>
+
+<h2 id="yara">YARA</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">YARA rules and scan matches</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/yara/rules</code></td><td>List YARA rules</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/yara/rules</code></td><td>Create a YARA rule</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/yara/matches</code></td><td>List YARA match events</td></tr>
+  </tbody>
+</table>
+
+<h2 id="firewall">Firewall</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Firewall rule management and sync</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/firewall/rules</code></td><td>List firewall rules</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/firewall/rules</code></td><td>Create a firewall rule</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/firewall/rules/{id}</code></td><td>Get a firewall rule by ID</td></tr><tr><td style="width:78px"><span class="badge put">PUT</span></td><td><code>/api/firewall/rules/{id}</code></td><td>Update a firewall rule</td></tr><tr><td style="width:78px"><span class="badge delete">DELETE</span></td><td><code>/api/firewall/rules/{id}</code></td><td>Delete a firewall rule</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/firewall/sync</code></td><td>Push firewall rules to all online agents</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/firewall/stats</code></td><td>Firewall hit statistics</td></tr>
+  </tbody>
+</table>
+
+<h2 id="users">Users</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">User and role management</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/users</code></td><td>List users in the tenant</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/users/invite</code></td><td>Invite a user (sends email with set-password link)</td></tr><tr><td style="width:78px"><span class="badge put">PUT</span></td><td><code>/api/users/{id}/role</code></td><td>Update a user's role</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/users/{id}/toggle</code></td><td>Enable or disable a user account</td></tr>
+  </tbody>
+</table>
+
+<h2 id="platform">Platform</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Platform-admin tenant provisioning</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/platform/tenants</code></td><td>List all tenants (platform admin only)</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/platform/tenants</code></td><td>Create a tenant and invite its first admin via email</td></tr><tr><td style="width:78px"><span class="badge put">PATCH</span></td><td><code>/api/platform/tenants/{id}/toggle</code></td><td>Suspend or reactivate a tenant</td></tr>
+  </tbody>
+</table>
+
+<h2 id="logs">Logs</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Log search and retention</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/logs/search</code></td><td>Full-text search across ingested logs</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/logs/stats</code></td><td>Log volume and severity distribution stats</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/logs/retention</code></td><td>Get current retention policy</td></tr><tr><td style="width:78px"><span class="badge put">PUT</span></td><td><code>/api/logs/retention</code></td><td>Set retention policy (admin only)</td></tr>
+  </tbody>
+</table>
+
+<h2 id="dashboard">Dashboard</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Dashboard overview metrics</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/dashboard/overview</code></td><td>Dashboard overview metrics</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/health</code></td><td>Liveness check <span class="text-faint text-xs">(no auth)</span></td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/health/deep</code></td><td>Deep health check (DB, Kafka, circuit state) <span class="text-faint text-xs">(no auth)</span></td></tr>
+  </tbody>
+</table>
+
+
+      </div>
+      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="usage.html" class="text-sub hover:text-brand transition-colors">&larr; Using the Dashboard</a><a href="development.html" class="text-brand hover:underline">Development Setup &rarr;</a></div>
+    </main>
+  </div>
+</div>
+
+<script>window.XCLOAK_SEARCH_INDEX = [{"title": "Overview", "url": "index.html", "section": "Documentation"}, {"title": "Where to go", "url": "index.html", "section": "Overview"}, {"title": "Tech stack, at a glance", "url": "index.html", "section": "Overview"}, {"title": "License", "url": "index.html", "section": "Overview"}, {"title": "Installation", "url": "installation.html", "section": "Documentation"}, {"title": "Prerequisites", "url": "installation.html", "section": "Installation"}, {"title": "1. Clone and configure", "url": "installation.html", "section": "Installation"}, {"title": "2. Generate secrets", "url": "installation.html", "section": "Installation"}, {"title": "3. Start the stack", "url": "installation.html", "section": "Installation"}, {"title": "4. Open the dashboard", "url": "installation.html", "section": "Installation"}, {"title": "5. Create your first account", "url": "installation.html", "section": "Installation"}, {"title": "6. Install an agent", "url": "installation.html", "section": "Installation"}, {"title": "Architecture", "url": "architecture.html", "section": "Documentation"}, {"title": "The four parts", "url": "architecture.html", "section": "Architecture"}, {"title": "Backend layering", "url": "architecture.html", "section": "Architecture"}, {"title": "Request flow: telemetry to alert", "url": "architecture.html", "section": "Architecture"}, {"title": "Multi-tenancy", "url": "architecture.html", "section": "Architecture"}, {"title": "Real-time delivery", "url": "architecture.html", "section": "Architecture"}, {"title": "Async work", "url": "architecture.html", "section": "Architecture"}, {"title": "Detection Engine", "url": "detection-engine.html", "section": "Documentation"}, {"title": "Sigma-compatible rules engine", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Behavioral detectors", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "YARA scanning", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Threat intelligence", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Writing custom rules", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Deployment", "url": "deployment.html", "section": "Documentation"}, {"title": "Docker Compose", "url": "deployment.html", "section": "Deployment"}, {"title": "Kubernetes / Helm", "url": "deployment.html", "section": "Deployment"}, {"title": "TLS", "url": "deployment.html", "section": "Deployment"}, {"title": "Agentless log ingestion", "url": "deployment.html", "section": "Deployment"}, {"title": "Backups", "url": "deployment.html", "section": "Deployment"}, {"title": "Configuration", "url": "configuration.html", "section": "Documentation"}, {"title": "Database", "url": "configuration.html", "section": "Configuration"}, {"title": "Security \u2014 required", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent \u2194 backend TLS (optional)", "url": "configuration.html", "section": "Configuration"}, {"title": "AI (choose one provider)", "url": "configuration.html", "section": "Configuration"}, {"title": "Redis", "url": "configuration.html", "section": "Configuration"}, {"title": "MinIO \u2014 immutable audit log export", "url": "configuration.html", "section": "Configuration"}, {"title": "Kafka", "url": "configuration.html", "section": "Configuration"}, {"title": "Email alerts (optional)", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent-side variables", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent", "url": "agent.html", "section": "Documentation"}, {"title": "Installing", "url": "agent.html", "section": "Agent"}, {"title": "What it collects", "url": "agent.html", "section": "Agent"}, {"title": "Remote task types", "url": "agent.html", "section": "Agent"}, {"title": "Self-update", "url": "agent.html", "section": "Agent"}, {"title": "Task expiry", "url": "agent.html", "section": "Agent"}, {"title": "Using the Dashboard", "url": "usage.html", "section": "Documentation"}, {"title": "Dashboard overview", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Alerts", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Incidents", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Playbooks (SOAR)", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Rules", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Threat Hunt", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Log Search", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Risk Posture &amp; Compliance", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Vulnerability Priority Queue", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "API Reference", "url": "api-reference.html", "section": "Documentation"}, {"title": "Authentication", "url": "api-reference.html", "section": "API Reference"}, {"title": "Auth", "url": "api-reference.html#auth", "section": "API Reference"}, {"title": "Signup", "url": "api-reference.html#signup", "section": "API Reference"}, {"title": "Agents", "url": "api-reference.html#agents", "section": "API Reference"}, {"title": "Alerts", "url": "api-reference.html#alerts", "section": "API Reference"}, {"title": "Incidents", "url": "api-reference.html#incidents", "section": "API Reference"}, {"title": "Sigma", "url": "api-reference.html#sigma", "section": "API Reference"}, {"title": "IOC", "url": "api-reference.html#ioc", "section": "API Reference"}, {"title": "YARA", "url": "api-reference.html#yara", "section": "API Reference"}, {"title": "Firewall", "url": "api-reference.html#firewall", "section": "API Reference"}, {"title": "Users", "url": "api-reference.html#users", "section": "API Reference"}, {"title": "Platform", "url": "api-reference.html#platform", "section": "API Reference"}, {"title": "Logs", "url": "api-reference.html#logs", "section": "API Reference"}, {"title": "Dashboard", "url": "api-reference.html#dashboard", "section": "API Reference"}, {"title": "Development Setup", "url": "development.html", "section": "Documentation"}, {"title": "Backend", "url": "development.html", "section": "Development Setup"}, {"title": "Frontend", "url": "development.html", "section": "Development Setup"}, {"title": "Observability stack (optional, for local testing)", "url": "development.html", "section": "Development Setup"}, {"title": "Running tests", "url": "development.html", "section": "Development Setup"}, {"title": "Where contributions help most", "url": "development.html", "section": "Development Setup"}, {"title": "Code style", "url": "development.html", "section": "Development Setup"}, {"title": "Reporting issues", "url": "development.html", "section": "Development Setup"}];</script>
+<script>
+  const searchBtn = document.getElementById('searchBtn');
+  const overlay = document.getElementById('searchOverlay');
+  const input = document.getElementById('searchInput');
+  const results = document.getElementById('searchResults');
+
+  function openSearch() { overlay.classList.remove('hidden'); input.focus(); renderResults(''); }
+  function closeSearch() { overlay.classList.add('hidden'); input.value=''; }
+
+  searchBtn?.addEventListener('click', openSearch);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); }
+    if (e.key === 'Escape') closeSearch();
+  });
+  overlay?.addEventListener('click', (e) => { if (e.target === overlay) closeSearch(); });
+
+  function renderResults(q) {
+    const items = (window.XCLOAK_SEARCH_INDEX || []).filter(it =>
+      !q || it.title.toLowerCase().includes(q.toLowerCase()) || it.section.toLowerCase().includes(q.toLowerCase())
+    ).slice(0, 8);
+    results.innerHTML = items.map(it => `
+      <a href="${it.url}" class="block px-3 py-2.5 rounded-lg hover:bg-slate-50">
+        <div class="text-sm font-medium text-ink">${it.title}</div>
+        <div class="text-xs text-faint font-mono">${it.section}</div>
+      </a>
+    `).join('') || '<div class="px-3 py-6 text-sm text-faint text-center">No results</div>';
+  }
+  input?.addEventListener('input', (e) => renderResults(e.target.value));
+
+  const mobileNavBtn = document.getElementById('mobileNavBtn');
+  const mobileNav = document.getElementById('mobileNav');
+  const mobileNavClose = document.getElementById('mobileNavClose');
+  mobileNavBtn?.addEventListener('click', () => mobileNav.classList.remove('hidden'));
+  mobileNavClose?.addEventListener('click', () => mobileNav.classList.add('hidden'));
+</script>
+
+</body>
+</html>

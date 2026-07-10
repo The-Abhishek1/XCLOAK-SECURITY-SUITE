@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Building Enterprise Android MDM Without Google EMM — XCloak Blog</title>
+<meta name="description" content="XCloak takes a different approach to Android MDM: a Flutter foreground service that collects security telemetry without requiring EMM enrollment or Device Owner mode." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/android-mdm-without-emm.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Building Enterprise Android MDM Without Google EMM" />
+<meta property="og:description" content="A Flutter foreground service that collects security telemetry and accepts management commands, without requiring EMM enrollment." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/android-mdm-without-emm.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 14px; display:block; overflow-x:auto; }
+  article th { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 8px 12px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; color: #94a3b8; }
+  article td { border-bottom: 1px solid #e2e8f0; padding: 8px 12px; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-06</span>
+    <span>&middot;</span>
+    <span class="text-brand">Engineering</span>
+    <span>&middot;</span>
+    <span>5 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">Building Enterprise Android MDM Without Google EMM</h1>
+
+  <article>
+    <p>Most enterprise MDM solutions for Android require enrolling devices in Google Workspace/Enterprise (EMM). This works well for corporate-owned devices but creates friction for BYOD scenarios — employees don't want to give their employer Google-level control over their personal phone.</p>
+    <p>XCloak takes a different approach: a Flutter foreground service that collects security telemetry and accepts management commands, without requiring EMM enrollment.</p>
+
+    <h2>What We Can Do Without Device Owner</h2>
+    <p>Android restricts many sensitive management APIs to "Device Owner" (DO) or "Profile Owner" (PO) mode. Without them:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Requires DO/PO</th>
+          <th>XCloak approach</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Screen lock detection</td>
+          <td>✅ (DevicePolicyManager)</td>
+          <td>Not available — <code>has_passcode</code> is null</td>
+        </tr>
+        <tr>
+          <td>Remote lock</td>
+          <td>✅ (DevicePolicyManager.lockNow)</td>
+          <td>Requires DO; BYOD: returns explanation</td>
+        </tr>
+        <tr>
+          <td>Remote wipe</td>
+          <td>✅</td>
+          <td>Requires DO; BYOD: intentionally rejected</td>
+        </tr>
+        <tr>
+          <td>VPN enforcement</td>
+          <td>✅</td>
+          <td>Not enforced; VPN <em>detected</em> via interface list</td>
+        </tr>
+        <tr>
+          <td>App whitelist/blacklist</td>
+          <td>✅</td>
+          <td>Not enforced; sideloads <em>detected</em> via inventory</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>The key insight: for BYOD, <strong>detection is more useful than enforcement</strong>. We can detect root, USB debugging, unknown sources, VPN absence, battery risk, and storage risk — and report these as a posture score to the SOC. The operator sees the risk; the user isn't locked out of their phone.</p>
+
+    <h2>How We Detect Root</h2>
+    <p>Root detection is a multi-layer check with no single point of bypass:</p>
+    <pre><code>static Future&lt;bool&gt; _checkRooted(AndroidDeviceInfo info) async {
+  // Layer 1: Build tags — test-keys means the ROM is not production-signed
+  if (info.tags.contains('test-keys')) return true;
+
+  // Layer 2: Well-known su binary locations
+  const suPaths = [
+    '/system/app/Superuser.apk', '/sbin/su', '/system/bin/su',
+    '/system/xbin/su', '/data/local/xbin/su', '/data/local/bin/su',
+    '/system/xbin/busybox', '/data/local/tmp/su',
+  ];
+  for (final path in suPaths) {
+    if (await File(path).exists()) return true;
+  }
+
+  // Layer 3: Magisk socket (modern rootkit hiding method)
+  try {
+    final result = await Process.run('test', ['-S', '/dev/.magisk/mirror']);
+    if (result.exitCode == 0) return true;
+  } catch (_) {}
+
+  return false;
+}</code></pre>
+
+    <p>Determined adversaries can bypass this — no BYOD root detection is perfect. The goal is detecting common rooted devices and unintentionally rooted phones (factory-rooted development devices, user-rooted phones with Magisk), not adversaries actively trying to hide.</p>
+
+    <h2>VPN Detection via NetworkInterface</h2>
+    <p>Android doesn't provide a direct "is VPN active?" API without DO mode. Instead, we inspect the network interface list:</p>
+    <pre><code>final interfaces = await NetworkInterface.list();
+vpn = interfaces.any((i) =&gt;
+    i.name.startsWith('tun') ||
+    i.name.startsWith('ppp') ||
+    i.name.startsWith('vpn'));</code></pre>
+
+    <p><code>tun</code> interfaces are created by WireGuard, OpenVPN, and most VPN clients. This covers the vast majority of VPN scenarios on Android without any special permissions.</p>
+
+    <h2>Battery and Storage via Process.run</h2>
+    <p>The Flutter SDK doesn't expose battery level or storage stats in a way that works from a background service isolate. We use <code>Process.run</code> to shell out to Android's command-line tools:</p>
+    <pre><code>// Battery level and charging state
+final result = await Process.run('dumpsys', ['battery']);
+final out = result.stdout as String;
+final levelMatch = RegExp(r'level: (\d+)').firstMatch(out);
+// status 2 = CHARGING, 5 = FULL
+final statusMatch = RegExp(r'status: (\d+)').firstMatch(out);
+
+// Storage
+final dfResult = await Process.run('df', ['-h', '/data']);
+// Parse: Filesystem Size Used Avail Use% Mounted</code></pre>
+
+    <p>These shell commands are available to non-root apps on Android — they don't require elevated permissions.</p>
+
+    <h2>The Foreground Service Architecture</h2>
+    <p>Android aggressively kills background processes. To keep the agent running while the app is closed, we use a foreground service — a service that shows a persistent notification to the user.</p>
+    <pre><code>@pragma('vm:entry-point')
+void onServiceStart(ServiceInstance service) async {
+  if (service is AndroidServiceInstance) {
+    service.setAsForegroundService();
+  }
+
+  // Immediate first run to confirm liveness
+  await _checkIn(service);
+  await _pollCommands();
+
+  // 5 staggered periodic timers with jitter
+  _schedulePeriodic(_checkinInterval,   () =&gt; _checkIn(service));
+  _schedulePeriodic(_cmdPollInterval,   _pollCommands);
+  _schedulePeriodic(_logInterval,       LogForwarder.forwardBatch);
+  _schedulePeriodic(_inventoryInterval, _runInventory);
+  _schedulePeriodic(_threatInterval,    _runThreatScan);
+}</code></pre>
+
+    <p>Each timer uses <code>_schedulePeriodic()</code> which adds random jitter (0–30 s) before the first tick. On a large fleet, this prevents all devices rebooting after an OS update from hitting the backend simultaneously.</p>
+    <p>The foreground notification degrades from "Monitoring device security…" to "Agent degraded — server unreachable" after 5 consecutive check-in failures, giving users a visible signal that something is wrong.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm">
+    <a href="proc-net-process-names.html" class="text-brand hover:underline">&larr; How XCloak Maps Linux /proc/net to Process Names</a>
+    <a href="xcloak-v0-2-0.html" class="text-brand hover:underline">XCloak v0.2.0: Enterprise Security Hardening &rarr;</a>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

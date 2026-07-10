@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Kafka is optional: designing for graceful degradation — XCloak Blog</title>
+<meta name="description" content="Not every self-hosted deployment wants to run a Kafka cluster. Here's how XCloak treats it as an enhancement rather than a hard dependency, and where that tradeoff actually lives in the code." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/kafka-optional-by-design.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Kafka is optional: designing for graceful degradation" />
+<meta property="og:description" content="Not every self-hosted deployment wants to run a Kafka cluster. Here's how XCloak treats it as an enhancement rather than a hard dependency, and where that tradeoff actually lives in the code." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/kafka-optional-by-design.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 14px; display:block; overflow-x:auto; }
+  article th { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 8px 12px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; color: #94a3b8; }
+  article td { border-bottom: 1px solid #e2e8f0; padding: 8px 12px; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-08-07</span>
+    <span>&middot;</span>
+    <span class="text-brand">Architecture</span>
+    <span>&middot;</span>
+    <span>3 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">Kafka is optional: designing for graceful degradation</h1>
+
+  <article>
+    <p>A lot of the interesting architecture decisions in a self-hosted product aren't about the happy path — they're about what happens when a piece of optional infrastructure isn't there. XCloak uses Kafka for event fan-out across seven topics (alerts, incidents, agent tasks, audit, FIM alerts, YARA matches, async IOC-match jobs), but a fresh <code>docker compose up</code> evaluation, or a small production deployment, shouldn't have to stand up and operate a Kafka cluster just to get core detection working. So Kafka had to be genuinely optional, not "optional" in the way that quietly breaks half the product if you skip it.</p>
+<h2>What "optional" has to actually mean</h2>
+<p>The easy way to build an optional dependency is to wrap every call site in an <code>if enabled</code> check and call it done. The harder part — the part that actually matters — is deciding what happens to the <em>behavior</em> on the other side of that check, not just whether the code path executes.</p>
+<p><code>KAFKA_ENABLED=false</code>, or an unreachable broker, degrades functionality in specific, bounded ways:</p>
+<ul>
+<li><strong>No external event fan-out.</strong> If you're piping XCloak alerts into an external SIEM or SOAR tool via Kafka, that stops. This is an expected, visible tradeoff for not running Kafka — you lose an integration point, not core functionality.</li>
+<li><strong>IOC matching falls back to a synchronous path.</strong> Normally, IOC matching against a log is deliberately asynchronous — dispatched to a Kafka topic and handled by a dedicated consumer, specifically so a large indicator list doesn't add latency to every ingest request (this is described in more detail in <a href="log-line-to-alert.html">the post on the detection pipeline</a>). Without Kafka, that decoupling isn't available in the same form.</li>
+</ul>
+<p>What does <strong>not</strong> degrade: Sigma rule evaluation, the 24 scheduled behavioral detectors, alert creation, the WebSocket real-time dashboard feed (which runs on Redis pub/sub, not Kafka), and SOAR playbook execution. None of that has a hard Kafka dependency, because none of it should — detection and response are the core product; Kafka is the plumbing that helps it scale and integrate outward.</p>
+<h2>Why not just require it</h2>
+<p>We could have made Kafka mandatory and simplified a chunk of conditional logic in the process. We didn't, for a reason that's more about who's actually running this software than about the code itself: a homelab user or a five-person security team evaluating XCloak for the first time is not well served by "step one, stand up a three-broker Kafka cluster with ZooKeeper." The BUSL free tier is explicitly aimed at self-hosted deployments up to 10 agents — exactly the size of deployment where requiring Kafka would be disproportionate operational weight relative to what's being protected.</p>
+<p>The docker-compose path still includes Kafka by default, because for evaluation purposes it's easy enough to bring up alongside everything else in one command. The point isn't "don't use Kafka" — it's "don't require it," which is a different design constraint and a harder one to build correctly, because it means every Kafka-touching code path needs an honest answer to "what happens if this isn't here," not just a null check that silently swallows the feature.</p>
+<h2>The actual lesson</h2>
+<p>Optional infrastructure dependencies are easy to get wrong in a way that isn't visible until someone actually runs without them — the null check compiles, the tests pass because CI always has Kafka available, and the gap only shows up when a real user disables it and finds a feature silently broken instead of cleanly degraded. Treating "Kafka unavailable" as a first-class state to design for, rather than an edge case to guard against, is what made the difference here.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="soar-human-approval.html" class="text-sub hover:text-brand transition-colors">&larr; Why every destructive SOAR action needs a human click</a><span></span></div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

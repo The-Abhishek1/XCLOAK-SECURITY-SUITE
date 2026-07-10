@@ -1,0 +1,558 @@
+---
+title: XCloak Blog
+description: Technical posts, release notes, and architecture deep-dives from the XCloak team.
+---
+
+# XCloak Blog
+
+Technical posts, release notes, and architecture deep-dives.
+
+---
+
+## Posts
+
+---
+
+### XCloak v0.2.0: Enterprise Security Hardening
+
+*July 7, 2026 · Release*
+
+v0.2.0 is the most significant XCloak release to date. The focus was depth over breadth: hardening everything already built rather than adding more features.
+
+Here's what changed.
+
+#### Backend Security Hardening
+
+**httpOnly Cookie Auth and Refresh Token Rotation**
+
+Access tokens were previously returned only in the JSON response body and stored by the frontend in memory. This works but leaves a gap: there's no robust mechanism for token renewal without user re-login.
+
+v0.2 introduces httpOnly cookie-based session management. On every login, the backend issues:
+- An 8-hour access token as an httpOnly cookie (inaccessible to JavaScript)
+- A 7-day refresh token as a second httpOnly cookie, scoped to `/api/auth/refresh` only (so it can't be accidentally sent to other endpoints)
+
+The refresh token is rotated on every use — each call to `/api/auth/refresh` invalidates the old token and issues a new one. Old tokens are revoked in Redis. This protects against token theft even if a refresh token is somehow extracted.
+
+Mobile clients (Dart/Android) additionally receive tokens in the response body because they don't use browser cookies.
+
+**Closing the Rate Limiter TOCTOU Race**
+
+The previous sliding-window rate limiter had a subtle race condition: it read the window count, then wrote the new entry in two separate Redis commands. Under concurrent requests, two requests could both pass the limit check before either incremented the counter.
+
+The fix is a single atomic Lua script executed via Redis `EVAL`:
+
+```lua
+local key    = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit  = tonumber(ARGV[3])
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+local count = redis.call('ZCARD', key)
+if count >= limit then
+  return 0
+end
+redis.call('ZADD', key, now, now .. '-' .. math.random())
+redis.call('EXPIRE', key, math.ceil(window / 1000))
+return 1
+```
+
+`ZREMRANGEBYSCORE`, `ZCARD`, and `ZADD` happen atomically. No gap between read and write. This closes the race entirely.
+
+**PostgreSQL RLS Operationally Active**
+
+XCloak had Row-Level Security policies defined since day one, but the app was connecting to PostgreSQL as a superuser — which bypasses RLS. The policies existed on paper but didn't enforce anything.
+
+Migration `000057` creates the `xcloak_app` role (DML-only: SELECT, INSERT, UPDATE, DELETE on all tables, no DDL) and grants it default privileges for future migrations. The backend now uses a separate pool that connects as `xcloak_app`. The migration pool (DDL, runs on startup) still connects as the superuser.
+
+With this change, RLS is load-bearing for every query. A bug in the application that forgets to set `app.tenant_id` returns no rows rather than all rows.
+
+**Kafka Event Bus Wired End-to-End**
+
+Five publish functions existed in the codebase and were never called. v0.2 wires them:
+- `PublishFIMAlert` — called from `fim_service.go` on every FIM detection
+- `PublishYARAMatch` — called from `yara_service.go` on every YARA hit
+- `PublishIncident` — called from `incident_service.go` on incident creation
+- `PublishAuditEvent` — called from `audit_service.go` for high-risk actions
+- `PublishTaskDispatched/Completed` — called from `task_service.go`
+
+Six consumer goroutines process these events: FIM auto-quarantine, YARA auto-quarantine, incident webhook delivery, audit Splunk streaming, WebSocket broadcast, IOC correlation.
+
+FIM and YARA matches now automatically create `quarantine_file` tasks in the pending-approval queue. Operators review and approve from the Tasks screen; the agent only acts after explicit approval.
+
+---
+
+#### Go Agent Enterprise Upgrade
+
+**Process-Aware Network Connections**
+
+The previous agent reported raw socket tuples: `src_ip:port → dst_ip:port` with no process context. This meant an analyst had to manually correlate network data with process data from a separate tab.
+
+v0.2 maps every connection to its owning process using the Linux `/proc` filesystem:
+
+```
+/proc/net/tcp   → hex-encoded socket table with inode numbers
+/proc/<pid>/fd/ → symlinks like "socket:[inode]" for each open fd
+/proc/<pid>/comm → process name
+/proc/<pid>/exe → executable path (symlink)
+```
+
+The agent builds a reverse map: `inode → PID → name/path`, then enriches every TCP/UDP entry. The result: every connection in the UI shows the owning process name, PID, and exe path without any additional queries.
+
+On Windows, the agent uses `netstat -ano` (which includes PID) and `tasklist /fo csv` (which maps PID → name), combined via a lookup table.
+
+**Full User Inventory**
+
+The previous user collector gathered: username, UID, shell. v0.2 expands this to 12 fields per user:
+
+```go
+type User struct {
+  Username    string
+  UID         int
+  GID         int
+  HomeDir     string
+  Shell       string
+  Groups      []string  // from /etc/group
+  SudoAccess  bool      // from /etc/sudoers + wheel/sudo/admin group
+  HasSSHKey   bool      // ~/.ssh/authorized_keys exists and non-empty
+  LastLogin   string    // from `last -n 1 <username>`
+  Enabled     bool      // /etc/shadow password field (!/* = locked)
+}
+```
+
+Sudoers parsing covers `/etc/sudoers`, `/etc/sudoers.d/*`, and group membership checks (`wheel`, `sudo`, `admin` groups). This gives SOC analysts an accurate picture of lateral movement paths and privilege escalation vectors.
+
+---
+
+#### Android Mobile Agent Enterprise Upgrade
+
+**24 Posture Fields**
+
+The previous posture check collected 8 fields. v0.2 expands to 24:
+
+- Battery level and charging state (via `dumpsys battery`)
+- Storage total and free GB (via `df /data`)
+- RAM total (via `/proc/meminfo`)
+- Network type (WiFi/Mobile/Ethernet/None via `connectivity_plus`)
+- VPN detection (via `NetworkInterface.list()` — checks for `tun*`, `ppp*`, `vpn*` interfaces)
+- USB debugging (via `settings get global adb_enabled`)
+- Unknown sources (via `settings get secure install_non_market_apps`)
+- Security patch level (from `AndroidDeviceInfo`)
+- Manufacturer and hardware board name
+- Android SDK version
+- Build fingerprint
+
+**Retry with Exponential Backoff**
+
+The previous `ApiClient` had no retry logic. Any transient network hiccup caused a check-in to fail silently. On a mobile device moving between WiFi and mobile networks, this was a frequent occurrence.
+
+v0.2 adds backoff inside `ApiClient._withRetry()`:
+- Up to 3 retry attempts
+- Delays: 500 ms → 1 s → 2 s (each + up to 200 ms random jitter)
+- Retries on: HTTP 5xx, HTTP 429, `SocketException`, `TimeoutException`
+- No retry on HTTP 4xx (client error — retrying won't help)
+- 30-second per-request timeout via `Future.timeout()`
+
+**Thundering Herd Prevention**
+
+If 500 devices all reboot simultaneously (e.g. after an OS update push), they would all start their background timers at the same time and hit the backend in a synchronized burst.
+
+v0.2 adds `_schedulePeriodic()`, which applies random jitter (0–30 s) before the first tick of each timer. The second and subsequent ticks run on the fixed interval. On a 500-device fleet, check-ins are spread across 30 seconds instead of firing simultaneously.
+
+---
+
+### How XCloak Maps Linux /proc/net to Process Names
+
+*July 5, 2026 · Technical*
+
+One of the most useful things a security agent can do is answer: "what process owns this network connection?" On Linux, the answer lives in the `/proc` filesystem — but it takes a few steps to assemble.
+
+#### The /proc/net Socket Tables
+
+Linux maintains per-protocol socket tables in `/proc/net/`:
+
+```
+/proc/net/tcp   — IPv4 TCP sockets
+/proc/net/tcp6  — IPv6 TCP sockets
+/proc/net/udp   — IPv4 UDP sockets
+/proc/net/udp6  — IPv6 UDP sockets
+```
+
+Each row looks like:
+
+```
+sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode
+ 0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000       0 12345 ...
+```
+
+The critical fields are:
+- `local_address` / `rem_address` — IP:port in little-endian hex
+- `st` — connection state (0A = LISTEN, 01 = ESTABLISHED, etc.)
+- `inode` — the kernel socket inode number
+
+The inode is the bridge to process information.
+
+#### Step 1 — Parse the Socket Table
+
+```go
+func hexToAddr(hex string) string {
+    parts := strings.Split(hex, ":")
+    // IP is 4 bytes little-endian hex → parse and reverse
+    b, _ := strconv.ParseUint(parts[0], 16, 32)
+    ip := net.IP{byte(b), byte(b >> 8), byte(b >> 16), byte(b >> 24)}
+    port, _ := strconv.ParseUint(parts[1], 16, 16)
+    return fmt.Sprintf("%s:%d", ip.String(), port)
+}
+```
+
+#### Step 2 — Build the Inode → PID Map
+
+Every process has a directory `/proc/<pid>/fd/` containing symlinks to its open file descriptors. Socket FDs appear as:
+
+```
+/proc/1234/fd/5 → socket:[12345]
+```
+
+We walk every `/proc/<pid>/fd/` and extract socket inodes:
+
+```go
+func buildInodePIDMap() map[uint64]int {
+    inodePID := make(map[uint64]int)
+    entries, _ := os.ReadDir("/proc")
+    for _, e := range entries {
+        pid, err := strconv.Atoi(e.Name())
+        if err != nil { continue } // skip non-numeric entries (not a PID)
+        fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+        fds, _ := os.ReadDir(fdDir)
+        for _, fd := range fds {
+            link, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
+            if err != nil { continue }
+            // "socket:[12345]" → extract inode 12345
+            if strings.HasPrefix(link, "socket:[") {
+                inode, _ := strconv.ParseUint(link[8:len(link)-1], 10, 64)
+                inodePID[inode] = pid
+            }
+        }
+    }
+    return inodePID
+}
+```
+
+#### Step 3 — Look Up Process Name
+
+```go
+func buildPIDNameMap(pids []int) map[int]string {
+    m := make(map[int]string)
+    for _, pid := range pids {
+        comm, _ := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+        m[pid] = strings.TrimSpace(string(comm))
+    }
+    return m
+}
+```
+
+And for the full exe path:
+```go
+exe, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+```
+
+#### Putting It Together
+
+```go
+inodePID  := buildInodePIDMap()
+connections := parseProcNetFiles()
+for i, conn := range connections {
+    if pid, ok := inodePID[conn.Inode]; ok {
+        connections[i].PID         = pid
+        connections[i].ProcessName = pidNames[pid]
+        connections[i].ProcessPath = pidExe[pid]
+    }
+}
+```
+
+The result: every connection in the XCloak UI shows the process that owns it — with no privileged access required. This is standard `/proc` reading, available to any non-root process.
+
+**Performance note:** On a busy server with thousands of connections and hundreds of processes, this scan can take 100–300 ms. The agent runs it every 30 seconds, so a single scan is well within budget. For very high process counts (>10,000), consider caching the inode map.
+
+---
+
+### Building Enterprise Android MDM Without Google EMM
+
+*July 6, 2026 · Technical*
+
+Most enterprise MDM solutions for Android require enrolling devices in Google Workspace/Enterprise (EMM). This works well for corporate-owned devices but creates friction for BYOD scenarios — employees don't want to give their employer Google-level control over their personal phone.
+
+XCloak takes a different approach: a Flutter foreground service that collects security telemetry and accepts management commands, without requiring EMM enrollment.
+
+#### What We Can Do Without Device Owner
+
+Android restricts many sensitive management APIs to "Device Owner" (DO) or "Profile Owner" (PO) mode. Without them:
+
+| Feature | Requires DO/PO | XCloak approach |
+|---------|---------------|-----------------|
+| Screen lock detection | ✅ (DevicePolicyManager) | Not available — `has_passcode` is null |
+| Remote lock | ✅ (DevicePolicyManager.lockNow) | Requires DO; BYOD: returns explanation |
+| Remote wipe | ✅ | Requires DO; BYOD: intentionally rejected |
+| VPN enforcement | ✅ | Not enforced; VPN *detected* via interface list |
+| App whitelist/blacklist | ✅ | Not enforced; sideloads *detected* via inventory |
+
+The key insight: for BYOD, **detection is more useful than enforcement**. We can detect root, USB debugging, unknown sources, VPN absence, battery risk, and storage risk — and report these as a posture score to the SOC. The operator sees the risk; the user isn't locked out of their phone.
+
+#### How We Detect Root
+
+Root detection is a multi-layer check with no single point of bypass:
+
+```dart
+static Future<bool> _checkRooted(AndroidDeviceInfo info) async {
+  // Layer 1: Build tags — test-keys means the ROM is not production-signed
+  if (info.tags.contains('test-keys')) return true;
+
+  // Layer 2: Well-known su binary locations
+  const suPaths = [
+    '/system/app/Superuser.apk', '/sbin/su', '/system/bin/su',
+    '/system/xbin/su', '/data/local/xbin/su', '/data/local/bin/su',
+    '/system/xbin/busybox', '/data/local/tmp/su',
+  ];
+  for (final path in suPaths) {
+    if (await File(path).exists()) return true;
+  }
+
+  // Layer 3: Magisk socket (modern rootkit hiding method)
+  try {
+    final result = await Process.run('test', ['-S', '/dev/.magisk/mirror']);
+    if (result.exitCode == 0) return true;
+  } catch (_) {}
+
+  return false;
+}
+```
+
+Determined adversaries can bypass this — no BYOD root detection is perfect. The goal is detecting common rooted devices and unintentionally rooted phones (factory-rooted development devices, user-rooted phones with Magisk), not adversaries actively trying to hide.
+
+#### VPN Detection via NetworkInterface
+
+Android doesn't provide a direct "is VPN active?" API without DO mode. Instead, we inspect the network interface list:
+
+```dart
+final interfaces = await NetworkInterface.list();
+vpn = interfaces.any((i) =>
+    i.name.startsWith('tun') ||
+    i.name.startsWith('ppp') ||
+    i.name.startsWith('vpn'));
+```
+
+`tun` interfaces are created by WireGuard, OpenVPN, and most VPN clients. This covers the vast majority of VPN scenarios on Android without any special permissions.
+
+#### Battery and Storage via Process.run
+
+The Flutter SDK doesn't expose battery level or storage stats in its plugin ecosystem in a way that works from a background service isolate. We use `Process.run` to shell out to Android's command-line tools:
+
+```dart
+// Battery level and charging state
+final result = await Process.run('dumpsys', ['battery']);
+final out = result.stdout as String;
+final levelMatch = RegExp(r'level: (\d+)').firstMatch(out);
+// status 2 = CHARGING, 5 = FULL
+final statusMatch = RegExp(r'status: (\d+)').firstMatch(out);
+
+// Storage
+final dfResult = await Process.run('df', ['-h', '/data']);
+// Parse: Filesystem Size Used Avail Use% Mounted
+```
+
+These shell commands are available to non-root apps on Android — they don't require elevated permissions.
+
+#### The Foreground Service Architecture
+
+Android aggressively kills background processes. To keep the agent running while the app is closed, we use a foreground service — a service that shows a persistent notification to the user.
+
+```dart
+@pragma('vm:entry-point')
+void onServiceStart(ServiceInstance service) async {
+  if (service is AndroidServiceInstance) {
+    service.setAsForegroundService();
+  }
+
+  // Immediate first run to confirm liveness
+  await _checkIn(service);
+  await _pollCommands();
+
+  // 5 staggered periodic timers with jitter
+  _schedulePeriodic(_checkinInterval,   () => _checkIn(service));
+  _schedulePeriodic(_cmdPollInterval,   _pollCommands);
+  _schedulePeriodic(_logInterval,       LogForwarder.forwardBatch);
+  _schedulePeriodic(_inventoryInterval, _runInventory);
+  _schedulePeriodic(_threatInterval,    _runThreatScan);
+}
+```
+
+Each timer uses `_schedulePeriodic()` which adds random jitter (0–30 s) before the first tick. On a large fleet, this prevents all devices rebooting after an OS update from hitting the backend simultaneously.
+
+The foreground notification degrades from "Monitoring device security…" to "Agent degraded — server unreachable" after 5 consecutive check-in failures, giving users a visible signal that something is wrong.
+
+---
+
+### Closing the TOCTOU Gap in Redis Rate Limiting
+
+*July 3, 2026 · Technical*
+
+Rate limiters look simple but contain a subtle concurrency trap. Here's how we found and fixed it in XCloak.
+
+#### The Original Implementation
+
+A sliding window rate limiter in Redis works by maintaining a sorted set of request timestamps:
+1. Remove timestamps older than the window
+2. Count how many remain
+3. If count < limit: add the new timestamp and allow the request
+4. If count ≥ limit: reject
+
+Implemented naively in Go:
+
+```go
+pipe := rdb.Pipeline()
+pipe.ZRemRangeByScore(ctx, key, "-inf", windowStart)
+pipe.ZCard(ctx, key)
+cmds, _ := pipe.Exec(ctx)
+
+count := cmds[1].(*redis.IntCmd).Val()
+if count >= limit {
+    return false // rejected
+}
+
+rdb.ZAdd(ctx, key, &redis.Z{Score: now, Member: now})
+return true
+```
+
+**The bug:** `ZRemRangeByScore` + `ZCard` execute atomically in the pipeline, but `ZAdd` is a separate command. Between the pipeline and the `ZAdd`, another goroutine (or another backend replica) can run the same pipeline, see the same count, pass the limit check, and also call `ZAdd`.
+
+Two concurrent requests both see count = 9 (limit = 10), both pass, both call `ZAdd`. The window now has 11 entries, and two requests slipped through a limit of 10.
+
+Under load (a credential stuffing attack, for example), this can allow significantly more requests than intended.
+
+#### The Fix: Atomic Lua Script
+
+Redis's `EVAL` command executes a Lua script atomically — no other command can interleave:
+
+```lua
+local key    = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])  -- milliseconds
+local limit  = tonumber(ARGV[3])
+
+-- Expire old entries
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+
+-- Count current window
+local count = redis.call('ZCARD', key)
+
+-- Reject if at limit
+if count >= limit then
+  return 0
+end
+
+-- Admit and record (unique member to handle same-millisecond requests)
+redis.call('ZADD', key, now, now .. '-' .. redis.call('INCR', key .. ':seq'))
+redis.call('EXPIRE', key, math.ceil(window / 1000) + 1)
+return 1
+```
+
+All three operations — expire, count, add — happen in a single atomic step. Two concurrent goroutines cannot both see count = 9 and both add an entry. The second one will see count = 10 after the first has added its entry.
+
+```go
+script := redis.NewScript(luaScript)
+result, err := script.Run(ctx, rdb, []string{key}, nowMs, windowMs, limit).Int()
+return result == 1, err
+```
+
+The fix is about 15 lines of Lua. The impact is significant: under a credential stuffing attack at 100 concurrent requests per second, the old implementation allowed roughly 2-3x the intended request rate. The new implementation holds the limit exactly.
+
+---
+
+### Changelog — All Releases
+
+---
+
+#### v0.2.0 — July 7, 2026
+
+**Backend Security Hardening**
+- httpOnly cookie session auth — access token + 7-day refresh token; refresh token rotated on every use; mobile UA detection sends tokens in response body too
+- Atomic Lua sliding-window rate limiter (TOCTOU race closed)
+- PostgreSQL RLS now load-bearing: migration 000057 creates `xcloak_app` DML-only role; app pool connects as `xcloak_app`; superuser bypassing RLS is closed
+- Kafka event bus wired: 5 publish functions called; 6 consumer groups processing events
+- FIM violations on critical paths auto-create `quarantine_file` tasks (pending approval)
+- YARA matches auto-create `quarantine_file` tasks (pending approval)
+- High-risk audit events streamed to Splunk HEC in real time (13 action codes)
+- Splunk config cached in-process (2-min TTL) — removes per-event DB round-trip
+- Webhook retry: immediate → 5 s → 30 s for all integrations (Slack, PD, Teams, Jira, ServiceNow, Splunk, generic)
+- `xcloak_webhook_deliveries_total` Prometheus counter (by integration + outcome)
+- `APP_BASE_URL` env var — replaces hardcoded localhost in password-reset/invite emails
+- `logRecover()` replaces all silent `recover()` calls — panics visible in structured logs
+- Zero `fmt.Printf`/`fmt.Println` in backend — full structured slog throughout
+- Audit logging added for `LOG_RETENTION_CHANGE` and `SECURITY_POLICY_UPDATE`
+
+**Go Agent — Enterprise Upgrade**
+- `log/slog` throughout — `LOG_FORMAT=json` / `LOG_LEVEL` env controls
+- Connections enriched with PID, process name, process path (`/proc/net` inode→PID on Linux; netstat+tasklist on Windows)
+- User inventory: groups, sudo access, SSH key presence, last login, account locked status, home dir, GID
+- Package collection: full fallback chain (dpkg→rpm→pacman→snap→flatpak→pip3 simultaneously on Linux; WMIC→registry→winget on Windows); `source` field added
+- FIM: mode, UID, GID, mtime per file via `syscall.Stat_t`; extended watch paths
+- New collectors: cron jobs, kernel modules (lsmod/driverquery), SUID/SGID binary scan, disk usage
+- Heartbeat: load_avg_1m/5m/15m, logged_in_users, open_fds (Linux); cpu_load_pct, logged_in_users (Windows)
+- 4 new server-dispatched task types
+
+**Mobile Agent — Enterprise Upgrade**
+- `DevicePosture` expanded: 8 → 24 fields (battery, storage, RAM, VPN, USB debug, unknown sources, security patch, manufacturer, SDK, fingerprint)
+- `PostureCollector` rewrite: battery via `dumpsys battery`, storage via `df /data`, RAM from `/proc/meminfo`, VPN via interface list, Magisk socket check
+- `EnrollmentService` sends full posture snapshot + build fingerprint at enrollment
+- `ApiClient` retry: exponential backoff ×3 (500ms→1s→2s+jitter) for 5xx/429/SocketException/Timeout; 30s timeout
+- 5 background timers with ≤30s jitter: check-in (5m), cmd poll (2m), log forward (10m), app inventory (30m), threat scan (15m)
+- New MDM commands: `collect_posture`, `scan_threats`, `rotate_token`, `update_agent`
+- `LogForwarder`: 11 security-relevant logcat tags; severity field per line; 200-line batches
+- Consecutive failure tracking → foreground notification degrades to "Agent degraded" after 5 failures
+- Pending message delivery: `message` command stores text; shown as AlertDialog on next app open
+- Posture tab: 10 checks, Hardware sub-score, Device Status card with battery/storage progress bars
+
+**Project Polish**
+- `SECURITY.md` with threat model, audit status, responsible disclosure
+- `CONTRIBUTING.md` with dev setup, code guidelines, PR process
+- `CHANGELOG.md` and `roadmap.md`
+- GitHub issue templates (bug report, feature request)
+- GitHub Actions: build CI (Go+Flutter+Helm), Docker push, release workflow (binaries + APK + Helm chart)
+- Helm chart bumped to v0.2.0
+
+---
+
+#### v0.1.0 — June 30, 2026
+
+Initial public release.
+
+**Core**
+- Go 1.25 / Gin backend; 56 database migrations; PostgreSQL 16 with RLS
+- Multi-tenant architecture; JWT + Redis revocation; TOTP 2FA via Vault
+- OIDC/SSO per-tenant; fine-grained RBAC (19 permissions, custom roles)
+
+**Detection**
+- 43 Sigma rules seeded automatically; YARA scanning; IOC engine; 12 behavioral detectors
+- STIX/TAXII, MISP, AlienVault OTX feed connectors
+- AD/LDAP alert enrichment with 3-tier cache
+
+**EDR**
+- Go agent: single binary, no runtime deps, 15 autonomous collectors
+- eBPF TCP events (Linux kernel 5.8+, optional); ed25519-signed self-update
+
+**SOAR**
+- Playbooks with AI recommender (Claude/Ollama); human-approval gate
+- Deception technology; script runner; firewall sync
+
+**Mobile**
+- Flutter 3.24 Android app; dual mode: agent + 53-section admin console
+- Foreground service, MDM check-in, app inventory, basic command handling
+
+**Infrastructure**
+- Docker Compose (dev); Helm v0.1.0; Prometheus + Grafana; Kafka; Elasticsearch; MinIO + Object Lock
+
+---
+
+*New posts at [blog.xcloak.tech](https://blog.xcloak.tech)*  
+*Source code at [github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE)*  
+*Maintained by [Abhishek N](mailto:abhishekn1003@gmail.com)*

@@ -1,0 +1,917 @@
+---
+title: XCloak Documentation
+description: Complete documentation for deploying, configuring, and using XCloak Security Suite.
+---
+
+# XCloak Documentation
+
+Welcome to the XCloak docs. XCloak is an open-core enterprise security platform combining NGFW, SIEM, EDR, SOAR, and MDM capabilities in a single Go/PostgreSQL/Flutter stack.
+
+**Quick links:**
+- [Getting Started](#getting-started) — up and running in 5 minutes
+- [Deployment Guide](#deployment-guide) — production setup with Kubernetes/Helm
+- [Go Agent](#go-agent) — Linux and Windows endpoint agent
+- [Mobile MDM Agent](#mobile-mdm-agent) — Android device management
+- [Detection & Rules](#detection-and-rules) — Sigma, YARA, IOC, behavioral engines
+- [SOAR & Playbooks](#soar-and-playbooks) — automated response
+- [API Reference](#api-reference) — REST API overview
+- [Troubleshooting](#troubleshooting) — common issues and fixes
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+| Tool | Version | Required for |
+|------|---------|-------------|
+| Go | 1.21+ | Backend + agent |
+| PostgreSQL | 16 | Primary database |
+| Redis | 7+ | Rate limiting + sessions |
+| Docker | 24+ | Observability stack (Kafka, Prometheus, Grafana, MinIO) |
+| Flutter | 3.24.5 | Mobile agent (optional) |
+| Java | 21 | Flutter Android build (optional) |
+
+### 5-Minute Local Setup
+
+**Step 1 — Clone the repo:**
+
+```bash
+git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
+cd XCLOAK-SECURITY-SUITE
+```
+
+**Step 2 — Start infrastructure:**
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL, Redis, Kafka, Prometheus, Grafana, and MinIO. Access:
+- Grafana: http://localhost:3001 (admin/xcloak)
+- Prometheus: http://localhost:9090
+- Kafka UI: http://localhost:8090
+- MinIO Console: http://localhost:9001
+
+**Step 3 — Configure the backend:**
+
+```bash
+cd xcloak-ngfw/backend
+cp .env.example .env
+```
+
+Edit `.env` and set at minimum:
+```env
+JWT_SECRET=<output of: openssl rand -hex 32>
+METRICS_TOKEN=<output of: openssl rand -hex 32>
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=xcloak
+DB_PASSWORD=your_password
+DB_NAME=ngfw
+```
+
+**Step 4 — Start the backend:**
+
+```bash
+# With hot reload (install: go install github.com/air-verse/air@latest)
+air
+
+# Or plain
+go run ./main.go
+```
+
+The backend runs 56 database migrations automatically on first start. Migration 056 seeds 43 production-ready Sigma rules.
+
+**Step 5 — Start the frontend:**
+
+```bash
+cd xcloak-ngfw/frontend
+npm install && npm run dev
+```
+
+Open http://localhost:3000. The first user to sign up becomes the admin.
+
+---
+
+## Deployment Guide
+
+### Docker Compose (Production)
+
+Use `docker-compose.yml` for development and `docker-compose.dev.yml` for local development with hot-reload mounts.
+
+For production, set all environment variables as secrets (not in the compose file). Use an external PostgreSQL and Redis rather than the bundled ones.
+
+### Kubernetes with Helm
+
+**Add the chart:**
+
+```bash
+# Install from this repo
+helm dependency update charts/xcloak
+helm install xcloak charts/xcloak \
+  --namespace xcloak --create-namespace \
+  --set global.ingress.host=xcloak.yourdomain.com \
+  --set backend.env.JWT_SECRET=$(openssl rand -hex 32) \
+  --set backend.env.METRICS_TOKEN=$(openssl rand -hex 32)
+```
+
+**Minimal `values.yaml` for production:**
+
+```yaml
+global:
+  ingress:
+    host: xcloak.yourdomain.com
+
+backend:
+  replicaCount: 2
+  env:
+    JWT_SECRET: "your-secret-here"
+    METRICS_TOKEN: "your-metrics-token"
+    DB_HOST: "your-postgres-host"
+    DB_USER: "xcloak"
+    DB_PASSWORD: "your-db-password"
+    DB_NAME: "ngfw"
+    APP_DB_USER: "xcloak_app"
+    APP_DB_PASSWORD: "your-app-user-password"
+    REDIS_ADDR: "your-redis:6379"
+    CORS_ALLOWED_ORIGINS: "https://xcloak.yourdomain.com"
+    APP_BASE_URL: "https://xcloak.yourdomain.com"
+
+postgresql:
+  enabled: false  # Use external PostgreSQL
+
+redis:
+  enabled: false  # Use external Redis
+```
+
+**Bundled PostgreSQL and Redis (evaluation only):**
+
+```yaml
+postgresql:
+  enabled: true
+  auth:
+    database: ngfw
+    username: xcloak
+    password: change_me
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+```
+
+> Kafka and MinIO are not bundled in the Helm chart — use external services or bring your own. Both degrade gracefully when unavailable.
+
+---
+
+## Environment Variables Reference
+
+### Backend
+
+#### Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_USER` | `xcloak` | Migration pool user (DDL permissions) |
+| `DB_PASSWORD` | — | Migration pool password |
+| `DB_NAME` | `ngfw` | Database name |
+| `DB_SSLMODE` | `disable` | Set to `require` or `verify-full` in production |
+| `APP_DB_USER` | `xcloak_app` | App pool user (DML-only, RLS load-bearing) |
+| `APP_DB_PASSWORD` | `change_me_in_production` | App pool password — **must** be changed |
+
+> The backend emits a `slog.Warn` on startup if `APP_DB_PASSWORD` is the default value. This is a security reminder, not an error.
+
+#### Security
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JWT_SECRET` | **Yes** | HMAC-SHA256 secret for access and refresh token signing |
+| `METRICS_TOKEN` | **Yes** | Bearer token for `/metrics` Prometheus endpoint |
+| `CORS_ALLOWED_ORIGINS` | **Yes** | Comma-separated list of allowed origins (frontend URL) |
+| `APP_BASE_URL` | **Yes (prod)** | Public URL for password-reset/invite email links |
+
+#### Redis
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_ADDR` | `localhost:6379` | Redis address |
+| `REDIS_PASSWORD` | _(empty)_ | Redis password |
+
+#### Kafka
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAFKA_ENABLED` | `false` | Set `true` to enable the event bus |
+| `KAFKA_BROKERS` | `localhost:9092` | Comma-separated broker list |
+| `KAFKA_REQUIRE_ALL_ACKS` | `false` | Set `true` for `min.insync.replicas=2` clusters |
+
+#### Elasticsearch
+
+| Variable | Description |
+|----------|-------------|
+| `ELASTICSEARCH_URL` | ES/OpenSearch URL (e.g. `http://elasticsearch:9200`) |
+| `ELASTICSEARCH_USERNAME` | Optional basic auth username |
+| `ELASTICSEARCH_PASSWORD` | Optional basic auth password |
+
+#### MinIO (Audit Export)
+
+| Variable | Description |
+|----------|-------------|
+| `MINIO_ENDPOINT` | MinIO endpoint (e.g. `minio:9000`) |
+| `MINIO_ACCESS_KEY` | Access key |
+| `MINIO_SECRET_KEY` | Secret key |
+| `MINIO_AUDIT_BUCKET` | Bucket for WORM audit exports |
+| `MINIO_USE_SSL` | `true` / `false` |
+| `AUDIT_EXPORT_RETENTION_DAYS` | Days to retain exports (default: 365) |
+
+#### AI
+
+| Variable | Description |
+|----------|-------------|
+| `LLM_PROVIDER` | `ollama` or `anthropic` |
+| `OLLAMA_URL` | Ollama base URL (if provider=ollama) |
+| `OLLAMA_MODEL` | Model name (e.g. `qwen2.5:3b`) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (if provider=anthropic) |
+| `ANTHROPIC_MODEL` | Model ID (default: `claude-sonnet-4-6`) |
+
+#### Agent Releases
+
+| Variable | Description |
+|----------|-------------|
+| `AGENT_RELEASE_SIGNING_KEY` | base64url-encoded ed25519 seed (32 bytes) |
+| `AGENT_RELEASE_REQUIRE_SIGNATURE` | `true` to reject unsigned release uploads |
+
+Generate a signing key:
+```bash
+openssl rand 32 | base64 | tr '+/' '-_' | tr -d '='
+```
+
+#### Logging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_FORMAT` | `text` | Set `json` for structured production logs |
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+
+---
+
+## Go Agent
+
+### Installation
+
+**Download a pre-built binary (v0.2+):**
+
+```bash
+# Linux amd64
+curl -Lo xcloak-agent \
+  https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/latest/download/xcloak-agent-linux-amd64
+chmod +x xcloak-agent
+
+# Linux arm64
+curl -Lo xcloak-agent \
+  https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases/latest/download/xcloak-agent-linux-arm64
+chmod +x xcloak-agent
+
+# Windows — download xcloak-agent-windows-amd64.exe
+```
+
+**Build from source:**
+
+```bash
+cd xcloak-agent
+go build -o xcloak-agent ./main.go
+```
+
+**Windows cross-compile:**
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o xcloak-agent.exe ./main.go
+```
+
+### First Run
+
+```bash
+XCLOAK_SERVER=https://xcloak.yourdomain.com ./xcloak-agent
+```
+
+On first run the agent prompts for an **install token** (generate one at **Agents → Add Agent → Install Token** in the UI). After registration the agent token is saved to `~/.config/xcloak-agent/token` and reused on every restart.
+
+### Agent Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `XCLOAK_SERVER` | — | Backend URL (required on first run) |
+| `LOG_FORMAT` | `text` | `json` for structured logs |
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `XCLOAK_DISABLE_SELF_UPDATE` | — | Set to `1` to skip update checks |
+
+### What the Agent Collects
+
+The agent runs 15 autonomous collectors in goroutines with jitter-staggered intervals. All collectors also respond to server-dispatched task commands.
+
+| Collector | Linux interval | Windows interval | Notes |
+|-----------|---------------|------------------|-------|
+| Processes | 30 s | 30 s | PID, PPID, name, cmdline, exe path, UID/GID |
+| Connections | 30 s | 30 s | `/proc/net` inode→PID (Linux); netstat+tasklist (Windows) |
+| Services | 60 s | 60 s | systemd unit state (Linux); Windows services |
+| Users | 10 min | 10 min | Groups, sudo, SSH keys, last login, account status |
+| Packages | 6 h | 6 h | dpkg→rpm→pacman→snap→flatpak→pip3 (Linux); WMIC→registry→winget (Windows) |
+| Auth logs | 2 min | 2 min | `/var/log/auth.log` (Linux); Windows Security Event Log |
+| auditd | 30 s | — | `/var/log/audit/audit.log` execve events |
+| File hashes | 1 h | 1 h | SHA-256 + MD5 inventory |
+| FIM | real-time | real-time | Hash + mode + owner + mtime; watched paths configurable |
+| Registry | — | 1 h | Run/RunOnce persistence keys |
+| Cron jobs | 1 h | 1 h | `/etc/crontab` + `/etc/cron.d/*` + user crontabs (Linux); schtasks (Windows) |
+| Kernel modules | 30 min | 30 min | `lsmod` (Linux); `driverquery` (Windows) |
+| SUID/SGID scan | 6 h | — | Walks `/usr /bin /sbin /opt /home` for SUID/SGID bits |
+| Disk usage | 5 min | 5 min | `/proc/mounts` + `syscall.Statfs` (Linux); WMIC/Get-PSDrive (Windows) |
+| eBPF TCP events | real-time | — | Kernel 5.8+ required; degrades gracefully on older kernels |
+
+### FIM — File Integrity Monitoring
+
+The agent monitors a default set of security-critical paths and reports any create, modify, delete, or permission change events. Each event includes:
+- File path, change type (create/modify/delete/chmod)
+- Old and new SHA-256 + MD5 hash
+- File mode (permission string), UID, GID
+- Modification timestamp
+
+**Default watched paths:**
+
+```
+/etc/passwd        /etc/shadow         /etc/sudoers
+/etc/ssh/          /etc/cron*          /etc/hosts
+/etc/ld.so.preload /etc/pam.d/         /etc/systemd/system/
+/bin/              /sbin/              /usr/bin/
+/usr/sbin/         /root/              /tmp/
+```
+
+Add custom paths by setting `FIM_EXTRA_PATHS` (comma-separated) in the agent environment.
+
+**Auto-quarantine:** When a FIM violation is detected on a critical system path, the backend automatically creates a `quarantine_file` task in **pending approval**. The file is not moved until an operator approves the task at **Tasks → Pending Approval**.
+
+### Server-Dispatched Tasks
+
+Beyond autonomous collection, operators can dispatch tasks from the UI:
+
+| Task type | Description |
+|-----------|-------------|
+| `collect_processes` | Snapshot running processes |
+| `collect_connections` | Active network connections with PID enrichment |
+| `collect_packages` | Full installed package inventory |
+| `collect_users` | User inventory with groups, sudo, SSH keys |
+| `collect_services` | Running service states |
+| `collect_auth_logs` | Read `/var/log/auth.log` |
+| `collect_file_hashes` | SHA-256/MD5 file inventory |
+| `collect_cron_jobs` | Cron job / scheduled task inventory |
+| `collect_kernel_modules` | Loaded kernel modules / drivers |
+| `collect_suid_binaries` | SUID/SGID binary scan |
+| `collect_disk_usage` | Disk capacity per mount point |
+| `fim_scan` | File integrity check — hash + mode + owner + mtime |
+| `vulnerability_scan` | Collect packages for server-side CVE matching |
+| `kill_process` | Kill a process by PID |
+| `isolate_host` | Block all traffic except XCloak server (requires approval) |
+| `quarantine_file` | Move file to quarantine directory (requires approval) |
+| `execute_script` | Run bash/sh/python3 script, stream output |
+| `apply_firewall_rules` | Apply iptables rules from XCloak |
+| `restore_file` | Restore a quarantined file to its original path |
+
+### Self-Update
+
+The agent checks for a newer release on startup. Releases are ed25519-signed. The agent verifies the signature before executing any update binary. Set `XCLOAK_DISABLE_SELF_UPDATE=1` to disable.
+
+---
+
+## Mobile MDM Agent
+
+### Requirements
+
+- Android API 26+ (Android 8.0 Oreo)
+- XCloak backend reachable from the device network
+
+### Installing the APK
+
+Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases):
+
+```bash
+adb install xcloak-agent-android.apk
+```
+
+Or build from source:
+
+```bash
+cd xcloak-agent-mobile
+flutter pub get
+flutter build apk --release
+adb install build/app/outputs/flutter-apk/app-release.apk
+```
+
+### Enrolling a Device
+
+**Step 1 — Generate an enrollment token:**
+
+Go to **MDM → Enrollment Tokens → Generate Token** in the XCloak UI. Set expiry (default 24 h) and optional owner email.
+
+Or via API:
+```bash
+curl -X POST https://xcloak.yourdomain.com/api/mdm/enrollment-tokens \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"ttl_hours": 24, "owner_email": "user@company.com"}'
+```
+
+**Step 2 — Enroll from the app:**
+
+1. Open XCloak Agent → tap **Enroll Device**
+2. Enter **Server URL** and the enrollment token
+3. Tap **Enroll**
+
+The agent sends a full device snapshot to the backend on enrollment: UDID, model, manufacturer, hardware, OS version, SDK, security patch, build fingerprint, root status, developer options, USB debugging, battery level, storage, RAM, network type.
+
+### What the Agent Monitors
+
+**Posture fields collected on every 5-minute check-in:**
+
+| Field | Collection method |
+|-------|-----------------|
+| Root / Jailbreak | su binary paths + test-keys build tag + Magisk socket |
+| Developer Options | `settings get global development_settings_enabled` |
+| USB Debugging | `settings get global adb_enabled` |
+| Unknown Sources (API < 26) | `settings get secure install_non_market_apps` |
+| Battery level + charging state | `dumpsys battery` |
+| Storage total / free | `df /data` |
+| RAM total | `/proc/meminfo:MemTotal` |
+| Network type | `Connectivity().checkConnectivity()` |
+| VPN active | `NetworkInterface.list()` — detects tun/ppp/vpn interfaces |
+| WiFi SSID | `dumpsys wifi` (best-effort, requires location permission) |
+| Security patch level | `AndroidDeviceInfo.version.securityPatch` |
+| Manufacturer / hardware | `AndroidDeviceInfo.manufacturer` / `.hardware` |
+| Android SDK version | `AndroidDeviceInfo.version.sdkInt` |
+| Build fingerprint | `AndroidDeviceInfo.fingerprint` |
+
+**Note on screen lock detection:** `has_passcode` requires Device Owner / DPC profile. It is always `null` in BYOD mode.
+
+### Background Service Timers
+
+All timers apply ≤30 s of random jitter on first tick to prevent fleet-wide thundering herd.
+
+| Timer | Interval | What it does |
+|-------|----------|-------------|
+| Device check-in | 5 min | Posture snapshot + enriched heartbeat to backend |
+| Command poll | 2 min | Fetches and executes pending MDM commands |
+| Log forward | 10 min | Ships `logcat` batch to `/api/logs/ingest` |
+| App inventory | 30 min | Full installed-app scan with sideload detection |
+| Threat scan | 15 min | Sideload summary shipped to `/api/mdm/devices/$id/threat-scan` |
+
+### MDM Commands
+
+Dispatch from **MDM → Devices → [Device] → Actions** in the UI, or via API:
+
+```bash
+curl -X POST https://xcloak.yourdomain.com/api/mdm/devices/<device-id>/commands \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"command_type": "collect_posture"}'
+```
+
+| Command | Result |
+|---------|--------|
+| `collect_posture` | Immediate posture refresh and upload |
+| `collect_apps` | Immediate app inventory scan |
+| `scan_threats` | Sideload summary shipped to backend |
+| `collect_logs` | Forwards a fresh logcat batch |
+| `sync` | Full sync: posture + app inventory |
+| `message` | Displays a message to the device user on next app open |
+| `rotate_token` | Issues and stores a new agent bearer token |
+| `update_agent` | Notifies user of a new APK URL |
+| `lock_screen` | Requires Device Owner profile (BYOD: returns explanation) |
+| `wipe` | Requires Device Owner profile (BYOD: intentionally rejected) |
+
+Every command is acknowledged to the server with `status: executed` or `status: failed` plus a result or error string.
+
+### Log Forwarding
+
+Every 10 minutes the agent captures security-relevant `logcat` output and forwards it to `/api/logs/ingest` with `log_source: android_agent`. Each log line includes a `severity` field (critical/error/warning/info/debug).
+
+Tags captured:
+`AndroidRuntime` · `ActivityManager` · `PackageManager` · `PackageInstaller` · `KeyStore` · `SELinux` · `Binder` · `WifiService` · `NetworkService` · `AccessibilityService` · `DevicePolicyManager`
+
+SELinux denials and AccessibilityService bind events are particularly useful for detecting privilege escalation and overlay-based malware.
+
+### Unenrolling a Device
+
+**User-initiated:** Menu (⋮) → Unenroll Device in the XCloak Agent app.
+
+**Admin-initiated:**
+```bash
+curl -X DELETE https://xcloak.yourdomain.com/api/mdm/devices/<device-id> \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+On the next check-in, the device receives a 403 and automatically wipes its credentials from Android Keystore.
+
+---
+
+## Detection and Rules
+
+### Sigma Rules
+
+XCloak ships with **43 production-ready Sigma rules** covering:
+- Initial Access (phishing, credential abuse, public-facing exploits)
+- Execution (PowerShell, scripting engines, scheduled tasks)
+- Persistence (registry keys, services, cron jobs, WMI subscriptions)
+- Privilege Escalation (sudo, SUID binaries, token impersonation)
+- Defense Evasion (LOLBins, timestomping, log clearing)
+- Credential Access (LSASS dump, SAM access, Kerberoasting)
+- Discovery (network scanning, enumeration)
+- Lateral Movement (SMB, RDP, WMI, SSH)
+- Collection (staging, screen capture, keylogging)
+- Exfiltration (cloud storage, DNS tunneling)
+- Impact (ransomware, disk wipe, service stop)
+- Cloud/Container/Supply Chain coverage
+
+**Import custom rules:**
+Go to **Detection → Sigma Rules → Import** and upload a YAML file. Rules are validated against the Sigma schema before import.
+
+**Write rules:**
+Use the built-in rule editor at **Detection → Sigma Rules → New Rule**. Rules support field-level matching, conditions, aggregations, and MITRE ATT&CK mapping.
+
+### YARA Rules
+
+Import YARA rules at **Detection → YARA Rules → Import**. Rules are stored in the database and deployed to enrolled agents. When a rule matches:
+
+1. An alert is generated with severity mapped from the YARA metadata
+2. A `quarantine_file` task is automatically created in **Tasks → Pending Approval**
+3. The file is only quarantined after an operator approves the task
+
+### IOC Engine
+
+Add indicators at **Threat Intel → IOCs**. Supported types: IP, domain, hash (MD5/SHA-256), URL, email.
+
+IOC matching runs asynchronously via Kafka off the request path — high-volume log ingest is never blocked by IOC lookups. Match events are reported as alerts with the matched indicator and source.
+
+**Bulk import:**
+```bash
+curl -X POST https://xcloak.yourdomain.com/api/iocs/bulk \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"iocs": [{"type": "ip", "value": "198.51.100.1", "severity": "high"}]}'
+```
+
+### Behavioral Detectors
+
+12 scheduled detectors run per-tenant, each applying statistical and heuristic analysis to your log stream:
+
+**C2 Beacon Detector** — Analyzes outbound connection timing using coefficient of variation (CV). Connections with suspiciously regular intervals (CV < 0.15 over 5+ samples) are flagged. Filters out known-benign processes and CDN destinations.
+
+**DNS Security** — Three separate checks:
+- DGA detection via Shannon entropy scoring on domain labels
+- DNS tunneling via payload length + query rate (long subdomains + high frequency)
+- DNS flood (>100 queries/min from one source)
+
+**Port Scan Detector** — Detects vertical (many ports, one host), horizontal (one port, many hosts), and SYN sweep patterns. Also detects SMB port spray (445 to many hosts).
+
+**Data Exfiltration** — Triggers on: single session >100 MB, burst of >10 large transfers, outbound connections to known cloud storage domains (S3, GDrive, OneDrive, Dropbox, Box, Mega, iCloud), large off-hours transfers.
+
+**TLS/JA3 Fingerprinting** — Matches TLS ClientHello JA3 hashes against a blocklist of 13+ known-malicious fingerprints. Current list includes: Cobalt Strike, Sliver, Havoc, BruteRatel, TrickBot, Emotet, Dridex, Ursnif, AsyncRAT, NjRAT.
+
+**Credential Attacks** — Four detection modes:
+- Brute force: ≥10 failures in 5 min from same src_ip + username
+- Password spray: same src_ip targeting ≥5 different usernames
+- Credential stuffing: same username targeted from ≥5 different src_ips
+- Successful brute force: success event preceded by ≥5 failures in 10 min
+
+**Privilege Escalation** — Windows: Event IDs 4728/4732/4756 (group add), 4720 (new user), 4672 (special privileges assigned). Linux: sudo commands, su invocations, SUID file execution, sudoers file modifications.
+
+**Ransomware Behavior** — Three kill-chain stages monitored simultaneously:
+- FIM: ≥20 file modifications with crypto extensions (`.locked`, `.encrypted`, `.crypt`, etc.) within 5 min
+- Kill-chain commands: `vssadmin delete shadows`, `bcdedit /set recoveryenabled no`, `wmic shadowcopy delete`
+- Security service kill: termination of 17 AV/EDR process names (defender, cylance, crowdstrike, etc.)
+
+**Living-off-the-Land** — Suspicious parent→child chains (Word/Excel/Outlook spawning PowerShell/cmd) and 10 LOLBin abuses: `certutil -decode`, `regsvr32 /s /u /i`, `mshta vbscript:`, `bitsadmin /transfer`, `wmic process call create`, `rundll32 shell32.dll,ShellExec`, `odbcconf.exe /a`. Also detects encoded PowerShell (`-enc`, `-encodedcommand`, `IEX`, `Invoke-Expression`, `DownloadString`).
+
+**Impossible Travel** — Calculates haversine distance between consecutive login events for the same user. Flags when implied travel speed exceeds 900 km/h. Falls back to /16 subnet comparison when GeoIP is unavailable.
+
+**UEBA** — Per-user behavioral baseline updated every 24 h. Anomaly scoring across: login hours, login locations, data access volume, command patterns, privilege usage. Alerts on significant deviation from the user's own baseline.
+
+**Network Behavior Analytics** — Per-agent baseline of connection volumes, destination diversity, and protocol distribution. Alerts on significant deviation.
+
+---
+
+## SOAR and Playbooks
+
+### Playbook Structure
+
+A playbook is a sequence of actions triggered by an alert condition. Each action can be:
+- **Automatic** — executes immediately when triggered
+- **Human-approved** — creates a pending-approval task; executes only after operator approval
+
+Playbooks are configured at **Response → Playbooks → New Playbook**.
+
+### AI Playbook Recommender
+
+When an alert is created, XCloak asks the configured LLM (Claude or Ollama) to suggest a response playbook based on the MITRE technique, severity, and alert context. The recommendation appears in the alert detail view under **Suggested Playbook**.
+
+**Configure the LLM provider in `.env`:**
+
+```env
+# Ollama (local)
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:3b
+
+# Claude (cloud)
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-6
+```
+
+### Built-in Response Actions
+
+| Action | Requires approval |
+|--------|------------------|
+| Send Slack/Teams/email notification | No |
+| Create Jira/ServiceNow ticket | No |
+| Tag alert | No |
+| Kill process on agent | Yes |
+| Isolate host (block all traffic) | Yes |
+| Quarantine file | Yes |
+| Run script on agent | Yes |
+
+### Task Approval Workflow
+
+Destructive actions created by playbooks, FIM violations, or YARA matches appear at **Tasks → Pending Approval**. Approval requires the `approve_soar_actions` permission.
+
+**Stale task expiry:** Tasks not actioned within 15 minutes are automatically cancelled. This prevents a backlog of stale destructive commands from executing hours later.
+
+### Deception Technology
+
+Configure at **Response → Deception**:
+- **Honeypots** — lightweight listeners on common attack ports; any connection triggers a high-severity alert
+- **Canary tokens** — documents, URLs, or DNS names that alert when accessed
+- **Decoy files** — files in common paths that alert on access; useful for detecting ransomware early
+- **Decoy users** — dormant accounts that alert on any authentication attempt
+
+---
+
+## Multi-Tenancy
+
+### Self-Serve Signup
+
+`POST /api/signup` provisions a new tenant + admin account. The first user who calls this becomes the platform admin. Subsequent signups create analyst accounts within the same tenant.
+
+No SMTP is required for the initial signup. Email delivery is optional (configure `SMTP_*` env vars for password-reset emails).
+
+### Tenant Isolation
+
+Every resource (agent, alert, rule, playbook, integration, audit log) is scoped to a tenant via PostgreSQL Row-Level Security (RLS). The app pool connects as `xcloak_app` (DML-only role), and RLS policies enforce tenant isolation on every query.
+
+A compromise of one tenant's API key cannot read another tenant's data — the isolation is enforced at the database level, not just the application layer.
+
+### Custom Roles
+
+Go to **Settings → Roles → New Role** to create a custom role. Permissions are additive:
+
+| Permission | Grants |
+|-----------|--------|
+| `manage_firewall` | Create/edit/delete firewall rules |
+| `manage_agents` | Enroll agents, rotate tokens, dispatch tasks |
+| `manage_detection_rules` | Create/edit Sigma and YARA rules |
+| `manage_threat_intel` | Add/edit/delete IOCs and threat feeds |
+| `manage_playbooks` | Create and trigger playbooks |
+| `manage_incidents` | Create/update/close incidents |
+| `manage_users` | Create/edit/delete users |
+| `manage_api_keys` | Issue and revoke API keys |
+| `approve_soar_actions` | Approve/reject pending destructive tasks |
+| `run_scripts` | Execute scripts on agents |
+| `run_ai_analysis` | Trigger AI triage and memory dump analysis |
+| `export_audit_logs` | Download audit log exports |
+| `sync_firewall` | Push firewall rules to agents |
+
+---
+
+## Security Hardening
+
+### Required Production Settings
+
+```env
+DB_SSLMODE=require             # or verify-full with a CA cert
+APP_DB_PASSWORD=<strong-password>   # not the default "change_me_in_production"
+JWT_SECRET=<64-char random hex>
+CORS_ALLOWED_ORIGINS=https://xcloak.yourdomain.com  # exact origin only
+APP_BASE_URL=https://xcloak.yourdomain.com
+LOG_FORMAT=json
+```
+
+### TLS Configuration
+
+XCloak can terminate TLS directly:
+```env
+TLS_CERT_FILE=/etc/ssl/xcloak/tls.crt
+TLS_KEY_FILE=/etc/ssl/xcloak/tls.key
+```
+
+Or terminate at ingress/load balancer and run the backend on plain HTTP internally.
+
+### Rate Limiting
+
+Login endpoint: 10 requests per minute per IP.  
+Username lockout: 5 failures per username triggers a 15-minute lockout.  
+High-cost API endpoints (log search, export, dashboard): 120 requests per minute.
+
+Rate limits use an atomic Lua sliding-window in Redis — no TOCTOU race.
+
+### Audit Trail
+
+All sensitive actions are logged to the `audit_logs` table and streamed to configured Splunk HEC endpoints in real time. Audit logs are batch-exported to MinIO under Object Lock (WORM) — they cannot be deleted even by an admin.
+
+Export and verify:
+```bash
+# Check export status
+curl https://xcloak.yourdomain.com/api/audit/export-status \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+---
+
+## API Reference
+
+XCloak exposes a REST API on port 8080. All endpoints (except login and registration) require a valid JWT access token.
+
+**Authentication:**
+```bash
+# Login
+curl -X POST https://xcloak.yourdomain.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "yourpassword"}'
+# Returns: {"access_token": "eyJ...", "refresh_token": "eyJ..."}
+
+# Use the token
+curl https://xcloak.yourdomain.com/api/agents \
+  -H "Authorization: Bearer eyJ..."
+```
+
+**Key endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/auth/login` | Login — returns access + refresh tokens |
+| `POST` | `/api/auth/refresh` | Refresh access token (httpOnly cookie or body) |
+| `POST` | `/api/auth/logout` | Revoke current session |
+| `GET` | `/api/agents` | List enrolled agents |
+| `GET` | `/api/agents/:id` | Agent detail with telemetry |
+| `POST` | `/api/agents/:id/tasks` | Dispatch task to agent |
+| `GET` | `/api/alerts` | List alerts (with filters) |
+| `GET` | `/api/alerts/:id` | Alert detail with enrichment |
+| `POST` | `/api/alerts/bulk-acknowledge` | Acknowledge multiple alerts |
+| `GET` | `/api/incidents` | List incidents |
+| `POST` | `/api/incidents` | Create incident |
+| `GET` | `/api/sigma-rules` | List Sigma rules |
+| `POST` | `/api/sigma-rules/import` | Import Sigma rule YAML |
+| `GET` | `/api/yara/rules` | List YARA rules |
+| `POST` | `/api/iocs/bulk` | Bulk import IOCs |
+| `GET` | `/api/logs/search` | KQL log search |
+| `POST` | `/api/mdm/enrollment-tokens` | Generate MDM enrollment token |
+| `GET` | `/api/mdm/devices` | List enrolled mobile devices |
+| `POST` | `/api/mdm/devices/:id/commands` | Dispatch MDM command |
+| `GET` | `/api/metrics` | Prometheus metrics (requires METRICS_TOKEN) |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/health/deep` | Deep health (DB, Redis, Kafka, ES) |
+
+Full OpenAPI specification: `xcloak-ngfw/backend/docs/generated/openapi.yaml`
+
+---
+
+## Integrations
+
+### Slack
+
+Go to **Settings → Integrations → Slack → Add**. Enter your Slack webhook URL and select the severity levels to notify. XCloak posts alert cards with severity color, rule name, and a link to the alert.
+
+### Email
+
+Go to **Settings → Notifications → Email**. Configure SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` in `.env`). Create rules per-severity in **Notifications → Email Rules**.
+
+### PagerDuty
+
+Go to **Settings → Integrations → PagerDuty**. Enter your integration key. XCloak creates PagerDuty incidents for critical/high severity alerts.
+
+### Microsoft Teams
+
+Go to **Settings → Integrations → Microsoft Teams**. Enter your Teams Incoming Webhook URL.
+
+### Jira
+
+Go to **Settings → Integrations → Jira**. Enter your Jira base URL, project key, and API token. XCloak auto-creates Jira issues from alerts/incidents.
+
+### ServiceNow
+
+Go to **Settings → Integrations → ServiceNow**. Enter your ServiceNow instance URL, username, and password. XCloak creates incidents via the Table API.
+
+### Webhook
+
+Go to **Settings → Integrations → Webhook**. Enter any HTTPS URL. XCloak POSTs JSON alert payloads. All outbound deliveries retry automatically (immediate → 5 s → 30 s) on transient failures.
+
+### Active Directory / LDAP
+
+Go to **Settings → Integrations → LDAP**. Enter your domain controller URL, bind DN, and password. XCloak auto-enriches every alert with user display name, department, and title from AD.
+
+---
+
+## Troubleshooting
+
+### Backend won't start — migration error
+
+```bash
+# Check which migration failed
+migrate -path backend/database/migrations \
+        -database "postgres://..." version
+
+# Force-reset a dirty migration (use with caution)
+migrate -path backend/database/migrations \
+        -database "postgres://..." force <version>
+```
+
+### 503 on all endpoints after start
+
+The DB circuit breaker tripped. Check `/api/health/deep`:
+```bash
+curl http://localhost:8080/api/health/deep
+```
+The response shows which subsystem is down (Postgres, Redis, Kafka, Elasticsearch). The circuit resets automatically once the subsystem recovers.
+
+### Agents show offline immediately
+
+Check that the backend clock is NTP-synced. Agents are considered offline after 5 minutes without a heartbeat. Clock skew between agent hosts and the backend causes false offline status.
+
+### WebSocket alerts not appearing in multi-replica setup
+
+Verify Redis pub/sub is working:
+```bash
+redis-cli subscribe xcloak:ws:alerts
+```
+Trigger a test alert. If nothing arrives, check `REDIS_ADDR` is consistent across all replicas.
+
+### Elasticsearch returning no results
+
+Check the backend startup logs for `elasticsearch: connected`. The per-tenant index (`xcloak-logs-<tenant-id>`) is created on first ingest — if no logs have been ingested since Elasticsearch was enabled, the search will return empty (expected).
+
+### Kafka consumer lag growing
+
+```bash
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --list | grep xcloak
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+  --describe --group xcloak-fim-consumer
+```
+
+All 7 consumer groups run in the same backend process. Each runs in an independent goroutine — a slow consumer does not block others. If the `fim` or `yara` consumer lags under heavy ingest, consider increasing topic partition counts for `xcloak.fim_alerts` and `xcloak.yara_matches`.
+
+### JWT errors after key rotation
+
+Rotating `JWT_SECRET` invalidates all existing sessions. All users must re-login. There is no zero-downtime key rotation in the current release — schedule a maintenance window.
+
+### Mobile agent stuck "Offline"
+
+1. Check that the backend is reachable from the device network (ping the server URL)
+2. Check the agent foreground notification — if it says "Agent degraded" the device has hit 5 consecutive check-in failures
+3. Verify the enrollment token was valid and the device is listed at **MDM → Devices**
+4. On the device: Settings → Apps → XCloak Agent → Permissions → allow "Network" if restricted
+
+---
+
+## FAQ
+
+**Q: Is the frontend (Next.js dashboard) open source?**  
+A: The backend, Go agents, and mobile app are open source under BSL 1.1. The Next.js frontend is proprietary (open-core model). Contact abhishekn1003@gmail.com if you are interested in the frontend source.
+
+**Q: Can I use XCloak in production?**  
+A: Yes, but be aware it is a solo-maintained project with no commercial SLA. Review the [Security Audit Prep](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/blob/main/docs/security-audit-prep.md) to understand the current security posture. A third-party pentest has not yet been conducted.
+
+**Q: Does XCloak support iOS?**  
+A: Not yet. The mobile agent is Android-only for now. iOS support is on the roadmap.
+
+**Q: Does XCloak support macOS agents?**  
+A: The Go agent compiles for macOS (`GOOS=darwin`), but macOS-specific collectors (Homebrew packages, macOS-native auth logs) are not yet implemented. macOS support is planned for v0.3.
+
+**Q: What does "open-core" mean for licensing?**  
+A: The backend and agents are licensed under BSL 1.1, which is source-available and converts to Apache 2.0 in 2029. You can self-host, modify, and contribute. Commercial use beyond the thresholds in the license file requires a separate agreement.
+
+**Q: Can I run without Kafka?**  
+A: Yes. Set `KAFKA_ENABLED=false` (the default). IOC matching and other async workloads will run synchronously. Kafka is recommended for high-volume environments (>10k events/s).
+
+**Q: Can I run without Elasticsearch?**  
+A: Yes. Omit `ELASTICSEARCH_URL`. Log search uses PostgreSQL full-text search as a fallback. Elasticsearch provides significantly better performance for large log volumes.
+
+**Q: How do I reset the admin password?**  
+A: Currently via the database directly:
+```sql
+UPDATE users SET password_hash = <new-bcrypt-hash> WHERE email = 'admin@example.com';
+```
+A UI-based admin password reset is planned for v0.3.
+
+---
+
+*Docs version: v0.2.0 · Last updated: 2026-07-08*  
+*Found an error? [Open an issue](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/issues) or submit a PR against the `docs/` directory.*

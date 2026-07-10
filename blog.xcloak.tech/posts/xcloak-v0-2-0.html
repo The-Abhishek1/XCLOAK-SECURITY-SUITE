@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>XCloak v0.2.0: Enterprise Security Hardening — XCloak Blog</title>
+<meta name="description" content="v0.2.0 is the most significant XCloak release to date. The focus was depth over breadth: hardening everything already built rather than adding more features." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/xcloak-v0-2-0.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="XCloak v0.2.0: Enterprise Security Hardening" />
+<meta property="og:description" content="v0.2.0 is the most significant XCloak release to date. The focus was depth over breadth: hardening everything already built rather than adding more features." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/xcloak-v0-2-0.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-07</span>
+    <span>&middot;</span>
+    <span class="text-brand">Release</span>
+    <span>&middot;</span>
+    <span>6 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">XCloak v0.2.0: Enterprise Security Hardening</h1>
+
+  <article>
+    <p>v0.2.0 is the most significant XCloak release to date. The focus was depth over breadth: hardening everything already built rather than adding more features.</p>
+    <p>Here's what changed.</p>
+
+    <h2>Backend Security Hardening</h2>
+
+    <h3>httpOnly Cookie Auth and Refresh Token Rotation</h3>
+    <p>Access tokens were previously returned only in the JSON response body and stored by the frontend in memory. This works but leaves a gap: there's no robust mechanism for token renewal without user re-login.</p>
+    <p>v0.2 introduces httpOnly cookie-based session management. On every login, the backend issues:</p>
+    <ul>
+      <li>An 8-hour access token as an httpOnly cookie (inaccessible to JavaScript)</li>
+      <li>A 7-day refresh token as a second httpOnly cookie, scoped to <code>/api/auth/refresh</code> only (so it can't be accidentally sent to other endpoints)</li>
+    </ul>
+    <p>The refresh token is rotated on every use — each call to <code>/api/auth/refresh</code> invalidates the old token and issues a new one. Old tokens are revoked in Redis. This protects against token theft even if a refresh token is somehow extracted.</p>
+    <p>Mobile clients (Dart/Android) additionally receive tokens in the response body because they don't use browser cookies.</p>
+
+    <h3>Closing the Rate Limiter TOCTOU Race</h3>
+    <p>The previous sliding-window rate limiter had a subtle race condition: it read the window count, then wrote the new entry in two separate Redis commands. Under concurrent requests, two requests could both pass the limit check before either incremented the counter.</p>
+    <p>The fix is a single atomic Lua script executed via Redis <code>EVAL</code>:</p>
+    <pre><code>local key    = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit  = tonumber(ARGV[3])
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+local count = redis.call('ZCARD', key)
+if count >= limit then
+  return 0
+end
+redis.call('ZADD', key, now, now .. '-' .. math.random())
+redis.call('EXPIRE', key, math.ceil(window / 1000))
+return 1</code></pre>
+    <p><code>ZREMRANGEBYSCORE</code>, <code>ZCARD</code>, and <code>ZADD</code> happen atomically. No gap between read and write. This closes the race entirely. Full write-up: <a href="redis-rate-limiter-toctou.html">Closing the TOCTOU Gap in Redis Rate Limiting</a>.</p>
+
+    <h3>PostgreSQL RLS Operationally Active</h3>
+    <p>XCloak had Row-Level Security policies defined since day one, but the app was connecting to PostgreSQL as a superuser — which bypasses RLS. The policies existed on paper but didn't enforce anything.</p>
+    <p>Migration <code>000057</code> creates the <code>xcloak_app</code> role (DML-only: SELECT, INSERT, UPDATE, DELETE on all tables, no DDL) and grants it default privileges for future migrations. The backend now uses a separate pool that connects as <code>xcloak_app</code>. The migration pool (DDL, runs on startup) still connects as the superuser.</p>
+    <p>With this change, RLS is load-bearing for every query. A bug in the application that forgets to set <code>app.tenant_id</code> returns no rows rather than all rows.</p>
+
+    <h3>Kafka Event Bus Wired End-to-End</h3>
+    <p>Five publish functions existed in the codebase and were never called. v0.2 wires them:</p>
+    <ul>
+      <li><code>PublishFIMAlert</code> — called from <code>fim_service.go</code> on every FIM detection</li>
+      <li><code>PublishYARAMatch</code> — called from <code>yara_service.go</code> on every YARA hit</li>
+      <li><code>PublishIncident</code> — called from <code>incident_service.go</code> on incident creation</li>
+      <li><code>PublishAuditEvent</code> — called from <code>audit_service.go</code> for high-risk actions</li>
+      <li><code>PublishTaskDispatched/Completed</code> — called from <code>task_service.go</code></li>
+    </ul>
+    <p>Six consumer goroutines process these events: FIM auto-quarantine, YARA auto-quarantine, incident webhook delivery, audit Splunk streaming, WebSocket broadcast, IOC correlation.</p>
+    <p>FIM and YARA matches now automatically create <code>quarantine_file</code> tasks in the pending-approval queue. Operators review and approve from the Tasks screen; the agent only acts after explicit approval.</p>
+
+    <h2>Go Agent Enterprise Upgrade</h2>
+
+    <h3>Process-Aware Network Connections</h3>
+    <p>The previous agent reported raw socket tuples: <code>src_ip:port → dst_ip:port</code> with no process context. This meant an analyst had to manually correlate network data with process data from a separate tab.</p>
+    <p>v0.2 maps every connection to its owning process using the Linux <code>/proc</code> filesystem:</p>
+    <pre><code>/proc/net/tcp   → hex-encoded socket table with inode numbers
+/proc/&lt;pid&gt;/fd/ → symlinks like "socket:[inode]" for each open fd
+/proc/&lt;pid&gt;/comm → process name
+/proc/&lt;pid&gt;/exe → executable path (symlink)</code></pre>
+    <p>The agent builds a reverse map: <code>inode → PID → name/path</code>, then enriches every TCP/UDP entry. The result: every connection in the UI shows the owning process name, PID, and exe path without any additional queries. Full write-up: <a href="proc-net-process-names.html">How XCloak Maps Linux /proc/net to Process Names</a>.</p>
+    <p>On Windows, the agent uses <code>netstat -ano</code> (which includes PID) and <code>tasklist /fo csv</code> (which maps PID → name), combined via a lookup table.</p>
+
+    <h3>Full User Inventory</h3>
+    <p>The previous user collector gathered: username, UID, shell. v0.2 expands this to 12 fields per user:</p>
+    <pre><code>type User struct {
+  Username    string
+  UID         int
+  GID         int
+  HomeDir     string
+  Shell       string
+  Groups      []string  // from /etc/group
+  SudoAccess  bool      // from /etc/sudoers + wheel/sudo/admin group
+  HasSSHKey   bool      // ~/.ssh/authorized_keys exists and non-empty
+  LastLogin   string    // from `last -n 1 &lt;username&gt;`
+  Enabled     bool      // /etc/shadow password field (!/* = locked)
+}</code></pre>
+    <p>Sudoers parsing covers <code>/etc/sudoers</code>, <code>/etc/sudoers.d/*</code>, and group membership checks (<code>wheel</code>, <code>sudo</code>, <code>admin</code> groups). This gives SOC analysts an accurate picture of lateral movement paths and privilege escalation vectors.</p>
+
+    <h2>Android Mobile Agent Enterprise Upgrade</h2>
+
+    <h3>24 Posture Fields</h3>
+    <p>The previous posture check collected 8 fields. v0.2 expands to 24:</p>
+    <ul>
+      <li>Battery level and charging state (via <code>dumpsys battery</code>)</li>
+      <li>Storage total and free GB (via <code>df /data</code>)</li>
+      <li>RAM total (via <code>/proc/meminfo</code>)</li>
+      <li>Network type (WiFi/Mobile/Ethernet/None via <code>connectivity_plus</code>)</li>
+      <li>VPN detection (via <code>NetworkInterface.list()</code> — checks for <code>tun*</code>, <code>ppp*</code>, <code>vpn*</code> interfaces)</li>
+      <li>USB debugging (via <code>settings get global adb_enabled</code>)</li>
+      <li>Unknown sources (via <code>settings get secure install_non_market_apps</code>)</li>
+      <li>Security patch level (from <code>AndroidDeviceInfo</code>)</li>
+      <li>Manufacturer and hardware board name</li>
+      <li>Android SDK version</li>
+      <li>Build fingerprint</li>
+    </ul>
+
+    <h3>Retry with Exponential Backoff</h3>
+    <p>The previous <code>ApiClient</code> had no retry logic. Any transient network hiccup caused a check-in to fail silently. On a mobile device moving between WiFi and mobile networks, this was a frequent occurrence.</p>
+    <p>v0.2 adds backoff inside <code>ApiClient._withRetry()</code>:</p>
+    <ul>
+      <li>Up to 3 retry attempts</li>
+      <li>Delays: 500 ms → 1 s → 2 s (each + up to 200 ms random jitter)</li>
+      <li>Retries on: HTTP 5xx, HTTP 429, <code>SocketException</code>, <code>TimeoutException</code></li>
+      <li>No retry on HTTP 4xx (client error — retrying won't help)</li>
+      <li>30-second per-request timeout via <code>Future.timeout()</code></li>
+    </ul>
+
+    <h3>Thundering Herd Prevention</h3>
+    <p>If 500 devices all reboot simultaneously (e.g. after an OS update push), they would all start their background timers at the same time and hit the backend in a synchronized burst.</p>
+    <p>v0.2 adds <code>_schedulePeriodic()</code>, which applies random jitter (0–30 s) before the first tick of each timer. The second and subsequent ticks run on the fixed interval. On a 500-device fleet, check-ins are spread across 30 seconds instead of firing simultaneously. Full write-up: <a href="android-mdm-without-emm.html">Building Enterprise Android MDM Without Google EMM</a>.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm">
+    <a href="android-mdm-without-emm.html" class="text-brand hover:underline">&larr; Building Enterprise Android MDM Without Google EMM</a>
+    <a href="log-line-to-alert.html" class="text-brand hover:underline">How a log line becomes an alert &rarr;</a>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

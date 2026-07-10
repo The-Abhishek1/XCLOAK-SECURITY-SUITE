@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>How XCloak Maps Linux /proc/net to Process Names — XCloak Blog</title>
+<meta name="description" content="One of the most useful things a security agent can do is answer: what process owns this network connection? On Linux, the answer lives in /proc — but it takes a few steps to assemble." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/proc-net-process-names.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="How XCloak Maps Linux /proc/net to Process Names" />
+<meta property="og:description" content="What process owns this network connection? On Linux, the answer lives in /proc — but it takes a few steps to assemble." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/proc-net-process-names.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-05</span>
+    <span>&middot;</span>
+    <span class="text-brand">Engineering</span>
+    <span>&middot;</span>
+    <span>4 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">How XCloak Maps Linux /proc/net to Process Names</h1>
+
+  <article>
+    <p>One of the most useful things a security agent can do is answer: "what process owns this network connection?" On Linux, the answer lives in the <code>/proc</code> filesystem — but it takes a few steps to assemble.</p>
+
+    <h2>The /proc/net Socket Tables</h2>
+    <p>Linux maintains per-protocol socket tables in <code>/proc/net/</code>:</p>
+    <pre><code>/proc/net/tcp   — IPv4 TCP sockets
+/proc/net/tcp6  — IPv6 TCP sockets
+/proc/net/udp   — IPv4 UDP sockets
+/proc/net/udp6  — IPv6 UDP sockets</code></pre>
+
+    <p>Each row looks like:</p>
+    <pre><code>sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode
+ 0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000       0 12345 ...</code></pre>
+
+    <p>The critical fields are:</p>
+    <ul>
+      <li><code>local_address</code> / <code>rem_address</code> — IP:port in little-endian hex</li>
+      <li><code>st</code> — connection state (0A = LISTEN, 01 = ESTABLISHED, etc.)</li>
+      <li><code>inode</code> — the kernel socket inode number</li>
+    </ul>
+    <p>The inode is the bridge to process information.</p>
+
+    <h2>Step 1 — Parse the Socket Table</h2>
+    <pre><code>func hexToAddr(hex string) string {
+    parts := strings.Split(hex, ":")
+    // IP is 4 bytes little-endian hex → parse and reverse
+    b, _ := strconv.ParseUint(parts[0], 16, 32)
+    ip := net.IP{byte(b), byte(b >> 8), byte(b >> 16), byte(b >> 24)}
+    port, _ := strconv.ParseUint(parts[1], 16, 16)
+    return fmt.Sprintf("%s:%d", ip.String(), port)
+}</code></pre>
+
+    <h2>Step 2 — Build the Inode → PID Map</h2>
+    <p>Every process has a directory <code>/proc/&lt;pid&gt;/fd/</code> containing symlinks to its open file descriptors. Socket FDs appear as:</p>
+    <pre><code>/proc/1234/fd/5 → socket:[12345]</code></pre>
+
+    <p>We walk every <code>/proc/&lt;pid&gt;/fd/</code> and extract socket inodes:</p>
+    <pre><code>func buildInodePIDMap() map[uint64]int {
+    inodePID := make(map[uint64]int)
+    entries, _ := os.ReadDir("/proc")
+    for _, e := range entries {
+        pid, err := strconv.Atoi(e.Name())
+        if err != nil { continue } // skip non-numeric entries (not a PID)
+        fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+        fds, _ := os.ReadDir(fdDir)
+        for _, fd := range fds {
+            link, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
+            if err != nil { continue }
+            // "socket:[12345]" → extract inode 12345
+            if strings.HasPrefix(link, "socket:[") {
+                inode, _ := strconv.ParseUint(link[8:len(link)-1], 10, 64)
+                inodePID[inode] = pid
+            }
+        }
+    }
+    return inodePID
+}</code></pre>
+
+    <h2>Step 3 — Look Up Process Name</h2>
+    <pre><code>func buildPIDNameMap(pids []int) map[int]string {
+    m := make(map[int]string)
+    for _, pid := range pids {
+        comm, _ := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+        m[pid] = strings.TrimSpace(string(comm))
+    }
+    return m
+}</code></pre>
+
+    <p>And for the full exe path:</p>
+    <pre><code>exe, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))</code></pre>
+
+    <h2>Putting It Together</h2>
+    <pre><code>inodePID    := buildInodePIDMap()
+connections := parseProcNetFiles()
+for i, conn := range connections {
+    if pid, ok := inodePID[conn.Inode]; ok {
+        connections[i].PID         = pid
+        connections[i].ProcessName = pidNames[pid]
+        connections[i].ProcessPath = pidExe[pid]
+    }
+}</code></pre>
+
+    <p>The result: every connection in the XCloak UI shows the process that owns it — with no privileged access required. This is standard <code>/proc</code> reading, available to any non-root process.</p>
+
+    <p><strong>Performance note:</strong> On a busy server with thousands of connections and hundreds of processes, this scan can take 100–300 ms. The agent runs it every 30 seconds, so a single scan is well within budget. For very high process counts (&gt;10,000), consider caching the inode map between scans.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm">
+    <a href="redis-rate-limiter-toctou.html" class="text-brand hover:underline">&larr; Closing the TOCTOU Gap in Redis Rate Limiting</a>
+    <a href="android-mdm-without-emm.html" class="text-brand hover:underline">Building Enterprise Android MDM Without Google EMM &rarr;</a>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

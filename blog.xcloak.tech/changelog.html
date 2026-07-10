@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Changelog — XCloak Blog</title>
+<meta name="description" content="What shipped, when — a live feed of XCloak development pulled directly from GitHub commit history." />
+<link rel="canonical" href="https://blog.xcloak.tech/changelog.html" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+  .lift:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -16px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-5 text-[13px] text-sub">
+      <a href="index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="changelog.html" class="text-brand font-medium">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-5 sm:px-8 py-16">
+  <div class="mb-14">
+    <span class="text-xs font-mono text-brand">CHANGELOG</span>
+    <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4">What shipped, when.</h1>
+    <p class="text-sub leading-relaxed max-w-xl">Pulled live from <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/commits/main" target="_blank" rel="noopener" class="text-brand hover:underline">GitHub commit history</a> — every entry below is a real commit, not a hand-written summary.</p>
+  </div>
+
+  <div id="changelogRoot">
+    <!-- skeleton loading state -->
+    <div id="skeletonState" class="space-y-8">
+      <div>
+        <div class="skeleton h-4 w-32 rounded mb-4"></div>
+        <div class="space-y-2">
+          <div class="skeleton h-14 rounded-xl"></div>
+          <div class="skeleton h-14 rounded-xl"></div>
+        </div>
+      </div>
+      <div>
+        <div class="skeleton h-4 w-32 rounded mb-4"></div>
+        <div class="space-y-2">
+          <div class="skeleton h-14 rounded-xl"></div>
+        </div>
+      </div>
+    </div>
+    <div id="errorState" class="hidden glass rounded-2xl p-8 text-center">
+      <p class="text-sm text-sub mb-3">Couldn't load commit history right now.</p>
+      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/commits/main" target="_blank" rel="noopener" class="text-sm text-brand hover:underline">View commit history directly on GitHub →</a>
+    </div>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10 mt-8">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  const REPO = 'The-Abhishek1/XCLOAK-SECURITY-SUITE';
+  const CACHE_KEY = 'xcloak_changelog_commits';
+  const CACHE_MS = 15 * 60 * 1000; // 15 min — this page should feel live
+
+  const root = document.getElementById('changelogRoot');
+  const skeleton = document.getElementById('skeletonState');
+  const errorState = document.getElementById('errorState');
+
+  function fmtDateHeading(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function render(commits) {
+    skeleton.remove();
+    const groups = {};
+    const order = [];
+    commits.forEach(c => {
+      const dateKey = new Date(c.commit.author.date).toDateString();
+      if (!groups[dateKey]) { groups[dateKey] = []; order.push(dateKey); }
+      groups[dateKey].push(c);
+    });
+
+    const html = order.map(dateKey => {
+      const items = groups[dateKey].map(c => {
+        const msg = c.commit.message.split('\n')[0];
+        const sha = c.sha.slice(0, 7);
+        const url = c.html_url;
+        const time = fmtTime(c.commit.author.date);
+        return `
+          <a href="${url}" target="_blank" rel="noopener" class="lift flex items-center gap-4 glass rounded-xl px-4 py-3 no-underline">
+            <span class="text-xs font-mono text-faint shrink-0 w-14">${time}</span>
+            <span class="text-sm text-ink flex-1 min-w-0 truncate">${escapeHtml(msg)}</span>
+            <span class="text-xs font-mono text-brand shrink-0">${sha}</span>
+          </a>`;
+      }).join('');
+      return `
+        <div class="mb-8">
+          <p class="text-xs font-mono uppercase tracking-wide text-faint mb-3">${fmtDateHeading(groups[dateKey][0].commit.author.date)}</p>
+          <div class="space-y-2">${items}</div>
+        </div>`;
+    }).join('');
+
+    root.insertAdjacentHTML('beforeend', html +
+      `<p class="text-center text-sm mt-4"><a href="https://github.com/${REPO}/commits/main" target="_blank" rel="noopener" class="text-brand hover:underline">View full history on GitHub →</a></p>`
+    );
+  }
+
+  function showError() {
+    skeleton.classList.add('hidden');
+    errorState.classList.remove('hidden');
+  }
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (cached && Date.now() - cached.t < CACHE_MS) {
+      render(cached.commits);
+      return;
+    }
+  } catch (e) {}
+
+  fetch(`https://api.github.com/repos/${REPO}/commits?per_page=40`)
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(commits => {
+      if (!Array.isArray(commits)) return Promise.reject('bad response');
+      render(commits);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ commits, t: Date.now() })); } catch (e) {}
+    })
+    .catch(() => showError());
+})();
+</script>
+
+</body>
+</html>

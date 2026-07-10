@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Closing the TOCTOU Gap in Redis Rate Limiting — XCloak Blog</title>
+<meta name="description" content="Rate limiters look simple but contain a subtle concurrency trap. Here's how we found and fixed it in XCloak." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/redis-rate-limiter-toctou.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Closing the TOCTOU Gap in Redis Rate Limiting" />
+<meta property="og:description" content="Rate limiters look simple but contain a subtle concurrency trap. Here's how we found and fixed it in XCloak." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/redis-rate-limiter-toctou.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-03</span>
+    <span>&middot;</span>
+    <span class="text-brand">Security</span>
+    <span>&middot;</span>
+    <span>4 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">Closing the TOCTOU Gap in Redis Rate Limiting</h1>
+
+  <article>
+    <p>Rate limiters look simple but contain a subtle concurrency trap. Here's how we found and fixed it in XCloak.</p>
+
+    <h2>The Original Implementation</h2>
+    <p>A sliding window rate limiter in Redis works by maintaining a sorted set of request timestamps:</p>
+    <ol>
+      <li>Remove timestamps older than the window</li>
+      <li>Count how many remain</li>
+      <li>If count &lt; limit: add the new timestamp and allow the request</li>
+      <li>If count ≥ limit: reject</li>
+    </ol>
+    <p>Implemented naively in Go:</p>
+    <pre><code>pipe := rdb.Pipeline()
+pipe.ZRemRangeByScore(ctx, key, "-inf", windowStart)
+pipe.ZCard(ctx, key)
+cmds, _ := pipe.Exec(ctx)
+
+count := cmds[1].(*redis.IntCmd).Val()
+if count >= limit {
+    return false // rejected
+}
+
+rdb.ZAdd(ctx, key, &amp;redis.Z{Score: now, Member: now})
+return true</code></pre>
+
+    <p><strong>The bug:</strong> <code>ZRemRangeByScore</code> + <code>ZCard</code> execute atomically in the pipeline, but <code>ZAdd</code> is a separate command. Between the pipeline and the <code>ZAdd</code>, another goroutine (or another backend replica) can run the same pipeline, see the same count, pass the limit check, and also call <code>ZAdd</code>.</p>
+    <p>Two concurrent requests both see count = 9 (limit = 10), both pass, both call <code>ZAdd</code>. The window now has 11 entries, and two requests slipped through a limit of 10.</p>
+    <p>Under load — a credential stuffing attack, for example — this can allow significantly more requests than intended.</p>
+
+    <h2>The Fix: Atomic Lua Script</h2>
+    <p>Redis's <code>EVAL</code> command executes a Lua script atomically — no other command can interleave:</p>
+    <pre><code>local key    = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])  -- milliseconds
+local limit  = tonumber(ARGV[3])
+
+-- Expire old entries
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+
+-- Count current window
+local count = redis.call('ZCARD', key)
+
+-- Reject if at limit
+if count >= limit then
+  return 0
+end
+
+-- Admit and record (unique member to handle same-millisecond requests)
+redis.call('ZADD', key, now, now .. '-' .. redis.call('INCR', key .. ':seq'))
+redis.call('EXPIRE', key, math.ceil(window / 1000) + 1)
+return 1</code></pre>
+
+    <p>All three operations — expire, count, add — happen in a single atomic step. Two concurrent goroutines cannot both see count = 9 and both add an entry. The second one will see count = 10 after the first has added its entry.</p>
+    <pre><code>script := redis.NewScript(luaScript)
+result, err := script.Run(ctx, rdb, []string{key}, nowMs, windowMs, limit).Int()
+return result == 1, err</code></pre>
+
+    <p>The fix is about 15 lines of Lua. The impact is significant: under a credential stuffing attack at 100 concurrent requests per second, the old implementation allowed roughly 2–3× the intended request rate. The new implementation holds the limit exactly.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm">
+    <span></span>
+    <a href="proc-net-process-names.html" class="text-brand hover:underline">How XCloak Maps Linux /proc/net to Process Names &rarr;</a>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

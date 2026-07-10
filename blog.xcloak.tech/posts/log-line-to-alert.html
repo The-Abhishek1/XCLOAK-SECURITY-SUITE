@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>How a log line becomes an alert — XCloak Blog</title>
+<meta name="description" content="The full pipeline from agent telemetry to a dashboard notification — normalization, Sigma evaluation, correlation, and real-time delivery." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/log-line-to-alert.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="How a log line becomes an alert" />
+<meta property="og:description" content="The full pipeline from agent telemetry to a dashboard notification — normalization, Sigma evaluation, correlation, and real-time delivery." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/log-line-to-alert.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 14px; display:block; overflow-x:auto; }
+  article th { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 8px 12px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; color: #94a3b8; }
+  article td { border-bottom: 1px solid #e2e8f0; padding: 8px 12px; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-07-10</span>
+    <span>&middot;</span>
+    <span class="text-brand">Architecture</span>
+    <span>&middot;</span>
+    <span>3 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">How a log line becomes an alert</h1>
+
+  <article>
+    <p>It's easy to describe XCloak as "an agent sends logs and you get alerts," but that sentence hides about six distinct steps, each of which had to be a deliberate decision. This post walks through what actually happens between an agent seeing something and an analyst seeing an alert on their screen.</p>
+<h2>Step 1: Collection</h2>
+<p>The agent gathers telemetry — process events, network connections, auth logs, file hashes — either by polling on an interval or, on Linux, through the real-time eBPF connection collector described in an <a href="ebpf-connection-collector.html">earlier post</a>. Either way, the output is the same shape: a structured event, not raw bytes.</p>
+<h2>Step 2: Ingest and normalization</h2>
+<p>Events (and externally-sourced logs, for agentless sources) arrive at <code>/api/logs/ingest</code> or <code>/api/ingest/http/:id</code>. The backend supports five source formats — CEF, LEEF, JSON, NDJSON, and plain syslog — and normalizes all of them into a common field set: <code>src_ip</code>, <code>dst_ip</code>, <code>user</code>, <code>auth_result</code>, <code>event_id</code>, <code>bytes_sent</code>/<code>bytes_recv</code>, <code>JA3</code> hash, <code>command_line</code>, <code>parent_image</code>, and a handful of others depending on source type. Everything downstream operates on this normalized shape, not on the original format — the Sigma engine doesn't know or care whether a given log started life as syslog or CEF.</p>
+<h2>Step 3: Sigma evaluation, on the hot path</h2>
+<p>This is the part that surprises people: rule evaluation happens <strong>synchronously</strong>, on the ingest request itself, not in a background queue. For each tenant, the ruleset is cached in memory, pre-bucketed by log format — so a rule that only applies to <code>windows/process_creation</code> logs never even gets considered for a Linux auth log. That pre-filtering is what makes synchronous evaluation viable at volume; without it, every log would need to be checked against every rule regardless of relevance.</p>
+<p>A match creates an alert row immediately. There's no "wait for the next batch job" — the alert exists in the same request that ingested the log.</p>
+<h2>Step 4: Correlation</h2>
+<p>Once an alert exists, a separate correlation pass checks whether it relates to other recent alerts — same source, same technique, same time window — and groups related alerts into an incident if the pattern crosses that threshold. This is intentionally decoupled from the alert-creation step itself: correlation logic changes more often than detection logic does, and keeping them separate means tuning one doesn't risk regressing the other.</p>
+<h2>Step 5: Fan-out</h2>
+<p>The new alert gets published to a Kafka topic (<code>xcloak.alerts</code>) for anything consuming events externally, and — separately — broadcast to connected dashboard sessions over WebSocket via Redis pub/sub. That second path matters architecturally: it means the alert reaches every open dashboard regardless of which backend replica happened to handle the original ingest request. Without the Redis layer, a multi-replica deployment would only notify whichever replica's WebSocket hub happened to have that particular browser connected.</p>
+<h2>Step 6: Async work that doesn't block any of the above</h2>
+<p>Two things are deliberately kept off this path entirely:</p>
+<ul>
+<li><strong>IOC matching</strong> — checking the log against threat-intel indicators — runs through a dedicated Kafka consumer, not inline. IOC lists can be large, and a slow lookup shouldn't add latency to every single log write.</li>
+<li><strong>Sigma hit bookkeeping</strong> (recording which rule fired, for analytics) is written asynchronously in a goroutine, so the actual alert-creation response isn't waiting on a write that's purely for later reporting.</li>
+</ul>
+<h2>Why this design, and not a queue-everything approach</h2>
+<p>The obvious alternative is to queue every log and process detection asynchronously across the board — simpler to reason about, easier to scale independently. We didn't do that for the primary Sigma path specifically because alert latency is the metric that matters most for a SOC tool: the gap between "something happened" and "an analyst can see it" is the thing XCloak exists to shrink. Everything that <em>doesn't</em> affect that gap (IOC matching, hit analytics) is queued; everything that does, isn't.</p>
+<p>The tradeoff is real: synchronous evaluation means the ingest endpoint's latency includes rule-matching time, and that has to stay fast as rule counts grow. The per-tenant, per-format caching is what keeps that bounded — but it's a constraint we chose deliberately, not a limitation we're unaware of.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="xcloak-v0-2-0.html" class="text-brand hover:underline">&larr; XCloak v0.2.0: Enterprise Security Hardening</a><a href="sigma-engine-internals.html" class="text-brand hover:underline">Why we built our own Sigma engine &rarr;</a></div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Using the Dashboard — XCloak Docs</title>
+<meta name="description" content="A tour of the dashboard — alerts, incidents, playbooks, rules, and threat hunting." />
+<link rel="canonical" href="https://docs.xcloak.tech/usage.html" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<meta name="theme-color" content="#2563eb" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<style>/* Shared docs prose + layout styles, loaded on every page alongside Tailwind CDN */
+:root { --ink:#0f172a; --sub:#475569; --faint:#94a3b8; --line:#e2e8f0; --brand:#2563eb; }
+body { background:#fff; color:var(--ink); }
+.sidebar-link { display:block; padding:6px 10px; border-radius:8px; font-size:13.5px; color:var(--sub); transition:background .15s,color .15s; }
+.sidebar-link:hover { background:#f1f5f9; color:var(--ink); }
+.sidebar-link.active { background:#eff6ff; color:var(--brand); font-weight:500; }
+.sidebar-group-title { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--faint); padding:0 10px; margin-top:22px; margin-bottom:6px; }
+.sidebar-group-title:first-child { margin-top:0; }
+
+.prose h1 { font-size:2.1rem; font-weight:600; letter-spacing:-0.02em; color:var(--ink); margin-bottom:0.75rem; }
+.prose > p.lead { font-size:1.05rem; color:var(--sub); margin-bottom:2.25rem; line-height:1.6; }
+.prose h2 { font-size:1.4rem; font-weight:600; color:var(--ink); margin-top:2.75rem; margin-bottom:1rem; letter-spacing:-0.01em; scroll-margin-top:90px; border-bottom:1px solid var(--line); padding-bottom:0.6rem; }
+.prose h3 { font-size:1.1rem; font-weight:600; color:var(--ink); margin-top:2rem; margin-bottom:0.75rem; scroll-margin-top:90px; }
+.prose p { color:#334155; line-height:1.75; margin-bottom:1.1rem; font-size:15px; }
+.prose ul, .prose ol { color:#334155; line-height:1.75; margin-bottom:1.1rem; padding-left:1.4rem; font-size:15px; }
+.prose ul { list-style:disc; }
+.prose ol { list-style:decimal; }
+.prose li { margin-bottom:0.4rem; }
+.prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:0.85em; background:#f1f5f9; padding:0.15em 0.4em; border-radius:4px; color:var(--ink); }
+.prose pre { background:#0f172a; color:#e2e8f0; border-radius:10px; padding:1.1rem 1.35rem; overflow-x:auto; margin-bottom:1.4rem; font-size:12.5px; line-height:1.7; }
+.prose pre code { background:none; padding:0; color:inherit; font-size:1em; }
+.prose table { width:100%; border-collapse:collapse; margin-bottom:1.5rem; font-size:13.5px; display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.prose code { word-break:break-word; }
+.prose th { text-align:left; font-family: ui-monospace, monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--faint); border-bottom:1px solid var(--line); padding:10px 12px; }
+.prose td { border-bottom:1px solid var(--line); padding:10px 12px; color:#334155; vertical-align:top; }
+.prose tr:last-child td { border-bottom:none; }
+.prose blockquote { border-left:3px solid var(--brand); padding-left:1rem; color:var(--sub); font-style:italic; margin-bottom:1.25rem; }
+.callout { border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.4rem; font-size:14px; line-height:1.6; }
+.callout.note { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
+.callout.warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+.badge { display:inline-block; font-family: ui-monospace, monospace; font-size:11px; padding:2px 8px; border-radius:999px; }
+.badge.get { background:#eff6ff; color:#2563eb; }
+.badge.post { background:#ecfdf5; color:#059669; }
+.badge.put { background:#fffbeb; color:#b45309; }
+.badge.delete { background:#fef2f2; color:#dc2626; }
+</style>
+</head>
+<body class="antialiased">
+
+<header class="fixed top-0 inset-x-0 z-50 h-14 border-b border-line bg-white/90 backdrop-blur-md">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-6">
+      <a href="https://xcloak.tech" class="flex items-center gap-2 shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M8.5 12.2 11 14.7 15.7 9.5" stroke="#2563eb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="font-semibold tracking-tight text-[14px] text-ink">XCloak</span>
+        <span class="text-faint font-mono text-xs">/ docs</span>
+      </a>
+      <button id="searchBtn" class="hidden sm:flex items-center gap-2 text-xs text-faint bg-slate-100 hover:bg-slate-200 transition-colors rounded-lg px-3 py-1.5 w-56">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+        Search docs...
+        <span class="ml-auto font-mono border border-slate-300 rounded px-1">/</span>
+      </button>
+    </div>
+    <nav class="flex items-center gap-4 text-[13px] text-sub">
+      <a href="https://xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Product</a>
+      <a href="https://blog.xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Blog</a>
+      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<!-- search overlay -->
+<div id="searchOverlay" class="hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm px-4 pt-24">
+  <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-2xl border border-line overflow-hidden">
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+      <input id="searchInput" type="text" placeholder="Search documentation..." class="flex-1 outline-none text-sm" autocomplete="off" />
+      <kbd class="text-[10px] font-mono text-faint border border-line rounded px-1.5 py-0.5">Esc</kbd>
+    </div>
+    <div id="searchResults" class="max-h-80 overflow-y-auto p-2"></div>
+  </div>
+</div>
+
+<div class="max-w-[1400px] mx-auto px-4 sm:px-6 pt-14">
+  <div class="flex">
+
+    <!-- sidebar -->
+    <aside class="hidden lg:block w-60 shrink-0 border-r border-line h-[calc(100vh-56px)] sticky top-14 overflow-y-auto py-8 pr-4">
+      <div class="sidebar-group-title">Getting Started</div>
+<a href="index.html" class="sidebar-link">Overview</a>
+<a href="installation.html" class="sidebar-link">Installation</a>
+<div class="sidebar-group-title">Core Concepts</div>
+<a href="architecture.html" class="sidebar-link">Architecture</a>
+<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
+<div class="sidebar-group-title">Guides</div>
+<a href="deployment.html" class="sidebar-link">Deployment</a>
+<a href="configuration.html" class="sidebar-link">Configuration</a>
+<a href="agent.html" class="sidebar-link">Agent</a>
+<a href="usage.html" class="sidebar-link active">Using the Dashboard</a>
+<div class="sidebar-group-title">Reference</div>
+<a href="api-reference.html" class="sidebar-link">API Reference</a>
+<div class="sidebar-group-title">Contributing</div>
+<a href="development.html" class="sidebar-link">Development Setup</a>
+    </aside>
+
+    <!-- mobile sidebar toggle -->
+    <div class="lg:hidden fixed bottom-5 right-5 z-40">
+      <button id="mobileNavBtn" class="w-12 h-12 rounded-full bg-ink text-white shadow-lg flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="mobileNav" class="hidden lg:hidden fixed inset-0 z-50 bg-white p-6 overflow-y-auto">
+      <div class="flex justify-between items-center mb-6">
+        <span class="font-semibold">Documentation</span>
+        <button id="mobileNavClose" class="p-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M6 18 18 6" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="sidebar-group-title">Getting Started</div>
+<a href="index.html" class="sidebar-link">Overview</a>
+<a href="installation.html" class="sidebar-link">Installation</a>
+<div class="sidebar-group-title">Core Concepts</div>
+<a href="architecture.html" class="sidebar-link">Architecture</a>
+<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
+<div class="sidebar-group-title">Guides</div>
+<a href="deployment.html" class="sidebar-link">Deployment</a>
+<a href="configuration.html" class="sidebar-link">Configuration</a>
+<a href="agent.html" class="sidebar-link">Agent</a>
+<a href="usage.html" class="sidebar-link active">Using the Dashboard</a>
+<div class="sidebar-group-title">Reference</div>
+<a href="api-reference.html" class="sidebar-link">API Reference</a>
+<div class="sidebar-group-title">Contributing</div>
+<a href="development.html" class="sidebar-link">Development Setup</a>
+    </div>
+
+    <!-- content -->
+    <main class="flex-1 min-w-0 px-0 lg:px-10 py-10 max-w-3xl">
+      <div class="prose">
+        
+<h1>Using the Dashboard</h1>
+<p class="lead">Once agents or log sources are reporting in, everything happens from one dashboard. This page is a tour of the main areas.</p>
+
+<h2>Dashboard overview</h2>
+<p>The landing page shows active alert counts, online agent status, a platform threat score, alert trend over 24 hours, severity breakdown, and top firing rules — a snapshot of overall posture at a glance.</p>
+
+<h2>Alerts</h2>
+<p>Filterable by status (open/acknowledged/resolved) and severity. Each alert expands into a detail panel showing the raw log message, MITRE ATT&CK technique/tactic mapping, AI-assisted triage (if configured), investigation context (similar historical alerts, IOC hits, correlated rules), and manual response actions.</p>
+
+<h2>Incidents</h2>
+<p>Alerts that correlate across sources or time get grouped into incidents automatically, with a unified timeline and DFIR artifact collection.</p>
+
+<h2>Playbooks (SOAR)</h2>
+<p>Create branching automation chains triggered by alert conditions. Non-destructive actions (Slack notification, ticket creation, enrichment) run immediately; destructive actions (kill process, isolate host, quarantine file) queue in <strong>SOAR Approvals</strong> pending analyst sign-off.</p>
+
+<h2>Rules</h2>
+<p>Manage Sigma rules, YARA rules, and JA3 fingerprint blocklists from their respective pages. Rules are tenant-scoped — changes only affect your own environment.</p>
+
+<h2>Threat Hunt</h2>
+<p>Ad-hoc queries across endpoint telemetry, with a Hunt Workbench for tracking a hypothesis across multiple queries and findings.</p>
+
+<h2>Log Search</h2>
+<p>A lightweight query syntax (<code>user:admin src_ip:10.0.0.0/8 "failed login"</code>) over stored logs, with adjustable time windows and per-agent/per-source filtering.</p>
+
+<h2>Risk Posture &amp; Compliance</h2>
+<p>A composite risk score computed from open alerts, vulnerabilities, and UEBA behavioral signals. Framework compliance (CIS Controls, NIST CSF, PCI-DSS) is scored automatically from what's actually deployed — Sigma rules, YARA rules, firewall rules, agents, vulnerabilities, audit logs, playbooks — not from a manually-filled questionnaire.</p>
+
+<h2>Vulnerability Priority Queue</h2>
+<p>CVEs affecting installed packages, ranked by a combined score: CVSS × 10 + EPSS × 200 + KEV × 300 + asset criticality + risk bonus — so a lower-CVSS vulnerability with active known exploitation (KEV) can outrank a higher-CVSS one that isn't being exploited in the wild.</p>
+
+      </div>
+      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="agent.html" class="text-sub hover:text-brand transition-colors">&larr; Agent</a><a href="api-reference.html" class="text-brand hover:underline">API Reference &rarr;</a></div>
+    </main>
+  </div>
+</div>
+
+<script>window.XCLOAK_SEARCH_INDEX = [{"title": "Overview", "url": "index.html", "section": "Documentation"}, {"title": "Where to go", "url": "index.html", "section": "Overview"}, {"title": "Tech stack, at a glance", "url": "index.html", "section": "Overview"}, {"title": "License", "url": "index.html", "section": "Overview"}, {"title": "Installation", "url": "installation.html", "section": "Documentation"}, {"title": "Prerequisites", "url": "installation.html", "section": "Installation"}, {"title": "1. Clone and configure", "url": "installation.html", "section": "Installation"}, {"title": "2. Generate secrets", "url": "installation.html", "section": "Installation"}, {"title": "3. Start the stack", "url": "installation.html", "section": "Installation"}, {"title": "4. Open the dashboard", "url": "installation.html", "section": "Installation"}, {"title": "5. Create your first account", "url": "installation.html", "section": "Installation"}, {"title": "6. Install an agent", "url": "installation.html", "section": "Installation"}, {"title": "Architecture", "url": "architecture.html", "section": "Documentation"}, {"title": "The four parts", "url": "architecture.html", "section": "Architecture"}, {"title": "Backend layering", "url": "architecture.html", "section": "Architecture"}, {"title": "Request flow: telemetry to alert", "url": "architecture.html", "section": "Architecture"}, {"title": "Multi-tenancy", "url": "architecture.html", "section": "Architecture"}, {"title": "Real-time delivery", "url": "architecture.html", "section": "Architecture"}, {"title": "Async work", "url": "architecture.html", "section": "Architecture"}, {"title": "Detection Engine", "url": "detection-engine.html", "section": "Documentation"}, {"title": "Sigma-compatible rules engine", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Behavioral detectors", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "YARA scanning", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Threat intelligence", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Writing custom rules", "url": "detection-engine.html", "section": "Detection Engine"}, {"title": "Deployment", "url": "deployment.html", "section": "Documentation"}, {"title": "Docker Compose", "url": "deployment.html", "section": "Deployment"}, {"title": "Kubernetes / Helm", "url": "deployment.html", "section": "Deployment"}, {"title": "TLS", "url": "deployment.html", "section": "Deployment"}, {"title": "Agentless log ingestion", "url": "deployment.html", "section": "Deployment"}, {"title": "Backups", "url": "deployment.html", "section": "Deployment"}, {"title": "Configuration", "url": "configuration.html", "section": "Documentation"}, {"title": "Database", "url": "configuration.html", "section": "Configuration"}, {"title": "Security \u2014 required", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent \u2194 backend TLS (optional)", "url": "configuration.html", "section": "Configuration"}, {"title": "AI (choose one provider)", "url": "configuration.html", "section": "Configuration"}, {"title": "Redis", "url": "configuration.html", "section": "Configuration"}, {"title": "MinIO \u2014 immutable audit log export", "url": "configuration.html", "section": "Configuration"}, {"title": "Kafka", "url": "configuration.html", "section": "Configuration"}, {"title": "Email alerts (optional)", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent-side variables", "url": "configuration.html", "section": "Configuration"}, {"title": "Agent", "url": "agent.html", "section": "Documentation"}, {"title": "Installing", "url": "agent.html", "section": "Agent"}, {"title": "What it collects", "url": "agent.html", "section": "Agent"}, {"title": "Remote task types", "url": "agent.html", "section": "Agent"}, {"title": "Self-update", "url": "agent.html", "section": "Agent"}, {"title": "Task expiry", "url": "agent.html", "section": "Agent"}, {"title": "Using the Dashboard", "url": "usage.html", "section": "Documentation"}, {"title": "Dashboard overview", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Alerts", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Incidents", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Playbooks (SOAR)", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Rules", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Threat Hunt", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Log Search", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Risk Posture &amp; Compliance", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "Vulnerability Priority Queue", "url": "usage.html", "section": "Using the Dashboard"}, {"title": "API Reference", "url": "api-reference.html", "section": "Documentation"}, {"title": "Authentication", "url": "api-reference.html", "section": "API Reference"}, {"title": "Auth", "url": "api-reference.html#auth", "section": "API Reference"}, {"title": "Signup", "url": "api-reference.html#signup", "section": "API Reference"}, {"title": "Agents", "url": "api-reference.html#agents", "section": "API Reference"}, {"title": "Alerts", "url": "api-reference.html#alerts", "section": "API Reference"}, {"title": "Incidents", "url": "api-reference.html#incidents", "section": "API Reference"}, {"title": "Sigma", "url": "api-reference.html#sigma", "section": "API Reference"}, {"title": "IOC", "url": "api-reference.html#ioc", "section": "API Reference"}, {"title": "YARA", "url": "api-reference.html#yara", "section": "API Reference"}, {"title": "Firewall", "url": "api-reference.html#firewall", "section": "API Reference"}, {"title": "Users", "url": "api-reference.html#users", "section": "API Reference"}, {"title": "Platform", "url": "api-reference.html#platform", "section": "API Reference"}, {"title": "Logs", "url": "api-reference.html#logs", "section": "API Reference"}, {"title": "Dashboard", "url": "api-reference.html#dashboard", "section": "API Reference"}, {"title": "Development Setup", "url": "development.html", "section": "Documentation"}, {"title": "Backend", "url": "development.html", "section": "Development Setup"}, {"title": "Frontend", "url": "development.html", "section": "Development Setup"}, {"title": "Observability stack (optional, for local testing)", "url": "development.html", "section": "Development Setup"}, {"title": "Running tests", "url": "development.html", "section": "Development Setup"}, {"title": "Where contributions help most", "url": "development.html", "section": "Development Setup"}, {"title": "Code style", "url": "development.html", "section": "Development Setup"}, {"title": "Reporting issues", "url": "development.html", "section": "Development Setup"}];</script>
+<script>
+  const searchBtn = document.getElementById('searchBtn');
+  const overlay = document.getElementById('searchOverlay');
+  const input = document.getElementById('searchInput');
+  const results = document.getElementById('searchResults');
+
+  function openSearch() { overlay.classList.remove('hidden'); input.focus(); renderResults(''); }
+  function closeSearch() { overlay.classList.add('hidden'); input.value=''; }
+
+  searchBtn?.addEventListener('click', openSearch);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); openSearch(); }
+    if (e.key === 'Escape') closeSearch();
+  });
+  overlay?.addEventListener('click', (e) => { if (e.target === overlay) closeSearch(); });
+
+  function renderResults(q) {
+    const items = (window.XCLOAK_SEARCH_INDEX || []).filter(it =>
+      !q || it.title.toLowerCase().includes(q.toLowerCase()) || it.section.toLowerCase().includes(q.toLowerCase())
+    ).slice(0, 8);
+    results.innerHTML = items.map(it => `
+      <a href="${it.url}" class="block px-3 py-2.5 rounded-lg hover:bg-slate-50">
+        <div class="text-sm font-medium text-ink">${it.title}</div>
+        <div class="text-xs text-faint font-mono">${it.section}</div>
+      </a>
+    `).join('') || '<div class="px-3 py-6 text-sm text-faint text-center">No results</div>';
+  }
+  input?.addEventListener('input', (e) => renderResults(e.target.value));
+
+  const mobileNavBtn = document.getElementById('mobileNavBtn');
+  const mobileNav = document.getElementById('mobileNav');
+  const mobileNavClose = document.getElementById('mobileNavClose');
+  mobileNavBtn?.addEventListener('click', () => mobileNav.classList.remove('hidden'));
+  mobileNavClose?.addEventListener('click', () => mobileNav.classList.add('hidden'));
+</script>
+
+</body>
+</html>
