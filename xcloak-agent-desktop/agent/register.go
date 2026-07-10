@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,31 +17,85 @@ import (
 	"golang.org/x/term"
 )
 
+// ErrInvalidToken is returned when the install token is missing or rejected by the server.
+// Callers should switch to interactive prompting instead of retrying.
+var ErrInvalidToken = errors.New("invalid install token")
+
 type registrationResponse struct {
 	AgentID int    `json:"agent_id"`
 	Message string `json:"message"`
 	Token   string `json:"token"`
 }
 
+// Register tries the install token from config (env var / .env file).
+// Returns ErrInvalidToken if no token is configured or the server rejects it (401).
+// Returns a network/server error for everything else.
 func Register() (int, error) {
-
-	hostname, _ := os.Hostname()
-	machineID := deriveMachineID(hostname)
-
-	// ── Get install token ─────────────────────────────────────
-	// Priority: env var → interactive prompt
 	installToken := config.InstallToken()
 	if installToken == "" {
-		installToken = promptInstallToken()
+		return 0, ErrInvalidToken
 	}
-	if installToken == "" {
+	return sendRegistration(installToken)
+}
+
+// RegisterInteractive prompts the user to paste an install token, up to maxAttempts times.
+// Each rejected token shows a clear error before offering another try.
+// Non-auth errors (network, server down) are returned immediately without burning attempts.
+func RegisterInteractive(maxAttempts int) (int, error) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return 0, fmt.Errorf(
-			"install token required\n" +
-				"  Generate one: XCloak UI → Agents → Add Agent → Generate Token",
+			"stdin is not a terminal — cannot prompt for install token\n" +
+				"  Set XCLOAK_INSTALL_TOKEN in .env, or run the agent directly (not piped)",
 		)
 	}
 
-	// ── Send registration request ─────────────────────────────
+	fmt.Println()
+	fmt.Println("┌─────────────────────────────────────────────────────┐")
+	fmt.Println("│         XCloak Agent — Install Token Required       │")
+	fmt.Println("├─────────────────────────────────────────────────────┤")
+	fmt.Println("│  Generate one in the XCloak UI:                     │")
+	fmt.Println("│  Agents → Add Agent → Generate Token                │")
+	fmt.Println("└─────────────────────────────────────────────────────┘")
+
+	reader := bufio.NewReader(os.Stdin)
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		fmt.Printf("\nPaste install token [%d/%d]: ", attempt, maxAttempts)
+		token, _ := reader.ReadString('\n')
+		token = strings.TrimSpace(token)
+
+		if token == "" {
+			fmt.Println("✗ No token entered.")
+			if attempt < maxAttempts {
+				continue
+			}
+			return 0, fmt.Errorf("no token provided — generate one at XCloak UI → Agents → Add Agent")
+		}
+
+		fmt.Println("  Verifying with server...")
+		id, err := sendRegistration(token)
+		if err == nil {
+			return id, nil
+		}
+		if errors.Is(err, ErrInvalidToken) {
+			remaining := maxAttempts - attempt
+			if remaining > 0 {
+				fmt.Printf("✗ Token rejected (invalid, expired, or already used). %d attempt(s) remaining.\n", remaining)
+				continue
+			}
+			return 0, fmt.Errorf("token rejected after %d attempt(s) — generate a fresh token at XCloak UI → Agents → Add Agent", maxAttempts)
+		}
+		// Network / server error — don't burn remaining attempts on something the user can't fix
+		return 0, err
+	}
+	return 0, fmt.Errorf("max attempts reached")
+}
+
+// sendRegistration performs the HTTP registration call with the given install token.
+func sendRegistration(installToken string) (int, error) {
+	hostname, _ := os.Hostname()
+	machineID := deriveMachineID(hostname)
+
 	data := struct {
 		MachineID    string `json:"machine_id"`
 		Hostname     string `json:"hostname"`
@@ -73,10 +128,7 @@ func Register() (int, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return 0, fmt.Errorf(
-			"registration rejected (401) — token may be invalid, expired, or already used\n" +
-				"  Generate a new one: XCloak UI → Agents → Add Agent",
-		)
+		return 0, ErrInvalidToken
 	}
 	if resp.StatusCode != 200 {
 		return 0, fmt.Errorf("register returned HTTP %d", resp.StatusCode)
@@ -99,42 +151,6 @@ func Register() (int, error) {
 	return result.AgentID, nil
 }
 
-// promptInstallToken prints a friendly prompt and reads the token from stdin.
-// Returns empty string if stdin is not an interactive terminal.
-func promptInstallToken() string {
-	// Check if stdin is a real terminal — not a pipe or non-interactive shell
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		fmt.Println("[agent] stdin is not a terminal — cannot prompt for install token.")
-		fmt.Println("[agent] Set XCLOAK_INSTALL_TOKEN env var or run interactively.")
-		return ""
-	}
-
-	fmt.Println()
-	fmt.Println("┌─────────────────────────────────────────────────────┐")
-	fmt.Println("│         XCloak Agent — First Time Setup             │")
-	fmt.Println("├─────────────────────────────────────────────────────┤")
-	fmt.Println("│  An install token is required to register this      │")
-	fmt.Println("│  agent with the XCloak server.                      │")
-	fmt.Println("│                                                      │")
-	fmt.Println("│  Generate one in the XCloak UI:                     │")
-	fmt.Println("│  Agents page → Add Agent → Generate Token           │")
-	fmt.Println("└─────────────────────────────────────────────────────┘")
-	fmt.Println()
-	fmt.Print("Paste install token: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	token, _ := reader.ReadString('\n')
-	token = strings.TrimSpace(token)
-
-	if token == "" {
-		fmt.Println("No token entered.")
-		return ""
-	}
-
-	fmt.Println("✓ Token received, connecting to server...")
-	return token
-}
-
 func deriveMachineID(hostname string) string {
 	h := sha256.Sum256([]byte(hostname))
 	return hex.EncodeToString(h[:])
@@ -153,10 +169,6 @@ func detectOS() string {
 	return "Linux"
 }
 
-// getLocalIP returns the local IP this host would use to reach the network
-// (no packet is actually sent — UDP "connect" just picks a route/interface).
-// Falls back to 127.0.0.1 only if the host has no usable network route,
-// e.g. fully offline.
 func getLocalIP() string {
 	conn, err := net.Dial("udp", "1.1.1.1:80")
 	if err != nil {

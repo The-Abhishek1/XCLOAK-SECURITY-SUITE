@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -45,10 +46,21 @@ func main() {
 			agentID = id
 			break
 		}
+		if errors.Is(err, agent.ErrInvalidToken) {
+			// Token missing or rejected — prompt user interactively (3 attempts)
+			id, err = agent.RegisterInteractive(3)
+			if err == nil {
+				agentID = id
+				break
+			}
+			slog.Error("registration failed", "err", err)
+			os.Exit(1)
+		}
+		// Network / server error — retry with delay
 		slog.Warn("registration attempt failed", "attempt", attempt, "max", registerMaxRetry, "err", err)
 		if attempt == registerMaxRetry {
 			slog.Error("all registration attempts failed — exiting")
-			slog.Info("fix: generate a new install token at XCloak UI → Agents → Add Agent")
+			slog.Info("fix: check SERVER_URL and ensure the XCloak backend is reachable")
 			os.Exit(1)
 		}
 		time.Sleep(registerRetryWait)
