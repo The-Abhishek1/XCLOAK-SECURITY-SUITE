@@ -9,7 +9,7 @@
 
 **Open-core enterprise security platform.** NGFW + SIEM + EDR + SOAR + MDM in a single stack — built with Go, PostgreSQL, Next.js, and Flutter.
 
-**[xcloak.tech](https://xcloak.tech)** · **[docs.xcloak.tech](https://docs.xcloak.tech)** · **[blog.xcloak.tech](https://blog.xcloak.tech)**
+**[xcloak.tech](https://xcloak.tech)** · **[suite.xcloak.tech](https://suite.xcloak.tech/demo)** · **[docs.xcloak.tech](https://docs.xcloak.tech)** · **[blog.xcloak.tech](https://blog.xcloak.tech)**
 
 > **Single maintainer project.** This is not a commercial product with an SLA. See [Current Status](#current-status) for an honest picture of what works and what doesn't yet.
 
@@ -80,7 +80,7 @@
 | Limitation | Detail |
 |------------|--------|
 | **Single maintainer** | Solo project — response times and release cadence reflect this |
-| **Frontend not open-source** | Next.js dashboard is open-core (not in this repo) |
+| **Frontend open-core** | Next.js dashboard is in this repo (`xcloak-platform/frontend`) but BSL 1.1 licensed |
 | **iOS mobile agent** | Does not exist yet — Android only |
 | **Screen lock detection** | Requires Device Owner / DPC profile; `has_passcode` is null in BYOD mode |
 | **PII in logs** | `parsed_fields` may contain emails/IPs — no automatic masking yet |
@@ -90,28 +90,74 @@
 
 ---
 
-## Quick Install
+## Try It
 
-### Option A — Docker Compose (5 minutes)
+**[suite.xcloak.tech/demo](https://suite.xcloak.tech/demo)** — live demo, no account needed. Pure Next.js, zero backend, all data baked in.
+
+---
+
+## Running Locally
+
+The platform has three modes depending on what you need:
+
+| | Mode 1 | Mode 2 | Mode 3 |
+|---|---|---|---|
+| Go backend | ✅ | ✅ | ❌ |
+| PostgreSQL | ✅ | ✅ | ❌ |
+| Real data | ✅ | ❌ | ❌ |
+| Mutations work | ✅ | ✅ | ❌ blocked |
+| Netlify-deployable | ❌ | ❌ | ✅ |
+
+### Mode 1 — Real Data & Services (full stack)
+
+Everything live — Go backend, PostgreSQL, Redis, real agent data.
 
 ```bash
 git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
-cd XCLOAK-SECURITY-SUITE
+cd XCLOAK-SECURITY-SUITE/xcloak-platform
 
-# Start the observability stack + infra
 docker compose up -d
-
-# Backend
-cd xcloak-platform/backend
-cp .env.example .env
-# Set JWT_SECRET, DB_PASSWORD in .env
-go run ./main.go   # or: air (hot reload)
-
-# Frontend (separate terminal)
-cd xcloak-platform/frontend && npm install && npm run dev
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:8080
 ```
 
-Open http://localhost:3000 — first signup creates the admin account.
+First signup creates the admin account. Data comes from your actual database.
+
+### Mode 2 — Demo Data + Real Backend (seeded DB)
+
+Go backend running but pre-seeded with synthetic data. Useful for testing backend features with realistic data without touching production.
+
+```bash
+cd XCLOAK-SECURITY-SUITE/xcloak-platform
+
+docker compose -f docker-compose.demo.yml up -d
+
+# Seed demo data (first time only)
+docker exec xcloak-demo-backend ./seed-demo
+
+# Frontend: http://localhost:3000 — visit /demo to start a session
+```
+
+All API calls go through the real Go backend, but the database has 200 synthetic alerts, 30 agents, incidents, playbook executions, etc.
+
+### Mode 3 — Demo Data, No Backend (static / Netlify)
+
+Pure Next.js, zero backend required. All data is baked into the JS bundle. This is what runs at [suite.xcloak.tech](https://suite.xcloak.tech/demo).
+
+```bash
+cd XCLOAK-SECURITY-SUITE/xcloak-platform/frontend
+npm install
+
+# Dev (hot-reload):
+NEXT_PUBLIC_DEMO_ONLY=true npm run dev
+
+# Production build (what Netlify runs):
+NEXT_PUBLIC_DEMO_ONLY=true npm run build
+NEXT_PUBLIC_DEMO_ONLY=true npx next start -p 3333
+# Visit http://localhost:3333/demo
+```
+
+No Docker, no database, no Go binary needed. All demo data (alerts, sigma rules, agents, playbooks, etc.) comes from `lib/demo-data/data.json` via the static router.
 
 ### Option B — Kubernetes / Helm
 
@@ -270,6 +316,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | | |
 |--|--|
 | Website | [xcloak.tech](https://xcloak.tech) |
+| Live Demo | [suite.xcloak.tech/demo](https://suite.xcloak.tech/demo) |
 | Docs | [docs.xcloak.tech](https://docs.xcloak.tech) |
 | Blog | [blog.xcloak.tech](https://blog.xcloak.tech) |
 | GitHub | [The-Abhishek1/XCLOAK-SECURITY-SUITE](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE) |
