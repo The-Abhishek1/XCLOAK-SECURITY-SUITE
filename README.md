@@ -9,7 +9,12 @@
 
 **Open-core enterprise security platform.** NGFW + SIEM + EDR + SOAR + MDM in a single stack — built with Go, PostgreSQL, Next.js, and Flutter.
 
-**[xcloak.tech](https://xcloak.tech)** · **[suite.xcloak.tech](https://suite.xcloak.tech/demo)** · **[docs.xcloak.tech](https://docs.xcloak.tech)** · **[blog.xcloak.tech](https://blog.xcloak.tech)**
+<p>
+  <a href="https://xcloak.tech"><img src="https://img.shields.io/badge/xcloak.tech-Website-2563eb?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website"/></a>
+  <a href="https://suite.xcloak.tech/demo"><img src="https://img.shields.io/badge/suite.xcloak.tech-Live%20Demo-0ea5e9?style=for-the-badge&logo=netlify&logoColor=white" alt="Live Demo"/></a>
+  <a href="https://docs.xcloak.tech"><img src="https://img.shields.io/badge/docs.xcloak.tech-Docs-475569?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Docs"/></a>
+  <a href="https://blog.xcloak.tech"><img src="https://img.shields.io/badge/blog.xcloak.tech-Blog-0f172a?style=for-the-badge&logo=rss&logoColor=white" alt="Blog"/></a>
+</p>
 
 > **Single maintainer project.** This is not a commercial product with an SLA. See [Current Status](#current-status) for an honest picture of what works and what doesn't yet.
 
