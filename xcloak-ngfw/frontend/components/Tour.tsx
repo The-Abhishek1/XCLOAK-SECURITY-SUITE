@@ -334,11 +334,11 @@ export default function Tour() {
               Skip
             </button>
             <button
-              onClick={() => isLast ? router.push('/signup') : goTo(step + 1)}
+              onClick={() => isLast ? close() : goTo(step + 1)}
               className="flex items-center gap-1 text-xs px-3.5 py-1.5 rounded-lg font-semibold hover:opacity-90 transition-opacity"
               style={{ background: 'var(--accent)', color: '#fff', cursor: 'pointer' }}
             >
-              {isLast ? 'Sign up free' : 'Next'} <ChevronRight className="h-3.5 w-3.5" />
+              {isLast ? 'Done' : 'Next'} <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

@@ -38,11 +38,11 @@ export default function DemoBanner() {
 
       <div className="flex items-center gap-3 shrink-0">
         <button
-          onClick={() => router.push('/signup')}
+          onClick={() => window.open('https://xcloak.tech', '_blank')}
           className="flex items-center gap-1 rounded px-3 py-1 text-xs font-semibold transition-opacity hover:opacity-80"
           style={{ background: 'rgba(255,255,255,0.2)' }}
         >
-          Sign up free <ArrowRight className="h-3 w-3" />
+          Get full access <ArrowRight className="h-3 w-3" />
         </button>
         <button onClick={dismiss} className="opacity-70 hover:opacity-100 transition-opacity" aria-label="Dismiss">
           <X className="h-4 w-4" />

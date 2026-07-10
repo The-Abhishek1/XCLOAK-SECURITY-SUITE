@@ -242,6 +242,27 @@ export default function LiveLogsPage() {
       return;
     }
 
+    // Demo mode: no backend WS — load recent logs via HTTP and mark as connected
+    if (ticket === 'demo-ws-ticket-noop') {
+      try {
+        const lr = await fetch(`/api/logs/search?agent_id=${id}&limit=50`, { credentials: 'include' });
+        if (lr.ok) {
+          const body = await lr.json();
+          const lines: LogEntry[] = (body.logs ?? []).map((l: any) => ({
+            id:      l.id,
+            source:  l.log_source ?? l.source ?? 'agent',
+            message: l.log_message ?? l.message ?? '',
+            ts:      l.collected_at ?? l.timestamp ?? new Date().toISOString(),
+            fields:  {},
+          }));
+          setLogs(lines);
+        }
+      } catch { /* ignore */ }
+      setConnected(true);
+      setStatusMsg('Demo mode — showing historical logs');
+      return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host     = window.location.hostname;
     const url      = `${protocol}://${host}:8080/api/agents/${id}/logs/stream?ticket=${encodeURIComponent(ticket)}`;

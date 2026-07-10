@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { demoRoute } from '@/lib/demo-data/router';
 
-const BACKEND = process.env.BACKEND_INTERNAL_URL || 'http://localhost:8080';
+const BACKEND   = process.env.BACKEND_INTERNAL_URL || 'http://localhost:8080';
+// NEXT_PUBLIC_ is baked into the bundle at build time so it's available in
+// both server-side route handlers and the client — no Netlify runtime config needed.
+const DEMO_ONLY = process.env.NEXT_PUBLIC_DEMO_ONLY === 'true';
 
 async function proxy(request: NextRequest): Promise<NextResponse> {
-  const url = `${BACKEND}${request.nextUrl.pathname}${request.nextUrl.search}`;
+  if (DEMO_ONLY) {
+    const path = request.nextUrl.pathname;
+    const sp   = request.nextUrl.searchParams;
+    const { data, status } = demoRoute(path, request.method, sp);
+    return NextResponse.json(data, { status });
+  }
 
+  const url     = `${BACKEND}${request.nextUrl.pathname}${request.nextUrl.search}`;
   const headers = new Headers(request.headers);
   headers.delete('host');
 
@@ -16,22 +26,20 @@ async function proxy(request: NextRequest): Promise<NextResponse> {
       method: request.method,
       headers,
       body: hasBody ? request.body : undefined,
-      // required for streaming request bodies in Node.js
-      // @ts-ignore
+      // @ts-ignore — required for streaming request bodies in Node.js
       duplex: 'half',
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Backend unreachable' }, { status: 502 });
   }
 
   const responseHeaders = new Headers(upstream.headers);
-  // Allow the browser to read all headers (CORS preflight already handled by backend)
   responseHeaders.delete('transfer-encoding');
 
   return new NextResponse(upstream.body, {
-    status: upstream.status,
+    status:     upstream.status,
     statusText: upstream.statusText,
-    headers: responseHeaders,
+    headers:    responseHeaders,
   });
 }
 

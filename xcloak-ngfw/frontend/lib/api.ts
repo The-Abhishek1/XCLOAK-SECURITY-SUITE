@@ -36,7 +36,7 @@ function showDemoToast() {
   el.innerHTML = `
     <span style="font-size:16px">🔒</span>
     <span><strong>Demo mode</strong> — this action is disabled in the live demo.
-    <a href="/signup" style="color:#60a5fa;text-decoration:underline;margin-left:6px">Sign up free →</a></span>
+    <a href="https://xcloak.tech" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;margin-left:6px">Get full access →</a></span>
   `;
   Object.assign(el.style, {
     position:     'fixed',

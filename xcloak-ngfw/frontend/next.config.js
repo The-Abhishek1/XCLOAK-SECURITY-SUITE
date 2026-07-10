@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Standalone output so the production Docker image only needs
-  // .next/standalone + minimal deps, not the full node_modules tree.
-  output: 'standalone',
+  // 'standalone' is for Docker deployments; Netlify needs the default build output.
+  // output: 'standalone',
   // NOTE: the /api/* proxy to the backend lives in middleware.ts, not here.
   // next.config.js's rewrites() is resolved ONCE into a static manifest at
   // build time (confirmed empirically — verified this the hard way after it

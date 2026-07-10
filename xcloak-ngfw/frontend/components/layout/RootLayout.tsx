@@ -250,8 +250,10 @@ function DemoBadge() {
   if (!show) return null;
   return (
     <a
-      href="/signup"
-      title="Demo mode — click to sign up free"
+      href="https://xcloak.tech"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Demo mode — visit xcloak.tech for full access"
       className="flex items-center gap-1 rounded-full px-2 py-1 shrink-0 transition-opacity hover:opacity-80"
       style={{ background: 'rgba(250,204,21,0.15)', border: '1px solid rgba(250,204,21,0.4)', color: '#ca8a04' }}
     >

@@ -64,6 +64,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
     if (!mountedRef.current) return;
 
+    // In demo mode the WS backend isn't running — pre-populate with recent alerts instead
+    if (ticket === 'demo-ws-ticket-noop') {
+      try {
+        const ar = await fetch('/api/alerts', { credentials: 'include' });
+        if (ar.ok) {
+          const alerts = await ar.json();
+          const live = (Array.isArray(alerts) ? alerts : []).slice(0, 50).map((a: any) => ({
+            id:        a.id,
+            severity:  a.severity,
+            rule_name: a.rule_name ?? 'Unknown Rule',
+            agent_id:  a.agent_id,
+            message:   a.log_message ?? a.rule_name ?? '',
+            timestamp: a.created_at ?? new Date().toISOString(),
+          }));
+          if (mountedRef.current) setLiveAlerts(live);
+        }
+      } catch { /* ignore */ }
+      return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host     = window.location.hostname;
     const ws = new WebSocket(
