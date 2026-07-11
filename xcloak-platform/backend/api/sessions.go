@@ -85,7 +85,9 @@ func UpdateSecurityPolicy(c *gin.Context) {
 		return
 	}
 	username, _ := c.Get("username")
-	services.LogEvent("SECURITY_POLICY_UPDATE", "security policy updated", fmt.Sprintf("%v", username))
+	detail := fmt.Sprintf("session_timeout=%dm max_sessions=%d mfa_required=%v",
+		body.SessionTimeoutMins, body.MaxConcurrentSessions, body.MFARequired)
+	services.LogEvent("SECURITY_POLICY_UPDATE", detail, fmt.Sprintf("%v", username))
 	c.JSON(http.StatusOK, gin.H{"message": "security policy updated"})
 }
 

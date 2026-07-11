@@ -63,6 +63,7 @@ func LiveLogsWS(c *gin.Context) {
 	c.Set("user_id",   claims.UserID)
 	c.Set("username",  claims.Username)
 	c.Set("role",      claims.Role)
+	isViewer := claims.Role == "viewer"
 
 	// Verify the agent belongs to the caller's tenant before upgrading.
 	if !agentOwnedBy404(c, agentID) {
@@ -111,6 +112,9 @@ func LiveLogsWS(c *gin.Context) {
 			var collectedAt time.Time
 			if scanErr := histRows.Scan(&e.ID, &e.Source, &e.Message, &e.ParsedFields, &collectedAt); scanErr == nil {
 				e.TS = collectedAt.UTC().Format(time.RFC3339)
+				if isViewer {
+					e.ParsedFields = maskParsedFieldsPII(e.ParsedFields)
+				}
 				hist = append(hist, e)
 			}
 		}
@@ -173,6 +177,9 @@ func LiveLogsWS(c *gin.Context) {
 				var collectedAt time.Time
 				if scanErr := rows.Scan(&e.ID, &e.Source, &e.Message, &e.ParsedFields, &collectedAt); scanErr == nil {
 					e.TS = collectedAt.UTC().Format(time.RFC3339)
+					if isViewer {
+						e.ParsedFields = maskParsedFieldsPII(e.ParsedFields)
+					}
 					if err := conn.WriteJSON(e); err != nil {
 						rows.Close()
 						return

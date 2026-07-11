@@ -26,6 +26,12 @@ func SearchLogsHandler(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+	role, _ := c.Get("role")
+	if role == "viewer" {
+		for i := range result.Logs {
+			result.Logs[i].ParsedFields = maskParsedFieldsPII(result.Logs[i].ParsedFields)
+		}
+	}
 	c.JSON(200, result)
 }
 
@@ -125,6 +131,12 @@ func RunSavedLogSearch(c *gin.Context) {
 		return
 	}
 
+	role, _ := c.Get("role")
+	if role == "viewer" {
+		for i := range result.Logs {
+			result.Logs[i].ParsedFields = maskParsedFieldsPII(result.Logs[i].ParsedFields)
+		}
+	}
 	services.IncrementSearchRunCount(found.ID)
 	c.JSON(200, result)
 }

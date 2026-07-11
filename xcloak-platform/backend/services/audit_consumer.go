@@ -91,8 +91,10 @@ var highRiskAuditActions = map[string]bool{
 	"SIGMA_RULE_DELETE":    true,
 	"IOC_DELETE":           true,
 	"THREAT_FEED_DELETE":   true,
-	"INTEGRATION_SAVE":     true,
-	"PERMISSION_CHANGE":    true,
+	"INTEGRATION_SAVE":       true,
+	"PERMISSION_CHANGE":      true,
+	"LOG_RETENTION_CHANGE":   true, // evidence-destruction risk
+	"SECURITY_POLICY_UPDATE": true, // auth policy (session timeout, MFA) change
 }
 
 // StartAuditConsumer reads from xcloak.audit and, for each event:
