@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,12 +12,12 @@ import (
 )
 
 // GetRiskPosture — GET /api/risk-posture
-// Returns the most-recent snapshot; triggers a fresh one if none exists or >1h old.
+// Returns the most-recent snapshot; triggers a fresh computation if none
+// exists or the latest snapshot is more than 1 hour old.
 func GetRiskPosture(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 	history, err := services.GetRiskPostureHistory(tenantID, 1)
-	if err != nil || len(history) == 0 {
-		// No snapshot yet — compute one now.
+	if err != nil || len(history) == 0 || time.Since(history[0].SnapshotAt) > time.Hour {
 		snap, err2 := services.ComputeRiskPosture(tenantID)
 		if err2 != nil {
 			c.JSON(500, gin.H{"error": err2.Error()})

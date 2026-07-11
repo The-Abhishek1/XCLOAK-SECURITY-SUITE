@@ -167,8 +167,11 @@ func GetAlertsPaginated(c *gin.Context) {
 	if status != "" && status != "all" {
 		where += fmt.Sprintf(" AND alerts.status=$%d", idx)
 		args = append(args, status); idx++
+		if status == "open" {
+			where += " AND (alerts.suppressed_until IS NULL OR alerts.suppressed_until < NOW())"
+		}
 	} else if status == "" {
-		where += " AND alerts.status='open'"
+		where += " AND alerts.status='open' AND (alerts.suppressed_until IS NULL OR alerts.suppressed_until < NOW())"
 	}
 	if agentID != "" {
 		where += fmt.Sprintf(" AND alerts.agent_id=$%d", idx)
@@ -245,4 +248,88 @@ func GetAlertsPaginated(c *gin.Context) {
 		"per_page": perPage,
 		"pages":    pages,
 	})
+}
+
+// SnoozeAlert — PATCH /api/alerts/:id/snooze
+// Sets suppressed_until on a specific alert instance, hiding it from the
+// default open-alert views until the window expires. Unlike suppression rules
+// (which pattern-match future events by rule name), this silences one alert
+// that the analyst has already seen and plans to revisit later.
+func SnoozeAlert(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid alert id"})
+		return
+	}
+
+	var body struct {
+		Minutes int `json:"minutes"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if body.Minutes < 1 || body.Minutes > 20160 { // 1 min – 2 weeks
+		c.JSON(400, gin.H{"error": "minutes must be between 1 and 20160"})
+		return
+	}
+
+	until := time.Now().Add(time.Duration(body.Minutes) * time.Minute)
+
+	tag, err := database.DB.Exec(`
+		UPDATE alerts SET suppressed_until = $1 WHERE id = $2 AND tenant_id = $3
+	`, until, id, tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "alert not found"})
+		return
+	}
+
+	username, _ := c.Get("username")
+	services.LogEvent("ALERT_SNOOZE",
+		fmt.Sprintf("Alert #%d snoozed for %d minutes by %s (until %s)",
+			id, body.Minutes, username, until.Format(time.RFC3339)),
+		fmt.Sprintf("%v", username))
+
+	c.JSON(200, gin.H{"message": "alert snoozed", "suppressed_until": until})
+}
+
+// UpdateAlertNote — PATCH /api/alerts/:id/note
+// Sets or replaces the analyst note on an alert without changing its status.
+// Called by the detail drawer's "Save Note" button in the frontend.
+func UpdateAlertNote(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid alert id"})
+		return
+	}
+
+	var body struct {
+		Note string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	tag, err := database.DB.Exec(`
+		UPDATE alerts SET note = $1 WHERE id = $2 AND tenant_id = $3
+	`, body.Note, id, tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := tag.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "alert not found"})
+		return
+	}
+
+	username, _ := c.Get("username")
+	services.LogEvent("ALERT_NOTE_UPDATE",
+		fmt.Sprintf("Alert #%d note updated by %s", id, username), fmt.Sprintf("%v", username))
+
+	c.JSON(200, gin.H{"message": "note saved"})
 }

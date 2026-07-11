@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { elasticAPI } from '@/lib/api';
 import {
   Play, Save, Download, Trash2, Clock, Database, ChevronDown, ChevronRight,
   X, Copy, CheckCheck, AlertCircle, Layers, RefreshCw, BookOpen, Plus,
@@ -408,8 +408,8 @@ export default function ElasticQueryPage() {
   const loadMeta = useCallback(async () => {
     try {
       const [healthRes, indicesRes] = await Promise.allSettled([
-        api.get('/elastic/health'),
-        api.get('/elastic/indices'),
+        elasticAPI.health(),
+        elasticAPI.indices(),
       ]);
       if (healthRes.status === 'fulfilled') {
         const h = healthRes.value.data;
@@ -449,7 +449,7 @@ export default function ElasticQueryPage() {
     setResult(null);
 
     try {
-      const res = await api.post('/elastic/query', {
+      const res = await elasticAPI.query({
         index: selectedIndex || undefined,
         dsl: parsedDSL,
       });

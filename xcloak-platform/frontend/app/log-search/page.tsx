@@ -260,17 +260,17 @@ export default function LogSearchPage() {
   };
 
   const handleRunSaved = async (s: SavedLogSearch) => {
+    // Sync UI state so the search bar reflects what's running
     setQuery(s.query);
     setTimeRange(s.time_range || '24h');
     setAgentID(0); setSource('');
     setLoading(true); setError('');
     try {
-      const params: Record<string, string | number | undefined> = {
-        range: s.time_range || '24h', limit, page: 0,
-      };
-      if (s.query) params.q = s.query;
-      const r = await logSearchAPI.search(params);
+      // Use the dedicated /run endpoint — increments run_count + last_run_at on the server
+      const r = await logSearchAPI.runSaved(s.id);
       setResult(r.data); setPage(0);
+      // Refresh saved list so run_count + last_run_at reflect the increment
+      logSearchAPI.getSavedSearches().then(r2 => setSaved(r2.data || []));
     } catch (e: any) { setError(e?.response?.data?.error || 'Failed'); }
     finally { setLoading(false); }
   };

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { schedulerAPI, agentsAPI } from '@/lib/api';
 import { Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, X, Cpu, Check, Activity } from 'lucide-react';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
@@ -49,14 +49,14 @@ export default function ScheduledTasksPage() {
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
-    try { const r = await api.get('/scheduler/tasks'); setTasks(r.data || []); }
+    try { const r = await schedulerAPI.getAll(); setTasks(r.data || []); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    api.get('/agents').then(r => setAgents(r.data || [])).catch(() => {});
+    agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
   }, []);
 
   const toggleAgent = (id: number) =>
@@ -72,7 +72,7 @@ export default function ScheduledTasksPage() {
     if (!form.name || !form.cron_expr) return;
     setSaving(true);
     try {
-      await api.post('/scheduler/tasks', {
+      await schedulerAPI.create({
         name: form.name, task_type: form.task_type,
         cron_expr: form.cron_expr, agent_ids: selectedAgents,
       });
@@ -84,18 +84,18 @@ export default function ScheduledTasksPage() {
   };
 
   const toggle = async (id: number, enabled: boolean) => {
-    await api.patch(`/scheduler/tasks/${id}/toggle`, { enabled: !enabled });
+    await schedulerAPI.toggle(id, !enabled);
     setTasks(t => t.map(x => x.id === id ? { ...x, enabled: !enabled } : x));
   };
 
   const runNow = async (id: number) => {
-    await api.post(`/scheduler/tasks/${id}/run`, {});
+    await schedulerAPI.run(id);
     notify('Task dispatched to agents');
     setTimeout(() => load(), 1000);
   };
 
   const del = async (id: number) => {
-    await api.delete(`/scheduler/tasks/${id}`);
+    await schedulerAPI.remove(id);
     setTasks(t => t.filter(x => x.id !== id));
     notify('Deleted');
   };

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/services"
@@ -28,6 +29,12 @@ func ElasticQueryHandler(c *gin.Context) {
 	}
 	if body.Index == "" {
 		body.Index = indexForTenant(tenantIDFromContext(c))
+	}
+
+	// Reject admin or system indices that have no tenant data.
+	if strings.HasPrefix(body.Index, ".") || body.Index == "_all" {
+		c.JSON(400, gin.H{"error": "index name not allowed"})
+		return
 	}
 
 	result, err := services.ExecuteRawQuery(tenantIDFromContext(c), body.Index, body.DSL)

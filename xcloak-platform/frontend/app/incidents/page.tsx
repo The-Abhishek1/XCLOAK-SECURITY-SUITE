@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { incidentsAPI, aiAPI } from '@/lib/api';
-import api from '@/lib/api';
 import { Incident } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import Link from 'next/link';
@@ -85,7 +84,7 @@ export default function IncidentsPage() {
     try {
       const [evR, alR] = await Promise.allSettled([
         incidentsAPI.getEvents(inc.id),
-        api.get(`/incidents/${inc.id}/alerts`).catch(() => ({ data: [] })),
+        incidentsAPI.getAlerts(inc.id),
       ]);
       if (evR.status === 'fulfilled') setEvents(evR.value.data || []);
       if (alR.status === 'fulfilled') setLinkedAlerts(alR.value.data || []);
@@ -100,7 +99,7 @@ export default function IncidentsPage() {
     const next = SEV[idx + 1] as 'low' | 'medium' | 'high' | 'critical';
     setEscalating(true);
     try {
-      await api.patch(`/incidents/${selected.id}/severity`, { severity: next });
+      await incidentsAPI.updateSeverity(selected.id, next);
       setSelected({ ...selected, severity: next });
       setIncidents(p => p.map(i => i.id === selected.id ? { ...i, severity: next } : i));
       notify(`Escalated to ${next}`);
@@ -147,12 +146,8 @@ export default function IncidentsPage() {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    // Load unfiltered totals for count badges in tabs
-    incidentsAPI.getAll().then(r => {
-      const all: Incident[] = r.data || [];
-      const c: Record<string, number> = {};
-      STATUSES.forEach(s => { c[s] = all.filter(i => i.status === s).length; });
-      setStatusCounts(c);
+    incidentsAPI.getCounts().then(r => {
+      setStatusCounts(r.data || {});
     }).catch(() => {});
   }, []);
 

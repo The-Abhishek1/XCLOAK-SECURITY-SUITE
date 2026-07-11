@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { ja3API } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import {
   Fingerprint, Plus, Trash2, RefreshCw, Loader2,
@@ -45,7 +45,7 @@ export default function JA3FingerprintsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/ja3/fingerprints');
+      const r = await ja3API.getAll();
       setEntries(Array.isArray(r.data) ? r.data : []);
     } catch { setEntries([]); }
     finally { setLoading(false); }
@@ -58,7 +58,7 @@ export default function JA3FingerprintsPage() {
     if (form.hash.length !== 32) { notify('Hash must be exactly 32 hex characters (MD5)'); return; }
     setSaving(true);
     try {
-      await api.post('/ja3/fingerprints', form);
+      await ja3API.create(form);
       setShowAdd(false);
       setForm({ ...empty });
       load();
@@ -72,7 +72,7 @@ export default function JA3FingerprintsPage() {
     if (e.is_platform) { notify('Platform-wide fingerprints cannot be deleted'); return; }
     if (!confirm(`Delete "${e.threat_name}"?`)) return;
     try {
-      await api.delete(`/ja3/fingerprints/${e.id}`);
+      await ja3API.remove(e.id);
       setEntries(p => p.filter(x => x.id !== e.id));
       notify('Deleted');
     } catch { notify('Delete failed'); }

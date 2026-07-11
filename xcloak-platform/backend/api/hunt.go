@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/models"
@@ -92,4 +94,34 @@ func DeleteHuntQuery(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"message": "deleted"})
+}
+
+// PromoteHuntToSigmaRule — POST /api/sigma/rules/from-hunt
+// Creates a Sigma rule seeded from a hunt query result.
+func PromoteHuntToSigmaRule(c *gin.Context) {
+	var body struct {
+		Name      string `json:"name"       binding:"required"`
+		QueryType string `json:"query_type"`
+		QueryText string `json:"query_text" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	rule := models.SigmaRule{
+		Title:       body.Name,
+		Description: fmt.Sprintf("Promoted from hunt: %s query %q", body.QueryType, body.QueryText),
+		Status:      "experimental",
+		Severity:    "medium",
+		Keywords:    []string{body.QueryText},
+		Condition:   "keywords",
+		Enabled:     false,
+	}
+
+	if err := services.CreateSigmaRule(rule, tenantIDFromContext(c)); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(201, gin.H{"message": "detection rule created"})
 }

@@ -3,12 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { alertsAPI, aiAPI, agentsAPI, investigateAPI } from '@/lib/api';
+import { alertsAPI, aiAPI, agentsAPI, investigateAPI, alertDetailAPI } from '@/lib/api';
 import { Alert, Agent, InvestigationContext, PlaybookRecommendation } from '@/types';
 import { sevClass, timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { Bell, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check, Clock, Download, VolumeX, FileText } from 'lucide-react';
-import api from '@/lib/api';
+import { Bell, BellOff, Search, Filter, X, Bot, Loader2, ChevronRight, Shield, Tag, Zap, Skull, Lock, Package, Activity, Cpu, Check, Clock, Download, VolumeX, FileText } from 'lucide-react';
 
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
 const PER_PAGE = 50;
@@ -114,6 +113,10 @@ export default function AlertsPage() {
   const [suppressHours, setSuppressHours] = useState('4');
   const [suppressing, setSuppressing]     = useState(false);
 
+  // Per-alert snooze
+  const [snoozeMinutes, setSnoozeMinutes] = useState('240');
+  const [snoozing, setSnoozing]           = useState(false);
+
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
   const load = useCallback(async (p = page, sev = severity, aid = agentId, st = statusFilter, spin = false) => {
@@ -164,7 +167,7 @@ export default function AlertsPage() {
     setLoadingRecs(true);
     setPbRecs([]);
     try {
-      const r = await api.get(`/alerts/${id}/playbook-recommendations`);
+      const r = await alertDetailAPI.getPlaybookRecs(id);
       setPbRecs(r.data ?? []);
     } catch { /* best-effort */ }
     finally { setLoadingRecs(false); }
@@ -174,7 +177,7 @@ export default function AlertsPage() {
     if (!selected) return;
     setExecutingRec(recID);
     try {
-      await api.post(`/alerts/${selected.id}/execute-recommendation`, { recommendation_id: recID });
+      await alertDetailAPI.executeRec(selected.id, recID);
       notify('Playbook dispatched');
       setPbRecs(prev => prev.map(r => r.id === recID ? { ...r, executed: true } : r));
     } catch { notify('Failed to execute playbook'); }
@@ -197,18 +200,32 @@ export default function AlertsPage() {
     if (!selected) return;
     setSavingNote(true);
     try {
-      await api.patch(`/alerts/${selected.id}/note`, { note: noteText });
+      await alertDetailAPI.updateNote(selected.id, noteText);
       notify('Note saved');
       setSelected({ ...selected, note: noteText });
     } catch { notify('Failed to save note'); }
     finally { setSavingNote(false); }
   };
 
+  const snoozeAlert = async () => {
+    if (!selected) return;
+    setSnoozing(true);
+    try {
+      await alertsAPI.snooze(selected.id, parseInt(snoozeMinutes));
+      const label = snoozeMinutes === '60' ? '1 hour' : snoozeMinutes === '240' ? '4 hours'
+        : snoozeMinutes === '1440' ? '24 hours' : '7 days';
+      notify(`Alert snoozed for ${label}`);
+      load(page, severity, agentId, statusFilter);
+      setSelected(null);
+    } catch { notify('Snooze failed'); }
+    finally { setSnoozing(false); }
+  };
+
   const suppressRule = async () => {
     if (!selected) return;
     setSuppressing(true);
     try {
-      await api.post('/sigma-rules/suppress', {
+      await alertDetailAPI.suppressSigmaRule({
         rule_name: selected.rule_name,
         agent_id: selected.agent_id,
         hours: parseInt(suppressHours),
@@ -668,6 +685,43 @@ export default function AlertsPage() {
                 </div>
               </div>
 
+              {/* Snooze This Alert */}
+              {selected.status === 'open' && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <div className="px-4 py-3 flex items-center gap-2"
+                    style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
+                    <BellOff className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Snooze Alert</p>
+                    {selected.suppressed_until && new Date(selected.suppressed_until) > new Date() && (
+                      <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full"
+                        style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                        snoozed until {new Date(selected.suppressed_until).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-3 flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-3)' }}>
+                        Hide this alert for
+                      </label>
+                      <select value={snoozeMinutes} onChange={e => setSnoozeMinutes(e.target.value)}
+                        className="g-select w-full text-xs">
+                        <option value="60">1 hour</option>
+                        <option value="240">4 hours</option>
+                        <option value="1440">24 hours</option>
+                        <option value="10080">7 days</option>
+                      </select>
+                    </div>
+                    <button onClick={snoozeAlert} disabled={snoozing}
+                      className="g-btn text-xs flex items-center gap-1 shrink-0"
+                      style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                      {snoozing ? <Loader2 className="h-3 w-3 animate-spin" /> : <BellOff className="h-3 w-3" />}
+                      Snooze
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* AI Triage section */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -938,7 +992,7 @@ export default function AlertsPage() {
                         if (responseAction === 'quarantine_file' && responseFile)
                           payload.file_path = responseFile;
                         try {
-                          const { data } = await api.post(`/alerts/${selected.id}/respond`, {
+                          const { data } = await alertDetailAPI.respond(selected.id, {
                             action_type: responseAction,
                             payload,
                           });

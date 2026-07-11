@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { alertsAPI } from '@/lib/api';
 import { ShieldOff, RefreshCw, Loader2, Key, Users, AlertOctagon, Network } from 'lucide-react';
 
 interface Alert {
@@ -50,7 +50,7 @@ export default function ADAttacksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/alerts/paginated', { params: { page: 1, per_page: 200 } });
+      const r = await alertsAPI.getFiltered({ page: 1, per_page: 200 });
       const data = r.data?.alerts ?? r.data ?? [];
       setAlerts(Array.isArray(data) ? data.filter((a: Alert) => AD_KEYWORDS.test(a.rule_name)) : []);
     } catch { setAlerts([]); }

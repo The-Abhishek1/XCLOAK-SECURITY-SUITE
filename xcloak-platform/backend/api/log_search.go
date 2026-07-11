@@ -110,21 +110,8 @@ func RunSavedLogSearch(c *gin.Context) {
 	id := c.Param("id")
 	tenantID := tenantIDFromContext(c)
 
-	// Load the saved search to rebuild params.
-	searches, err := services.GetSavedLogSearches(tenantID)
+	found, err := services.GetSavedLogSearchByID(id, tenantID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	var found *services.SavedLogSearch
-	for _, s := range searches {
-		if strconv.Itoa(s.ID) == id {
-			found = &s
-			break
-		}
-	}
-	if found == nil {
 		c.JSON(404, gin.H{"error": "search not found"})
 		return
 	}

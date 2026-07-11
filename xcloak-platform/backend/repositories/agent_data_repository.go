@@ -44,17 +44,18 @@ func GetProcessesByAgent(agentID string) ([]models.Process, error) {
 	return out, nil
 }
 
-// GetConnectionsByAgent returns the most recent 200 connections for an agent.
+// GetConnectionsByAgent returns the most recent 200 connections for an agent,
+// including the process that owns each socket when available.
 func GetConnectionsByAgent(agentID string) ([]models.Connection, error) {
-
 	rows, err := database.DB.Query(`
-		SELECT id, agent_id, protocol, local_address, remote_address, state, collected_at
+		SELECT id, agent_id, protocol, local_address, remote_address, state, collected_at,
+		       pid, COALESCE(process_name,''), COALESCE(process_path,''),
+		       COALESCE(country,''), COALESCE(country_code,''), COALESCE(is_proxy,false)
 		FROM endpoint_connections
 		WHERE agent_id = $1
 		ORDER BY id DESC
 		LIMIT 200
 	`, agentID)
-
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,11 @@ func GetConnectionsByAgent(agentID string) ([]models.Connection, error) {
 	var out []models.Connection
 	for rows.Next() {
 		var c models.Connection
-		if err := rows.Scan(&c.ID, &c.AgentID, &c.Protocol, &c.LocalAddress, &c.RemoteAddress, &c.State, &c.CollectedAt); err == nil {
+		if err := rows.Scan(
+			&c.ID, &c.AgentID, &c.Protocol, &c.LocalAddress, &c.RemoteAddress, &c.State, &c.CollectedAt,
+			&c.PID, &c.ProcessName, &c.ProcessPath,
+			&c.Country, &c.CountryCode, &c.IsProxy,
+		); err == nil {
 			out = append(out, c)
 		}
 	}
@@ -74,16 +79,16 @@ func GetConnectionsByAgent(agentID string) ([]models.Connection, error) {
 // agent in tenantID — for tenant-wide aggregate views (e.g. the attack-path
 // graph) that need cross-agent reachability, not one agent's connection list.
 func GetConnectionsByTenant(tenantID int) ([]models.Connection, error) {
-
 	rows, err := database.DB.Query(`
-		SELECT c.id, c.agent_id, c.protocol, c.local_address, c.remote_address, c.state, c.collected_at
+		SELECT c.id, c.agent_id, c.protocol, c.local_address, c.remote_address, c.state, c.collected_at,
+		       c.pid, COALESCE(c.process_name,''), COALESCE(c.process_path,''),
+		       COALESCE(c.country,''), COALESCE(c.country_code,''), COALESCE(c.is_proxy,false)
 		FROM endpoint_connections c
 		JOIN agents a ON a.id = c.agent_id
 		WHERE a.tenant_id = $1
 		ORDER BY c.id DESC
 		LIMIT 5000
 	`, tenantID)
-
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +97,11 @@ func GetConnectionsByTenant(tenantID int) ([]models.Connection, error) {
 	var out []models.Connection
 	for rows.Next() {
 		var c models.Connection
-		if err := rows.Scan(&c.ID, &c.AgentID, &c.Protocol, &c.LocalAddress, &c.RemoteAddress, &c.State, &c.CollectedAt); err == nil {
+		if err := rows.Scan(
+			&c.ID, &c.AgentID, &c.Protocol, &c.LocalAddress, &c.RemoteAddress, &c.State, &c.CollectedAt,
+			&c.PID, &c.ProcessName, &c.ProcessPath,
+			&c.Country, &c.CountryCode, &c.IsProxy,
+		); err == nil {
 			out = append(out, c)
 		}
 	}

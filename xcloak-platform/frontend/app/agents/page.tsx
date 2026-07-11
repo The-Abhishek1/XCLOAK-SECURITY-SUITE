@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { agentsAPI, tasksAPI } from '@/lib/api';
-import api from '@/lib/api';
+import { agentsAPI, tasksAPI, integrationsAPI } from '@/lib/api';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
 import { Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart, Key, Copy, Check, Terminal, ShieldCheck, ArrowRight, RefreshCw, Activity, ShieldOff, Monitor } from 'lucide-react';
@@ -64,7 +63,7 @@ export default function AgentsPage() {
     try {
       const [agentRes, healthRes] = await Promise.allSettled([
         agentsAPI.getAll(),
-        api.get('/agents/health').catch(() => ({ data: [] })),
+        agentsAPI.getHealth().catch(() => ({ data: [] })),
       ]);
       if (agentRes.status === 'fulfilled') setAgents(agentRes.value.data || []);
       if (healthRes.status === 'fulfilled') {
@@ -196,7 +195,15 @@ export default function AgentsPage() {
                         <p className="text-xs" style={{ color: 'var(--text-3)' }}>{agent.ip_address}</p>
                       </div>
                     </div>
-                    <span className={agent.status === 'online' ? 's-online' : 's-offline'}>{agent.status}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {(agent.open_alert_count ?? 0) > 0 && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                          style={{ background: 'rgba(251,146,60,0.12)', color: 'var(--orange)', border: '1px solid rgba(251,146,60,0.3)' }}>
+                          {agent.open_alert_count} alert{agent.open_alert_count !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      <span className={agent.status === 'online' ? 's-online' : 's-offline'}>{agent.status}</span>
+                    </div>
                   </div>
                   <div className="space-y-1.5 text-xs">
                     {[['OS', agent.os || '—'], ['Last seen', timeAgo(agent.last_seen)]].map(([k, v]) => (
@@ -205,6 +212,32 @@ export default function AgentsPage() {
                         <span style={{ color: 'var(--text-2)' }}>{v}</span>
                       </div>
                     ))}
+                    {/* Linux load average */}
+                    {agent.load_avg_1m != null && (
+                      <div className="flex justify-between items-center">
+                        <span style={{ color: 'var(--text-3)' }}>Load avg</span>
+                        <span className="mono tabular-nums" style={{ color: 'var(--text-2)' }}>
+                          {agent.load_avg_1m.toFixed(2)} · {agent.load_avg_5m?.toFixed(2)} · {agent.load_avg_15m?.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    {/* Mobile battery + network */}
+                    {agent.battery_level != null && (
+                      <div className="flex justify-between items-center">
+                        <span style={{ color: 'var(--text-3)' }}>Battery</span>
+                        <span className="tabular-nums" style={{
+                          color: agent.battery_level < 20 ? 'var(--red)' : agent.battery_level < 40 ? 'var(--orange)' : 'var(--green)'
+                        }}>
+                          {agent.battery_level}%{agent.battery_charging ? ' ⚡' : ''}
+                        </span>
+                      </div>
+                    )}
+                    {agent.network_type && (
+                      <div className="flex justify-between items-center">
+                        <span style={{ color: 'var(--text-3)' }}>Network</span>
+                        <span style={{ color: 'var(--text-2)' }}>{agent.network_type}</span>
+                      </div>
+                    )}
                     {/* Version + risk row */}
                     {(agent.version || (agent.risk_score !== undefined && agent.risk_score !== null)) && (
                       <div className="flex items-center justify-between gap-2 mt-1">
@@ -415,7 +448,7 @@ export default function AgentsPage() {
                       onClick={async () => {
                         setGenLoading(true);
                         try {
-                          const r = await api.post('/integrations/install-tokens', { label: tokenLabel || 'agent' });
+                          const r = await integrationsAPI.createInstallToken(tokenLabel || 'agent');
                           setGenToken(r.data.token);
                         } catch { setToast('Failed to generate token'); setTimeout(() => setToast(null), 3000); }
                         finally { setGenLoading(false); }

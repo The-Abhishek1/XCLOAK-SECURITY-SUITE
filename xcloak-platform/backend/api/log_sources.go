@@ -53,10 +53,7 @@ func CreateLogSource(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "source_type must be 'syslog' or 'http'"})
 		return
 	}
-	if body.SourceType == "syslog" && body.IPAddress == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ip_address required for syslog sources"})
-		return
-	}
+	// Blank ip_address for syslog = wildcard (match any sender IP).
 
 	format := body.Format
 	if format == "" {
@@ -103,12 +100,16 @@ func UpdateLogSource(c *gin.Context) {
 		return
 	}
 
-	enabled := true
-	if body.Enabled != nil {
-		enabled = *body.Enabled
+	if body.Enabled == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "enabled field is required"})
+		return
 	}
 
-	if err := repositories.UpdateLogSource(id, tenantIDFromContext(c), body.Name, body.DeviceType, enabled); err != nil {
+	if err := repositories.UpdateLogSource(id, tenantIDFromContext(c), body.Name, body.DeviceType, *body.Enabled); err != nil {
+		if err.Error() == "not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "log source not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

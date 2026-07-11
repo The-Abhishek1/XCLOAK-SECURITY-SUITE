@@ -6,7 +6,6 @@ import { quarantineAPI, agentsAPI } from '@/lib/api';
 import { Agent } from '@/types';
 import { formatDate, timeAgo } from '@/lib/utils';
 import { Archive, Search, Plus, X, ShieldOff, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
-import api from '@/lib/api';
 
 interface QFile {
   id: number;
@@ -61,7 +60,7 @@ export default function QuarantinePage() {
   const releaseFile = async (id: number, restore: boolean) => {
     setDeleting(id);
     try {
-      await api.delete(`/quarantine/${id}`, { data: { restore } });
+      await quarantineAPI.remove(id, restore);
       setFiles(f => f.filter(x => x.id !== id));
       notify(restore ? 'File released — restore task dispatched to agent' : 'Quarantine record deleted');
     } catch { notify('Action failed'); }

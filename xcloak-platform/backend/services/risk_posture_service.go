@@ -33,12 +33,13 @@ func ComputeRiskPosture(tenantID int) (models.RiskPostureSnapshot, error) {
 	).Scan(&uebaRaw)
 	snap.UEBAScore = int(math.Min(20, uebaRaw/5))
 
-	// ── Alert score (0-30): open critical/high alerts in last 7d ──
+	// ── Alert score (0-30): open, non-snoozed critical/high alerts in last 7d ──
 	var criticalOpen, highOpen int
 	database.DB.QueryRow(`
 		SELECT COUNT(*) FILTER (WHERE severity='critical'),
 		       COUNT(*) FILTER (WHERE severity='high')
 		FROM alerts WHERE tenant_id=$1 AND status='open'
+		  AND (suppressed_until IS NULL OR suppressed_until < NOW())
 		  AND created_at > NOW()-INTERVAL '7 days'`, tenantID,
 	).Scan(&criticalOpen, &highOpen)
 	alertRaw := criticalOpen*5 + highOpen*2
@@ -55,6 +56,13 @@ func ComputeRiskPosture(tenantID int) (models.RiskPostureSnapshot, error) {
 	snap.IOCScore = int(math.Min(20, float64(iocHits)*2))
 
 	snap.Score = snap.VulnScore + snap.UEBAScore + snap.AlertScore + snap.IOCScore
+
+	// ── Snoozed alert count (informational — not stored, not scored) ──
+	database.DB.QueryRow(`
+		SELECT COUNT(*) FROM alerts
+		WHERE tenant_id=$1 AND status='open'
+		  AND suppressed_until IS NOT NULL AND suppressed_until >= NOW()`, tenantID,
+	).Scan(&snap.SnoozedAlertCount)
 
 	// ── Per-asset breakdown ──
 	snap.AssetScores = computeAssetRisks(tenantID)
@@ -85,6 +93,7 @@ func computeAssetRisks(tenantID int) []models.AssetRisk {
 		LEFT JOIN (
 			SELECT agent_id, COUNT(*) as alert_count
 			FROM alerts WHERE tenant_id=$1 AND status='open'
+			  AND (suppressed_until IS NULL OR suppressed_until < NOW())
 			  AND created_at>NOW()-INTERVAL '7 days'
 			GROUP BY agent_id
 		) al ON al.agent_id=a.agent_id

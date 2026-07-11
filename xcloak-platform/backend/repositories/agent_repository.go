@@ -80,97 +80,112 @@ func GetAgentByToken(token string) (*models.Agent, error) {
 	return &agent, nil
 }
 
-// GetAgents returns agents belonging to tenantID only. Use this from
-// user-facing API paths that have a real tenant context from the request.
+const agentMetricsCols = `
+	version, uptime_seconds, mem_alloc_mb, goroutines, platform_category,
+	load_avg_1m, load_avg_5m, load_avg_15m, logged_in_users, open_fds,
+	battery_level, battery_charging, network_type,
+	is_rooted, developer_mode, storage_free_gb, storage_total_gb,
+	vpn_active, security_patch`
+
+// GetAgents returns agents belonging to tenantID only, enriched with snooze-aware
+// open alert counts and latest risk scores.
 func GetAgents(tenantID int) ([]models.Agent, error) {
-	return queryAgents(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
+	agents, err := queryAgents(`
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,`+
+		agentMetricsCols+`
 		FROM agents
 		WHERE tenant_id = $1
 		ORDER BY id
 	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	enrichAgentCounts(tenantID, agents)
+	return agents, nil
 }
 
-// GetAgentsByPlatform returns agents filtered by platform_category.
+// GetAgentsByPlatform returns agents filtered by platform_category, enriched with
+// snooze-aware open alert counts and latest risk scores.
 func GetAgentsByPlatform(tenantID int, platform string) ([]models.Agent, error) {
-	return queryAgents(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
+	agents, err := queryAgents(`
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,`+
+		agentMetricsCols+`
 		FROM agents
 		WHERE tenant_id = $1 AND platform_category = $2
 		ORDER BY id
 	`, tenantID, platform)
+	if err != nil {
+		return nil, err
+	}
+	enrichAgentCounts(tenantID, agents)
+	return agents, nil
 }
 
-// GetAllAgents returns every agent across every tenant. For internal
-// background jobs (health scoring, compliance, firewall sync, scheduler)
-// that operate fleet-wide and have no per-request tenant context — not for
-// user-facing API responses, which must use GetAgents(tenantID) instead.
+// enrichAgentCounts populates OpenAlertCount and RiskScore on each agent using
+// two batch queries — avoids N per-agent round-trips on the list endpoint.
+func enrichAgentCounts(tenantID int, agents []models.Agent) {
+	if len(agents) == 0 {
+		return
+	}
+
+	// Open non-snoozed alert counts
+	alertRows, err := database.DB.Query(`
+		SELECT agent_id, COUNT(*) FROM alerts
+		WHERE tenant_id = $1 AND status = 'open'
+		  AND (suppressed_until IS NULL OR suppressed_until < NOW())
+		GROUP BY agent_id
+	`, tenantID)
+	if err == nil {
+		counts := map[int]int{}
+		for alertRows.Next() {
+			var id, cnt int
+			alertRows.Scan(&id, &cnt)
+			counts[id] = cnt
+		}
+		alertRows.Close()
+		for i := range agents {
+			agents[i].OpenAlertCount = counts[agents[i].ID]
+		}
+	}
+
+	// Latest risk scores from asset_risk_scores
+	riskRows, err := database.DB.Query(`
+		SELECT s.agent_id, s.risk_score
+		FROM asset_risk_scores s
+		JOIN agents a ON a.id = s.agent_id
+		WHERE a.tenant_id = $1
+	`, tenantID)
+	if err == nil {
+		scores := map[int]int{}
+		for riskRows.Next() {
+			var id, score int
+			riskRows.Scan(&id, &score)
+			scores[id] = score
+		}
+		riskRows.Close()
+		for i := range agents {
+			if score, ok := scores[agents[i].ID]; ok {
+				agents[i].RiskScore = &score
+			}
+		}
+	}
+}
+
+// GetAllAgents returns every agent across every tenant. For internal background
+// jobs that operate fleet-wide — not for user-facing API responses.
 func GetAllAgents() ([]models.Agent, error) {
 	return queryAgents(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,`+
+		agentMetricsCols+`
 		FROM agents
 		ORDER BY id
 	`)
 }
 
-func queryAgents(query string, args ...interface{}) ([]models.Agent, error) {
-
-	rows, err := database.DB.Query(query, args...)
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var agents []models.Agent
-
-	for rows.Next() {
-
-		var agent models.Agent
-
-		err := rows.Scan(
-			&agent.ID,
-			&agent.MachineID,
-			&agent.Hostname,
-			&agent.OS,
-			&agent.IPAddress,
-			&agent.Status,
-			&agent.LastSeen,
-			&agent.CreatedAt,
-			&agent.TenantID,
-			&agent.Version,
-			&agent.UptimeSeconds,
-			&agent.MemAllocMB,
-			&agent.Goroutines,
-			&agent.PlatformCategory,
-		)
-
-		if err != nil {
-			continue
-		}
-
-		agents = append(agents, agent)
-	}
-
-	return agents, nil
-}
-
-// GetAgentByID returns the agent only if it belongs to tenantID — a request
-// for another tenant's agent ID gets the same "not found" as a nonexistent
-// one, so existence isn't leaked across tenants.
-func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
-
-	var agent models.Agent
-
-	err := database.DB.QueryRow(`
-		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,
-		       version, uptime_seconds, mem_alloc_mb, goroutines, platform_category
-		FROM agents
-		WHERE id = $1 AND tenant_id = $2
-	`, id, tenantID).Scan(
+func scanAgentMetrics(agent *models.Agent, rows interface {
+	Scan(...any) error
+}) error {
+	return rows.Scan(
 		&agent.ID,
 		&agent.MachineID,
 		&agent.Hostname,
@@ -185,24 +200,112 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 		&agent.MemAllocMB,
 		&agent.Goroutines,
 		&agent.PlatformCategory,
+		&agent.LoadAvg1m,
+		&agent.LoadAvg5m,
+		&agent.LoadAvg15m,
+		&agent.LoggedInUsers,
+		&agent.OpenFDs,
+		&agent.BatteryLevel,
+		&agent.BatteryCharging,
+		&agent.NetworkType,
+		&agent.IsRooted,
+		&agent.DeveloperMode,
+		&agent.StorageFreeGB,
+		&agent.StorageTotalGB,
+		&agent.VPNActive,
+		&agent.SecurityPatch,
 	)
+}
 
+func queryAgents(query string, args ...interface{}) ([]models.Agent, error) {
+
+	rows, err := database.DB.Query(query, args...)
 	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var agents []models.Agent
+
+	for rows.Next() {
+		var agent models.Agent
+		if err := scanAgentMetrics(&agent, rows); err != nil {
+			continue
+		}
+		agents = append(agents, agent)
+	}
+
+	return agents, nil
+}
+
+// GetAgentByID returns the agent only if it belongs to tenantID.
+func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
+
+	var agent models.Agent
+
+	row := database.DB.QueryRow(`
+		SELECT id, machine_id, hostname, os, ip_address, status, last_seen, created_at, tenant_id,`+
+		agentMetricsCols+`
+		FROM agents
+		WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID)
+
+	if err := scanAgentMetrics(&agent, row); err != nil {
 		return nil, err
 	}
 
 	return &agent, nil
 }
 
-func UpdateAgentHeartbeat(agentID int, version string, uptimeSeconds int64, memAllocMB, goroutines int) error {
+// UpdateAgentHeartbeat persists all metrics from a heartbeat payload.
+// All platform-specific fields are stored as-is; missing fields (zero values
+// from older agent binaries) are written as NULL via NULLIF where appropriate.
+func UpdateAgentHeartbeat(req models.HeartbeatRequest) error {
 
 	_, err := database.DB.Exec(`
 		UPDATE agents
-		SET last_seen = NOW(), status = 'online',
-		    version = $2, uptime_seconds = $3, mem_alloc_mb = $4, goroutines = $5
+		SET last_seen        = NOW(),
+		    status           = 'online',
+		    version          = $2,
+		    uptime_seconds   = $3,
+		    mem_alloc_mb     = $4,
+		    goroutines       = $5,
+		    load_avg_1m      = NULLIF($6, 0.0),
+		    load_avg_5m      = NULLIF($7, 0.0),
+		    load_avg_15m     = NULLIF($8, 0.0),
+		    logged_in_users  = NULLIF($9, 0),
+		    open_fds         = NULLIF($10, 0),
+		    battery_level    = NULLIF($11, 0),
+		    battery_charging = $12,
+		    network_type     = NULLIF($13, ''),
+		    is_rooted        = $14,
+		    developer_mode   = $15,
+		    storage_free_gb  = NULLIF($16, 0.0),
+		    storage_total_gb = NULLIF($17, 0.0),
+		    vpn_active       = $18,
+		    security_patch   = NULLIF($19, '')
 		WHERE id = $1
-	`, agentID, version, uptimeSeconds, memAllocMB, goroutines)
+	`,
+		req.AgentID,
+		req.Version,
+		req.UptimeSeconds,
+		req.MemAllocMB,
+		req.Goroutines,
+		req.LoadAvg1m,
+		req.LoadAvg5m,
+		req.LoadAvg15m,
+		req.LoggedInUsers,
+		req.OpenFDs,
+		req.BatteryLevel,
+		req.BatteryCharging,
+		req.NetworkType,
+		req.IsRooted,
+		req.DeveloperMode,
+		req.StorageFreeGB,
+		req.StorageTotalGB,
+		req.VPNActive,
+		req.SecurityPatch,
+	)
 
 	return err
 }
-

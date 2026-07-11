@@ -273,18 +273,34 @@ type RawQueryResult struct {
 	Error    string           `json:"error,omitempty"`
 }
 
+const maxESResultSize = 1000
+const maxESFrom       = 10000
+
 // ExecuteRawQuery sends an arbitrary DSL body to ES for the given index.
 // A tenant_id filter is always injected into the outermost bool.filter to
 // prevent cross-tenant data leakage regardless of what the caller sends.
+// size is capped at 1000 and from at 10000 to protect ES from deep-pagination.
 func ExecuteRawQuery(tenantID int, index string, rawDSL json.RawMessage) (*RawQueryResult, error) {
 	if esClient == nil {
 		return nil, fmt.Errorf("elasticsearch not configured (set ELASTICSEARCH_URL)")
 	}
+	if tenantID <= 0 {
+		return nil, fmt.Errorf("invalid tenant")
+	}
 
-	// Parse the caller's DSL so we can inject the tenant filter.
+	// Parse the caller's DSL so we can inject the tenant filter and apply caps.
 	var dsl map[string]any
 	if err := json.Unmarshal(rawDSL, &dsl); err != nil {
 		return nil, fmt.Errorf("invalid DSL JSON: %w", err)
+	}
+
+	// Cap size to prevent ES from returning huge result sets.
+	if sz, ok := dsl["size"].(float64); !ok || sz > maxESResultSize {
+		dsl["size"] = maxESResultSize
+	}
+	// Cap from (offset) to prevent expensive deep pagination.
+	if from, ok := dsl["from"].(float64); ok && from > maxESFrom {
+		dsl["from"] = maxESFrom
 	}
 
 	// Ensure query.bool.filter contains a tenant_id term.

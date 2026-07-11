@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"xcloak-platform/database"
 	"xcloak-platform/models"
 	"xcloak-platform/repositories"
 )
@@ -24,8 +25,9 @@ type AttackPathNode struct {
 	MaxEPSS        float64 `json:"max_epss"`
 	HasKEV         bool    `json:"has_kev"`
 	KEVCount       int     `json:"kev_count"`
-	Exposed        bool    `json:"exposed"` // has at least one observed connection to a public IP
+	Exposed        bool    `json:"exposed"` // has at least one observed ESTABLISHED connection to a public IP
 	CompromiseCost float64 `json:"compromise_cost"`
+	OpenAlertCount int     `json:"open_alert_count"` // open, non-snoozed alerts right now
 }
 
 // AttackPathEdge is reachability, not necessarily live traffic direction —
@@ -115,6 +117,11 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 		return nil, fmt.Errorf("loading risk scores: %w", err)
 	}
 
+	openAlerts, err := openAlertCountsByAgent(tenantID)
+	if err != nil {
+		openAlerts = map[int]int{} // non-fatal
+	}
+
 	agentByIP := map[string]models.Agent{}
 	for _, a := range agents {
 		if a.IPAddress != "" {
@@ -170,6 +177,7 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 			n.HasKEV = s.hasKEV
 			n.KEVCount = s.kevCount
 		}
+		n.OpenAlertCount = openAlerts[a.ID]
 
 		// Cheaper to traverse into a node that's already known-risky,
 		// has a confirmed-actively-exploited (KEV) vuln, or a high EPSS
@@ -207,6 +215,12 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 	}
 
 	for _, c := range conns {
+		// Only ESTABLISHED connections represent real reachability. LISTEN,
+		// CLOSE_WAIT, and TIME_WAIT rows with real remote IPs would add
+		// phantom lateral-movement edges that never actually existed.
+		if c.State != "ESTABLISHED" {
+			continue
+		}
 		host := hostFromAddress(c.RemoteAddress)
 		if isListenPlaceholder(host) {
 			continue
@@ -326,7 +340,11 @@ func rankAttackPaths(nodes map[string]*AttackPathNode, dist map[string]float64, 
 		if value <= 0 {
 			continue // no signal this target is worth reaching
 		}
-		candidates = append(candidates, candidate{id: id, score: value / dist[id]})
+		pathCost := dist[id]
+		if pathCost <= 0 {
+			pathCost = 0.001 // prevent division by zero for zero-cost paths
+		}
+		candidates = append(candidates, candidate{id: id, score: value / pathCost})
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
@@ -356,4 +374,29 @@ func rankAttackPaths(nodes map[string]*AttackPathNode, dist map[string]float64, 
 	}
 
 	return out
+}
+
+// openAlertCountsByAgent returns a map of agent_id → count of open, non-snoozed
+// alerts. Used to annotate attack-path nodes with live alert pressure so the
+// SOC can see which nodes are actively firing, not just historically risky.
+func openAlertCountsByAgent(tenantID int) (map[int]int, error) {
+	rows, err := database.DB.Query(`
+		SELECT agent_id, COUNT(*) FROM alerts
+		WHERE tenant_id = $1
+		  AND status = 'open'
+		  AND (suppressed_until IS NULL OR suppressed_until < NOW())
+		GROUP BY agent_id
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]int{}
+	for rows.Next() {
+		var id, cnt int
+		if rows.Scan(&id, &cnt) == nil {
+			out[id] = cnt
+		}
+	}
+	return out, nil
 }

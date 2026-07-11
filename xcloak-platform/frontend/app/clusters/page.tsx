@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { clustersAPI } from '@/lib/api';
 import { GitMerge, AlertTriangle, ChevronDown, ChevronRight, RefreshCw, VolumeX, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
@@ -32,7 +32,7 @@ function ClusterRow({ cluster, expanded, onToggle, onSuppress }: {
   const load = async () => {
     if (alerts.length > 0) return;
     setLoading(true);
-    const r = await api.get(`/clusters/${cluster.id}/alerts`).catch(() => ({ data: [] }));
+    const r = await clustersAPI.getAlerts(cluster.id);
     setAlerts(r.data || []);
     setLoading(false);
   };
@@ -128,7 +128,7 @@ export default function ClustersPage() {
 
   const load = async () => {
     setLoading(true);
-    const r = await api.get('/clusters?limit=200').catch(() => ({ data: [] }));
+    const r = await clustersAPI.getAll(200);
     setClusters(r.data || []);
     setLoading(false);
   };
@@ -137,12 +137,12 @@ export default function ClustersPage() {
 
   const runClustering = async () => {
     setRunning(true);
-    await api.post('/clusters/analyze');
+    await clustersAPI.analyze();
     setTimeout(() => { load(); setRunning(false); }, 3000);
   };
 
   const suppress = async (id: number) => {
-    await api.post(`/clusters/${id}/suppress`);
+    await clustersAPI.suppress(id);
     setClusters(prev => prev.map(c => c.id === id ? { ...c, status: 'suppressed' } : c));
   };
 

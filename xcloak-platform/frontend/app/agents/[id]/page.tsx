@@ -5,8 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, alertsAPI, tasksAPI, fimAPI, aiAPI } from '@/lib/api';
-import api from '@/lib/api';
-import { Agent, AgentSummary, Vulnerability, TimelineEvent, Alert } from '@/types';
+import { Agent, AgentSummary, Vulnerability, TimelineEvent, Alert, FIMAlert, FIMBaseline, Connection } from '@/types';
 import { sevClass, formatDate, timeAgo, formatUptime } from '@/lib/utils';
 import {
   ArrowLeft, Activity, Network, Database, Package,
@@ -50,12 +49,12 @@ export default function AgentDetailPage() {
   // Tab data — loaded lazily on tab click
   const [processes, setProcesses]     = useState<any[] | null>(null);
   const [auditEvents, setAuditEvents]  = useState<any[] | null>(null);
-  const [connections, setConnections] = useState<any[] | null>(null);
+  const [connections, setConnections] = useState<Connection[] | null>(null);
   const [services, setServices]       = useState<any[] | null>(null);
   const [users, setUsers]             = useState<any[] | null>(null);
   const [packages, setPackages]       = useState<any[] | null>(null);
-  const [fimAlerts, setFimAlerts]     = useState<any[] | null>(null);
-  const [fimBaseline, setFimBaseline] = useState<any[] | null>(null);
+  const [fimAlerts, setFimAlerts]     = useState<FIMAlert[] | null>(null);
+  const [fimBaseline, setFimBaseline] = useState<FIMBaseline[] | null>(null);
   const [authLogs, setAuthLogs]       = useState<any[] | null>(null);
   const [anomalies, setAnomalies]       = useState<any[] | null>(null);
   const [runningAnomaly, setRunningAnomaly] = useState(false);
@@ -134,14 +133,14 @@ export default function AgentDetailPage() {
           break;
         case 'filehashes':
           if (fileHashes === null) {
-            api.get('/agents/' + agentId + '/filehashes').then(r => {
+            agentsAPI.getFileHashes(agentId).then(r => {
               setFileHashes(Array.isArray(r.data) ? r.data : []);
             }).catch(() => setFileHashes([]));
           }
           break;
         case 'tasks':
           if (taskHistory === null) {
-            const r = await api.get(`/agents/${agentId}/tasks`).catch(() => ({ data: [] }));
+            const r = await agentsAPI.getTasks(agentId);
             setTaskHistory(r.data || []);
           }
           break;
@@ -439,12 +438,13 @@ export default function AgentDetailPage() {
               <DataTable
                 data={connections} loading={tabLoading} search={search} setSearch={setSearch}
                 onCollect={() => dispatch('collect_connections', 'connections')} dispatching={dispatching}
-                collectLabel="Collect Connections" searchKeys={['local_address', 'remote_address', 'protocol', 'state']}
+                collectLabel="Collect Connections" searchKeys={['local_address', 'remote_address', 'protocol', 'state', 'process_name']}
                 columns={[
-                  { key: 'protocol', label: 'Proto', width: '70px', mono: true, upper: true },
-                  { key: 'state', label: 'State', width: '90px' },
-                  { key: 'local_address', label: 'Local', mono: true },
-                  { key: 'remote_address', label: 'Remote', mono: true },
+                  { key: 'protocol',      label: 'Proto',   width: '70px',  mono: true, upper: true },
+                  { key: 'state',         label: 'State',   width: '90px' },
+                  { key: 'local_address', label: 'Local',   mono: true },
+                  { key: 'remote_address',label: 'Remote',  mono: true },
+                  { key: 'process_name',  label: 'Process', width: '130px', mono: true },
                 ]}
               />
             )}
@@ -557,34 +557,41 @@ export default function AgentDetailPage() {
                   </div>
                 ) : (
                   <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-                    <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '80px 1fr 1fr 100px 80px' }}>
-                      <span>Change</span><span>File Path</span><span>Hash (new)</span><span>Time</span><span></span>
+                    <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '110px 1fr 1fr 100px 80px' }}>
+                      <span>Change</span><span>File Path</span><span>Details</span><span>Time</span><span></span>
                     </div>
-                    {fimAlerts!.map((a: any, i: number) => (
-                      <div key={i} className="g-tr grid gap-3 items-center px-4"
-                        style={{ gridTemplateColumns: '80px 1fr 1fr 100px 80px' }}>
-                        <span className="text-[11px] font-medium capitalize rounded px-2 py-0.5 w-fit"
-                          style={{
-                            background: a.change_type === 'modified' ? 'var(--orange-bg)' : a.change_type === 'deleted' ? 'var(--red-bg)' : 'var(--accent-glow)',
-                            color: a.change_type === 'modified' ? 'var(--orange)' : a.change_type === 'deleted' ? 'var(--red)' : 'var(--accent)',
-                            border: `1px solid ${a.change_type === 'modified' ? 'var(--orange-border)' : a.change_type === 'deleted' ? 'var(--red-border)' : 'var(--accent-border)'}`,
-                          }}>
-                          {a.change_type}
-                        </span>
-                        <span className="text-[11px] mono truncate" style={{ color: 'var(--text-1)' }}>{a.file_path}</span>
-                        <span className="text-[10px] mono truncate" style={{ color: 'var(--text-3)' }}>
-                          {a.new_hash?.slice(0, 16) || '—'}
-                        </span>
-                        <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</span>
-                        {a.change_type !== 'created' ? (
-                          <button onClick={() => acceptFIMBaseline(a.file_path)}
-                            title="Accept this change as the new baseline — stops it from re-alerting"
-                            className="g-btn g-btn-ghost text-[10px] justify-self-start">
-                            Accept
-                          </button>
-                        ) : <span />}
-                      </div>
-                    ))}
+                    {fimAlerts!.map((a: FIMAlert, i: number) => {
+                      const isPermChange = a.change_type === 'permission_change';
+                      const badgeStyle = {
+                        modified:          { bg: 'var(--orange-bg)',  fg: 'var(--orange)',  border: 'var(--orange-border)' },
+                        permission_change: { bg: 'rgba(168,85,247,.12)', fg: 'rgb(192,132,252)', border: 'rgba(168,85,247,.4)' },
+                        deleted:           { bg: 'var(--red-bg)',     fg: 'var(--red)',     border: 'var(--red-border)' },
+                        created:           { bg: 'var(--accent-glow)',fg: 'var(--accent)',  border: 'var(--accent-border)' },
+                      }[a.change_type] ?? { bg: 'var(--accent-glow)', fg: 'var(--accent)', border: 'var(--accent-border)' };
+                      return (
+                        <div key={i} className="g-tr grid gap-3 items-center px-4"
+                          style={{ gridTemplateColumns: '110px 1fr 1fr 100px 80px' }}>
+                          <span className="text-[11px] font-medium capitalize rounded px-2 py-0.5 w-fit"
+                            style={{ background: badgeStyle.bg, color: badgeStyle.fg, border: `1px solid ${badgeStyle.border}` }}>
+                            {a.change_type.replace('_', ' ')}
+                          </span>
+                          <span className="text-[11px] mono truncate" style={{ color: 'var(--text-1)' }}>{a.file_path}</span>
+                          <span className="text-[10px] mono truncate" style={{ color: 'var(--text-3)' }}>
+                            {isPermChange && a.old_mode && a.new_mode
+                              ? <>{a.old_mode} <span style={{ color: 'var(--orange)' }}>→</span> {a.new_mode}</>
+                              : (a.new_hash?.slice(0, 16) || '—')}
+                          </span>
+                          <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</span>
+                          {a.change_type !== 'created' ? (
+                            <button onClick={() => acceptFIMBaseline(a.file_path)}
+                              title="Accept this change as the new baseline — stops it from re-alerting"
+                              className="g-btn g-btn-ghost text-[10px] justify-self-start">
+                              Accept
+                            </button>
+                          ) : <span />}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

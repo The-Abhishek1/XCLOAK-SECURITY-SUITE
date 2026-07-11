@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { integrationsAPI, agentsAPI } from '@/lib/api';
 import {
   Terminal, Copy, Check, ChevronRight,
   Key, Cpu, CheckCircle, RefreshCw, ArrowLeft,
@@ -35,7 +35,7 @@ export default function OnboardPage() {
   const generate = async () => {
     setGenerating(true);
     try {
-      const r = await api.post('/integrations/install-tokens', { label });
+      const r = await integrationsAPI.createInstallToken(label);
       setToken(r.data.token);
       setStep(2);
     } catch {
@@ -48,7 +48,7 @@ export default function OnboardPage() {
   const checkForAgent = async () => {
     setChecking(true);
     try {
-      const r = await api.get('/agents');
+      const r = await agentsAPI.getAll();
       const agents = r.data || [];
       // Look for a recently registered agent (within last 2 minutes)
       const recent = agents.find((a: any) => {

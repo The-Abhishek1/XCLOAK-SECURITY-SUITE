@@ -9,6 +9,22 @@ import (
 	"xcloak-platform/services"
 )
 
+// GetTenantTimeline returns the most recent events across all agents for the
+// caller's tenant — replaces N per-agent requests from the "all agents" view.
+func GetTenantTimeline(c *gin.Context) {
+	limit := 200
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 1000 {
+		limit = l
+	}
+
+	events, err := services.GetTenantTimeline(tenantIDFromContext(c), limit)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, events)
+}
+
 func GetAgentTimeline(
 	c *gin.Context,
 ) {

@@ -9,7 +9,6 @@ import {
   Bug, Activity, Users, Eye, ChevronDown, ChevronUp, X,
   CheckCircle, XCircle, Target, BarChart3,
 } from 'lucide-react';
-import api from '@/lib/api';
 
 const REPORT_TYPES = [
   { id: 'full',          label: 'Full Compliance Report', icon: Shield },
@@ -170,7 +169,7 @@ export default function CompliancePage() {
                       if (!frameworkScores[r.id]) {
                         setLoadingScores(r.id);
                         try {
-                          const res = await api.get(`/compliance/reports/${r.id}/scores`);
+                          const res = await complianceAPI.getScores(r.id);
                           setFrameworkScores(s => ({ ...s, [r.id]: res.data }));
                         } finally { setLoadingScores(null); }
                       }

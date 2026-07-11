@@ -116,6 +116,9 @@ func ExecuteRecommendedPlaybook(c *gin.Context) {
 func GetNetworkAnomalies(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
 	anomalies, err := services.GetNetworkAnomalies(tenantID, limit)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -128,9 +131,17 @@ func GetNetworkAnomalies(c *gin.Context) {
 }
 
 func AcknowledgeNetworkAnomaly(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 	if err := services.AcknowledgeNetworkAnomaly(id, tenantIDFromContext(c)); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		if err.Error() == "not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "anomaly not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "acknowledged"})

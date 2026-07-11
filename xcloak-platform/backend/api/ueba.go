@@ -15,6 +15,9 @@ func GetUEBAUsers(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
 
 	profiles, total, err := repositories.GetUserRiskProfiles(tenantID, limit, offset)
 	if err != nil {
@@ -30,6 +33,9 @@ func GetUEBAEvents(c *gin.Context) {
 	username := c.Query("username")
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
 
 	events, total, err := repositories.GetUEBAEvents(tenantID, username, limit, offset)
 	if err != nil {

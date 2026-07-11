@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { huntWorkbenchAPI } from '@/lib/api';
 import { Search, Plus, Play, Trash2, Clock, CheckCircle, AlertCircle, ChevronDown, ChevronRight, BookOpen, Target } from 'lucide-react';
 
 interface HuntTemplate {
@@ -128,8 +128,8 @@ export default function HuntWorkbenchPage() {
 
   const load = useCallback(async () => {
     const [t, r] = await Promise.all([
-      api.get('/hunt/templates').catch(() => ({ data: [] })),
-      api.get('/hunt/runs').catch(() => ({ data: [] })),
+      huntWorkbenchAPI.getTemplates(),
+      huntWorkbenchAPI.getRuns(),
     ]);
     setTemplates(t.data || []);
     setRuns(r.data || []);
@@ -150,7 +150,7 @@ export default function HuntWorkbenchPage() {
     setRunning(true);
     const body: any = { kql_query: kql, name: name || 'Ad-hoc Hunt' };
     if (templateID) body.template_id = templateID;
-    const r = await api.post('/hunt/execute', body).catch(() => ({ data: null }));
+    const r = await huntWorkbenchAPI.execute(body);
     setRunning(false);
     if (r.data) {
       setRuns(prev => [r.data, ...prev]);
@@ -162,7 +162,7 @@ export default function HuntWorkbenchPage() {
 
   const createTemplate = async () => {
     if (!newTpl.name || !newTpl.kql_query) return;
-    await api.post('/hunt/templates', newTpl);
+    await huntWorkbenchAPI.createTemplate(newTpl);
     setShowCreateTemplate(false);
     setNewTpl({ name: '', description: '', mitre_tactic: '', mitre_technique: '', kql_query: '', schedule: '' });
     load();
@@ -170,13 +170,13 @@ export default function HuntWorkbenchPage() {
   };
 
   const deleteTemplate = async (id: number) => {
-    await api.delete(`/hunt/templates/${id}`);
+    await huntWorkbenchAPI.deleteTemplate(id);
     setTemplates(prev => prev.filter(t => t.id !== id));
     notify('Template deleted');
   };
 
   const updateNotes = async (id: number, notes: string, severity: string) => {
-    await api.patch(`/hunt/runs/${id}/notes`, { notes, severity });
+    await huntWorkbenchAPI.updateNotes(id, notes, severity);
     setRuns(prev => prev.map(r => r.id === id ? { ...r, notes, severity } : r));
   };
 

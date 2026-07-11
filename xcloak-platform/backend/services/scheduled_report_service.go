@@ -148,7 +148,11 @@ func sendEmailWithAttachment(cfg *SMTPConfig, to []string, subject, body string,
 	msg.WriteString("\r\n")
 	msg.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
 
-	return sendEmail(cfg, to, subject, msg.String())
+	from := cfg.From
+	if from == "" {
+		from = cfg.Username
+	}
+	return transmit(cfg, from, to, []byte(msg.String()))
 }
 
 func encodeBase64Chunked(data []byte) string {

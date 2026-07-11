@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { threatActorsAPI } from '@/lib/api';
 import { Shield, Globe, Target, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Crosshair } from 'lucide-react';
 
 interface ThreatActor {
@@ -36,7 +36,7 @@ function ActorCard({ actor, expanded, onToggle, onDelete }: {
   const loadAlerts = async () => {
     if (alerts.length > 0) return;
     setLoadingAlerts(true);
-    const r = await api.get(`/threat-actors/${actor.id}/alerts?limit=10`).catch(() => ({ data: [] }));
+    const r = await threatActorsAPI.getAlerts(actor.id, 10);
     setAlerts(r.data || []);
     setLoadingAlerts(false);
   };
@@ -176,7 +176,7 @@ function CreateActorModal({ onClose, onCreate }: { onClose: () => void; onCreate
   const save = async () => {
     if (!form.name) return;
     setSaving(true);
-    await api.post('/threat-actors', {
+    await threatActorsAPI.create({
       ...form,
       aliases: form.aliases.split(',').map(s => s.trim()).filter(Boolean),
       targeted_sectors: form.targeted_sectors.split(',').map(s => s.trim()).filter(Boolean),
@@ -230,14 +230,14 @@ export default function ThreatActorsPage() {
 
   const load = async () => {
     setLoading(true);
-    const r = await api.get('/threat-actors').catch(() => ({ data: [] }));
+    const r = await threatActorsAPI.getAll();
     setActors(r.data || []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
 
   const deleteActor = async (id: number) => {
-    await api.delete(`/threat-actors/${id}`);
+    await threatActorsAPI.remove(id);
     setActors(prev => prev.filter(a => a.id !== id));
   };
 

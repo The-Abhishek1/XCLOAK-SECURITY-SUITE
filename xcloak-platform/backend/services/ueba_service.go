@@ -33,10 +33,21 @@ type userStats struct {
 	flags           []string
 }
 
+// analysisWindow is the look-back period for endpoint and audit log analysis.
+const analysisWindow = 7 * 24 * time.Hour
+
 // AnalyzeTenant scans logs + audit trail for one tenant and updates risk profiles.
 func AnalyzeTenant(tenantID int) {
 	pruneTime := time.Now().Add(-30 * 24 * time.Hour)
 	repositories.DeleteOldUEBAEvents(tenantID, pruneTime)
+
+	// Clear the analysis window before re-processing to prevent duplicate events.
+	// Each run is a full recompute of the last 7 days; without this, the same
+	// auth.log lines would be re-inserted every 30 minutes.
+	windowStart := time.Now().Add(-analysisWindow)
+	database.DB.Exec(
+		`DELETE FROM ueba_events WHERE tenant_id=$1 AND detected_at >= $2`,
+		tenantID, windowStart)
 
 	events := analyzeEndpointLogs(tenantID)
 	platformEvents := analyzePlatformAuditLogs(tenantID)

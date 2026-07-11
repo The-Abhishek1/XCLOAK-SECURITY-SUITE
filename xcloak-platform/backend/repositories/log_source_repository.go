@@ -22,12 +22,17 @@ var (
 )
 
 // GetLogSourceByIP looks up a registered syslog source by device IP.
+// Falls back to the first enabled wildcard source (ip_address IS NULL).
 // Returns nil if no enabled source matches.
 func GetLogSourceByIP(ip string) *models.LogSource {
 	if v, ok := sourceByIP.Load(ip); ok {
 		return v.(*models.LogSource)
 	}
-	src := queryLogSource(`WHERE ip_address = $1::inet AND enabled = true LIMIT 1`, ip)
+	src := queryLogSource(`WHERE ip_address = $1::inet AND source_type='syslog' AND enabled = true LIMIT 1`, ip)
+	if src == nil {
+		// Wildcard: sources with no IP match any sender.
+		src = queryLogSource(`WHERE ip_address IS NULL AND source_type='syslog' AND enabled = true LIMIT 1`)
+	}
 	if src != nil {
 		sourceByIP.Store(ip, src)
 	}
@@ -202,27 +207,48 @@ func CreateLogSource(src *models.LogSource) (id int, plaintextKey string, err er
 }
 
 // UpdateLogSource toggles enabled/name/device_type.
+// Returns an error if no row matched (id+tenant_id mismatch).
 func UpdateLogSource(id, tenantID int, name, deviceType string, enabled bool) error {
-	_, err := database.DB.Exec(`
+	res, err := database.DB.Exec(`
 		UPDATE log_sources
 		SET name = $3, device_type = $4, enabled = $5
 		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID, name, deviceType, enabled)
-	return err
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("not found")
+	}
+	return nil
 }
 
 // DeleteLogSource removes the log source and its virtual agent.
+// Invalidates the IP and API-key routing caches.
 func DeleteLogSource(id, tenantID int) error {
 	var agentID *int
+	var ipStr, apiKeyHash *string
 	_ = database.DB.QueryRow(
-		`SELECT agent_id FROM log_sources WHERE id = $1 AND tenant_id = $2`, id, tenantID,
-	).Scan(&agentID)
+		`SELECT agent_id, ip_address::text, api_key FROM log_sources WHERE id = $1 AND tenant_id = $2`,
+		id, tenantID,
+	).Scan(&agentID, &ipStr, &apiKeyHash)
 
 	if _, err := database.DB.Exec(
 		`DELETE FROM log_sources WHERE id = $1 AND tenant_id = $2`, id, tenantID,
 	); err != nil {
 		return err
 	}
+
+	ip := ""
+	if ipStr != nil {
+		ip = *ipStr
+	}
+	keyHash := ""
+	if apiKeyHash != nil {
+		keyHash = *apiKeyHash
+	}
+	InvalidateLogSourceCaches(ip, keyHash)
 
 	if agentID != nil {
 		database.DB.Exec(

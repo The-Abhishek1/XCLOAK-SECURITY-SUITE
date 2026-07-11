@@ -21,7 +21,8 @@ package services
 //   60–79 = high
 //   80+   = critical
 //
-// Runs once per day per tenant. Retains 90 days of history.
+// Alert threshold: score >= 60 (high). Runs every 6 hours per tenant.
+// Retains 90 days of history.
 // MITRE: T1078 (Valid Accounts), T1530 (Data from Cloud Storage Object)
 
 import (
@@ -69,7 +70,7 @@ func scoreInsiderThreatsForTenant(tenantID int) {
 		JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
 		WHERE el.parsed_fields->>'user' IS NOT NULL
 		  AND el.parsed_fields->>'user' != ''
-		  AND el.created_at > NOW() - INTERVAL '24 hours'
+		  AND el.collected_at > NOW() - INTERVAL '24 hours'
 	`, tenantID)
 	if err != nil {
 		return
@@ -83,6 +84,7 @@ func scoreInsiderThreatsForTenant(tenantID int) {
 			users = append(users, u)
 		}
 	}
+	rows.Close()
 
 	for _, username := range users {
 		score, contributors := computeInsiderScore(tenantID, username)
@@ -113,9 +115,9 @@ func computeInsiderScore(tenantID int, username string) (int, insiderContributor
 		JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
 		WHERE el.parsed_fields->>'user' = $2
 		  AND el.parsed_fields->>'auth_result' = 'success'
-		  AND (EXTRACT(HOUR FROM el.created_at AT TIME ZONE 'UTC') < 6
-		    OR EXTRACT(HOUR FROM el.created_at AT TIME ZONE 'UTC') >= 22)
-		  AND el.created_at > NOW() - INTERVAL '24 hours'
+		  AND (EXTRACT(HOUR FROM el.collected_at AT TIME ZONE 'UTC') < 6
+		    OR EXTRACT(HOUR FROM el.collected_at AT TIME ZONE 'UTC') >= 22)
+		  AND el.collected_at > NOW() - INTERVAL '24 hours'
 	`, tenantID, username).Scan(&offHoursCount)
 	if offHoursCount >= 3 {
 		c.OffHoursAuth = 20
@@ -131,7 +133,7 @@ func computeInsiderScore(tenantID int, username string) (int, insiderContributor
 		JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
 		WHERE el.parsed_fields->>'user' = $2
 		  AND el.parsed_fields->>'auth_result' = 'failure'
-		  AND el.created_at > NOW() - INTERVAL '24 hours'
+		  AND el.collected_at > NOW() - INTERVAL '24 hours'
 	`, tenantID, username).Scan(&failedAuthCount)
 	if failedAuthCount >= 20 {
 		c.FailedAuth = 15
@@ -149,7 +151,7 @@ func computeInsiderScore(tenantID int, username string) (int, insiderContributor
 		JOIN agents a ON a.id = el.agent_id AND a.tenant_id = $1
 		WHERE el.parsed_fields->>'user' = $2
 		  AND el.parsed_fields->>'bytes_sent' IS NOT NULL
-		  AND el.created_at > NOW() - INTERVAL '24 hours'
+		  AND el.collected_at > NOW() - INTERVAL '24 hours'
 	`, tenantID, username).Scan(&totalBytesSent)
 	const (
 		exfilMedium   = 50 * 1024 * 1024   // 50 MB

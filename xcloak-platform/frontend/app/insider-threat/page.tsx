@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { insiderThreatAPI } from '@/lib/api';
 import {
   UserX, RefreshCw, Loader2, TrendingUp,
   Clock, ShieldAlert, MapPin, Lock, Database,
@@ -51,7 +51,7 @@ export default function InsiderThreatPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/insider-threat', { params: { days, min_score: minScore } });
+      const r = await insiderThreatAPI.getScores(days, minScore);
       setScores(Array.isArray(r.data) ? r.data : []);
     } catch { setScores([]); }
     finally { setLoading(false); }

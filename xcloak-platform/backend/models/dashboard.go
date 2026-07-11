@@ -13,6 +13,8 @@ type DashboardOverview struct {
 
 	Alerts         int `json:"alerts"`
 	CriticalAlerts int `json:"critical_alerts"`
+	OpenAlerts     int `json:"open_alerts"`
+	SnoozedAlerts  int `json:"snoozed_alerts"`
 
 	Incidents         int `json:"incidents"`
 	CriticalIncidents int `json:"critical_incidents"`

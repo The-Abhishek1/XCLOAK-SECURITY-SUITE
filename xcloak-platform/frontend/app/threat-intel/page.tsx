@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { iocsAPI, sigmaAPI, threatFeedsAPI } from '@/lib/api';
-import api from '@/lib/api';
 import { IOC, SigmaRule, ThreatFeed } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import {
@@ -163,7 +162,7 @@ export default function ThreatIntelPage() {
   const bulkImport = async () => {
     setSaving(true);
     try {
-      const r = await api.post('/iocs/bulk', { indicators: bulkForm.indicators, severity: bulkForm.severity, description: bulkForm.description, source: 'manual' });
+      const r = await iocsAPI.bulkCreate({ indicators: bulkForm.indicators, severity: bulkForm.severity, description: bulkForm.description, source: 'manual' });
       const { imported, dupes, skipped } = r.data;
       notify(`Imported ${imported} IOCs (${dupes} already existed, ${skipped} skipped)`);
       loadIOCs(1, debouncedIocSearch, typeFilter);

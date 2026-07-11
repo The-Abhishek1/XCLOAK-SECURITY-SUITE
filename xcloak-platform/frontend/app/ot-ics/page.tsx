@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { alertsAPI } from '@/lib/api';
 import { Wrench, RefreshCw, Loader2, Radio, AlertOctagon, Network } from 'lucide-react';
 
 interface Alert { id: number; rule_name: string; severity: string; log_message: string; mitre_technique: string; created_at: string; }
@@ -27,7 +27,7 @@ export default function OTICSPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/alerts/paginated', { params: { page: 1, per_page: 200 } });
+      const r = await alertsAPI.getFiltered({ page: 1, per_page: 200 });
       const data = r.data?.alerts ?? r.data ?? [];
       setAlerts(Array.isArray(data) ? data.filter((a: Alert) => KEYWORDS.test(a.rule_name)) : []);
     } catch { setAlerts([]); } finally { setLoading(false); }

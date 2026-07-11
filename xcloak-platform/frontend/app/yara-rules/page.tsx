@@ -2,15 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { yaraAPI } from '@/lib/api';
-import api from '@/lib/api';
+import { yaraAPI, agentsAPI, schedulerAPI } from '@/lib/api';
 import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
 import {
   Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning, Code2, Upload, CheckCircle,
   ChevronDown, ChevronUp, Clock, Hash, Download, BarChart3,
 } from 'lucide-react';
-import { agentsAPI } from '@/lib/api';
 import { Agent } from '@/types';
 
 interface MatchedString { identifier: string; offset: string; data: string; }
@@ -78,7 +76,7 @@ export default function YaraRulesPage() {
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
     const [rr, mr, sr] = await Promise.allSettled([
-      yaraAPI.getAll(), yaraAPI.getMatches(), api.get('/scheduler/tasks'),
+      yaraAPI.getAll(), yaraAPI.getMatches(), schedulerAPI.getAll(),
     ]);
     if (rr.status === 'fulfilled') setRules(rr.value.data || []);
     if (mr.status === 'fulfilled') setMatches(mr.value.data || []);
@@ -98,7 +96,7 @@ export default function YaraRulesPage() {
   const enablePeriodicScan = async () => {
     setScheduling(true);
     try {
-      const r = await api.post('/scheduler/tasks', {
+      const r = await schedulerAPI.create({
         name: 'Periodic YARA Scan',
         task_type: 'scan_yara',
         cron_expr: '0 */6 * * *',
@@ -167,9 +165,7 @@ export default function YaraRulesPage() {
                   const form = new FormData();
                   files.forEach(f => form.append('rules', f));
                   try {
-                    const r = await api.post('/yara/import', form, {
-                      headers: { 'Content-Type': 'multipart/form-data' },
-                    });
+                    const r = await yaraAPI.import(form);
                     notify(r.data?.message || 'Imported');
                     load();
                   } catch { notify('Import failed'); }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { frameworkComplianceAPI } from '@/lib/api';
 import { ShieldCheck, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 
 interface ControlCoverage {
@@ -148,7 +148,7 @@ export default function FrameworkCompliancePage() {
 
   const load = async () => {
     setLoading(true);
-    const r = await api.get('/framework-compliance').catch(() => ({ data: [] }));
+    const r = await frameworkComplianceAPI.getAll();
     setAssessments(r.data || []);
     setLoading(false);
   };

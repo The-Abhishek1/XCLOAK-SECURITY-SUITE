@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { agentsAPI } from '@/lib/api';
+import { agentsAPI, timelineAPI } from '@/lib/api';
 import { TimelineEvent, Agent } from '@/types';
 import { formatDate, timeAgo } from '@/lib/utils';
 import { Clock, Search, AlertTriangle, Play, Shield, Activity, ChevronDown } from 'lucide-react';
@@ -41,19 +41,24 @@ export default function TimelinePage() {
       const agentList: Agent[] = agRes.data || [];
       setAgents(agentList);
 
-      const targets = agentId === 'all' ? agentList : agentList.filter(a => a.id === agentId);
+      // Build a hostname lookup so tenant-wide events can resolve agent_id → hostname
+      const hostnameById = new Map<number, string>(agentList.map(a => [a.id, a.hostname]));
 
-      const all: (TimelineEvent & { hostname?: string })[] = [];
+      let all: (TimelineEvent & { hostname?: string })[];
 
-      await Promise.allSettled(
-        targets.map(async (a) => {
-          const r = await agentsAPI.getTimeline(a.id);
-          const evts = (r.data || []).map((e: TimelineEvent) => ({ ...e, hostname: a.hostname }));
-          all.push(...evts);
-        })
-      );
+      if (agentId === 'all') {
+        // Single tenant-wide request — avoids N per-agent round-trips
+        const r = await timelineAPI.get(500);
+        all = (r.data || []).map((e: TimelineEvent) => ({
+          ...e,
+          hostname: e.agent_id ? hostnameById.get(e.agent_id) : undefined,
+        }));
+      } else {
+        const r = await agentsAPI.getTimeline(agentId);
+        all = (r.data || []).map((e: TimelineEvent) => ({ ...e, hostname: hostnameById.get(agentId) }));
+      }
 
-      // Sort newest first
+      // Already sorted newest-first by the backend, but re-sort to be safe
       all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setEvents(all);
     } finally {
@@ -158,8 +163,14 @@ export default function TimelinePage() {
                             style={{ background: `${color}22`, color, border: `1px solid ${color}44` }}>
                             {ev.event_type}
                           </span>
+                          {ev.severity && (
+                            <span className="text-[10px] font-semibold capitalize shrink-0"
+                              style={{ color: EVENT_COLORS[ev.severity] || 'var(--text-3)' }}>
+                              {ev.severity}
+                            </span>
+                          )}
                           {ev.hostname && (
-                            <span className="mono text-[10px] shrink-0" style={{ color: 'var(--accent)' }}>
+                            <span className="mono text-[10px] shrink-0 truncate" style={{ color: 'var(--accent)' }}>
                               {ev.hostname}
                             </span>
                           )}

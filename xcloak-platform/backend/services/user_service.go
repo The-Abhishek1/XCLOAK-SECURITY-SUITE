@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"xcloak-platform/auth"
@@ -15,15 +13,6 @@ import (
 	"xcloak-platform/repositories"
 )
 
-// appBaseURL returns the externally-reachable base URL used in email links.
-// Defaults to http://localhost:3000 for local dev if APP_BASE_URL is not set.
-func appBaseURL() string {
-	u := os.Getenv("APP_BASE_URL")
-	if u == "" {
-		return "http://localhost:3000"
-	}
-	return strings.TrimRight(u, "/")
-}
 
 // ValidatePasswordComplexity returns an error when a password fails minimum
 // requirements: ≥8 chars, at least one uppercase, lowercase, digit, and
@@ -208,18 +197,7 @@ func InviteUser(username, email, role string, tenantID int) error {
 		WHERE id=$3
 	`, token, expiry, userID)
 
-	subject := "XCloak — You've been invited"
-	body := fmt.Sprintf(`Hi %s,
-
-You've been invited to join XCloak Security Suite as a %s.
-
-Click the link below to set your password (expires in 24 hours):
-%s/reset-password?token=%s
-
-— XCloak Security Suite
-`, username, role, appBaseURL(), token)
-
-	if err := sendEmail(cfg, []string{email}, subject, body); err != nil {
+	if err := SendInviteEmail(cfg, email, username, role, token); err != nil {
 		// Don't leave a password-less account stranded with no way to claim
 		// it — roll back so the admin can safely retry the invite.
 		database.DB.Exec(`DELETE FROM users WHERE id=$1`, userID)
@@ -284,20 +262,7 @@ func RequestPasswordReset(email string) error {
 		return fmt.Errorf("SMTP not configured — cannot send reset email")
 	}
 
-	subject := "XCloak — Password Reset Request"
-	body := fmt.Sprintf(`Hi %s,
-
-A password reset was requested for your XCloak account.
-
-Click the link below to reset your password (expires in 1 hour):
-%s/reset-password?token=%s
-
-If you didn't request this, you can safely ignore this email.
-
-— XCloak Security Suite
-`, username, appBaseURL(), token)
-
-	return sendEmail(cfg, []string{email}, subject, body)
+	return SendPasswordResetEmail(cfg, email, username, token)
 }
 
 // ResetPassword validates the reset token and sets the new password.

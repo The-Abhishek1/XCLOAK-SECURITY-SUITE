@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI, sessionsAPI, securityPolicyAPI } from '@/lib/api';
-import api from '@/lib/api';
+import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI, sessionsAPI, securityPolicyAPI, integrationsAPI, authAPI, notificationsAPI } from '@/lib/api';
 import type { UserSession, TenantSecurityPolicy } from '@/types';
 import { useUser } from '@/context/UserContext';
 import { timeAgo } from '@/lib/utils';
@@ -139,9 +138,9 @@ export default function SettingsPage() {
     setIntLoading(true);
     try {
       const [intR, delR, tokR] = await Promise.all([
-        api.get('/integrations').catch(() => ({ data: [] })),
-        api.get('/integrations/deliveries').catch(() => ({ data: [] })),
-        api.get('/integrations/install-tokens').catch(() => ({ data: [] })),
+        integrationsAPI.getAll(),
+        integrationsAPI.getDeliveries(),
+        integrationsAPI.getInstallTokens(),
       ]);
       const list = intR.data || [];
       setIntegrations(list);
@@ -156,7 +155,7 @@ export default function SettingsPage() {
   const loadSSO = useCallback(async () => {
     setSsoLoading(true);
     try {
-      const r = await api.get('/integrations');
+      const r = await integrationsAPI.getAll();
       const row = (r.data || []).find((i: any) => i.name === 'oidc');
       if (row) {
         const secret = row.config?.client_secret || '';
@@ -181,7 +180,7 @@ export default function SettingsPage() {
   const saveSSO = async () => {
     setSsoSaving(true);
     try {
-      await api.put('/integrations/oidc', {
+      await integrationsAPI.save('oidc', {
         enabled: ssoForm.enabled,
         config: {
           issuer_url: ssoForm.issuer_url,
@@ -277,7 +276,7 @@ export default function SettingsPage() {
 
   const loadProfile = useCallback(async () => {
     try {
-      const r = await api.get('/auth/profile');
+      const r = await authAPI.getProfile();
       setProfile(r.data);
       setProfileEmail(r.data?.email || '');
       setTwoFAEnabled(r.data?.totp_enabled || false);
@@ -287,7 +286,7 @@ export default function SettingsPage() {
   const loadEmailRules = useCallback(async () => {
     setEmailLoading(true);
     try {
-      const r = await api.get('/notifications/email');
+      const r = await notificationsAPI.getEmailRules();
       setEmailRules(r.data || []);
     } catch { setEmailRules([]); }
     finally { setEmailLoading(false); }
@@ -322,7 +321,7 @@ export default function SettingsPage() {
 
   const load2FAStatus = useCallback(async () => {
     try {
-      const r = await api.get('/auth/profile');
+      const r = await authAPI.getProfile();
       setTwoFAEnabled(r.data?.totp_enabled || false);
     } catch {}
   }, []);
@@ -500,12 +499,12 @@ export default function SettingsPage() {
                     const form = intForms[int.name] || { enabled: false, config: {} };
                     const save = async () => {
                       setIntSaving(int.name);
-                      try { await api.put(`/integrations/${int.name}`, form); notify(`${int.name} saved`); }
+                      try { await integrationsAPI.save(int.name, form); notify(`${int.name} saved`); }
                       catch { notify('Save failed'); }
                       finally { setIntSaving(null); }
                     };
                     const test = async () => {
-                      try { await api.post(`/integrations/${int.name}/test`, {}); notify(`Test sent via ${int.name}`); }
+                      try { await integrationsAPI.test(int.name); notify(`Test sent via ${int.name}`); }
                       catch { notify('Test failed'); }
                     };
                     const setForm = (patch: any) => setIntForms(f => ({ ...f, [int.name]: { ...form, ...patch } }));
@@ -780,9 +779,9 @@ export default function SettingsPage() {
                       <input value={tokenLabel} onChange={e => setTokenLabel(e.target.value)}
                         placeholder="Label (optional)" className="g-input text-xs" style={{ width: 150 }} />
                       <button onClick={async () => {
-                        const r = await api.post('/integrations/install-tokens', { label: tokenLabel });
+                        const r = await integrationsAPI.createInstallToken(tokenLabel);
                         setGenToken(r.data.token); setTokenLabel('');
-                        const r2 = await api.get('/integrations/install-tokens');
+                        const r2 = await integrationsAPI.getInstallTokens();
                         setInstallTokens(r2.data || []);
                       }} className="g-btn g-btn-primary text-xs">
                         <Plus className="h-3.5 w-3.5" /> Generate
@@ -1151,7 +1150,7 @@ export default function SettingsPage() {
                   placeholder="your@email.com" className="g-input flex-1 text-sm" />
                 <button onClick={async () => {
                   try {
-                    await api.patch('/auth/profile', { email: profileEmail });
+                    await authAPI.updateProfile({ email: profileEmail });
                     await loadProfile();
                     notify('Email updated');
                   } catch { notify('Failed to update email'); }
@@ -1188,7 +1187,7 @@ export default function SettingsPage() {
                 onClick={async () => {
                   setPwLoading(true); setPwMsg(null);
                   try {
-                    await api.post('/auth/change-password', {
+                    await authAPI.changePassword({
                       current_password: changePw.current,
                       new_password: changePw.next,
                     });
@@ -1249,7 +1248,7 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                 <button onClick={async () => {
                   if (!newRule.recipient) return;
                   try {
-                    await api.post('/notifications/email', newRule);
+                    await notificationsAPI.createEmailRule(newRule);
                     await loadEmailRules();
                     setNewRule({ name: '', severity: 'critical', recipient: '' });
                     notify('Email rule created');
@@ -1275,13 +1274,13 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                       <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{r.recipient} · {r.severity}</p>
                     </div>
                     <button onClick={async () => {
-                      await api.patch(`/notifications/email/${r.id}/toggle`, { enabled: !r.enabled });
+                      await notificationsAPI.toggleEmailRule(r.id, !r.enabled);
                       await loadEmailRules();
                     }} style={{ color: r.enabled ? 'var(--green)' : 'var(--text-3)' }}>
                       {r.enabled ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
                     </button>
                     <button onClick={async () => {
-                      await api.delete(`/notifications/email/${r.id}`);
+                      await notificationsAPI.deleteEmailRule(r.id);
                       await loadEmailRules();
                     }} style={{ color: 'var(--text-3)' }}>
                       <Trash2 className="h-3.5 w-3.5" />
@@ -1313,7 +1312,7 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                   <button onClick={async () => {
                     setTfaLoading(true);
                     try {
-                      const r = await api.post('/auth/2fa/setup');
+                      const r = await authAPI.setup2FA();
                       setTotpSecret(r.data.secret);
                       setTotpQR(r.data.qr_url);
                     } catch { notify('Failed to setup 2FA'); }
@@ -1365,7 +1364,7 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                         className="g-input flex-1 mono text-center text-lg tracking-widest font-bold" />
                       <button onClick={async () => {
                         try {
-                          await api.post('/auth/2fa/verify', { code: totpCode });
+                          await authAPI.verify2FA(totpCode);
                           setTwoFAEnabled(true);
                           setTotpQR(''); setTotpCode('');
                           notify('2FA enabled successfully!');
@@ -1399,7 +1398,7 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
                         className="g-input flex-1 mono text-center text-lg tracking-widest font-bold" />
                       <button onClick={async () => {
                         try {
-                          await api.delete('/auth/2fa', { data: { code: totpCode } });
+                          await authAPI.disable2FA(totpCode);
                           setTwoFAEnabled(false); setTotpCode('');
                           notify('2FA disabled');
                         } catch { notify('Invalid code'); setTotpCode(''); }

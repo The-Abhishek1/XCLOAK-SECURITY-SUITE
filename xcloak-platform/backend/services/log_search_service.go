@@ -593,6 +593,25 @@ func IncrementSearchRunCount(id int) {
 	`, id)
 }
 
+// GetSavedLogSearchByID fetches a single saved search by ID, scoped to tenantID.
+// Replaces the O(N) linear scan in RunSavedLogSearch.
+func GetSavedLogSearchByID(id string, tenantID int) (*SavedLogSearch, error) {
+	var s SavedLogSearch
+	err := database.DB.QueryRow(`
+		SELECT id, name, query, filters, time_range, created_by,
+		       run_count, last_run_at, created_at
+		FROM saved_log_searches WHERE id=$1 AND tenant_id=$2
+	`, id, tenantID).Scan(
+		&s.ID, &s.Name, &s.Query, &s.Filters, &s.TimeRange,
+		&s.CreatedBy, &s.RunCount, &s.LastRunAt, &s.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("not found")
+	}
+	s.TenantID = tenantID
+	return &s, nil
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Retention policy
 // ─────────────────────────────────────────────────────────────────────────────

@@ -171,6 +171,14 @@ export default function AttackPathPage() {
                             <Skull x={-4.5} y={-4.5} width={9} height={9} color="#fff" />
                           </g>
                         )}
+                        {n.open_alert_count > 0 && (
+                          <g transform="translate(-13,-11)">
+                            <circle r={6} fill="#fb923c" />
+                            <text textAnchor="middle" dominantBaseline="central" fontSize={7} fill="#fff" fontWeight="bold">
+                              {n.open_alert_count > 9 ? '9+' : n.open_alert_count}
+                            </text>
+                          </g>
+                        )}
                         <text x={0} y={32} textAnchor="middle" fontSize={10.5} fill="var(--text-2)">
                           {n.type === 'internet' ? 'Internet' : (n.hostname || `agent-${n.agent_id}`)}
                         </text>
@@ -228,6 +236,7 @@ export default function AttackPathPage() {
                 <span>EPSS {(hovered.max_epss * 100).toFixed(1)}%</span>
                 {hovered.has_kev && <span style={{ color: '#f85149' }} className="font-bold">{hovered.kev_count} KEV vuln{hovered.kev_count > 1 ? 's' : ''}</span>}
                 {hovered.exposed && <span style={{ color: 'var(--orange)' }}>internet-facing</span>}
+                {hovered.open_alert_count > 0 && <span style={{ color: 'var(--orange)' }} className="font-semibold">{hovered.open_alert_count} open alert{hovered.open_alert_count !== 1 ? 's' : ''}</span>}
                 <span>pivot cost {hovered.compromise_cost.toFixed(0)}</span>
               </div>
             )}

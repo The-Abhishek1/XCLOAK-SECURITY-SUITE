@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { huntAPI, agentsAPI } from '@/lib/api';
 import { Search, Play, Save, Trash2, Clock, ChevronDown, ChevronRight, Shield, Download, Cpu, Calendar, Zap } from 'lucide-react';
-import { agentsAPI } from '@/lib/api';
 import { Agent } from '@/types';
 import { timeAgo } from '@/lib/utils';
 
@@ -65,7 +64,7 @@ export default function HuntPage() {
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
   const loadSaved = useCallback(async () => {
-    try { const r = await api.get('/hunt/queries'); setSaved(r.data || []); } catch {}
+    try { const r = await huntAPI.getSaved(); setSaved(r.data || []); } catch {}
   }, []);
 
   useEffect(() => { loadSaved(); }, [loadSaved]);
@@ -79,7 +78,7 @@ export default function HuntPage() {
     setResult(null);
     setExpandedRow(null);
     try {
-      const r = await api.post('/hunt/run', {
+      const r = await huntAPI.run({
         query_type: type,
         query_text: text,
         save:       saveIt && saveName.trim() !== '',
@@ -112,7 +111,7 @@ export default function HuntPage() {
   const promoteToRule = async () => {
     if (!promoteName.trim()) return;
     try {
-      await api.post('/sigma-rules/from-hunt', {
+      await huntAPI.promote({
         name: promoteName,
         query_type: queryType,
         query_text: queryText,
@@ -129,14 +128,14 @@ export default function HuntPage() {
     setRunning(true);
     setResult(null);
     try {
-      const r = await api.post(`/hunt/queries/${q.id}/run`, {});
+      const r = await huntAPI.rerun(q.id);
       setResult(r.data);
       loadSaved();
     } finally { setRunning(false); }
   };
 
   const del = async (id: number) => {
-    await api.delete(`/hunt/queries/${id}`);
+    await huntAPI.deleteSaved(id);
     setSaved(s => s.filter(q => q.id !== id));
     notify('Deleted');
   };

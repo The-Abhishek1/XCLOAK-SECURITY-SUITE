@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { nbaAPI } from '@/lib/api';
 import { Activity, AlertTriangle, CheckCircle, RefreshCw, Wifi, TrendingUp } from 'lucide-react';
 
 interface NetworkAnomaly {
@@ -39,7 +39,7 @@ export default function NBAPage() {
 
   const load = async () => {
     setLoading(true);
-    const r = await api.get('/nba/anomalies?limit=200').catch(() => ({ data: [] }));
+    const r = await nbaAPI.getAnomalies(200).catch(() => ({ data: [] }));
     setAnomalies(r.data || []);
     setLoading(false);
   };
@@ -47,13 +47,13 @@ export default function NBAPage() {
   useEffect(() => { load(); }, []);
 
   const acknowledge = async (id: number) => {
-    await api.post(`/nba/anomalies/${id}/acknowledge`);
+    await nbaAPI.acknowledge(id);
     setAnomalies(prev => prev.map(a => a.id === id ? { ...a, is_acknowledged: true } : a));
   };
 
   const triggerAnalysis = async () => {
     setAnalyzing(true);
-    await api.post('/nba/analyze');
+    await nbaAPI.analyze();
     setTimeout(() => { load(); setAnalyzing(false); }, 3000);
   };
 

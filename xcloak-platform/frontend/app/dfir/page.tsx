@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { dfirAPI, agentsAPI } from '@/lib/api';
 import { HardDrive, Play, ChevronDown, ChevronRight, Clock, CheckCircle, Loader2, Plus, AlertTriangle, List, Layers, Download, Filter } from 'lucide-react';
 
 interface ForensicCollection {
@@ -45,7 +45,7 @@ function CollectionCard({ col, onExpand, expanded }: {
   const load = async () => {
     if (artifacts.length > 0) return;
     setLoading(true);
-    const r = await api.get(`/dfir/collections/${col.id}/artifacts`).catch(() => ({ data: [] }));
+    const r = await dfirAPI.getArtifacts(col.id);
     setArtifacts(r.data || []);
     setLoading(false);
   };
@@ -167,12 +167,12 @@ export default function DFIRPage() {
 
   useEffect(() => {
     load();
-    api.get('/agents').then(r => setAgents((r.data?.agents ?? r.data) || [])).catch(() => {});
+    agentsAPI.getAll().then(r => setAgents((r.data?.agents ?? r.data) || [])).catch(() => {});
   }, []);
 
   const load = async () => {
     setLoading(true);
-    const r = await api.get('/dfir/collections?limit=50').catch(() => ({ data: [] }));
+    const r = await dfirAPI.getCollections(50);
     setCollections(r.data || []);
     setLoading(false);
   };
@@ -180,7 +180,7 @@ export default function DFIRPage() {
   const triggerCollection = async () => {
     if (!form.agentID) return;
     setTriggering(true);
-    await api.post('/dfir/collections', {
+    await dfirAPI.triggerCollection({
       agent_id: parseInt(form.agentID),
       label: form.label || 'IR Evidence Collection',
       incident_id: form.incidentID ? parseInt(form.incidentID) : null,
@@ -193,7 +193,7 @@ export default function DFIRPage() {
   const loadTimeline = async () => {
     if (!timelineIncident) return;
     setLoadingTimeline(true);
-    const r = await api.get(`/dfir/incidents/${timelineIncident}/timeline`).catch(() => ({ data: [] }));
+    const r = await dfirAPI.getTimeline(timelineIncident);
     setTimeline(r.data || []);
     setLoadingTimeline(false);
   };

@@ -450,8 +450,7 @@ func GetAgentBaselines(agentID, tenantID int) ([]models.AgentBaseline, error) {
 		       sample_count, updated_at
 		FROM agent_behavior_baselines
 		WHERE agent_id = $1
-		  AND tenant_id = (SELECT tenant_id FROM agents WHERE id = $1)
-		  AND $2 = $2
+		  AND tenant_id = $2
 		ORDER BY hour_of_week
 	`, agentID, tenantID)
 	if err != nil {
@@ -524,8 +523,7 @@ func AcknowledgeAnomalyFinding(id, tenantID int) error {
 	tag, err := database.DB.Exec(`
 		UPDATE anomaly_findings
 		SET acknowledged = TRUE
-		WHERE id = $1 AND tenant_id = (SELECT tenant_id FROM agents WHERE id = agent_id)
-		  AND $2 = $2
+		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID)
 	if err != nil {
 		return err

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { alertsAPI } from '@/lib/api';
 import { Cloud, RefreshCw, Loader2, ShieldAlert, Lock, Database } from 'lucide-react';
 
 interface Alert {
@@ -45,9 +45,7 @@ export default function CloudSecurityPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get('/alerts/paginated', {
-        params: { page: 1, per_page: 200, rule_prefix: 'AWS,Azure,GCP' },
-      });
+      const r = await alertsAPI.getFiltered({ page: 1, per_page: 200, rule_prefix: 'AWS,Azure,GCP' });
       const data = r.data?.alerts ?? r.data ?? [];
       setAlerts(Array.isArray(data) ? data.filter((a: Alert) =>
         /^(AWS|Azure|GCP)/i.test(a.rule_name)

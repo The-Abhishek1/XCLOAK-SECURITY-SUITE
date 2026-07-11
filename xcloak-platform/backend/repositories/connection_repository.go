@@ -17,7 +17,8 @@ func GetEndpointConnectionsByTenant(tenantID int, limit int) ([]models.ConnectEv
 	}
 	rows, err := database.DB.Query(`
 		SELECT ec.agent_id, ec.protocol, ec.local_address, ec.remote_address,
-		       ec.state, COALESCE(ec.collected_at, NOW())
+		       ec.state, COALESCE(ec.collected_at, NOW()),
+		       COALESCE(ec.process_name, '')
 		FROM endpoint_connections ec
 		WHERE ec.tenant_id = $1
 		ORDER BY ec.collected_at DESC
@@ -33,6 +34,7 @@ func GetEndpointConnectionsByTenant(tenantID int, limit int) ([]models.ConnectEv
 		if err := rows.Scan(
 			&ev.AgentID, &ev.Protocol, &ev.LocalAddress,
 			&ev.RemoteAddress, &ev.State, &ev.CreatedAt,
+			&ev.Comm,
 		); err == nil {
 			out = append(out, ev)
 		}
@@ -78,20 +80,15 @@ func SaveConnections(
 	}
 
 	for _, c := range connections {
-
 		_, err := tx.Exec(`
 			INSERT INTO endpoint_connections
-			(agent_id, protocol, local_address,
-			 remote_address, state)
-			VALUES ($1,$2,$3,$4,$5)
+			  (agent_id, protocol, local_address, remote_address, state,
+			   pid, process_name, process_path)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		`,
-			c.AgentID,
-			c.Protocol,
-			c.LocalAddress,
-			c.RemoteAddress,
-			c.State,
+			c.AgentID, c.Protocol, c.LocalAddress, c.RemoteAddress, c.State,
+			c.PID, c.ProcessName, c.ProcessPath,
 		)
-
 		if err != nil {
 			return err
 		}

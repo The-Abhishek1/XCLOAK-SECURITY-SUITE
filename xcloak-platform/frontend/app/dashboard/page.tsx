@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { dashboardAPI, alertsAPI, incidentsAPI, agentsAPI, playbooksAPI } from '@/lib/api';
-import api from '@/lib/api';
 import { DashboardOverview, Alert, Incident, Agent, PlaybookExecution } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import { useNotifications } from '@/context/NotificationContext';
@@ -349,7 +348,7 @@ export default function DashboardPage() {
       incidentsAPI.getAll(),
       agentsAPI.getAll(),
       playbooksAPI.getExecutions(),
-      api.get('/dashboard/metrics', { params: { range } }),
+      dashboardAPI.getMetrics(range),
     ]);
     if (ov.status  === 'fulfilled') setOverview(ov.value.data);
     if (al.status  === 'fulfilled') setAlerts((al.value.data || []).slice(0, 20));
@@ -369,7 +368,9 @@ export default function DashboardPage() {
 
   const agentName = (id: number) => agents.find(a => a.id === id)?.hostname || `#${id}`;
 
-  const criticalAlerts = alerts.filter(a => a.severity === 'critical').length;
+  const criticalAlerts = overview?.critical_alerts ?? alerts.filter(a => a.severity === 'critical').length;
+  const openAlerts     = overview?.open_alerts ?? alerts.length;
+  const snoozedAlerts  = overview?.snoozed_alerts ?? 0;
   const openIncidents  = incidents.filter(i => i.status === 'open' || i.status === 'investigating').length;
   const soarFired      = executions.filter(e => e.status === 'success').length;
 
@@ -403,7 +404,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
             label="Critical Alerts" value={criticalAlerts}
-            sub={`${alerts.length} total in window`}
+            sub={snoozedAlerts > 0
+              ? `${openAlerts} open · ${snoozedAlerts} snoozed`
+              : `${openAlerts} open alerts`}
             icon={Bell}
             accent={criticalAlerts > 0 ? 'var(--red)' : undefined}
             pulse={criticalAlerts > 0}

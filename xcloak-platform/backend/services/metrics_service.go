@@ -145,7 +145,7 @@ func GetDashboardMetrics(tenantID int, rangeStr string) (*DashboardMetrics, erro
 	if rangeStr == "7d" {
 		// 6-hour buckets for 7d
 		trendSQL = fmt.Sprintf(`
-			SELECT to_char(date_trunc('hour', created_at) - INTERVAL '0 hours' *
+			SELECT to_char(date_trunc('hour', created_at) - INTERVAL '1 hour' *
 			       (EXTRACT(HOUR FROM date_trunc('hour', created_at))::int %% 6), 'MM-DD HH24:MI') AS lbl,
 			       COALESCE(SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END),0),
 			       COALESCE(SUM(CASE WHEN severity='high'     THEN 1 ELSE 0 END),0),

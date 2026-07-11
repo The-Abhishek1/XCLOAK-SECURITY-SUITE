@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { suppressionAPI } from '@/lib/api';
 import { VolumeX, Plus, Trash2, ToggleLeft, ToggleRight, X, Info, Clock } from 'lucide-react';
 import { timeAgo } from '@/lib/utils';
 
@@ -53,7 +53,7 @@ export default function SuppressionPage() {
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
     try {
-      const r = await api.get('/suppression/rules');
+      const r = await suppressionAPI.getAll();
       setRules(r.data?.rules || []);
       setStats(r.data?.stats || { active_rules: 0, total_suppressed: 0 });
     } finally { setLoading(false); setRefreshing(false); }
@@ -65,7 +65,7 @@ export default function SuppressionPage() {
     if (!form.name) return;
     setSaving(true);
     try {
-      await api.post('/suppression/rules', {
+      await suppressionAPI.create({
         ...form,
         agent_id: form.agent_id || 0,
         window_minutes: form.window_minutes || 60,
@@ -78,12 +78,12 @@ export default function SuppressionPage() {
   };
 
   const toggle = async (id: number, enabled: boolean) => {
-    await api.patch(`/suppression/rules/${id}/toggle`, { enabled: !enabled });
+    await suppressionAPI.toggle(id, !enabled);
     setRules(r => r.map(x => x.id === id ? { ...x, enabled: !enabled } : x));
   };
 
   const del = async (id: number) => {
-    await api.delete(`/suppression/rules/${id}`);
+    await suppressionAPI.remove(id);
     setRules(r => r.filter(x => x.id !== id));
     notify('Rule deleted');
   };

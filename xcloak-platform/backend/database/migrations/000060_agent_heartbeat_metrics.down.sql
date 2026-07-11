@@ -1,0 +1,15 @@
+ALTER TABLE agents
+    DROP COLUMN IF EXISTS load_avg_1m,
+    DROP COLUMN IF EXISTS load_avg_5m,
+    DROP COLUMN IF EXISTS load_avg_15m,
+    DROP COLUMN IF EXISTS logged_in_users,
+    DROP COLUMN IF EXISTS open_fds,
+    DROP COLUMN IF EXISTS battery_level,
+    DROP COLUMN IF EXISTS battery_charging,
+    DROP COLUMN IF EXISTS network_type,
+    DROP COLUMN IF EXISTS is_rooted,
+    DROP COLUMN IF EXISTS developer_mode,
+    DROP COLUMN IF EXISTS storage_free_gb,
+    DROP COLUMN IF EXISTS storage_total_gb,
+    DROP COLUMN IF EXISTS vpn_active,
+    DROP COLUMN IF EXISTS security_patch;

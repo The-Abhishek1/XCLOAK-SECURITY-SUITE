@@ -10,6 +10,11 @@ import (
 	"xcloak-platform/services"
 )
 
+// errIsNotFound checks whether a service error means the record was not found.
+func errIsNotFound(err error) bool {
+	return err != nil && err.Error() == "finding not found"
+}
+
 // GetAnomalyScores — GET /api/threat/scores?agent_id=N&hours=24
 // Returns behavioral anomaly score time series.
 func GetAnomalyScores(c *gin.Context) {
@@ -87,6 +92,10 @@ func AcknowledgeAnomalyFinding(c *gin.Context) {
 		return
 	}
 	if err := services.AcknowledgeAnomalyFinding(id, tenantIDFromContext(c)); err != nil {
+		if errIsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "finding not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

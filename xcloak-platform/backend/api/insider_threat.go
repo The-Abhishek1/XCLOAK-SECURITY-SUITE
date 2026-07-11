@@ -21,7 +21,7 @@ func GetInsiderThreatScores(c *gin.Context) {
 		days = d
 	}
 	minScore := 0
-	if s, err := strconv.Atoi(c.DefaultQuery("min_score", "0")); err == nil {
+	if s, err := strconv.Atoi(c.DefaultQuery("min_score", "0")); err == nil && s >= 0 && s <= 100 {
 		minScore = s
 	}
 

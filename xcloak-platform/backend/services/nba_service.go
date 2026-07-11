@@ -37,7 +37,6 @@ func AnalyzeAgentNetworkBehavior(agentID, tenantID int) {
 		      SELECT 1 FROM network_baselines nb
 		      WHERE nb.agent_id=$1 AND nb.dst_ip=ce.dst_ip
 		        AND nb.dst_port=ce.dst_port
-		        AND nb.last_seen < NOW()-INTERVAL '1 hour'
 		        AND nb.hit_count >= 3
 		  )
 		  AND ce.dst_ip != ''
@@ -154,9 +153,15 @@ func GetNetworkAnomalies(tenantID, limit int) ([]models.NetworkAnomaly, error) {
 }
 
 func AcknowledgeNetworkAnomaly(id, tenantID int) error {
-	_, err := database.DB.Exec(`
+	res, err := database.DB.Exec(`
 		UPDATE network_anomalies SET is_acknowledged=true WHERE id=$1 AND tenant_id=$2`, id, tenantID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("not found")
+	}
+	return nil
 }
 
 func GetNetworkBaselineStats(agentID, tenantID int) (map[string]any, error) {

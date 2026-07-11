@@ -56,7 +56,7 @@ func GetAgentByID(id string, tenantID int) (*models.Agent, error) {
 }
 
 func Heartbeat(req models.HeartbeatRequest) error {
-	if err := repositories.UpdateAgentHeartbeat(req.AgentID, req.Version, req.UptimeSeconds, req.MemAllocMB, req.Goroutines); err != nil {
+	if err := repositories.UpdateAgentHeartbeat(req); err != nil {
 		return err
 	}
 	// Re-classify if this agent's category is still 'other'. This catches

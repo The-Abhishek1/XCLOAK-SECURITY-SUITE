@@ -1,10 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"xcloak-platform/database"
 	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
@@ -95,4 +98,98 @@ func AddIncidentNote(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "Note added"})
+}
+
+// GetIncidentAlerts — GET /api/incidents/:id/alerts
+// Returns alerts that were linked to the incident via alert clustering.
+func GetIncidentAlerts(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid incident id"})
+		return
+	}
+	tenantID := tenantIDFromContext(c)
+
+	if _, err := repositories.GetIncidentByID(fmt.Sprintf("%d", id), tenantID); err != nil {
+		c.JSON(404, gin.H{"error": "incident not found"})
+		return
+	}
+
+	type linkedAlert struct {
+		ID        int       `json:"id"`
+		AgentID   int       `json:"agent_id"`
+		Severity  string    `json:"severity"`
+		RuleName  string    `json:"rule_name"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+
+	rows, err := database.DB.Query(`
+		SELECT id, agent_id, severity, rule_name, created_at
+		FROM alerts
+		WHERE incident_id = $1 AND tenant_id = $2
+		ORDER BY created_at DESC
+		LIMIT 50
+	`, id, tenantID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var alerts []linkedAlert
+	for rows.Next() {
+		var a linkedAlert
+		if err := rows.Scan(&a.ID, &a.AgentID, &a.Severity, &a.RuleName, &a.CreatedAt); err == nil {
+			alerts = append(alerts, a)
+		}
+	}
+	if alerts == nil {
+		alerts = []linkedAlert{}
+	}
+	c.JSON(200, alerts)
+}
+
+// UpdateIncidentSeverity — PATCH /api/incidents/:id/severity
+// Body: { "severity": "low" | "medium" | "high" | "critical" }
+func UpdateIncidentSeverity(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid incident id"})
+		return
+	}
+	tenantID := tenantIDFromContext(c)
+
+	if _, err := repositories.GetIncidentByID(fmt.Sprintf("%d", id), tenantID); err != nil {
+		c.JSON(404, gin.H{"error": "incident not found"})
+		return
+	}
+
+	var body struct {
+		Severity string `json:"severity"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Severity == "" {
+		c.JSON(400, gin.H{"error": "severity is required"})
+		return
+	}
+
+	valid := map[string]bool{"low": true, "medium": true, "high": true, "critical": true}
+	if !valid[body.Severity] {
+		c.JSON(400, gin.H{"error": "severity must be: low, medium, high, or critical"})
+		return
+	}
+
+	res, err := database.DB.Exec(
+		`UPDATE incidents SET severity = $1 WHERE id = $2 AND tenant_id = $3`,
+		body.Severity, id, tenantID,
+	)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "incident not found"})
+		return
+	}
+
+	c.JSON(200, gin.H{"severity": body.Severity})
 }

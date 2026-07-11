@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
+import { deceptionAPI, agentsAPI } from '@/lib/api';
 import { Eye, EyeOff, Trash2, AlertTriangle, Shield, Zap, Plus, Copy, Check, Wifi } from 'lucide-react';
 
 interface CanaryToken {
@@ -83,7 +83,7 @@ function CreateTokenModal({ onClose, onCreate }: { onClose: () => void; onCreate
   const save = async () => {
     if (!form.name) return;
     setSaving(true);
-    await api.post('/canary/tokens', form);
+    await deceptionAPI.createToken(form);
     setSaving(false);
     onCreate();
     onClose();
@@ -140,10 +140,10 @@ export default function DeceptionPage() {
   const load = async () => {
     setLoading(true);
     const [t, tr, h, ag] = await Promise.all([
-      api.get('/canary/tokens').catch(() => ({ data: [] })),
-      api.get('/canary/trips?limit=50').catch(() => ({ data: [] })),
-      api.get('/honeyports').catch(() => ({ data: [] })),
-      api.get('/agents').catch(() => ({ data: [] })),
+      deceptionAPI.getTokens(),
+      deceptionAPI.getTrips(50),
+      deceptionAPI.getHoneyports(),
+      agentsAPI.getAll().catch(() => ({ data: [] })),
     ]);
     setTokens(t.data || []);
     setTrips(tr.data || []);
@@ -155,23 +155,23 @@ export default function DeceptionPage() {
   useEffect(() => { load(); }, []);
 
   const deleteToken = async (id: number) => {
-    await api.delete(`/canary/tokens/${id}`);
+    await deceptionAPI.deleteToken(id);
     setTokens(prev => prev.filter(t => t.id !== id));
     notify('Token deleted');
   };
   const toggleToken = async (t: CanaryToken) => {
-    await api.patch(`/canary/tokens/${t.id}/toggle`, { is_active: !t.is_active });
+    await deceptionAPI.toggleToken(t.id, !t.is_active);
     setTokens(prev => prev.map(x => x.id === t.id ? { ...x, is_active: !x.is_active } : x));
   };
   const createHoneyport = async () => {
     if (!newPort.port || !newPort.agent_id) return;
-    await api.post('/honeyports', { ...newPort, port: parseInt(newPort.port) });
+    await deceptionAPI.createHoneyport({ ...newPort, port: parseInt(newPort.port) });
     setNewPort({ agent_id: 0, port: '', protocol: 'tcp', description: '', alert_severity: 'high' });
     load();
     notify('Honeyport created');
   };
   const deleteHoneyport = async (id: number) => {
-    await api.delete(`/honeyports/${id}`);
+    await deceptionAPI.deleteHoneyport(id);
     setHoneyports(prev => prev.filter(h => h.id !== id));
     notify('Honeyport removed');
   };

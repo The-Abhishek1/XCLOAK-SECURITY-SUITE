@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import api from '@/lib/api';
-import { RefreshCw, TrendingUp, TrendingDown, Shield, AlertTriangle, Users, Bug, Zap } from 'lucide-react';
+import { riskPostureAPI } from '@/lib/api';
+import { RefreshCw, TrendingUp, TrendingDown, Shield, AlertTriangle, Users, Bug, Zap, BellOff } from 'lucide-react';
 
 interface AssetRisk { asset_id: number; hostname: string; score: number; top_reason: string; criticality: string; }
 interface RiskSnapshot {
   id: number; score: number; vuln_score: number; ueba_score: number;
-  alert_score: number; ioc_score: number; asset_scores: AssetRisk[];
+  alert_score: number; ioc_score: number; snoozed_alert_count: number;
+  asset_scores: AssetRisk[];
   snapshot_at: string;
 }
 
@@ -58,8 +59,8 @@ export default function RiskPosturePage() {
   const load = async () => {
     setLoading(true);
     const [s, h] = await Promise.all([
-      api.get('/risk-posture').catch(() => ({ data: null })),
-      api.get('/risk-posture/history?limit=30').catch(() => ({ data: [] })),
+      riskPostureAPI.get(),
+      riskPostureAPI.history(30),
     ]);
     setSnap(s.data);
     setHistory((h.data || []).reverse()); // oldest first for chart
@@ -70,7 +71,7 @@ export default function RiskPosturePage() {
 
   const refresh = async () => {
     setRefreshing(true);
-    const r = await api.post('/risk-posture/refresh').catch(() => ({ data: null }));
+    const r = await riskPostureAPI.refresh();
     if (r.data) setSnap(r.data);
     setRefreshing(false);
     load();
@@ -137,6 +138,12 @@ export default function RiskPosturePage() {
                       background: color,
                     }} />
                   </div>
+                  {label === 'Open Alerts' && (snap?.snoozed_alert_count ?? 0) > 0 && (
+                    <p className="flex items-center gap-1 text-[10px] mt-1.5" style={{ color: 'var(--text-3)' }}>
+                      <BellOff className="h-3 w-3" />
+                      {snap!.snoozed_alert_count} snoozed alert{snap!.snoozed_alert_count !== 1 ? 's' : ''} excluded from score
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

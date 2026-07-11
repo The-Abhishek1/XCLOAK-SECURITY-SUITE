@@ -43,15 +43,16 @@ type HuntFinding struct {
 }
 
 type RiskPostureSnapshot struct {
-	ID          int         `json:"id"`
-	TenantID    int         `json:"tenant_id"`
-	Score       int         `json:"score"`
-	VulnScore   int         `json:"vuln_score"`
-	UEBAScore   int         `json:"ueba_score"`
-	AlertScore  int         `json:"alert_score"`
-	IOCScore    int         `json:"ioc_score"`
-	AssetScores []AssetRisk `json:"asset_scores"`
-	SnapshotAt  time.Time   `json:"snapshot_at"`
+	ID                int         `json:"id"`
+	TenantID          int         `json:"tenant_id"`
+	Score             int         `json:"score"`
+	VulnScore         int         `json:"vuln_score"`
+	UEBAScore         int         `json:"ueba_score"`
+	AlertScore        int         `json:"alert_score"`
+	IOCScore          int         `json:"ioc_score"`
+	SnoozedAlertCount int         `json:"snoozed_alert_count"` // not stored; computed fresh per request
+	AssetScores       []AssetRisk `json:"asset_scores"`
+	SnapshotAt        time.Time   `json:"snapshot_at"`
 }
 
 type AssetRisk struct {

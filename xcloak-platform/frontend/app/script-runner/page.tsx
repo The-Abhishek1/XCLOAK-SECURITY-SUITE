@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { agentsAPI } from '@/lib/api';
-import api from '@/lib/api';
+import { agentsAPI, scriptAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import {
   Terminal, Play, Loader2, Copy, Check, ChevronDown,
@@ -58,7 +57,7 @@ export default function ScriptRunnerPage() {
 
   useEffect(() => {
     agentsAPI.getAll().then(r => setAgents(r.data || []));
-    api.get('/scripts/templates').then(r => setTemplates(r.data));
+    scriptAPI.getTemplates().then(r => setTemplates(r.data));
   }, []);
 
   useEffect(() => {
@@ -66,9 +65,7 @@ export default function ScriptRunnerPage() {
   }, [tab, historyAgent]);
 
   const loadHistory = async () => {
-    const r = await api.get('/scripts/history', {
-      params: historyAgent ? { agent_id: historyAgent } : {},
-    });
+    const r = await scriptAPI.getHistory(historyAgent ? { agent_id: historyAgent } : {});
     setHistory(r.data || []);
   };
 
@@ -88,7 +85,7 @@ export default function ScriptRunnerPage() {
   const pollResult = useCallback((result: RunResult) => {
     const poll = async () => {
       try {
-        const r = await api.get(`/scripts/result/${result.taskId}`);
+        const r = await scriptAPI.getResult(result.taskId);
         const { status, result: rawOutput } = r.data;
         // result is *string in Go — null when empty, string otherwise
         const output = rawOutput ?? '';
@@ -123,7 +120,7 @@ export default function ScriptRunnerPage() {
     setResults([]);
 
     try {
-      const r = await api.post('/scripts/run', {
+      const r = await scriptAPI.run({
         agent_ids: selectedAgents,
         script,
         label,
