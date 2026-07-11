@@ -99,7 +99,9 @@ api.interceptors.response.use(
       // Clear the JS-readable presence flag (the httpOnly token cookie is
       // cleared by the backend on an explicit logout call).
       document.cookie = 'logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+      const publicPaths = ['/login', '/signup', '/reset-password', '/demo'];
+      const onPublicPage = publicPaths.some(p => window.location.pathname.startsWith(p));
+      if (typeof window !== 'undefined' && !onPublicPage) {
         window.location.href = '/login';
       }
     }
@@ -178,6 +180,7 @@ export const incidentsAPI = {
 
 export const dashboardAPI = {
   getOverview: () => api.get('/dashboard/overview'),
+  getMetrics:  (range: string) => api.get('/dashboard/metrics', { params: { range } }),
 };
 
 export const attackPathAPI = {
@@ -377,14 +380,6 @@ export const mitreAPI = {
 };
 
 
-export const integrationsAPI = {
-  getAll:          ()                                    => api.get('/integrations'),
-  save:            (name: string, enabled: boolean, config: any) => api.put(`/integrations/${name}`, { enabled, config }),
-  test:            (name: string)                        => api.post(`/integrations/${name}/test`, {}),
-  getDeliveries:   ()                                    => api.get('/integrations/deliveries'),
-  getInstallTokens:()                                    => api.get('/integrations/install-tokens'),
-  createInstallToken:(label: string)                     => api.post('/integrations/install-tokens', { label }),
-};
 
 export const correlationAPI = {
   getAll:     ()                               => api.get('/correlation/rules'),
@@ -644,9 +639,6 @@ export const riskPostureAPI = {
   get:     ()  => api.get('/risk-posture').catch(() => ({ data: null })),
   history: (limit = 30) => api.get('/risk-posture/history', { params: { limit } }).catch(() => ({ data: [] })),
   refresh: ()  => api.post('/risk-posture/refresh').catch(() => ({ data: null })),
-};
-export const dashboardAPI = {
-  getMetrics: (range: string) => api.get('/dashboard/metrics', { params: { range } }),
 };
 export const elasticAPI = {
   health:  ()              => api.get('/elastic/health'),
