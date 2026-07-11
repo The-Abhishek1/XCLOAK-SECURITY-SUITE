@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Enterprise Firewall + Deep Packet Inspection — XCloak Blog</title>
+<meta name="description" content="How XCloak's firewall went from a basic rule list to an enterprise policy engine — and how we added multi-layer DPI covering DGA domains, TLS anomalies, HTTP inspection, and protocol tunneling." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/enterprise-firewall-and-dpi.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Enterprise Firewall + Deep Packet Inspection" />
+<meta property="og:description" content="How XCloak's firewall went from a basic rule list to an enterprise policy engine — and how we added multi-layer DPI covering DGA domains, TLS anomalies, HTTP inspection, and protocol tunneling." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/enterprise-firewall-and-dpi.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 1.1rem 1.35rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; }
+  article pre code { background: none; padding: 0; }
+  article ul { list-style: disc; padding-left: 1.5rem; }
+  article ol { list-style: decimal; padding-left: 1.5rem; }
+  article li { margin-bottom: 0.4rem; }
+  article strong { color: #0f172a; font-weight: 600; }
+  article a { color: #2563eb; text-decoration: underline; text-underline-offset: 3px; }
+  .callout { border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1.4rem; font-size: 14px; line-height: 1.6; border: 1px solid; }
+  .callout.note { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+  .callout.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+</style>
+</head>
+<body class="antialiased">
+
+<header class="fixed top-0 inset-x-0 z-50 h-14 border-b border-line bg-white/90 backdrop-blur-md">
+  <div class="max-w-[900px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2 shrink-0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z" fill="#2563eb" fill-opacity="0.1" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M9 9l6 6M15 9l-6 6" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[14px] text-ink">XCloak</span>
+      <span class="text-faint font-mono text-xs">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">All Posts</a>
+      <a href="https://docs.xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Docs</a>
+      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="pt-14">
+  <div class="max-w-[720px] mx-auto px-4 sm:px-6 py-16">
+
+    <div class="mb-10">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-xs font-semibold uppercase tracking-widest text-brand">Detection · Firewall</span>
+        <span class="text-faint">·</span>
+        <time class="text-sm text-faint" datetime="2026-07-11">July 11, 2026</time>
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-bold text-ink leading-tight tracking-tight mb-5">
+        Enterprise Firewall + Deep Packet Inspection
+      </h1>
+      <p class="text-lg text-sub leading-relaxed">
+        Two major upgrades landed together: the firewall went from a basic rule list to a proper enterprise policy engine, and we added four new L7 detection services that inspect traffic at the protocol level. Here's how they work and why we built them the way we did.
+      </p>
+    </div>
+
+    <article>
+
+      <h2>The firewall problem</h2>
+      <p>
+        The original firewall implementation was functional but flat: a list of IP/port rules that the agent applied with iptables. There was no concept of rule direction (in vs. out), no port ranges, no expiry, no per-tenant default policy, no bulk operations. Every enterprise deployment has a different threat model and a different egress policy — a flat list with no metadata doesn't serve that.
+      </p>
+      <p>
+        The upgrade added nine new fields to each rule:
+      </p>
+      <ul>
+        <li><strong>direction</strong> — <code>in</code>, <code>out</code>, or <code>both</code>. The agent now generates separate iptables rules for INPUT vs. OUTPUT (or both). On Windows, it creates separate <code>netsh</code> rules with <code>-in</code>/<code>-out</code> suffixes to avoid naming collisions.</li>
+        <li><strong>port_range</strong> — accepts <code>8000-9000</code>, <code>80,443,8080</code>, or <code>8080</code>. The Linux agent uses <code>-m multiport --dports</code> for comma-separated ranges and a simple <code>--dport</code> for single ports.</li>
+        <li><strong>tags</strong> — a <code>TEXT[]</code> column, surfaced as a tag distribution in the stats API and filter chips in the UI.</li>
+        <li><strong>expires_at</strong> — rules auto-prune via a goroutine reaper that runs every hour.</li>
+        <li><strong>log_enabled / log_prefix</strong> — when set, the agent inserts a LOG rule before the ACCEPT/DROP target, writing matched packets to the kernel log with the prefix.</li>
+        <li><strong>created_by / updated_by / updated_at</strong> — full audit trail for compliance.</li>
+      </ul>
+
+      <h3>Atomic application on Linux</h3>
+      <p>
+        The previous approach applied rules incrementally — one <code>iptables -A</code> call per rule. That means if the sync is interrupted halfway through, the firewall ends up in an inconsistent state. The new primary path builds a complete <code>iptables-restore</code> script in memory and pipes it with <code>--noflush</code>. Either the entire new policy is installed atomically, or nothing changes. An incremental path is retained as a fallback for hosts without <code>iptables-restore</code>.
+      </p>
+
+      <h3>Enterprise policy</h3>
+      <p>
+        Each tenant now has a <code>firewall_policy</code> record with a default action (allow/deny) and an enforcement mode (enforcing/audit/disabled). The dashboard exposes a one-click toggle and a per-rule template picker with 12 built-in starting points: SSH allowlist, HTTPS egress, DNS allow, SMB block, and others. Rules can be bulk-enabled, bulk-disabled, or bulk-deleted in one API call.
+      </p>
+
+      <h3>Conflict detection</h3>
+      <p>
+        The conflict detector was rewritten to understand the new fields. Two rules conflict when their source/destination IP ranges overlap (using <code>net.IPNet.Contains</code> in both directions), their port ranges intersect (interval overlap on the parsed <code>[][2]int</code> pairs), their directions are compatible, and they have opposite actions. The endpoint returns the full conflict pair so the UI can highlight both rules.
+      </p>
+
+      <h2>Deep Packet Inspection</h2>
+      <p>
+        Network detection in XCloak previously worked at the connection level: source IP, destination port, connection count, JA3 hash. We had no visibility into what was actually in the payload — the protocol layer. Four new scheduled detectors fix that.
+      </p>
+
+      <h3>DGA domain scoring</h3>
+      <p>
+        The old DNS detector used a single Shannon entropy threshold. That works well for obviously random domains (konficker-era pure-random DGAs), but it has poor precision on modern families that use word-based or pseudo-dictionary generators, and poor recall on short labels that don't accumulate enough entropy.
+      </p>
+      <p>
+        The new multi-factor scorer runs five independent checks and sums them:
+      </p>
+      <ol>
+        <li><strong>Shannon entropy</strong> (up to 40 points): captures truly random-looking labels.</li>
+        <li><strong>English bigram deviation</strong> (up to 30 points): measures how far the observed bigram distribution deviates from the top-80 English bigrams. Human-readable domains like "google" or "cloudflare" score near zero; algorithmically generated ones score high.</li>
+        <li><strong>Digit ratio</strong> (up to 20 points): DGA families like Necurs mix in many digits; legitimate hostnames rarely exceed 15% digit content.</li>
+        <li><strong>Consonant cluster length</strong> (up to 15 points): run of 4–5 consecutive consonants is a reliable DGA signal.</li>
+        <li><strong>Label length</strong> (up to 15 points): labels ≥18 characters are suspicious; ≥25 characters very suspicious.</li>
+      </ol>
+      <p>
+        On top of the label score, the tenant-level scorer adds: suspicious TLD bonuses (25 TLDs: .tk, .gq, .ml, .cf, .ga, .top, .xyz, .pw, .cc, .ws…), IOC database cross-check, DGA family pattern matching (Conficker: 8–16 chars, &lt;10% digits; Necurs: 12–22 chars; Mirai-variant: 8–12 chars), and NXDOMAIN storm detection (≥8 events to the same SLD in 5 minutes). A score ≥60 fires an alert with MITRE T1568.002.
+      </p>
+      <p>
+        The DNS log pipeline (<code>AnalyzeDNSLogEntry</code>) now delegates to <code>ScoreDomainDGA()</code> instead of the old inline entropy check, so real-time DNS events and the 30-minute background sweep use the same model.
+      </p>
+
+      <h3>TLS anomaly detection</h3>
+      <p>
+        Five checks run every 15 minutes against the <code>network_connect_events</code> DPI fields and endpoint log <code>parsed_fields</code>:
+      </p>
+      <ul>
+        <li><strong>Weak ciphers</strong>: 12 patterns covering NULL, EXPORT, RC4, DES, DES-CBC3, ADH, AECDH, ANON, MD5. NULL and EXPORT ciphers → critical; the rest → high or medium.</li>
+        <li><strong>Deprecated versions</strong>: SSLv3 → critical/90 score; TLS 1.0 → high/75 per RFC 8996; TLS 1.1 → medium/60.</li>
+        <li><strong>Self-signed certificates</strong>: detected via "self-signed"/"selfsigned" string in log messages, or by regex extraction of <code>cert_issuer</code> and <code>cert_subject</code> fields — a match between them indicates self-signed (MITRE T1553.004).</li>
+        <li><strong>TLS on non-standard ports</strong>: TLS traffic outside the known-good set (443, 8443, 993, 995, 465, 636, 5061, 8883). Connections to port 80, 25, 53, or 110 with TLS → high severity — these are typical C2-over-TLS evasion techniques (T1571).</li>
+        <li><strong>SNI/Host mismatch</strong>: when the TLS ClientHello SNI field differs from the HTTP Host header on the same connection (excluding the www./non-www variant), it's domain fronting — routing C2 traffic through a CDN using a legitimate domain as the SNI while the actual C2 hostname appears only in the encrypted HTTP layer (MITRE T1090.004).</li>
+      </ul>
+
+      <h3>HTTP inspection</h3>
+      <p>
+        HTTP is still the most common C2 transport. The HTTP inspection service scans three data sources: the <code>http_user_agent</code> DPI field in NCE, <code>parsed_fields</code> in endpoint logs, and raw log message regex extraction. Detection categories:
+      </p>
+      <ul>
+        <li><strong>Malicious User-Agents</strong>: 35+ signatures. Cobalt Strike and Metasploit beacons have recognizable default UA strings. So do most commodity RATs (njRAT, AsyncRAT, Remcos, Warzone, DCRat). Scanner tools (Nikto, sqlmap, Gobuster, Feroxbuster, Nuclei) use identifiable UA strings that are almost never legitimate in production traffic.</li>
+        <li><strong>Webshell paths</strong>: 20+ known webshell filenames (c99.php, r57.php, b374k.php, alfa.php, etc.) plus common admin panel paths that shouldn't exist on endpoints.</li>
+        <li><strong>Path traversal</strong>: <code>../</code>, <code>..\</code>, and <code>%2e%2e</code> sequences in URL paths.</li>
+        <li><strong>Null byte injection</strong>: <code>%00</code> in paths — used to bypass extension checks in older PHP applications.</li>
+        <li><strong>Suspicious HTTP methods</strong>: PROPFIND, TRACK, TRACE, DEBUG outside WebDAV environments. TRACE and TRACK can be used for cross-site tracing; DEBUG is used for IIS remote debugging.</li>
+        <li><strong>High-entropy User-Agents</strong>: some C2 frameworks generate random-looking UA strings for each beacon. These are caught by the entropy threshold on the <code>entropy_score</code> NCE field.</li>
+      </ul>
+
+      <h3>Protocol anomaly detection</h3>
+      <p>
+        The final piece is protocol-layer anomaly detection — catching protocols running on the wrong port or being abused for tunneling. Highlights:
+      </p>
+      <ul>
+        <li><strong>Protocol-on-wrong-port</strong>: we maintain a map of 9 protocols (SSH, FTP, SMTP, RDP, SMB, DNS, LDAP, NFS, VNC) to their expected ports. SSH on 443 or 80 — the most common C2 evasion — fires high severity. SMB on any port other than 445/139 does the same.</li>
+        <li><strong>DNS tunneling</strong>: two signals — subdomain labels longer than 40 characters (DNS tunnel tools encode data in label content), and more than 200 unique SNI/hostname contacts in 10 minutes (indicating a DGA rotation or exfil campaign using DNS lookups as the channel).</li>
+        <li><strong>ICMP tunneling</strong>: ICMP payloads larger than 1 KB are suspicious; larger than 4 KB is high severity. Standard ping payloads are 32–64 bytes.</li>
+        <li><strong>HTTP CONNECT abuse</strong>: CONNECT requests to RFC 1918 addresses via a proxy — a technique for lateral movement that hides the actual destination behind the proxy.</li>
+        <li><strong>DNS-over-TCP flood</strong>: more than 30 TCP connections to port 53 in 10 minutes. DNS-over-TCP is normal for large responses but high-volume TCP DNS is a reliable tunneling indicator.</li>
+        <li><strong>SMTP on non-standard ports</strong>: SMTP traffic outside 25/465/587. This covers both misconfigured relay abuse and exfil via custom SMTP-like channels.</li>
+      </ul>
+
+      <h2>Passive DPI on the agent</h2>
+      <p>
+        The new DPI fields on <code>network_connect_events</code> are only useful if the agent actually populates them. On Linux, a new <code>passive_dpi_linux.go</code> collector extracts L7 metadata after each eBPF connect event, without a pcap library or kernel module:
+      </p>
+      <ol>
+        <li>Walk <code>/proc/&lt;pid&gt;/fd/</code> to find the file descriptor connected to the target address (matched via the socket inode in <code>/proc/net/tcp6</code> and <code>/proc/net/tcp</code>).</li>
+        <li>Open the socket and peek at the first 512 bytes without consuming them (the data stays in the kernel buffer for the application to read normally).</li>
+        <li>If the first byte is <code>0x16</code> (TLS content type handshake) and byte 5 is <code>0x01</code> (ClientHello), parse the SNI from the SNI extension (type <code>0x0000</code>) and the TLS version from the supported_versions extension (type <code>0x002b</code> for TLS 1.3).</li>
+        <li>If the buffer starts with an HTTP verb, extract method, path, Host header, and User-Agent.</li>
+        <li>Compute a Shannon entropy score on the first 256 bytes and store it as <code>entropy_score</code>.</li>
+      </ol>
+      <p>
+        The entire operation runs in a goroutine with an 80ms deadline. If <code>/proc</code> access is unavailable (non-root, container with restrictive seccomp), the goroutine times out and the event is sent without DPI fields — the rest of the pipeline continues normally.
+      </p>
+      <p>
+        Non-Linux platforms get a no-op stub (<code>passive_dpi_other.go</code>). Full passive DPI on macOS and Windows requires different mechanisms (network extension / WFP driver) which are out of scope for now.
+      </p>
+
+      <h2>The dashboard</h2>
+      <p>
+        A new <strong>Deep Inspection</strong> page under the Network group surfaces all DPI findings with four summary stat cards, a breakdown pill row by finding type and severity, a full filterable table (by type, severity, alert-fired status, or free-text search), score bars (0–100), and an expand-to-details row that shows the raw JSON context for each finding. MITRE technique codes link directly to att.ck.mitre.org.
+      </p>
+      <p>
+        The firewall page received a parallel upgrade: direction badge (in/out/both with color coding), bulk select with a floating toolbar, a template picker modal with live search across 12 built-in templates, a default policy toggle, JSON import/export, per-rule expiry countdown, and tags display.
+      </p>
+
+      <h2>What's next</h2>
+      <p>
+        The DPI field set on <code>network_connect_events</code> is designed to be extended. The natural next step is JA3S (server-side fingerprint from the ServerHello) correlation against the existing JA3 detector — once we have both sides of the TLS handshake, we can flag mismatches between the client fingerprint and the server certificate characteristics. That, combined with the SNI/Host mismatch detector, gives much stronger domain fronting coverage.
+      </p>
+
+      <hr class="my-10 border-line" />
+      <p class="text-sm text-sub">
+        <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" class="text-brand hover:underline">GitHub</a>
+        ·
+        <a href="https://docs.xcloak.tech" class="text-brand hover:underline">Docs</a>
+        ·
+        <a href="https://suite.xcloak.tech/demo" class="text-brand hover:underline">Live Demo</a>
+      </p>
+
+    </article>
+  </div>
+</main>
+
+</body>
+</html>

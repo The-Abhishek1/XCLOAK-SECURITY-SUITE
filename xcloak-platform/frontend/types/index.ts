@@ -13,6 +13,24 @@ export interface Agent {
   uptime_seconds?: number;
   mem_alloc_mb?: number;
   goroutines?: number;
+  // Linux desktop metrics
+  load_avg_1m?: number;
+  load_avg_5m?: number;
+  load_avg_15m?: number;
+  logged_in_users?: number;
+  open_fds?: number;
+  // Mobile (Android) posture metrics
+  battery_level?: number;
+  battery_charging?: boolean;
+  network_type?: string;
+  is_rooted?: boolean;
+  developer_mode?: boolean;
+  storage_free_gb?: number;
+  storage_total_gb?: number;
+  vpn_active?: boolean;
+  security_patch?: string;
+  // Server-computed; populated in list endpoint
+  open_alert_count?: number;
 }
 
 export interface AgentSummary {
@@ -43,6 +61,7 @@ export interface Alert {
   status?: 'open' | 'acknowledged' | 'resolved';
   acknowledged_by?: string;
   note?: string;
+  suppressed_until?: string | null;
   created_at: string;
 }
 
@@ -179,9 +198,18 @@ export interface FirewallRule {
   destination_ip: string;
   protocol: string;
   port: number;
+  port_range: string;
+  direction: 'in' | 'out' | 'both';
+  log_enabled: boolean;
+  log_prefix: string;
   action: string;
   enabled: boolean;
   priority: number;
+  tags: string[];
+  expires_at: string | null;
+  created_by: string;
+  updated_by: string;
+  updated_at: string;
   hit_count: number;
   synced_at: string | null;
 }
@@ -207,6 +235,8 @@ export interface FirewallStats {
   top_rules: Array<{ id: number; name: string; group_name: string; action: string; hit_count: number }>;
   total_hits_24h: number;
   per_agent: Array<{ agent_id: number; hostname: string; hits: number }>;
+  tag_distribution: Array<{ tag: string; count: number }>;
+  expiring_soon: number;
 }
 
 export interface Playbook {
@@ -294,6 +324,7 @@ export interface AttackPathNode {
   kev_count: number;
   exposed: boolean;
   compromise_cost: number;
+  open_alert_count: number;
 }
 
 export interface AttackPathEdge {
@@ -403,6 +434,7 @@ export interface NetworkMapGraph {
 
 export interface TimelineEvent {
   id?: number;
+  agent_id?: number;
   event_type: string;
   message: string;
   severity?: 'critical' | 'high' | 'medium' | 'low' | string;
@@ -420,6 +452,8 @@ export interface DashboardOverview {
   users: number;
   alerts: number;
   critical_alerts: number;
+  open_alerts: number;
+  snoozed_alerts: number;
   incidents: number;
   critical_incidents: number;
 }
@@ -698,6 +732,7 @@ export interface UEBAEvent {
   description: string;
   source_ip: string;
   agent_id?: number;
+  raw_log?: string;
   detected_at: string;
 }
 
@@ -762,4 +797,50 @@ export interface UserProfile {
   tenant_slug: string;
   last_login: string | null;
   created_at: string | null;
+}
+
+export interface FIMAlert {
+  id: number;
+  agent_id: number;
+  file_path: string;
+  /** modified | permission_change | deleted | created */
+  change_type: string;
+  old_hash: string;
+  new_hash: string;
+  old_mode?: string;
+  new_mode?: string;
+  old_uid?: number;
+  new_uid?: number;
+  created_at: string;
+}
+
+export interface FIMBaseline {
+  id: number;
+  agent_id: number;
+  file_path: string;
+  sha256_hash: string;
+  file_size: number;
+  file_mode?: string;
+  file_uid?: number;
+  file_gid?: number;
+  mod_time?: string | null;
+  created_at: string;
+}
+
+export interface Connection {
+  id: number;
+  agent_id: number;
+  protocol: string;
+  local_address: string;
+  remote_address: string;
+  state: string;
+  collected_at: string;
+  /** Process that owns this socket — populated when agent runs on Linux. */
+  pid?: number | null;
+  process_name?: string;
+  process_path?: string;
+  /** GeoIP enrichment applied at ingest. */
+  country?: string;
+  country_code?: string;
+  is_proxy?: boolean;
 }

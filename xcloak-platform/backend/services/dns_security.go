@@ -179,13 +179,10 @@ func AnalyzeDNSLogEntry(agentID, tenantID int, domain string) {
 
 	var findings []string
 
-	// 1. DGA detection via Shannon entropy of the leftmost subdomain label
-	label := parts[0]
-	if len(label) >= 10 {
-		entropy := shannonEntropy(label)
-		if entropy > 3.8 {
-			findings = append(findings, fmt.Sprintf("high_entropy_domain(%.2f)", entropy))
-		}
+	// 1. DGA detection via multi-factor scorer (delegates to dga_detector.go)
+	dgaS := ScoreDomainDGA(agentID, tenantID, domain)
+	if dgaS >= 50 {
+		findings = append(findings, fmt.Sprintf("dga_score(%d)", dgaS))
 	}
 
 	// 2. Subdomain tunneling: excessively long subdomain chain
@@ -219,8 +216,11 @@ func AnalyzeDNSLogEntry(agentID, tenantID int, domain string) {
 	score := 0
 	for _, f := range findings {
 		switch {
-		case strings.HasPrefix(f, "high_entropy"):
-			score += 50
+		case strings.HasPrefix(f, "dga_score("):
+			// parse score from "dga_score(75)" for proportional contribution
+			var dS int
+			fmt.Sscanf(f, "dga_score(%d)", &dS)
+			score += dS / 2
 		case f == "long_subdomain_chain":
 			score += 40
 		case f == "ioc_match":

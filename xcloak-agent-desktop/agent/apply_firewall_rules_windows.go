@@ -6,22 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"xcloak-agent-desktop/models"
 )
 
 // ApplyFirewallRules on Windows translates XCloak rules into Windows Defender
-// Firewall rules using the `netsh advfirewall firewall` CLI.
-//
-// Rules are namespaced with "XCloak-<id>-<name>" so they can be cleanly
-// flushed on a "replace" sync without touching any pre-existing host rules.
-//
-// Requires elevated privileges (the agent must run as Administrator or
-// LocalSystem). Returns an error if netsh is not available.
+// Firewall rules using `netsh advfirewall firewall`.
+// Rules are namespaced with "XCloak-<id>-<name>" for clean replace-mode flush.
+// Requires elevated privileges (Administrator or LocalSystem).
 func ApplyFirewallRules(task models.AgentTask) (string, error) {
-
 	if _, err := exec.LookPath("netsh"); err != nil {
 		return "", fmt.Errorf("netsh not found — is this running as Administrator?")
 	}
@@ -38,26 +32,23 @@ func ApplyFirewallRules(task models.AgentTask) (string, error) {
 	var applied, skipped int
 	var log []string
 
-	// ── Replace mode: delete all existing XCloak rules ───────────
 	if payload.Mode == "replace" {
 		deleteXCloakRules()
 		log = append(log, fmt.Sprintf("[replace] flushed XCloak rules (sync_id=%d)", payload.SyncID))
 	}
 
-	// ── Always allow management IP ────────────────────────────────
 	if payload.AllowManage != "" {
 		addAllowRule(
 			fmt.Sprintf("XCloak-manage-in-%s", sanitizeRuleName(payload.AllowManage)),
-			"in", payload.AllowManage, "", "", 0,
+			"in", payload.AllowManage, "", "", "",
 		)
 		addAllowRule(
 			fmt.Sprintf("XCloak-manage-out-%s", sanitizeRuleName(payload.AllowManage)),
-			"out", "", payload.AllowManage, "", 0,
+			"out", "", payload.AllowManage, "", "",
 		)
 		log = append(log, fmt.Sprintf("allowed manage IP %s (in+out)", payload.AllowManage))
 	}
 
-	// ── Apply rules ───────────────────────────────────────────────
 	for _, rule := range payload.Rules {
 		errs := applyWDFRule(rule)
 		if errs != nil {
@@ -73,9 +64,7 @@ func ApplyFirewallRules(task models.AgentTask) (string, error) {
 		applied, skipped, payload.SyncID, strings.Join(log, "\n")), nil
 }
 
-// applyWDFRule creates one or two netsh rules for a SyncRule.
-// Windows Defender Firewall requires separate rules for inbound and outbound,
-// so we create both for rules without a direction specified.
+// applyWDFRule creates one or two netsh rules for a SyncRule based on direction.
 func applyWDFRule(r SyncRule) error {
 	action := "allow"
 	if r.Action == "deny" || r.Action == "drop" || r.Action == "reject" {
@@ -89,15 +78,17 @@ func applyWDFRule(r SyncRule) error {
 		proto = "any"
 	}
 
-	portStr := ""
-	if r.Port > 0 && (proto == "tcp" || proto == "udp") {
-		portStr = strconv.Itoa(r.Port)
+	portSpec := effectivePortSpec(r)
+	// netsh uses comma-separated ports; ranges use "-" (same format)
+	portStr := portSpec
+
+	dir := strings.ToLower(r.Direction)
+	if dir == "" {
+		dir = "both"
 	}
 
-	// Build the base netsh args shared by inbound and outbound rules.
 	base := []string{
 		"advfirewall", "firewall", "add", "rule",
-		"name=" + ruleName,
 		"protocol=" + proto,
 		"action=" + action,
 		"enable=yes",
@@ -108,39 +99,51 @@ func applyWDFRule(r SyncRule) error {
 		base = append(base, "localport="+portStr)
 	}
 
-	// Inbound rule (remoteip = source, localip = destination)
-	inArgs := append([]string{"netsh"}, base...)
-	inArgs = append(inArgs, "dir=in")
-	if r.SourceIP != "" && r.SourceIP != "any" && r.SourceIP != "0.0.0.0/0" {
-		inArgs = append(inArgs, "remoteip="+r.SourceIP)
-	}
-	if r.DestinationIP != "" && r.DestinationIP != "any" && r.DestinationIP != "0.0.0.0/0" {
-		inArgs = append(inArgs, "localip="+r.DestinationIP)
-	}
-
-	if out, err := exec.Command(inArgs[0], inArgs[1:]...).CombinedOutput(); err != nil {
-		return fmt.Errorf("netsh in: %s — %s", err, strings.TrimSpace(string(out)))
-	}
-
-	// Outbound rule (remoteip = destination, localip = source)
-	outArgs := append([]string{"netsh"}, base...)
-	outArgs = append(outArgs, "dir=out")
-	if r.DestinationIP != "" && r.DestinationIP != "any" && r.DestinationIP != "0.0.0.0/0" {
-		outArgs = append(outArgs, "remoteip="+r.DestinationIP)
-	}
-	if r.SourceIP != "" && r.SourceIP != "any" && r.SourceIP != "0.0.0.0/0" {
-		outArgs = append(outArgs, "localip="+r.SourceIP)
+	if dir == "in" || dir == "both" {
+		inName := ruleName
+		if dir == "both" {
+			inName = ruleName + "-in"
+		}
+		inArgs := append([]string{"netsh"}, base...)
+		inArgs = append(inArgs, "name="+inName, "dir=in")
+		if r.SourceIP != "" && !isWildcardWin(r.SourceIP) {
+			inArgs = append(inArgs, "remoteip="+r.SourceIP)
+		}
+		if r.DestinationIP != "" && !isWildcardWin(r.DestinationIP) {
+			inArgs = append(inArgs, "localip="+r.DestinationIP)
+		}
+		if out, err := exec.Command(inArgs[0], inArgs[1:]...).CombinedOutput(); err != nil {
+			return fmt.Errorf("netsh in: %s — %s", err, strings.TrimSpace(string(out)))
+		}
 	}
 
-	if out, err := exec.Command(outArgs[0], outArgs[1:]...).CombinedOutput(); err != nil {
-		return fmt.Errorf("netsh out: %s — %s", err, strings.TrimSpace(string(out)))
+	if dir == "out" || dir == "both" {
+		outName := ruleName
+		if dir == "both" {
+			outName = ruleName + "-out"
+		}
+		outArgs := append([]string{"netsh"}, base...)
+		outArgs = append(outArgs, "name="+outName, "dir=out")
+		if r.DestinationIP != "" && !isWildcardWin(r.DestinationIP) {
+			outArgs = append(outArgs, "remoteip="+r.DestinationIP)
+		}
+		if r.SourceIP != "" && !isWildcardWin(r.SourceIP) {
+			outArgs = append(outArgs, "localip="+r.SourceIP)
+		}
+		if out, err := exec.Command(outArgs[0], outArgs[1:]...).CombinedOutput(); err != nil {
+			return fmt.Errorf("netsh out: %s — %s", err, strings.TrimSpace(string(out)))
+		}
 	}
 
 	return nil
 }
 
+func isWildcardWin(ip string) bool {
+	return ip == "" || ip == "any" || ip == "0.0.0.0/0" || ip == "::/0"
+}
+
 // addAllowRule creates a single named allow rule for the management IP.
-func addAllowRule(name, dir, remoteIP, localIP, proto string, port int) {
+func addAllowRule(name, dir, remoteIP, localIP, proto, port string) {
 	args := []string{
 		"netsh", "advfirewall", "firewall", "add", "rule",
 		"name=" + name,
@@ -159,14 +162,13 @@ func addAllowRule(name, dir, remoteIP, localIP, proto string, port int) {
 	if localIP != "" {
 		args = append(args, "localip="+localIP)
 	}
-	if port > 0 {
-		args = append(args, "localport="+strconv.Itoa(port))
+	if port != "" {
+		args = append(args, "localport="+port)
 	}
 	exec.Command(args[0], args[1:]...).Run()
 }
 
 // deleteXCloakRules removes all rules whose name starts with "XCloak-".
-// Uses netsh with a name filter; runs twice to catch both in and out rules.
 func deleteXCloakRules() {
 	exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=XCloak-").Run()
 }

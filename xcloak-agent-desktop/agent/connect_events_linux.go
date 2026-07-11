@@ -55,7 +55,7 @@ func connectEventReadLoop(collector *ebpf.Collector, agentID int, out chan<- mod
 			close(out)
 			return
 		}
-		out <- models.ConnectEvent{
+		ce := models.ConnectEvent{
 			AgentID:       agentID,
 			PID:           int(ev.PID),
 			Comm:          ev.Comm,
@@ -66,6 +66,16 @@ func connectEventReadLoop(collector *ebpf.Collector, agentID int, out chan<- mod
 			State:         "connect",
 			EventTS:       int64(ev.TimestampNS),
 		}
+		// Passive DPI: best-effort L7 enrichment (SNI, HTTP headers, TLS version).
+		// Runs in a goroutine with a short deadline so slow /proc reads never
+		// stall the eBPF ring buffer drain.
+		enriched := make(chan models.ConnectEvent, 1)
+		go func() { enriched <- EnrichConnectEventDPI(ce) }()
+		select {
+		case ce = <-enriched:
+		case <-time.After(80 * time.Millisecond):
+		}
+		out <- ce
 	}
 }
 

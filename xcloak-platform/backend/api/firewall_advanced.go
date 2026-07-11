@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/repositories"
-	"xcloak-platform/services"
 )
 
 // GetFirewallGroups — GET /api/firewall/groups
@@ -32,15 +31,6 @@ func GetFirewallStats(c *gin.Context) {
 	c.JSON(200, stats)
 }
 
-// GetFirewallConflicts — GET /api/firewall/conflicts
-func GetFirewallConflicts(c *gin.Context) {
-	conflicts, err := services.DetectFirewallConflicts(tenantIDFromContext(c))
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(200, conflicts)
-}
 
 // ReceiveFirewallHits — POST /api/agents/firewall-hits
 // Agents submit per-rule packet counters periodically.

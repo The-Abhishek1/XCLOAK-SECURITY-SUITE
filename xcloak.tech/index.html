@@ -333,7 +333,7 @@
         <h3 class="font-semibold text-ink mb-2.5">Detect</h3>
         <ul class="text-sm text-sub space-y-1.5 leading-relaxed">
           <li>43 production-ready Sigma rules</li>
-          <li>12 behavioral detection engines (MITRE ATT&amp;CK mapped)</li>
+          <li>17 behavioral detection engines incl. DPI (MITRE ATT&amp;CK mapped)</li>
           <li>YARA malware scanning + JA3/TLS fingerprinting</li>
           <li>IOC matching via Kafka async pipeline</li>
         </ul>
@@ -586,7 +586,7 @@
         <div class="pt-6 mt-6 border-t border-line">
           <div class="grid sm:grid-cols-2 gap-3 mb-4">
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Rule engine</p><p class="text-xs text-sub mt-1">43 detection rules, checked against every log</p></div>
-            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Behavioral detectors</p><p class="text-xs text-sub mt-1">24 engines watching for attack patterns over time</p></div>
+            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Behavioral detectors</p><p class="text-xs text-sub mt-1">29 engines watching for attack patterns over time</p></div>
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Malware scanning</p><p class="text-xs text-sub mt-1">Signature matching on the endpoint itself</p></div>
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Threat intel feeds</p><p class="text-xs text-sub mt-1">Known-bad IPs, domains, and file hashes</p></div>
           </div>
@@ -751,7 +751,7 @@ cp .env.example .env &amp;&amp; go run ./main.go
     <div class="reveal max-w-2xl mb-14">
       <span class="text-xs font-mono text-brand">DETECTION ENGINE</span>
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">Detection you can read.</h2>
-      <p class="text-sub leading-relaxed">12 behavioral detection engines + 43 Sigma rules, mapped to real attacker techniques (MITRE ATT&amp;CK) — not a black box.</p>
+      <p class="text-sub leading-relaxed">17 behavioral detection engines (incl. DGA domain scoring, TLS anomaly detection, HTTP inspection, and protocol anomaly detection) + 43 Sigma rules, all mapped to MITRE ATT&amp;CK — not a black box.</p>
     </div>
 
     <div class="grid lg:grid-cols-2 gap-5 mb-8">

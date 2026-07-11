@@ -71,7 +71,7 @@
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Backend API | ✅ Production-grade | Go/Gin, 56 migrations, RLS, httpOnly cookies, refresh rotation |
-| Detection engines | ✅ Working | 12 behavioral detectors, 43 Sigma rules seeded, YARA, IOC matching |
+| Detection engines | ✅ Working | 17 behavioral detectors (incl. DPI: DGA, TLS anomaly, HTTP inspection, protocol anomaly), 43 Sigma rules, YARA, IOC |
 | Go agent (Linux) | ✅ Production-grade | 15 autonomous collectors, slog, eBPF (optional) |
 | Go agent (Windows) | ✅ Working | Same collectors, Windows-native telemetry |
 | Mobile agent (Android) | ✅ Working | Posture, MDM, 10 commands, retry backoff, 53-section admin console |
@@ -202,7 +202,10 @@ Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/
 | **IOC Engine** | IP, domain, hash, URL, email; async Kafka matching off the request path |
 | **Threat Intel** | STIX/TAXII, MISP, AlienVault OTX, flat-file feeds |
 | **C2 Beacon** | CV-based interval analysis on periodic outbound connections (T1071, T1571) |
-| **DNS Security** | DGA/entropy, DNS tunneling, flood detection (T1568.002, T1071.004) |
+| **DNS Security** | Multi-factor DGA scoring (entropy + bigrams + TLD + family patterns + NXDOMAIN storm); DNS tunneling; flood detection (T1568.002, T1071.004) |
+| **TLS Anomaly** | Weak ciphers (NULL/RC4/EXPORT/DES); deprecated TLS (SSLv3/1.0/1.1); self-signed certs; TLS on wrong ports; SNI/Host domain fronting (T1040, T1090.004, T1571) |
+| **HTTP Inspection** | 35+ malicious UA signatures; webshell path detection; path traversal; suspicious methods; high-entropy payloads (T1071.001, T1505.003, T1595) |
+| **Protocol Anomaly** | Protocol-on-wrong-port (SSH/SMB/RDP/FTP); DNS tunnel (long labels + TCP volume); ICMP tunnel; HTTP CONNECT lateral movement; SMTP exfil (T1571, T1095, T1572) |
 | **Port Scan / LM** | Vertical, horizontal, SYN sweep; SMB spray (T1046, T1021.002) |
 | **Exfiltration** | Volume flood, cloud storage drain (S3/Drive/OneDrive/Dropbox/Box/Mega) (T1048, T1567.002) |
 | **TLS/JA3** | 13+ known C2 tool fingerprints (Cobalt Strike, Sliver, Havoc, BruteRatel, etc.) (T1071.001) |
@@ -212,6 +215,7 @@ Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/
 | **LotL** | Office→PowerShell chains; 10 LOLBins; encoded PowerShell detection (T1059, T1218, T1027) |
 | **Impossible Travel** | Haversine distance >900 km/h (T1078) |
 | **UEBA** | Behavioral baseline, risk scoring across auth + file access + network |
+| **Enterprise Firewall** | Direction-aware rules (in/out/both), port ranges, tags, expiry, per-tenant policy, 12 built-in templates, CIDR conflict detection, atomic agent sync |
 
 ### Go Agent — Autonomous Collectors
 
@@ -232,6 +236,7 @@ Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/
 | SUID/SGID binary scan | ✅ | — | 6 h |
 | Disk usage | ✅ /proc/mounts | ✅ WMIC/Get-PSDrive | 5 min |
 | eBPF TCP events | ✅ (kernel 5.8+) | — | real-time |
+| Passive DPI | ✅ SNI + HTTP headers from `/proc/<pid>/fd` | — | per-event |
 | Firewall stats | ✅ iptables | — | 60 s |
 
 **Heartbeat:** load_avg_1m/5m/15m, logged_in_users, open_fds (Linux) · cpu_load_pct, logged_in_users (Windows)

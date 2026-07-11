@@ -1,22 +1,41 @@
 package repositories
 
 import (
+	"time"
+
+	"github.com/lib/pq"
+
 	"xcloak-platform/database"
 	"xcloak-platform/models"
 )
 
 const firewallCols = `id, name, description, group_name,
        source_ip, destination_ip, protocol, port,
-       action, enabled, COALESCE(priority, 100), hit_count, synced_at`
+       COALESCE(port_range,''), COALESCE(direction,'both'),
+       COALESCE(log_enabled,false), COALESCE(log_prefix,''),
+       action, enabled, COALESCE(priority, 100), hit_count,
+       COALESCE(tags,'{}'), expires_at,
+       COALESCE(created_by,'system'), COALESCE(updated_by,'system'),
+       COALESCE(updated_at,NOW()), synced_at`
 
 func scanRule(dest *models.FirewallRule, scanner interface {
 	Scan(...interface{}) error
 }) error {
-	return scanner.Scan(
+	var tags pq.StringArray
+	err := scanner.Scan(
 		&dest.ID, &dest.Name, &dest.Description, &dest.GroupName,
 		&dest.SourceIP, &dest.DestinationIP, &dest.Protocol, &dest.Port,
-		&dest.Action, &dest.Enabled, &dest.Priority, &dest.HitCount, &dest.SyncedAt,
+		&dest.PortRange, &dest.Direction,
+		&dest.LogEnabled, &dest.LogPrefix,
+		&dest.Action, &dest.Enabled, &dest.Priority, &dest.HitCount,
+		&tags, &dest.ExpiresAt,
+		&dest.CreatedBy, &dest.UpdatedBy, &dest.UpdatedAt,
+		&dest.SyncedAt,
 	)
+	if err == nil {
+		dest.Tags = []string(tags)
+	}
+	return err
 }
 
 func CreateRule(rule models.FirewallRule, tenantID int) error {
@@ -26,16 +45,27 @@ func CreateRule(rule models.FirewallRule, tenantID int) error {
 	if rule.GroupName == "" {
 		rule.GroupName = "default"
 	}
+	if rule.Direction == "" {
+		rule.Direction = "both"
+	}
+	if rule.CreatedBy == "" {
+		rule.CreatedBy = "system"
+	}
+	tags := pq.StringArray(rule.Tags)
 	_, err := database.DB.Exec(`
 		INSERT INTO firewall_rules
 		(name, description, group_name, source_ip, destination_ip,
-		 protocol, port, action, enabled, priority, tenant_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		 protocol, port, port_range, direction, log_enabled, log_prefix,
+		 action, enabled, priority, tags, expires_at, created_by, updated_by, tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 	`,
 		rule.Name, rule.Description, rule.GroupName,
 		rule.SourceIP, rule.DestinationIP,
-		rule.Protocol, rule.Port, rule.Action,
-		rule.Enabled, rule.Priority, tenantID,
+		rule.Protocol, rule.Port, rule.PortRange, rule.Direction,
+		rule.LogEnabled, rule.LogPrefix,
+		rule.Action, rule.Enabled, rule.Priority,
+		tags, rule.ExpiresAt, rule.CreatedBy, rule.CreatedBy,
+		tenantID,
 	)
 	return err
 }
@@ -50,15 +80,11 @@ func GetRulesForGroup(group string, tenantID int) ([]models.FirewallRule, error)
 
 func GetRuleByID(id string, tenantID int) (*models.FirewallRule, error) {
 	var r models.FirewallRule
-	err := database.DB.QueryRow(
+	row := database.DB.QueryRow(
 		`SELECT `+firewallCols+` FROM firewall_rules WHERE id=$1 AND tenant_id=$2`,
 		id, tenantID,
-	).Scan(
-		&r.ID, &r.Name, &r.Description, &r.GroupName,
-		&r.SourceIP, &r.DestinationIP, &r.Protocol, &r.Port,
-		&r.Action, &r.Enabled, &r.Priority, &r.HitCount, &r.SyncedAt,
 	)
-	if err != nil {
+	if err := scanRule(&r, row); err != nil {
 		return nil, err
 	}
 	return &r, nil
@@ -71,18 +97,30 @@ func UpdateRule(id string, rule models.FirewallRule, tenantID int) (int64, error
 	if rule.GroupName == "" {
 		rule.GroupName = "default"
 	}
+	if rule.Direction == "" {
+		rule.Direction = "both"
+	}
+	if rule.UpdatedBy == "" {
+		rule.UpdatedBy = "system"
+	}
+	tags := pq.StringArray(rule.Tags)
 	result, err := database.DB.Exec(`
 		UPDATE firewall_rules
 		SET name=$1, description=$2, group_name=$3,
 		    source_ip=$4, destination_ip=$5,
-		    protocol=$6, port=$7, action=$8,
-		    enabled=$9, priority=$10
-		WHERE id=$11 AND tenant_id=$12
+		    protocol=$6, port=$7, port_range=$8,
+		    direction=$9, log_enabled=$10, log_prefix=$11,
+		    action=$12, enabled=$13, priority=$14,
+		    tags=$15, expires_at=$16, updated_by=$17, updated_at=NOW()
+		WHERE id=$18 AND tenant_id=$19
 	`,
 		rule.Name, rule.Description, rule.GroupName,
 		rule.SourceIP, rule.DestinationIP,
-		rule.Protocol, rule.Port, rule.Action,
-		rule.Enabled, rule.Priority, id, tenantID,
+		rule.Protocol, rule.Port, rule.PortRange,
+		rule.Direction, rule.LogEnabled, rule.LogPrefix,
+		rule.Action, rule.Enabled, rule.Priority,
+		tags, rule.ExpiresAt, rule.UpdatedBy,
+		id, tenantID,
 	)
 	if err != nil {
 		return 0, err
@@ -98,6 +136,85 @@ func DeleteRule(id string, tenantID int) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+// BulkAction performs enable/disable/delete on a list of rule IDs for a tenant.
+// Returns the number of rows affected.
+func BulkAction(ids []int, action string, tenantID int) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	pqIDs := pq.Array(ids)
+	var result interface {
+		RowsAffected() (int64, error)
+	}
+	var err error
+	switch action {
+	case "enable":
+		result, err = database.DB.Exec(
+			`UPDATE firewall_rules SET enabled=true, updated_at=NOW() WHERE id=ANY($1) AND tenant_id=$2`,
+			pqIDs, tenantID,
+		)
+	case "disable":
+		result, err = database.DB.Exec(
+			`UPDATE firewall_rules SET enabled=false, updated_at=NOW() WHERE id=ANY($1) AND tenant_id=$2`,
+			pqIDs, tenantID,
+		)
+	case "delete":
+		result, err = database.DB.Exec(
+			`DELETE FROM firewall_rules WHERE id=ANY($1) AND tenant_id=$2`,
+			pqIDs, tenantID,
+		)
+	default:
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// PruneExpiredRules deletes rules whose expires_at is in the past for the tenant.
+func PruneExpiredRules(tenantID int) (int64, error) {
+	result, err := database.DB.Exec(
+		`DELETE FROM firewall_rules WHERE tenant_id=$1 AND expires_at IS NOT NULL AND expires_at < NOW()`,
+		tenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// GetExpiredRules lists rules that have expired but not yet been pruned.
+func GetExpiredRules(tenantID int) ([]models.FirewallRule, error) {
+	return queryRules(
+		`WHERE tenant_id=$1 AND expires_at IS NOT NULL AND expires_at < NOW() ORDER BY expires_at`,
+		tenantID,
+	)
+}
+
+// GetFirewallPolicy returns the default action for a tenant ("allow" or "deny").
+func GetFirewallPolicy(tenantID int) (string, error) {
+	var action string
+	err := database.DB.QueryRow(
+		`SELECT default_action FROM firewall_policy WHERE tenant_id=$1`, tenantID,
+	).Scan(&action)
+	if err != nil {
+		return "allow", nil // default when no row exists
+	}
+	return action, nil
+}
+
+// SetFirewallPolicy upserts the default action for a tenant.
+func SetFirewallPolicy(tenantID int, defaultAction, updatedBy string) error {
+	_, err := database.DB.Exec(`
+		INSERT INTO firewall_policy (tenant_id, default_action, updated_by, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (tenant_id) DO UPDATE
+		    SET default_action=$2, updated_by=$3, updated_at=NOW()
+	`, tenantID, defaultAction, updatedBy)
+	return err
 }
 
 // GetFirewallGroups returns distinct groups with rule/enabled counts.
@@ -137,11 +254,9 @@ type FirewallHit struct {
 }
 
 // RecordFirewallHits inserts per-rule hit reports and bumps the cumulative
-// hit_count on firewall_rules. Only updates rules that belong to tenantID's
-// agents (via the agent_id → tenant_id join) — prevents cross-tenant poisoning.
+// hit_count on firewall_rules.
 func RecordFirewallHits(agentID, tenantID int, hits []FirewallHit) error {
 	for _, h := range hits {
-		// Verify the rule belongs to this tenant before updating.
 		var rTenant int
 		err := database.DB.QueryRow(
 			`SELECT tenant_id FROM firewall_rules WHERE id=$1`, h.RuleID,
@@ -155,7 +270,6 @@ func RecordFirewallHits(agentID, tenantID int, hits []FirewallHit) error {
 			VALUES ($1,$2,$3,$4,NOW())
 		`, h.RuleID, agentID, tenantID, h.Hits)
 
-		// Update cumulative counter (add the delta).
 		database.DB.Exec(`
 			UPDATE firewall_rules SET hit_count = hit_count + $1 WHERE id=$2 AND tenant_id=$3
 		`, h.Hits, h.RuleID, tenantID)
@@ -167,7 +281,6 @@ func RecordFirewallHits(agentID, tenantID int, hits []FirewallHit) error {
 func GetFirewallStats(tenantID int) (map[string]interface{}, error) {
 	stats := map[string]interface{}{}
 
-	// Top 10 rules by hit_count.
 	rows, err := database.DB.Query(`
 		SELECT id, name, group_name, action, hit_count
 		FROM firewall_rules WHERE tenant_id=$1
@@ -191,7 +304,6 @@ func GetFirewallStats(tenantID int) (map[string]interface{}, error) {
 	rows.Close()
 	stats["top_rules"] = topRules
 
-	// Total hits last 24h from the hits table.
 	var totalHits int64
 	database.DB.QueryRow(`
 		SELECT COALESCE(SUM(hits),0) FROM firewall_rule_hits
@@ -199,7 +311,6 @@ func GetFirewallStats(tenantID int) (map[string]interface{}, error) {
 	`, tenantID).Scan(&totalHits)
 	stats["total_hits_24h"] = totalHits
 
-	// Per-agent hit totals (24h).
 	rows2, err := database.DB.Query(`
 		SELECT h.agent_id, a.hostname, COALESCE(SUM(h.hits),0)
 		FROM firewall_rule_hits h
@@ -222,6 +333,33 @@ func GetFirewallStats(tenantID int) (map[string]interface{}, error) {
 		rows2.Close()
 		stats["per_agent"] = perAgent
 	}
+
+	// Tag distribution
+	tagRows, err := database.DB.Query(`
+		SELECT unnest(tags) AS tag, COUNT(*) FROM firewall_rules
+		WHERE tenant_id=$1 GROUP BY tag ORDER BY 2 DESC LIMIT 20
+	`, tenantID)
+	if err == nil {
+		var tagDist []map[string]interface{}
+		for tagRows.Next() {
+			var tag string
+			var cnt int
+			if tagRows.Scan(&tag, &cnt) == nil {
+				tagDist = append(tagDist, map[string]interface{}{"tag": tag, "count": cnt})
+			}
+		}
+		tagRows.Close()
+		stats["tag_distribution"] = tagDist
+	}
+
+	// Expiring soon (next 7 days)
+	var expiringSoon int
+	database.DB.QueryRow(`
+		SELECT COUNT(*) FROM firewall_rules
+		WHERE tenant_id=$1 AND expires_at IS NOT NULL
+		  AND expires_at > NOW() AND expires_at < NOW() + INTERVAL '7 days'
+	`, tenantID).Scan(&expiringSoon)
+	stats["expiring_soon"] = expiringSoon
 
 	return stats, nil
 }
@@ -250,13 +388,35 @@ func scanRules(rows interface {
 	var rules []models.FirewallRule
 	for rows.Next() {
 		var r models.FirewallRule
-		if err := rows.Scan(
+		var tags pq.StringArray
+		err := rows.Scan(
 			&r.ID, &r.Name, &r.Description, &r.GroupName,
 			&r.SourceIP, &r.DestinationIP, &r.Protocol, &r.Port,
-			&r.Action, &r.Enabled, &r.Priority, &r.HitCount, &r.SyncedAt,
-		); err == nil {
+			&r.PortRange, &r.Direction,
+			&r.LogEnabled, &r.LogPrefix,
+			&r.Action, &r.Enabled, &r.Priority, &r.HitCount,
+			&tags, &r.ExpiresAt,
+			&r.CreatedBy, &r.UpdatedBy, &r.UpdatedAt,
+			&r.SyncedAt,
+		)
+		if err == nil {
+			r.Tags = []string(tags)
 			rules = append(rules, r)
 		}
 	}
 	return rules, nil
+}
+
+// StartExpiredRuleReaper runs a background goroutine that prunes expired
+// firewall rules globally every hour.
+func StartExpiredRuleReaper() {
+	go func() {
+		t := time.NewTicker(1 * time.Hour)
+		defer t.Stop()
+		for range t.C {
+			database.DB.Exec(
+				`DELETE FROM firewall_rules WHERE expires_at IS NOT NULL AND expires_at < NOW()`,
+			)
+		}
+	}()
 }

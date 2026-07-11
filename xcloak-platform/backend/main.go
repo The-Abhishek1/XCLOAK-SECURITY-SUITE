@@ -218,6 +218,12 @@ func main() {
 	// ── MDM compliance + command delivery ─────────────────────────
 	services.StartMDMScheduler()
 
+	// ── Deep Packet Inspection / Advanced Inspection ───────────────
+	services.StartDGAScheduler()
+	services.StartTLSAnomalyScheduler()
+	services.StartHTTPInspectionScheduler()
+	services.StartProtocolAnomalyScheduler()
+
 	// ── Prometheus metrics refresh (every 30s) ────────────────
 	// Deliberately NOT behind WithSingletonLock — Prometheus scrapes each
 	// replica's /metrics independently (per-pod, not via the Service VIP),

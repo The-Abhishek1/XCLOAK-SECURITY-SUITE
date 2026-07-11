@@ -41,6 +41,13 @@
     <pubDate>Fri, 10 Jul 2026 00:00:00 GMT</pubDate>
   </item>
   <item>
+    <title>Enterprise Firewall + Deep Packet Inspection</title>
+    <link>https://blog.xcloak.tech/posts/enterprise-firewall-and-dpi.html</link>
+    <guid>https://blog.xcloak.tech/posts/enterprise-firewall-and-dpi.html</guid>
+    <description>How the firewall went from a basic rule list to an enterprise policy engine — and how four new DPI detectors add multi-layer L7 visibility: DGA scoring, TLS anomalies, HTTP inspection, and protocol tunneling.</description>
+    <pubDate>Fri, 11 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
     <title>XCloak v0.2.0: Enterprise Security Hardening</title>
     <link>https://blog.xcloak.tech/posts/xcloak-v0-2-0.html</link>
     <guid>https://blog.xcloak.tech/posts/xcloak-v0-2-0.html</guid>

@@ -108,8 +108,20 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  register: (data: { username: string; email: string; password: string; role: string }) => api.post('/auth/register', data),
-  login:    (data: { username: string; password: string })                                => api.post('/auth/login', data),
+  register:       (data: { username: string; email: string; password: string; role: string }) => api.post('/auth/register', data),
+  login:          (data: { username: string; password: string })                                => api.post('/auth/login', data),
+  getProfile:     ()                                   => api.get('/auth/profile'),
+  updateProfile:  (data: any)                          => api.patch('/auth/profile', data),
+  changePassword: (data: { current_password: string; new_password: string }) => api.post('/auth/change-password', data),
+  setup2FA:       ()                                   => api.post('/auth/2fa/setup'),
+  verify2FA:      (code: string)                       => api.post('/auth/2fa/verify', { code }),
+  disable2FA:     (code: string)                       => api.delete('/auth/2fa', { data: { code } }),
+};
+export const notificationsAPI = {
+  getEmailRules:    ()              => api.get('/notifications/email'),
+  createEmailRule:  (data: any)     => api.post('/notifications/email', data),
+  toggleEmailRule:  (id: number, enabled: boolean) => api.patch(`/notifications/email/${id}/toggle`, { enabled }),
+  deleteEmailRule:  (id: number)    => api.delete(`/notifications/email/${id}`),
 };
 
 export const agentsAPI = {
@@ -130,12 +142,15 @@ export const agentsAPI = {
   getPackages:    (id: number) => api.get(`/agents/${id}/packages`).catch(() => ({ data: [] })),
   getAuthLogs:    (id: number) => api.get(`/agents/${id}/auth-logs`).catch(() => ({ data: [] })),
   getFileHashes:  (id: number) => api.get(`/agents/${id}/filehashes`).catch(() => ({ data: [] })),
+  getHealth:      ()           => api.get('/agents/health').catch(() => ({ data: [] })),
+  getTasks:       (id: number) => api.get(`/agents/${id}/tasks`).catch(() => ({ data: [] })),
 };
 
 export const alertsAPI = {
   getAll:    () => api.get('/alerts'),
   getPaginated: (page = 1, perPage = 50, severity = '', agentId = '', status = '') =>
     api.get('/alerts/paginated', { params: { page, per_page: perPage, severity: severity || undefined, agent_id: agentId || undefined, status: status || undefined } }),
+  getFiltered: (params: Record<string, any>) => api.get('/alerts/paginated', { params }),
   getByAgent: async (agentId: number) => {
     const res = await api.get('/alerts');
     const all = res.data || [];
@@ -144,16 +159,21 @@ export const alertsAPI = {
   acknowledge:     (id: number, note = '') => api.post(`/alerts/${id}/acknowledge`, { note }),
   resolve:         (id: number, note = '') => api.post(`/alerts/${id}/resolve`, { note }),
   bulkAcknowledge: (ids: number[], note = '') => api.post('/alerts/bulk-acknowledge', { ids, note }),
+  snooze:          (id: number, minutes: number) => api.patch(`/alerts/${id}/snooze`, { minutes }),
+  updateNote:      (id: number, note: string)    => api.patch(`/alerts/${id}/note`, { note }),
 };
 
 export const incidentsAPI = {
-  getAll:       ()                              => api.get('/incidents'),
-  getPaginated: (page = 1, perPage = 25, status = '') =>
+  getAll:        ()                              => api.get('/incidents'),
+  getCounts:     ()                              => api.get('/incidents/counts'),
+  getPaginated:  (page = 1, perPage = 25, status = '') =>
     api.get('/incidents/paginated', { params: { page, per_page: perPage, status: status || undefined } }),
-  getById:      (id: number)                   => api.get(`/incidents/${id}`),
-  getEvents:    (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
-  updateStatus: (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
-  addNote:      (id: number, note: string)      => api.post(`/incidents/${id}/notes`, { note }),
+  getById:       (id: number)                   => api.get(`/incidents/${id}`),
+  getEvents:     (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
+  getAlerts:     (id: number)                   => api.get(`/incidents/${id}/alerts`).catch(() => ({ data: [] })),
+  updateStatus:  (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
+  updateSeverity:(id: number, severity: string) => api.patch(`/incidents/${id}/severity`, { severity }),
+  addNote:       (id: number, note: string)     => api.post(`/incidents/${id}/notes`, { note }),
 };
 
 export const dashboardAPI = {
@@ -183,6 +203,7 @@ export const iocsAPI = {
   enable:     (id: number)               => api.patch(`/iocs/${id}/enable`),
   disable:    (id: number)               => api.patch(`/iocs/${id}/disable`),
   bulkImport: (data: any)                => api.post('/iocs/import', data),
+  bulkCreate: (data: any)                => api.post('/iocs/bulk', data),
 };
 
 export const playbooksAPI = {
@@ -256,8 +277,9 @@ export const tasksAPI = {
 };
 
 export const quarantineAPI = {
-  getAll:     ()          => api.get('/quarantine').catch(() => ({ data: [] })),
-  quarantine: (data: any) => api.post('/quarantine', data),
+  getAll:     ()                                 => api.get('/quarantine').catch(() => ({ data: [] })),
+  quarantine: (data: any)                        => api.post('/quarantine', data),
+  remove:     (id: number, restore = false)      => api.delete(`/quarantine/${id}`, { data: { restore } }),
 };
 
 export const threatFeedsAPI = {
@@ -276,19 +298,27 @@ export const yaraAPI = {
   enable:     (id: number)            => api.patch(`/yara/rules/${id}/enable`),
   disable:    (id: number)            => api.patch(`/yara/rules/${id}/disable`),
   getMatches: (agentId?: number)      => api.get('/yara/matches', { params: agentId ? { agent_id: agentId } : {} }),
+  import:     (form: FormData)        => api.post('/yara/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 export const firewallAPI = {
-  getAll:      (group?: string)         => api.get('/firewall/rules', { params: group ? { group } : {} }),
-  getById:     (id: number)             => api.get(`/firewall/rules/${id}`),
-  create:      (data: any)              => api.post('/firewall/rules', data),
-  update:      (id: number, data: any)  => api.put(`/firewall/rules/${id}`, data),
-  delete:      (id: number)             => api.delete(`/firewall/rules/${id}`),
-  sync:        (data: any)              => api.post('/firewall/sync', data),
-  getSyncLog:  (agentId?: number)       => api.get('/firewall/sync/log', { params: agentId ? { agent_id: agentId } : {} }),
-  getGroups:   ()                       => api.get('/firewall/groups'),
-  getStats:    ()                       => api.get('/firewall/stats'),
-  getConflicts: ()                      => api.get('/firewall/conflicts'),
+  getAll:       (group?: string)         => api.get('/firewall/rules', { params: group ? { group } : {} }),
+  getById:      (id: number)             => api.get(`/firewall/rules/${id}`),
+  create:       (data: any)              => api.post('/firewall/rules', data),
+  update:       (id: number, data: any)  => api.put(`/firewall/rules/${id}`, data),
+  delete:       (id: number)             => api.delete(`/firewall/rules/${id}`),
+  sync:         (data: any)              => api.post('/firewall/sync', data),
+  getSyncLog:   (agentId?: number)       => api.get('/firewall/sync/log', { params: agentId ? { agent_id: agentId } : {} }),
+  getGroups:    ()                       => api.get('/firewall/groups'),
+  getStats:     ()                       => api.get('/firewall/stats'),
+  getConflicts: ()                       => api.get('/firewall/conflicts'),
+  getPolicy:    ()                       => api.get('/firewall/policy'),
+  setPolicy:    (action: string)         => api.put('/firewall/policy', { default_action: action }),
+  bulk:         (ids: number[], action: string) => api.post('/firewall/rules/bulk', { ids, action }),
+  import:       (rules: any[], mode?: string)   => api.post('/firewall/rules/import', { rules, mode: mode || 'append' }),
+  getTemplates: ()                       => api.get('/firewall/templates'),
+  getExpired:   ()                       => api.get('/firewall/expired'),
+  pruneExpired: ()                       => api.delete('/firewall/expired'),
 };
 
 export const auditAPI = {
@@ -310,6 +340,7 @@ export const complianceAPI = {
   generate:  (reportType: string)  => api.post('/compliance/reports', { report_type: reportType }),
   getAll:    ()                    => api.get('/compliance/reports'),
   getById:   (id: number)          => api.get(`/compliance/reports/${id}`),
+  getScores: (id: number)          => api.get(`/compliance/reports/${id}/scores`),
   delete:    (id: number)          => api.delete(`/compliance/reports/${id}`),
   pdfUrl:    (id: number)          => `${api.defaults.baseURL}/compliance/reports/${id}/pdf`,
 };
@@ -448,6 +479,31 @@ export const uebaAPI = {
   analyze:   ()                             => api.post('/ueba/analyze'),
 };
 
+export const insiderThreatAPI = {
+  getScores:  (days: number, minScore: number) =>
+    api.get('/insider-threat', { params: { days, min_score: minScore } }),
+  getSummary: () => api.get('/insider-threat/summary'),
+};
+
+export const nbaAPI = {
+  getAnomalies:  (limit = 200)      => api.get('/nba/anomalies', { params: { limit } }),
+  acknowledge:   (id: number)        => api.post(`/nba/anomalies/${id}/acknowledge`),
+  getBaseline:   (agentId: number)   => api.get(`/nba/baseline/${agentId}`),
+  analyze:       ()                  => api.post('/nba/analyze'),
+};
+
+export const dpiAPI = {
+  getFindings: (params?: {
+    agent_id?: number;
+    finding_type?: string;
+    severity?: string;
+    alert_only?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => api.get('/dpi/findings', { params }),
+  getSummary: () => api.get('/dpi/summary'),
+};
+
 export const sessionsAPI = {
   getMy:          ()          => api.get('/auth/sessions'),
   getAll:         ()          => api.get('/sessions'),
@@ -486,6 +542,124 @@ export const mdmAPI = {
   createToken: (label: string, platform = 'any', maxUses?: number, expiresIn?: number) =>
     api.post('/mdm/enrollment-tokens', { label, platform, max_uses: maxUses, expires_in: expiresIn }),
   revokeToken: (id: number) => api.delete(`/mdm/enrollment-tokens/${id}`),
+};
+
+export const clustersAPI = {
+  getAll:    (limit = 200)  => api.get('/clusters', { params: { limit } }).catch(() => ({ data: [] })),
+  getAlerts: (id: number)   => api.get(`/clusters/${id}/alerts`).catch(() => ({ data: [] })),
+  analyze:   ()             => api.post('/clusters/analyze'),
+  suppress:  (id: number)   => api.post(`/clusters/${id}/suppress`),
+};
+
+export const threatActorsAPI = {
+  getAll:    ()                       => api.get('/threat-actors').catch(() => ({ data: [] })),
+  create:    (data: any)              => api.post('/threat-actors', data),
+  remove:    (id: number)             => api.delete(`/threat-actors/${id}`),
+  getAlerts: (id: number, limit = 10) =>
+    api.get(`/threat-actors/${id}/alerts`, { params: { limit } }).catch(() => ({ data: [] })),
+};
+
+export const ja3API = {
+  getAll:  ()           => api.get('/ja3/fingerprints').catch(() => ({ data: [] })),
+  create:  (data: any)  => api.post('/ja3/fingerprints', data),
+  remove:  (id: number) => api.delete(`/ja3/fingerprints/${id}`),
+};
+
+export const huntAPI = {
+  getSaved:    ()              => api.get('/hunt/queries').catch(() => ({ data: [] })),
+  run:         (data: any)     => api.post('/hunt/run', data),
+  rerun:       (id: number)    => api.post(`/hunt/queries/${id}/run`, {}),
+  deleteSaved: (id: number)    => api.delete(`/hunt/queries/${id}`),
+  promote:     (data: any)     => api.post('/sigma/rules/from-hunt', data),
+};
+
+export const huntWorkbenchAPI = {
+  getTemplates:   ()              => api.get('/hunt/templates').catch(() => ({ data: [] })),
+  createTemplate: (data: any)     => api.post('/hunt/templates', data),
+  deleteTemplate: (id: number)    => api.delete(`/hunt/templates/${id}`),
+  getRuns:        ()              => api.get('/hunt/runs').catch(() => ({ data: [] })),
+  getRunDetail:   (id: number)    => api.get(`/hunt/runs/${id}`),
+  execute:        (data: any)     => api.post('/hunt/execute', data).catch(() => ({ data: null })),
+  updateNotes:    (id: number, notes: string, severity: string) =>
+    api.patch(`/hunt/runs/${id}/notes`, { notes, severity }),
+};
+
+export const dfirAPI = {
+  getCollections:    (limit = 50)          => api.get('/dfir/collections', { params: { limit } }).catch(() => ({ data: [] })),
+  triggerCollection: (data: any)           => api.post('/dfir/collections', data),
+  getArtifacts:      (id: number)          => api.get(`/dfir/collections/${id}/artifacts`).catch(() => ({ data: [] })),
+  getTimeline:       (incidentId: number)  => api.get(`/dfir/incidents/${incidentId}/timeline`).catch(() => ({ data: [] })),
+};
+
+export const deceptionAPI = {
+  getTokens:      ()                              => api.get('/canary/tokens').catch(() => ({ data: [] })),
+  createToken:    (data: any)                     => api.post('/canary/tokens', data),
+  deleteToken:    (id: number)                    => api.delete(`/canary/tokens/${id}`),
+  toggleToken:    (id: number, isActive: boolean) => api.patch(`/canary/tokens/${id}/toggle`, { is_active: isActive }),
+  getTrips:       (limit = 50)                    => api.get('/canary/trips', { params: { limit } }).catch(() => ({ data: [] })),
+  getHoneyports:  ()                              => api.get('/honeyports').catch(() => ({ data: [] })),
+  createHoneyport:(data: any)                     => api.post('/honeyports', data),
+  deleteHoneyport:(id: number)                    => api.delete(`/honeyports/${id}`),
+};
+
+export const suppressionAPI = {
+  getAll:  ()                              => api.get('/suppression/rules').catch(() => ({ data: [] })),
+  create:  (data: any)                     => api.post('/suppression/rules', data),
+  toggle:  (id: number, enabled: boolean)  => api.patch(`/suppression/rules/${id}/toggle`, { enabled }),
+  remove:  (id: number)                    => api.delete(`/suppression/rules/${id}`),
+};
+
+export const scriptAPI = {
+  getTemplates: ()               => api.get('/scripts/templates').catch(() => ({ data: [] })),
+  getHistory:   (params?: any)   => api.get('/scripts/history', { params }).catch(() => ({ data: [] })),
+  getResult:    (taskId: string) => api.get(`/scripts/result/${taskId}`),
+  run:          (data: any)      => api.post('/scripts/run', data),
+};
+
+export const schedulerAPI = {
+  getAll:  ()                              => api.get('/scheduler/tasks').catch(() => ({ data: [] })),
+  create:  (data: any)                     => api.post('/scheduler/tasks', data),
+  toggle:  (id: number, enabled: boolean)  => api.patch(`/scheduler/tasks/${id}/toggle`, { enabled }),
+  run:     (id: number)                    => api.post(`/scheduler/tasks/${id}/run`, {}),
+  remove:  (id: number)                    => api.delete(`/scheduler/tasks/${id}`),
+};
+
+export const frameworkComplianceAPI = {
+  getAll:    () => api.get('/framework-compliance').catch(() => ({ data: [] })),
+  getByName: (name: string) => api.get(`/framework-compliance/${name}`).catch(() => ({ data: null })),
+};
+
+export const integrationsAPI = {
+  getAll:          ()          => api.get('/integrations').catch(() => ({ data: [] })),
+  getDeliveries:   ()          => api.get('/integrations/deliveries').catch(() => ({ data: [] })),
+  getInstallTokens:()          => api.get('/integrations/install-tokens').catch(() => ({ data: [] })),
+  createInstallToken: (label: string) => api.post('/integrations/install-tokens', { label }),
+  save:            (name: string, data: any) => api.put(`/integrations/${name}`, data),
+  test:            (name: string)            => api.post(`/integrations/${name}/test`),
+};
+export const timelineAPI = {
+  get: (limit = 500) => api.get('/timeline', { params: { limit } }).catch(() => ({ data: [] })),
+};
+export const riskPostureAPI = {
+  get:     ()  => api.get('/risk-posture').catch(() => ({ data: null })),
+  history: (limit = 30) => api.get('/risk-posture/history', { params: { limit } }).catch(() => ({ data: [] })),
+  refresh: ()  => api.post('/risk-posture/refresh').catch(() => ({ data: null })),
+};
+export const dashboardAPI = {
+  getMetrics: (range: string) => api.get('/dashboard/metrics', { params: { range } }),
+};
+export const elasticAPI = {
+  health:  ()              => api.get('/elastic/health'),
+  indices: ()              => api.get('/elastic/indices'),
+  query:   (data: any)     => api.post('/elastic/query', data),
+};
+export const alertDetailAPI = {
+  getPlaybookRecs:   (id: number) => api.get(`/alerts/${id}/playbook-recommendations`),
+  executeRec:        (id: number, recID: number) =>
+    api.post(`/alerts/${id}/execute-recommendation`, { recommendation_id: recID }),
+  updateNote:        (id: number, note: string) => api.patch(`/alerts/${id}/note`, { note }),
+  respond:           (id: number, data: any) => api.post(`/alerts/${id}/respond`, data),
+  suppressSigmaRule: (data: any) => api.post('/sigma-rules/suppress', data),
 };
 
 export default api;

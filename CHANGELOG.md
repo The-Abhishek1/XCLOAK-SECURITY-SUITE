@@ -121,6 +121,34 @@ Technical release posts and deep-dives at [blog.xcloak.tech](https://blog.xcloak
 
 ## [Unreleased]
 
+### Added
+
+**Enterprise Firewall (migration 000063)**
+- 9 new rule fields: `direction` (in/out/both), `port_range` (e.g. `8000-9000`, `80,443`), `log_enabled`, `log_prefix`, `expires_at`, `tags`, `created_by`, `updated_by`, `updated_at`
+- `firewall_policy` table: per-tenant default-action (allow/deny) + mode (enforcing/audit/disabled)
+- 8 new API endpoints: `GET/PUT /api/firewall/policy`, `POST /api/firewall/rules/bulk`, `POST /api/firewall/rules/import`, `GET /api/firewall/templates`, `GET/DELETE /api/firewall/expired`, `GET /api/firewall/conflicts/v2`
+- 12 built-in rule templates (SSH allowlist, HTTPS egress, DNS allow, SMB block, etc.)
+- CIDR overlap conflict detection using `net.IPNet.Contains`; port-range interval overlap via `ParsePortRange`
+- `StartExpiredRuleReaper()` goroutine prunes expired rules every hour
+- Agent Linux: atomic `iptables-restore --noflush` apply; incremental fallback; LOG target for `log_enabled`
+- Agent Windows: direction-aware `netsh` rules (`-in`/`-out` suffixes when `direction=both`); `localport=` for port ranges
+- Frontend: direction badge, bulk select toolbar, template picker modal, default policy toggle, JSON import, per-rule expiry indicator, tags display, full enterprise form
+- `firewall_validators.go` fully rewritten: 21 tests pass (CIDR, direction enum, port-range, action enum)
+
+**Deep Packet Inspection / Advanced Detection (migration 000064)**
+- `dpi_findings` table: `finding_type`, `severity`, `score`, `indicator`, `description`, `mitre_technique`, `raw_context` (JSONB), `alert_fired`, `detected_at`
+- 9 DPI columns on `network_connect_events`: `sni`, `http_host`, `http_method`, `http_path`, `http_user_agent`, `tls_version`, `tls_cipher`, `dpi_proto`, `entropy_score`
+- `services/payload_entropy.go`: `ShannonEntropy`, `EntropyScore` (0–100), multi-factor `DGAScore` (entropy + English bigrams + digit ratio + consonant clusters + label length), `URLPathEntropy`, `IsBase64Encoded`
+- `services/dga_detector.go`: 25 suspicious TLD bonuses; 3 DGA family matchers (Conficker/Necurs/Mirai-variant); NXDOMAIN storm detection; 30+ domain allowlist; 30-min sweep + real-time DNS pipeline hook; T1568.002
+- `services/tls_anomaly_detector.go`: 12 weak cipher patterns; deprecated TLS version detection (SSLv3/1.0/1.1); self-signed cert detection; TLS on non-standard ports; SNI/Host domain fronting; 1-hour dedup; 15-min sweep; T1040/T1553/T1571/T1090.004
+- `services/http_inspection_service.go`: 35+ malicious User-Agent signatures (RATs, C2 frameworks, scanners); webshell path detection (20+ patterns); path traversal/null-byte injection; suspicious HTTP methods (PROPFIND, TRACK, TRACE, DEBUG); high-entropy UA detection; 10-min sweep; T1071.001/T1505.003/T1190/T1595
+- `services/protocol_anomaly_detector.go`: DNS tunneling (long labels + query rate); protocol-on-wrong-port for 9 protocols; ICMP tunnel (large payload); HTTP CONNECT to RFC 1918 addresses; DNS-over-TCP volume; SMTP on non-standard ports; 10-min sweep; T1071.004/T1571/T1095/T1572/T1048.002
+- `dns_security.go` `AnalyzeDNSLogEntry` now delegates DGA scoring to `ScoreDomainDGA()` instead of single-entropy threshold
+- `GET /api/dpi/findings` — paginated, filterable by agent/type/severity/alert-only
+- `GET /api/dpi/summary` — 24-hour breakdown by finding type + severity
+- Agent: `ConnectEvent` model extended with 9 DPI fields; `passive_dpi_linux.go` extracts SNI from TLS ClientHello + HTTP headers from `/proc/<pid>/fd` sockets (80ms timeout goroutine); `passive_dpi_other.go` no-op stub
+- Frontend: `/dpi` Deep Inspection page — summary cards, breakdown pills, filterable table with score bars, expand-to-raw-context, MITRE links; Sidebar entry added
+
 See [roadmap.md](roadmap.md) for planned features.
 
 ---

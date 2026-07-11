@@ -83,6 +83,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/:id", middleware.RequireAuth(), api.GetAgentByID)
 	router.GET("/api/agents/:id/summary", middleware.RequireAuth(), api.GetAgentSummary)
 	router.GET("/api/agents/:id/risk", middleware.RequireAuth(), api.GetRiskScore)
+	router.GET("/api/timeline", middleware.RequireAuth(), api.GetTenantTimeline)
 	router.GET("/api/agents/:id/timeline", middleware.RequireAuth(), api.GetAgentTimeline)
 	router.GET("/api/agents/:id/vulnerabilities", middleware.RequireAuth(), api.GetAgentVulnerabilities)
 	router.POST("/api/agents/:id/vulnerability-scan", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ScanAgentVulnerabilities)
@@ -131,9 +132,12 @@ func SetupRoutes(router *gin.Engine) {
 
 	// ── Incidents ────────────────────────────────────────────────
 	router.GET("/api/incidents", middleware.RequireAuth(), api.GetIncidents)
+	router.GET("/api/incidents/counts", middleware.RequireAuth(), api.GetIncidentStatusCounts)
 	router.GET("/api/incidents/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetIncidentsPaginated)
 	router.GET("/api/incidents/:id/events", middleware.RequireAuth(), api.GetIncidentEvents)
+	router.GET("/api/incidents/:id/alerts", middleware.RequireAuth(), api.GetIncidentAlerts)
 	router.PUT("/api/incidents/:id/status", middleware.RequireAuth(), api.UpdateIncidentStatus)
+	router.PATCH("/api/incidents/:id/severity", middleware.RequireAuth(), api.UpdateIncidentSeverity)
 
 	// ── Quarantine ───────────────────────────────────────────────
 	router.GET("/api/quarantine", middleware.RequireAuth(), api.GetQuarantinedFiles)
@@ -317,6 +321,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/hunt/run", middleware.RequireAuth(), api.RunHunt)
 	router.POST("/api/hunt/run", middleware.RequireAuth(), api.RunHunt)
 	router.GET("/api/hunt/queries", middleware.RequireAuth(), api.GetHuntQueries)
+	router.POST("/api/hunt/queries/:id/run", middleware.RequireAuth(), api.RerunHuntQuery)
+	router.DELETE("/api/hunt/queries/:id", middleware.RequireAuth(), api.DeleteHuntQuery)
+	router.POST("/api/sigma/rules/from-hunt", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.PromoteHuntToSigmaRule)
 	router.GET("/api/search", middleware.RequireAuth(), api.GlobalSearch)
 	router.POST("/api/yara/import", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.ImportYARAFiles)
 	router.POST("/api/sigma/import", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.ImportSigmaYAML)
@@ -326,6 +333,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/incidents/:id/deepdive", middleware.RequireAuth(), api.GetIncidentDeepDive)
 	router.POST("/api/alerts/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeAlert)
 	router.POST("/api/alerts/:id/resolve", middleware.RequireAuth(), api.ResolveAlert)
+	router.PATCH("/api/alerts/:id/note", middleware.RequireAuth(), api.UpdateAlertNote)
+	router.PATCH("/api/alerts/:id/snooze", middleware.RequireAuth(), api.SnoozeAlert)
 	router.POST("/api/alerts/bulk-acknowledge", middleware.RequireAuth(), middleware.RateLimitAPI(), api.BulkAcknowledgeAlerts)
 	router.POST("/api/alerts/:id/respond", middleware.RequireAuth(), api.DispatchAlertResponse)
 	router.GET("/api/alerts/:id", middleware.RequireAuth(), api.GetAlertWithTriage)
@@ -334,7 +343,14 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/firewall/sync/log", middleware.RequireAuth(), api.GetFirewallSyncLog)
 	router.GET("/api/firewall/groups", middleware.RequireAuth(), api.GetFirewallGroups)
 	router.GET("/api/firewall/stats", middleware.RequireAuth(), api.GetFirewallStats)
-	router.GET("/api/firewall/conflicts", middleware.RequireAuth(), api.GetFirewallConflicts)
+	router.GET("/api/firewall/conflicts", middleware.RequireAuth(), api.GetFirewallConflictsV2)
+	router.GET("/api/firewall/policy", middleware.RequireAuth(), api.GetFirewallPolicy)
+	router.PUT("/api/firewall/policy", middleware.RequireAuth(), middleware.RequirePermission("manage_firewall"), api.SetFirewallPolicy)
+	router.POST("/api/firewall/rules/bulk", middleware.RequireAuth(), middleware.RequirePermission("manage_firewall"), api.BulkFirewallAction)
+	router.POST("/api/firewall/rules/import", middleware.RequireAuth(), middleware.RequirePermission("manage_firewall"), api.ImportFirewallRules)
+	router.GET("/api/firewall/templates", middleware.RequireAuth(), api.GetFirewallTemplates)
+	router.GET("/api/firewall/expired", middleware.RequireAuth(), api.GetExpiredFirewallRules)
+	router.DELETE("/api/firewall/expired", middleware.RequireAuth(), middleware.RequirePermission("manage_firewall"), api.PruneExpiredFirewallRules)
 	router.POST("/api/agents/firewall-hits", middleware.RequireAgentAuth(), api.ReceiveFirewallHits)
 	router.POST("/api/scripts/run", middleware.RequireAuth(), middleware.RequirePermission("run_scripts"), api.DispatchScript)
 	router.GET("/api/scripts/result/:task_id", middleware.RequireAuth(), api.GetScriptResult)
@@ -568,5 +584,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/mdm/devices/:id/checkin", middleware.RequireAgentAuth(), api.MobileDeviceCheckIn)
 	router.GET("/api/mdm/devices/:id/commands/pending", middleware.RequireAgentAuth(), api.GetPendingMobileCommands)
 	router.POST("/api/mdm/devices/:id/apps", middleware.RequireAgentAuth(), api.SubmitAppInventory)
+
+	// ── Deep Packet Inspection / Advanced Detection ─────────────────
+	router.GET("/api/dpi/findings", middleware.RequireAuth(), api.GetDPIFindings)
+	router.GET("/api/dpi/summary", middleware.RequireAuth(), api.GetDPIFindingsSummary)
 
 }

@@ -41,6 +41,7 @@ const NAV = [
     { href: '/ueba',             label: 'UEBA',             icon: Activity },
     { href: '/insider-threat',   label: 'Insider Threat',   icon: UserX },
     { href: '/nba',              label: 'Net Behavior',     icon: Wifi },
+    { href: '/dpi',              label: 'Deep Inspection',  icon: SearchCode },
     { href: '/threat-detection', label: 'Behavioral',       icon: Layers },
     { href: '/correlation',      label: 'Correlation',      icon: GitMerge },
     { href: '/clusters',         label: 'Alert Clusters',   icon: Aperture },

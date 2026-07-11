@@ -178,7 +178,13 @@ tags:
 
 <p><strong>C2 Beacon Detector</strong> — Analyzes outbound connection timing using coefficient of variation (CV). Connections with suspiciously regular intervals (CV &lt; 0.15 over 5+ samples) are flagged. Filters out known-benign processes and CDN destinations.</p>
 
-<p><strong>DNS Security</strong> — Three separate checks: DGA detection via Shannon entropy scoring on domain labels; DNS tunneling via payload length + query rate (long subdomains + high frequency); DNS flood (&gt;100 queries/min from one source).</p>
+<p><strong>DNS Security</strong> — Multi-factor DGA scoring: Shannon entropy + English bigram deviation + digit ratio + consonant clusters + 25 suspicious TLD bonuses + DGA family pattern matching (Conficker, Necurs, Mirai-variant) + NXDOMAIN storm detection. Also detects DNS tunneling (long subdomain labels &amp;gt;40 chars, high unique-domain query rate). Wired into the real-time DNS log pipeline. (T1568.002, T1071.004)</p>
+
+<p><strong>TLS Anomaly Detector</strong> — Weak ciphers (NULL/EXPORT/RC4/DES/ANON/MD5 — 12 patterns); deprecated TLS versions (SSLv3 → critical, TLS 1.0 → high per RFC 8996, TLS 1.1 → medium); self-signed cert detection; TLS on non-standard ports (port 80/25/53/110 → high); SNI/Host domain fronting (T1090.004). 1-hour dedup. (T1040, T1553.004, T1571)</p>
+
+<p><strong>HTTP Inspection</strong> — 35+ malicious User-Agent signatures (Cobalt Strike, Metasploit, Meterpreter, Empire, Havoc, njRAT, AsyncRAT, Remcos, Nikto, sqlmap, Gobuster, Nuclei, etc.); webshell path detection (c99.php, r57.php, /shell.php, /wp-content/uploads/shell, etc.); path traversal and null-byte injection; suspicious HTTP methods (PROPFIND, TRACK, TRACE, DEBUG); high-entropy User-Agents. 30-min dedup. (T1071.001, T1505.003, T1190, T1595)</p>
+
+<p><strong>Protocol Anomaly Detector</strong> — Protocol-on-wrong-port for 9 protocols (SSH on 443/80 → high); DNS tunneling via long subdomain labels and TCP DNS volume; ICMP tunnel via large payloads; HTTP CONNECT to RFC 1918 addresses; DNS-over-TCP flood; SMTP on non-standard ports. (T1071.004, T1571, T1095, T1572, T1048.002)</p>
 
 <p><strong>Port Scan Detector</strong> — Detects vertical (many ports, one host), horizontal (one port, many hosts), and SYN sweep patterns. Also detects SMB port spray (445 to many hosts).</p>
 
