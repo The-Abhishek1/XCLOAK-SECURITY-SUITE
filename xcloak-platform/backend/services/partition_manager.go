@@ -115,11 +115,31 @@ func DropOldEndpointLogPartitions(retainMonths int) {
 	}
 }
 
+// hasTimescaleDB reports whether the TimescaleDB extension is loaded in the
+// connected PostgreSQL instance. Used only for startup logging.
+func hasTimescaleDB() bool {
+	var exists bool
+	_ = database.DB.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'timescaledb')`,
+	).Scan(&exists)
+	return exists
+}
+
 // StartPartitionManager launches the background partition pre-creation job.
 // It runs once at startup (so missing partitions are fixed immediately after a
 // deployment) and then daily thereafter.  The singleton advisory lock ensures
 // only one replica runs the DDL at a time in a multi-replica deployment.
+//
+// endpoint_logs uses native PARTITION BY RANGE and is managed here regardless
+// of whether TimescaleDB is present. The TimescaleDB migration converts
+// endpoint_connections and endpoint_processes to hypertables independently.
 func StartPartitionManager() {
+	if hasTimescaleDB() {
+		slog.Info("partition-manager: TimescaleDB detected — endpoint_connections and endpoint_processes are managed as hypertables")
+	} else {
+		slog.Info("partition-manager: TimescaleDB not available — only native partitioning active")
+	}
+
 	go func() {
 		WithSingletonLock("partition_manager", EnsureEndpointLogPartitions)
 

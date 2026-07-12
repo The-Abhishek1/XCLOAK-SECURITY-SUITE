@@ -1,0 +1,257 @@
+# XCloak High-Availability Stack
+#
+# Patroni + etcd for automatic PostgreSQL primary/replica failover.
+# HAProxy routes writes (port 5000) and reads (port 5001) via Patroni REST health checks.
+# TimescaleDB image used — the same migration files work with or without the extension.
+#
+# Usage:
+#   cp .env.ha.example .env.ha
+#   # Edit .env.ha — at minimum change all passwords
+#   docker compose -f docker-compose.ha.yml --env-file .env.ha up -d --build
+#
+# After startup:
+#   Patroni REST  → http://localhost:8008  (primary) / http://localhost:8009  (replica)
+#   HAProxy stats → http://localhost:7000
+#   Backend API   → http://localhost:8080/api/health
+#   Dashboard     → http://localhost:3000
+#
+# Failover test:
+#   docker compose -f docker-compose.ha.yml stop patroni-primary
+#   # Replica auto-promotes in ~15s; HAProxy detects and re-routes writes.
+#   # Restart the old primary — it rejoins as a replica automatically.
+
+services:
+
+  # ── Distributed Coordination Store ─────────────────────────────────────────
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    container_name: xcloak-ha-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_NAME: etcd0
+      ETCD_DATA_DIR: /etcd-data
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_INITIAL_CLUSTER: etcd0=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_TOKEN: xcloak-ha-cluster
+      ETCD_INITIAL_CLUSTER_STATE: new
+    volumes:
+      - ha_etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://localhost:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── PostgreSQL Primary (Patroni-managed) ────────────────────────────────────
+  patroni-primary:
+    build:
+      context: ./patroni
+    container_name: xcloak-ha-pg-primary
+    restart: unless-stopped
+    depends_on:
+      etcd:
+        condition: service_healthy
+    environment:
+      # Cluster identity
+      PATRONI_SCOPE: xcloak-ha
+      PATRONI_NAME: pg-primary
+
+      # DCS
+      PATRONI_ETCD3_HOSTS: etcd:2379
+
+      # Postgres listen + connect
+      PATRONI_POSTGRESQL_LISTEN: "0.0.0.0:5432"
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: "patroni-primary:5432"
+      PATRONI_POSTGRESQL_DATA_DIR: /data/patroni
+
+      # Patroni REST API
+      PATRONI_RESTAPI_LISTEN: "0.0.0.0:8008"
+      PATRONI_RESTAPI_CONNECT_ADDRESS: "patroni-primary:8008"
+
+      # Superuser (used by backend and migrations)
+      PATRONI_SUPERUSER_USERNAME: ${DB_USER:-xcloak}
+      PATRONI_SUPERUSER_PASSWORD: ${DB_PASSWORD:-xcloak-ha-secret}
+
+      # Replication user
+      PATRONI_REPLICATION_USERNAME: replicator
+      PATRONI_REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-replication-secret}
+
+      # Application database
+      POSTGRES_DB: ${DB_NAME:-ngfw}
+    volumes:
+      - ha_pg_primary_data:/data/patroni
+    ports:
+      - "8008:8008"    # Patroni REST API (for debugging)
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8008/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # ── PostgreSQL Replica (Patroni-managed) ────────────────────────────────────
+  patroni-replica:
+    build:
+      context: ./patroni
+    container_name: xcloak-ha-pg-replica
+    restart: unless-stopped
+    depends_on:
+      patroni-primary:
+        condition: service_healthy
+    environment:
+      PATRONI_SCOPE: xcloak-ha
+      PATRONI_NAME: pg-replica
+
+      PATRONI_ETCD3_HOSTS: etcd:2379
+
+      PATRONI_POSTGRESQL_LISTEN: "0.0.0.0:5432"
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: "patroni-replica:5432"
+      PATRONI_POSTGRESQL_DATA_DIR: /data/patroni
+
+      PATRONI_RESTAPI_LISTEN: "0.0.0.0:8008"
+      PATRONI_RESTAPI_CONNECT_ADDRESS: "patroni-replica:8008"
+
+      PATRONI_SUPERUSER_USERNAME: ${DB_USER:-xcloak}
+      PATRONI_SUPERUSER_PASSWORD: ${DB_PASSWORD:-xcloak-ha-secret}
+
+      PATRONI_REPLICATION_USERNAME: replicator
+      PATRONI_REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-replication-secret}
+
+      POSTGRES_DB: ${DB_NAME:-ngfw}
+    volumes:
+      - ha_pg_replica_data:/data/patroni
+    ports:
+      - "8009:8008"    # Patroni REST API — replica node
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8008/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+
+  # ── HAProxy — write/read routing ────────────────────────────────────────────
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: xcloak-ha-haproxy
+    restart: unless-stopped
+    depends_on:
+      patroni-primary:
+        condition: service_healthy
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5432:5000"    # Write (primary) — external port 5432 maps to HAProxy write
+      - "5433:5001"    # Read  (replica) — external port 5433 maps to HAProxy read
+      - "7000:7000"    # HAProxy stats dashboard
+    healthcheck:
+      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: xcloak-ha-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis-ha-secret}
+    volumes:
+      - ha_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis-ha-secret}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── XCloak Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./xcloak-platform/backend
+      dockerfile: Dockerfile
+    container_name: xcloak-ha-backend
+    restart: unless-stopped
+    depends_on:
+      haproxy:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Write endpoint → HAProxy port 5000 (primary)
+      DB_HOST: haproxy
+      DB_PORT: "5000"
+      DB_USER: ${DB_USER:-xcloak}
+      DB_PASSWORD: ${DB_PASSWORD:-xcloak-ha-secret}
+      DB_NAME: ${DB_NAME:-ngfw}
+      DB_SSLMODE: disable
+
+      # Read endpoint → HAProxy port 5001 (replica-preferred)
+      DB_READ_HOST: haproxy
+      DB_READ_PORT: "5001"
+
+      # Redis
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-ha-secret}
+
+      # Security
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN is required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+
+      # Kafka disabled by default
+      KAFKA_ENABLED: ${KAFKA_ENABLED:-false}
+
+      # AI
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # ── Database Seeder (runs once) ─────────────────────────────────────────────
+  seeder:
+    build:
+      context: ./xcloak-platform/backend
+      dockerfile: Dockerfile.seed
+    container_name: xcloak-ha-seeder
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      DB_HOST: haproxy
+      DB_PORT: "5000"
+      DB_USER: ${DB_USER:-xcloak}
+      DB_PASSWORD: ${DB_PASSWORD:-xcloak-ha-secret}
+      DB_NAME: ${DB_NAME:-ngfw}
+
+  # ── XCloak Frontend ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./xcloak-platform/frontend
+      dockerfile: Dockerfile
+    container_name: xcloak-ha-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8080
+    ports:
+      - "3000:3000"
+
+volumes:
+  ha_etcd_data:
+  ha_pg_primary_data:
+  ha_pg_replica_data:
+  ha_redis_data:

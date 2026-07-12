@@ -1,0 +1,51 @@
+# Patroni bootstrap config — static cluster defaults only.
+# All connection strings, names, and credentials come from PATRONI_* env vars
+# so the same image works for primary and replica without modification.
+#
+# Env vars set by docker-compose.ha.yml (per node):
+#   PATRONI_SCOPE                     — cluster name (same on all nodes)
+#   PATRONI_NAME                      — unique node name per container
+#   PATRONI_ETCD3_HOSTS               — etcd endpoints
+#   PATRONI_POSTGRESQL_LISTEN         — bind address for postgres
+#   PATRONI_POSTGRESQL_CONNECT_ADDRESS— externally reachable address for this node
+#   PATRONI_RESTAPI_LISTEN            — bind address for patroni REST API (port 8008)
+#   PATRONI_RESTAPI_CONNECT_ADDRESS   — externally reachable address for REST API
+#   PATRONI_SUPERUSER_USERNAME/PASSWORD
+#   PATRONI_REPLICATION_USERNAME/PASSWORD
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 33554432  # 32 MB
+    synchronous_mode: false
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 256
+        wal_log_hints: "on"
+        checkpoint_completion_target: 0.9
+        archive_mode: "off"
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - local   all             all                             trust
+    - host    replication     replicator  0.0.0.0/0           scram-sha-256
+    - host    all             all         0.0.0.0/0           scram-sha-256
+
+postgresql:
+  listen: "0.0.0.0:5432"
+  authentication:
+    replication:
+      username: replicator
+    superuser:
+      username: postgres

@@ -12,7 +12,7 @@
 services:
 
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb-ha:pg16
     container_name: xcloak-postgres
     restart: unless-stopped
     environment:
