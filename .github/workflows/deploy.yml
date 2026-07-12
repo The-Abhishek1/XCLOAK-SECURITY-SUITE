@@ -1,0 +1,206 @@
+name: deploy
+
+# ── Trigger map ────────────────────────────────────────────────────────────────
+# Auto-deploy to demo VPS (staging) every time docker-build succeeds on main.
+# Deploy to production Kubernetes manually via workflow_dispatch (requires
+# approval from the "production" GitHub Environment).
+#
+# Required GitHub secrets — set in repo Settings → Secrets and variables → Actions:
+#
+#   DEMO_SSH_HOST        IP or hostname of the demo VPS
+#   DEMO_SSH_USER        SSH user on the VPS (e.g. ubuntu, deploy)
+#   DEMO_SSH_KEY         Private key corresponding to the deploy user
+#   DEMO_DEPLOY_PATH     Absolute path on the VPS where the repo is checked out
+#                        (e.g. /opt/xcloak) — docker-compose.demo.yml lives here
+#
+#   KUBE_CONFIG          Base64-encoded kubeconfig for the production cluster
+#                        Generate: base64 -w0 ~/.kube/config
+#   PROD_INGRESS_HOST    Public hostname (e.g. app.xcloak.tech)
+#   PROD_JWT_SECRET      >= 32-char JWT signing key
+#   PROD_METRICS_TOKEN   Bearer token for Prometheus scrape endpoint
+#   PROD_DB_PASSWORD     Postgres password (only if postgresql.enabled=false and
+#                        using external postgres — omit for bundled Bitnami chart)
+#   PROD_ANTHROPIC_KEY   (optional) Anthropic API key for Claude integration
+#   PROD_SMTP_PASS       (optional) SMTP password for alert email
+
+on:
+  workflow_run:
+    workflows: ["docker-build"]
+    branches: [main]
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: "Image tag to deploy (staging: 'latest'; production: e.g. 'v1.2.0')"
+        required: false
+        default: latest
+
+# ── Jobs ───────────────────────────────────────────────────────────────────────
+
+jobs:
+
+  # ── Demo VPS (staging) ──────────────────────────────────────────────────────
+  # Runs on every successful docker-build on main, or on manual dispatch to staging.
+  # Pulls the freshly-pushed :latest images and restarts the demo stack on the VPS.
+  deploy-demo:
+    name: Deploy → demo VPS
+    runs-on: ubuntu-latest
+    environment: staging
+
+    if: |
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success'
+      ) || (
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.environment == 'staging'
+      )
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEMO_SSH_HOST }}
+          username: ${{ secrets.DEMO_SSH_USER }}
+          key: ${{ secrets.DEMO_SSH_KEY }}
+          # Timeout each individual command, not the whole session.
+          command_timeout: 10m
+          script: |
+            set -e
+            cd "${{ secrets.DEMO_DEPLOY_PATH }}"
+
+            echo "=== pulling latest code ==="
+            git fetch --all --prune
+            git reset --hard origin/main
+
+            echo "=== pulling new images ==="
+            docker compose -f docker-compose.demo.yml pull
+
+            echo "=== restarting stack ==="
+            docker compose -f docker-compose.demo.yml up -d --remove-orphans
+
+            echo "=== waiting for backend health ==="
+            for i in $(seq 1 30); do
+              curl -sf http://localhost:8080/api/health && break
+              sleep 5
+            done
+            curl -sf http://localhost:8080/api/health || { echo "Backend did not come healthy"; exit 1; }
+
+            echo "=== pruning old images ==="
+            docker image prune -f
+
+            echo "=== deploy complete ==="
+
+  # ── Production Kubernetes ───────────────────────────────────────────────────
+  # Manual only — requires the "production" GitHub Environment (set up approval
+  # rules in Settings → Environments → production → Required reviewers).
+  # Deploys via Helm upgrade; backend and frontend images are pulled from GHCR.
+  deploy-k8s:
+    name: Deploy → Kubernetes (production)
+    runs-on: ubuntu-latest
+    environment: production
+
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.environment == 'production'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.0
+
+      - name: Add Bitnami repo and update chart dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm dependency update charts/xcloak
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.image_tag }}"
+          [[ -z "$TAG" || "$TAG" == "latest" ]] && TAG="latest"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      # Write sensitive values to a temp file so they never appear in --set
+      # arguments visible in process listings or GitHub logs.
+      - name: Write Helm production values
+        run: |
+          cat > /tmp/xcloak-prod-values.yaml << 'VALEOF'
+          global:
+            ingress:
+              host: "${{ secrets.PROD_INGRESS_HOST }}"
+
+          backend:
+            secrets:
+              jwtSecret: "${{ secrets.PROD_JWT_SECRET }}"
+              metricsToken: "${{ secrets.PROD_METRICS_TOKEN }}"
+              anthropicApiKey: "${{ secrets.PROD_ANTHROPIC_KEY }}"
+              smtpPass: "${{ secrets.PROD_SMTP_PASS }}"
+          VALEOF
+
+          # DB password only needed when using external postgres.
+          # When postgresql.enabled=true the Bitnami sub-chart manages its own secret.
+          if [[ -n "${{ secrets.PROD_DB_PASSWORD }}" ]]; then
+            printf '      dbPassword: "%s"\n' "${{ secrets.PROD_DB_PASSWORD }}" \
+              >> /tmp/xcloak-prod-values.yaml
+          fi
+
+      - name: helm upgrade --install
+        run: |
+          helm upgrade --install xcloak charts/xcloak \
+            --namespace xcloak \
+            --create-namespace \
+            --atomic \
+            --timeout 8m \
+            --history-max 5 \
+            --set "backend.image.tag=${{ steps.tag.outputs.tag }}" \
+            --set "frontend.image.tag=${{ steps.tag.outputs.tag }}" \
+            --set "ingress.tls.enabled=true" \
+            -f /tmp/xcloak-prod-values.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment \
+            -l app.kubernetes.io/instance=xcloak \
+            --namespace xcloak \
+            --timeout 5m
+
+      - name: Smoke test production endpoint
+        run: |
+          HOST="${{ secrets.PROD_INGRESS_HOST }}"
+          curl -sf --max-time 10 "https://${HOST}/api/health" | grep -q '"status"'
+          echo "Production endpoint is healthy ✓"
+
+      - name: Cleanup secrets file
+        if: always()
+        run: rm -f /tmp/xcloak-prod-values.yaml
+
+  # ── Notify on failure ───────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify deploy failure
+    runs-on: ubuntu-latest
+    needs: [deploy-demo, deploy-k8s]
+    if: failure()
+
+    steps:
+      - name: Report failure
+        run: |
+          echo "::error::Deploy failed. Check the deploy-demo or deploy-k8s job above."
+          echo "Triggering event: ${{ github.event_name }}"
+          echo "Triggered by:     ${{ github.actor }}"

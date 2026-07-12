@@ -51,3 +51,25 @@ jobs:
             --set backend.autoscaling.enabled=true \
             --set frontend.autoscaling.enabled=true \
             > /dev/null
+
+      - name: helm template (read-replica routing — Patroni HAProxy or Aurora reader)
+        run: |
+          helm template xcloak . --values ci/smoke-values.yaml \
+            --set postgresqlReadReplica.host=haproxy-svc \
+            --set postgresqlReadReplica.port=5001 \
+            > /dev/null
+
+      - name: helm template (SaaS mode pre-enabled)
+        run: |
+          helm template xcloak . --values ci/smoke-values.yaml \
+            --set backend.env.SAAS_MODE=true \
+            > /dev/null
+
+      - name: helm template (networkPolicy + Vault enabled)
+        run: |
+          helm template xcloak . --values ci/smoke-values.yaml \
+            --set networkPolicy.enabled=true \
+            --set vault.enabled=true \
+            --set vault.addr=https://vault.example.com \
+            --set vault.existingSecret=xcloak-vault-token \
+            > /dev/null

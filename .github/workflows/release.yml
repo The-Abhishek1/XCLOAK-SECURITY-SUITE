@@ -142,3 +142,42 @@ jobs:
             ```bash
             sha256sum -c SHA256SUMS.txt
             ```
+
+  # ── Publish Helm chart to GitHub Pages (Helm repo) ─────────────────────────
+  # After running this once, users can:
+  #   helm repo add xcloak https://the-abhishek1.github.io/XCLOAK-SECURITY-SUITE
+  #   helm install xcloak xcloak/xcloak --set global.ingress.host=...
+  #
+  # Prerequisites (one-time setup):
+  #   1. GitHub repo Settings → Pages → Source: "Deploy from a branch" → gh-pages
+  #   2. Settings → Actions → General → Workflow permissions: Read and write
+  publish-helm:
+    name: Publish Helm chart to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-artifacts
+
+    permissions:
+      contents: write   # push to gh-pages branch
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # chart-releaser needs full history to detect changes
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.0
+
+      - name: Add Bitnami repo and update chart dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm dependency update charts/xcloak
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        with:
+          charts_dir: charts
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

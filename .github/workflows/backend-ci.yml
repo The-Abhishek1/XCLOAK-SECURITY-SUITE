@@ -19,8 +19,10 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      # Use the same TimescaleDB image as production so migration 000067
+      # runs for real (extension available) rather than gracefully skipping.
       postgres:
-        image: postgres:16-alpine
+        image: timescale/timescaledb:latest-pg16
         env:
           POSTGRES_USER: xcloak
           POSTGRES_PASSWORD: xcloak_ci_password
@@ -69,4 +71,4 @@ jobs:
         run: go build ./...
 
       - name: go test
-        run: go test ./... -v
+        run: go test -race -count=1 -timeout 120s ./...
