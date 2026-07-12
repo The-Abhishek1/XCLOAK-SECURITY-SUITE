@@ -23,58 +23,165 @@ const IS_DEMO_ONLY = process.env.NEXT_PUBLIC_DEMO_ONLY === 'true';
 
 function DemoOnlyLanding() {
   const { theme, toggle } = useTheme();
+  const router = useRouter();
+  const [launching, setLaunching] = useState(false);
+
+  const launch = async () => {
+    setLaunching(true);
+    try {
+      await fetch('/api/demo/start', { method: 'GET', credentials: 'include' });
+      router.push('/dashboard');
+    } catch {
+      // Even if fetch fails in static mode, cookies might be set — try redirect anyway
+      router.push('/dashboard');
+    }
+  };
+
+  const FEATURES = [
+    { icon: ShieldCheck, label: 'AI Threat Detection',   sub: 'ML-powered anomaly engine' },
+    { icon: AlertCircle, label: 'SIEM / Alert Triage',   sub: '25 live alerts correlated' },
+    { icon: Lock,        label: 'SOAR Playbooks',        sub: '14 prebuilt automations' },
+    { icon: User,        label: 'UEBA & Insider Threat', sub: 'Behavioral baselining' },
+    { icon: Building2,   label: 'Mobile MDM',            sub: 'Android agent enrollment' },
+    { icon: KeyRound,    label: 'MITRE ATT&CK',          sub: 'Full framework mapping' },
+  ];
+
+  const STATS = [
+    { value: '50+', label: 'Detection Engines' },
+    { value: '14',  label: 'SOAR Playbooks' },
+    { value: '128', label: 'DB Tables' },
+    { value: '∞',   label: 'Log Ingestion' },
+  ];
+
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
-      style={{ background: 'var(--bg-0)' }}>
+    <div className="min-h-screen relative overflow-hidden" style={{ background: 'var(--bg-0)' }}>
       <div className="bg-mesh" />
       <div className="grid-bg fixed inset-0 z-0 opacity-20" />
-      <div className="fixed z-0 pointer-events-none" style={{ top: '8%', left: '3%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,0.07) 0%, transparent 70%)', filter: 'blur(40px)' }} />
-      <div className="fixed z-0 pointer-events-none" style={{ bottom: '8%', right: '3%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(14,165,233,0.05) 0%, transparent 70%)', filter: 'blur(40px)' }} />
 
-      <button onClick={toggle} className="fixed top-4 right-4 z-20 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
-        style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-        {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      </button>
+      {/* Glows */}
+      <div className="fixed z-0 pointer-events-none" style={{ top: '-5%', left: '-5%', width: 700, height: 700, borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,0.06) 0%, transparent 65%)', filter: 'blur(60px)' }} />
+      <div className="fixed z-0 pointer-events-none" style={{ bottom: '-5%', right: '-5%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(14,165,233,0.05) 0%, transparent 65%)', filter: 'blur(60px)' }} />
 
-      <div className="relative z-10 w-full max-w-[420px] px-4">
-        <div className="g-panel p-8 text-center">
-          {/* Logo */}
-          <div className="flex flex-col items-center mb-6">
-            <div className="relative mb-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl"
-                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', boxShadow: '0 0 40px var(--accent-glow)' }}>
-                <ShieldCheck className="h-8 w-8" style={{ color: 'var(--accent)' }} />
-              </div>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
-              XCloak <span style={{ color: 'var(--accent)' }}>Security Suite</span>
-            </h1>
-            <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              AI-powered enterprise SOC platform
-            </p>
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+            <ShieldCheck className="h-4 w-4" style={{ color: 'var(--accent)' }} />
           </div>
+          <span className="text-sm font-bold tracking-tight" style={{ color: 'var(--text-1)' }}>
+            XCloak <span style={{ color: 'var(--accent)' }}>Security Suite</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href="https://xcloak.tech" target="_blank" rel="noopener noreferrer"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            xcloak.tech ↗
+          </a>
+          <button onClick={toggle} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+            style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
 
-          {/* Feature pills */}
-          <div className="flex flex-wrap justify-center gap-2 mb-6">
-            {['SIEM · 25 alerts','3 Active incidents','eBPF agents','MITRE ATT&CK','SOAR playbooks','Mobile MDM'].map(f => (
-              <span key={f} className="rounded-full px-2.5 py-1 text-[11px] font-medium"
-                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
-                {f}
-              </span>
-            ))}
-          </div>
-
-
-          <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--border)' }}>
-            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-              Want full access?{' '}
-              <a href="https://xcloak.tech" className="underline" style={{ color: 'var(--accent)' }}>
-                Visit xcloak.tech
-              </a>
-              {' '}· XCloak Security Suite · Enterprise Edition
-            </p>
+      {/* Hero */}
+      <div className="relative z-10 flex flex-col items-center text-center px-4 pt-10 pb-8">
+        {/* Logo */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 rounded-3xl" style={{ background: 'var(--accent-glow)', filter: 'blur(20px)', transform: 'scale(1.4)' }} />
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl"
+            style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', boxShadow: '0 0 50px rgba(34,211,238,0.2)' }}>
+            <ShieldCheck className="h-10 w-10" style={{ color: 'var(--accent)' }} />
           </div>
         </div>
+
+        <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-4 text-[10px] font-semibold uppercase tracking-widest"
+          style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
+          Live Interactive Demo
+        </div>
+
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-3 max-w-xl" style={{ color: 'var(--text-1)' }}>
+          Enterprise SOC Platform<br />
+          <span style={{ color: 'var(--accent)' }}>powered by AI</span>
+        </h1>
+        <p className="text-sm sm:text-base max-w-md mb-8 leading-relaxed" style={{ color: 'var(--text-2)' }}>
+          Full-stack security operations — SIEM, SOAR, UEBA, threat intel, network map, DFIR, and mobile MDM in one platform.
+        </p>
+
+        {/* CTA */}
+        <button
+          onClick={launch}
+          disabled={launching}
+          className="flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+          style={{
+            background: launching ? 'var(--accent-glow)' : 'var(--accent)',
+            color: launching ? 'var(--accent)' : '#000',
+            border: '1px solid var(--accent-border)',
+            boxShadow: '0 0 30px rgba(34,211,238,0.3)',
+          }}
+          onMouseEnter={e => { if (!launching) (e.currentTarget as HTMLElement).style.boxShadow = '0 0 50px rgba(34,211,238,0.5)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 0 30px rgba(34,211,238,0.3)'; }}
+        >
+          {launching ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Launching…
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-4 w-4" />
+              Launch Live Demo
+            </>
+          )}
+        </button>
+        <p className="mt-3 text-[11px]" style={{ color: 'var(--text-3)' }}>
+          No sign-up required · Read-only sandbox · Resets periodically
+        </p>
+      </div>
+
+      {/* Stats strip */}
+      <div className="relative z-10 mx-auto max-w-2xl px-4 mb-10">
+        <div className="grid grid-cols-4 gap-3">
+          {STATS.map(s => (
+            <div key={s.label} className="rounded-xl p-3 text-center"
+              style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+              <p className="text-lg font-extrabold mono" style={{ color: 'var(--accent)' }}>{s.value}</p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Feature grid */}
+      <div className="relative z-10 mx-auto max-w-2xl px-4 pb-12">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {FEATURES.map(({ icon: Icon, label, sub }) => (
+            <div key={label} className="rounded-xl p-4 flex items-start gap-3"
+              style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
+                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                <Icon className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>{label}</p>
+                <p className="text-[10px] mt-0.5 leading-tight" style={{ color: 'var(--text-3)' }}>{sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="relative z-10 border-t pb-8 pt-5 text-center" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+          Want full access?{' '}
+          <a href="https://xcloak.tech" className="underline" style={{ color: 'var(--accent)' }}>
+            Visit xcloak.tech
+          </a>
+          {' '}· XCloak Security Suite · Enterprise Edition
+        </p>
       </div>
     </div>
   );
