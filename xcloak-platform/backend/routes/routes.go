@@ -255,7 +255,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/platform/tenants/:id/domains", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantDomains)
 	router.POST("/api/platform/tenants/:id/domains", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.AddTenantDomain)
 	router.DELETE("/api/platform/tenants/:id/domains/:did", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.DeleteTenantDomain)
-	router.POST("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.PublishAgentRelease)
+	router.POST("/api/platform/agent-releases", middleware.RequireAuthOrCIToken(), middleware.RequirePlatformAdmin(), api.PublishAgentRelease)
 	router.GET("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAgentReleases)
 	router.GET("/api/agent-releases/:platform", middleware.RequireAgentAuth(), api.GetLatestAgentRelease)
 

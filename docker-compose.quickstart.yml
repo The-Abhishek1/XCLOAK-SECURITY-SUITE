@@ -67,6 +67,11 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       # Kafka disabled — not needed for quickstart
       KAFKA_ENABLED: "false"
+      # Agent self-update — set all three to enable signed automatic updates.
+      # Generate keys: see .env.ha.example or CONTRIBUTING.md.
+      # AGENT_RELEASE_SIGNING_KEY: ""
+      # AGENT_RELEASE_PUBLIC_KEY: ""
+      # AGENT_RELEASE_CI_TOKEN: ""
       # AI — Ollama (local) by default; set ANTHROPIC_API_KEY + LLM_PROVIDER=anthropic to use Claude
       LLM_PROVIDER: ollama
       OLLAMA_URL: http://host.docker.internal:11434

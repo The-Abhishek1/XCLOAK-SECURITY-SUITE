@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -106,5 +107,30 @@ func RequireAuth() gin.HandlerFunc {
 		c.Set("token_string",      tokenString) // stored for logout
 
 		c.Next()
+	}
+}
+
+// RequireAuthOrCIToken is RequireAuth with one additional bypass: when
+// AGENT_RELEASE_CI_TOKEN is set in the backend environment and the request
+// carries a matching X-Release-Token header, the request is granted platform
+// admin context without needing a JWT. This allows the GitHub Actions release
+// pipeline to publish signed agent releases (POST /api/platform/agent-releases)
+// without storing a session credential in CI secrets.
+//
+// The env var is intentionally not checked when empty — if it's unset, the
+// bypass is completely disabled and only normal JWT auth works.
+func RequireAuthOrCIToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ciToken := os.Getenv("AGENT_RELEASE_CI_TOKEN")
+		if ciToken != "" && c.GetHeader("X-Release-Token") == ciToken {
+			c.Set("user_id", 0)
+			c.Set("username", "ci-release-pipeline")
+			c.Set("role", "platform_admin")
+			c.Set("tenant_id", float64(0))
+			c.Set("is_platform_admin", true)
+			c.Next()
+			return
+		}
+		RequireAuth()(c)
 	}
 }

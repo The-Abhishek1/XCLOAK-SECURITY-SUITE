@@ -22,11 +22,41 @@ jobs:
         with:
           go-version-file: xcloak-agent-desktop/go.mod
 
+      - name: Extract agent release public key
+        id: pubkey
+        run: |
+          # Derive the 32-byte raw ed25519 public key from the PEM private key
+          # stored in AGENT_SIGNING_KEY (base64url seed) and encode it as base64url
+          # (no padding) so it can be injected into the agent binary via ldflags.
+          SEED="${{ secrets.AGENT_SIGNING_KEY }}"
+          if [ -n "$SEED" ]; then
+            python3 - "$SEED" << 'PYEOF'
+          import sys, base64
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          seed = base64.urlsafe_b64decode(sys.argv[1] + "==")
+          priv = Ed25519PrivateKey.from_private_bytes(seed)
+          pub  = priv.public_key().public_bytes_raw()
+          print("pubkey=" + base64.urlsafe_b64encode(pub).rstrip(b"=").decode(), flush=True)
+          PYEOF
+          else
+            echo "pubkey="
+            echo "::warning::AGENT_SIGNING_KEY not set — agent will build WITHOUT embedded public key. Self-update signature verification will be skipped."
+          fi >> "$GITHUB_OUTPUT"
+
+      - name: Build signing helper
+        working-directory: xcloak-agent-desktop
+        run: go build -o /usr/local/bin/sign-release ./cmd/sign
+
       - name: Build agent binaries
         working-directory: xcloak-agent-desktop
+        env:
+          PUBKEY: ${{ steps.pubkey.outputs.pubkey }}
         run: |
           VERSION="${GITHUB_REF_NAME}"
+          # Embed version + release public key so the agent verifies update
+          # signatures against the key that was used at release time.
           LDFLAGS="-X xcloak-agent-desktop/agent.Version=${VERSION}"
+          [ -n "$PUBKEY" ] && LDFLAGS="$LDFLAGS -X xcloak-agent-desktop/agent.AgentReleasePublicKey=${PUBKEY}"
 
           # Linux amd64 (native — CGO available for eBPF)
           GOOS=linux  GOARCH=amd64 go build -ldflags "$LDFLAGS" \
@@ -142,6 +172,93 @@ jobs:
             ```bash
             sha256sum -c SHA256SUMS.txt
             ```
+
+  # ── Publish signed agent releases to the backend ───────────────────────────
+  # After the GitHub release is created, sign each binary and tell the backend
+  # about the new release so connected agents pick it up on their next check-in
+  # (every 6 hours by default, per selfUpdateCheckInterval in self_update.go).
+  #
+  # Required secrets:
+  #   AGENT_SIGNING_KEY    — base64url ed25519 seed (same as backend's AGENT_RELEASE_SIGNING_KEY)
+  #   RELEASE_API_URL      — backend URL, e.g. https://api.xcloak.tech
+  #   AGENT_RELEASE_CI_TOKEN — shared token (matches backend's AGENT_RELEASE_CI_TOKEN env var)
+  publish-agent-releases:
+    name: Sign and publish agent releases
+    runs-on: ubuntu-latest
+    needs: build-artifacts
+    if: |
+      secrets.RELEASE_API_URL != '' &&
+      secrets.AGENT_RELEASE_CI_TOKEN != '' &&
+      secrets.AGENT_SIGNING_KEY != ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: xcloak-agent-desktop/go.mod
+
+      - name: Build signing helper
+        working-directory: xcloak-agent-desktop
+        run: go build -o /usr/local/bin/sign-release ./cmd/sign
+
+      - name: Download GitHub release binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          mkdir -p /tmp/release-binaries
+          gh release download "$VERSION" \
+            --pattern "xcloak-agent-linux-amd64" \
+            --pattern "xcloak-agent-linux-arm64" \
+            --pattern "xcloak-agent-windows-amd64.exe" \
+            --dir /tmp/release-binaries
+
+      - name: Sign binaries and publish to backend
+        env:
+          AGENT_SIGNING_KEY: ${{ secrets.AGENT_SIGNING_KEY }}
+          RELEASE_API_URL: ${{ secrets.RELEASE_API_URL }}
+          CI_TOKEN: ${{ secrets.AGENT_RELEASE_CI_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+          REPO="The-Abhishek1/XCLOAK-SECURITY-SUITE"
+          BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          publish() {
+            local platform="$1"
+            local filename="$2"
+            local path="/tmp/release-binaries/${filename}"
+
+            [ -f "$path" ] || { echo "::warning::${filename} not found, skipping"; return; }
+
+            SHA256=$(sha256sum "$path" | awk '{print $1}')
+            SIG=$(AGENT_SIGNING_KEY="$AGENT_SIGNING_KEY" sign-release "$path")
+            DL_URL="${BASE_URL}/${filename}"
+
+            HTTP=$(curl -s -o /tmp/publish-resp.json -w "%{http_code}" \
+              -H "X-Release-Token: ${CI_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"platform\":     \"${platform}\",
+                \"version\":      \"${VERSION}\",
+                \"sha256\":       \"${SHA256}\",
+                \"signature\":    \"${SIG}\",
+                \"download_url\": \"${DL_URL}\"
+              }" \
+              "${RELEASE_API_URL}/api/platform/agent-releases")
+
+            if [ "$HTTP" = "200" ]; then
+              echo "Published ${platform} (${VERSION}) ✓"
+            else
+              echo "::error::Failed to publish ${platform}: HTTP ${HTTP}"
+              cat /tmp/publish-resp.json || true
+            fi
+          }
+
+          publish "linux_amd64"    "xcloak-agent-linux-amd64"
+          publish "linux_arm64"    "xcloak-agent-linux-arm64"
+          publish "windows_amd64"  "xcloak-agent-windows-amd64.exe"
 
   # ── Publish Helm chart to GitHub Pages (Helm repo) ─────────────────────────
   # After running this once, users can:
