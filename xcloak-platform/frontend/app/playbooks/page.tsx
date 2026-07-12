@@ -378,11 +378,16 @@ export default function PlaybooksPage() {
                               if {a.condition_expr}
                             </p>
                           )}
-                          {a.payload && a.payload !== '{}' && (
-                            <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)', maxWidth: 300 }}>
-                              {a.payload}
-                            </p>
-                          )}
+                          {(() => {
+                            const ps = typeof a.payload === 'object'
+                              ? JSON.stringify(a.payload)
+                              : String(a.payload ?? '');
+                            return ps && ps !== '{}' && ps !== 'null' ? (
+                              <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-3)', maxWidth: 300 }}>
+                                {ps}
+                              </p>
+                            ) : null;
+                          })()}
                         </div>
                         <button onClick={() => deleteAction(a.id, pb.id)}
                           className="p-1 rounded shrink-0 mt-0.5" style={{ color: 'var(--text-3)' }}

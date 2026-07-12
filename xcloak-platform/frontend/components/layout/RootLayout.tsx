@@ -6,6 +6,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
 import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock, FlaskConical } from 'lucide-react';
+import Link from 'next/link';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { timeAgo } from '@/lib/utils';
 
@@ -93,19 +94,32 @@ function AppHeader({
   const { notifications, unread, markRead, markAllRead, dismiss } = useNotifications();
   const { theme, toggle } = useTheme();
   const { profile } = useUser();
-  const [bellOpen, setBellOpen] = useState(false);
-  const [time, setTime] = useState('');
+  const [bellOpen, setBellOpen]   = useState(false);
+  const [useUTC, setUseUTC]       = useState(false);
+  const [time, setTime]           = useState('');
+  const [tzLabel, setTzLabel]     = useState('');
   const bellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const update = () => setTime(new Date().toLocaleTimeString('en-US', {
-      timeZone: 'UTC',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    }));
+    const update = () => {
+      const now = new Date();
+      if (useUTC) {
+        setTime(now.toLocaleTimeString('en-US', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
+        setTzLabel('UTC');
+      } else {
+        setTime(now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
+        // Short timezone abbreviation from Intl if available
+        try {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const abbr = now.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop() || tz;
+          setTzLabel(abbr);
+        } catch { setTzLabel('Local'); }
+      }
+    };
     update();
     const t = setInterval(update, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [useUTC]);
 
   // Close bell on outside click
   useEffect(() => {
@@ -159,14 +173,19 @@ function AppHeader({
         <div className="hidden md:block"><GlobalSearch /></div>
         <div className="flex md:hidden"><GlobalSearch compact /></div>
 
-        {/* Clock — hide on small screens */}
-        <div
-          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+        {/* Clock — click to toggle local ↔ UTC */}
+        <button
+          onClick={() => setUseUTC(u => !u)}
+          title={useUTC ? 'Switch to local time' : 'Switch to UTC'}
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors"
           style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}
         >
           <Clock className="h-3 w-3" style={{ color: 'var(--text-3)' }} />
-          <span className="mono text-[11px]" style={{ color: 'var(--text-2)' }}>{time || '--:--:--'} UTC</span>
-        </div>
+          <span className="mono text-[11px]" style={{ color: 'var(--text-2)' }}>{time || '--:--:--'}</span>
+          <span className="text-[9px] font-semibold uppercase" style={{ color: useUTC ? 'var(--accent)' : 'var(--text-3)' }}>{tzLabel}</span>
+        </button>
 
         {onRefresh && (
           <button
@@ -286,14 +305,17 @@ function AppHeader({
           )}
         </div>
 
-        {/* User badge — avatar always; text only on md+ */}
+        {/* User badge — links to profile settings */}
         {profile && (
-          <div
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+          <Link
+            href="/settings?tab=profile"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors"
             style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}
           >
             <div
-              className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+              className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
               style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}
             >
               {profile.username.charAt(0).toUpperCase()}
@@ -303,13 +325,19 @@ function AppHeader({
                 {profile.username}
               </p>
               <p className="text-[9px] leading-none mt-0.5" style={{ color: 'var(--text-3)' }}>
-                <span style={{ color: ROLE_COLORS[profile.role] ?? 'var(--text-3)', fontWeight: 600 }}>
-                  {profile.role}
-                </span>
-                {' · '}{profile.tenant_name}
+                {/* Only show role if it differs from username */}
+                {profile.role !== profile.username && (
+                  <>
+                    <span style={{ color: ROLE_COLORS[profile.role] ?? 'var(--text-3)', fontWeight: 600 }}>
+                      {profile.role}
+                    </span>
+                    {' · '}
+                  </>
+                )}
+                {profile.tenant_name}
               </p>
             </div>
-          </div>
+          </Link>
         )}
       </div>
     </header>
