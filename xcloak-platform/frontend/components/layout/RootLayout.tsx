@@ -19,12 +19,21 @@ interface RootLayoutProps {
 }
 
 export function RootLayout({ children, title, subtitle, onRefresh, refreshing, actions }: RootLayoutProps) {
-  const [mobileOpen, setMobileOpen]           = useState(false);
+  const [mobileOpen, setMobileOpen]             = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [isDesktop, setIsDesktop]               = useState(false);
 
-  // Read localStorage after mount to avoid SSR hydration mismatch
   useEffect(() => {
+    // Restore collapse preference
     setDesktopCollapsed(localStorage.getItem('sidebar-collapsed') === 'true');
+
+    // Track lg breakpoint (1024px) so we only apply left margin on desktop.
+    // Below lg the sidebar is hidden and the margin must be 0.
+    const mq = window.matchMedia('(min-width: 1024px)');
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
 
   const toggleMenu = () => setMobileOpen(o => !o);
@@ -37,7 +46,9 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
     });
   };
 
-  const sidebarW = desktopCollapsed ? 56 : 240;
+  const COLLAPSED_W = 68;
+  const EXPANDED_W  = 240;
+  const sidebarW    = desktopCollapsed ? COLLAPSED_W : EXPANDED_W;
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg-0)' }}>
@@ -47,12 +58,13 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
         onToggle={toggleMenu}
         desktopCollapsed={desktopCollapsed}
         onToggleCollapse={toggleCollapse}
+        collapsedWidth={COLLAPSED_W}
+        expandedWidth={EXPANDED_W}
       />
-      {/* Main area — margin tracks sidebar width with CSS transition */}
+      {/* Margin only on desktop — sidebar is hidden (display:none) below lg */}
       <div
         className="flex flex-1 flex-col min-w-0 transition-[margin-left] duration-200"
-        style={{ marginLeft: `${sidebarW}px` }}
-        // Override the default lg:ml-[240px] — sidebar width is now managed above
+        style={{ marginLeft: isDesktop ? `${sidebarW}px` : 0 }}
       >
         <AppHeader
           title={title}

@@ -157,55 +157,61 @@ function CollapsedNav({
 
   return (
     <>
-      <nav className="flex-1 overflow-y-auto py-2 flex flex-col items-center gap-0.5">
-        {visibleNav.flatMap((section: any) =>
-          section.items.map((item: any) => {
-            const Icon = item.icon;
-            const active = pathname === item.href || pathname?.startsWith(item.href + '/');
-            const badge  = badges[item.href] ?? 0;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={item.label}
-                onClick={onNavigate}
-                className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-all"
-                style={{
-                  background: active ? 'var(--accent-glow)' : 'transparent',
-                  color:      active ? 'var(--accent)' : 'var(--text-2)',
-                  border:     active ? '1px solid var(--accent-border)' : '1px solid transparent',
-                }}
-                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; }}
-                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {badge > 0 && (
-                  <span
-                    className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold"
-                    style={{ background: 'var(--red)', color: '#fff' }}
-                  >
-                    {badge > 9 ? '9+' : badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })
-        )}
+      <nav className="flex-1 overflow-y-auto py-3 flex flex-col items-center gap-1 px-2">
+        {visibleNav.map((section: any, si: number) => (
+          <div key={section.group} className="flex flex-col items-center gap-1 w-full">
+            {/* Divider between groups (not before first) */}
+            {si > 0 && (
+              <div className="w-8 my-1" style={{ height: 1, background: 'var(--border)' }} />
+            )}
+            {section.items.map((item: any) => {
+              const Icon   = item.icon;
+              const active = pathname === item.href || pathname?.startsWith(item.href + '/');
+              const badge  = badges[item.href] ?? 0;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={item.label}
+                  onClick={onNavigate}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-xl transition-all"
+                  style={{
+                    background: active ? 'var(--accent-glow)' : 'transparent',
+                    color:      active ? 'var(--accent)' : 'var(--text-2)',
+                    border:     active ? '1px solid var(--accent-border)' : '1px solid transparent',
+                  }}
+                  onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'; } }}
+                  onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; } }}
+                >
+                  <Icon className="shrink-0" style={{ width: 18, height: 18 }} />
+                  {badge > 0 && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[9px] font-bold"
+                      style={{ background: 'var(--red)', color: '#fff' }}
+                    >
+                      {badge > 9 ? '9+' : badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div
-        className="flex justify-center pb-4 shrink-0"
+        className="flex justify-center pb-4 shrink-0 px-2"
         style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}
       >
         <button
           onClick={logout}
           title="Sign out"
-          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all"
+          className="flex h-10 w-10 items-center justify-center rounded-xl transition-all"
           style={{ color: 'var(--text-2)' }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--red-bg)'; (e.currentTarget as HTMLElement).style.color = 'var(--red)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut style={{ width: 18, height: 18 }} />
         </button>
       </div>
     </>
@@ -378,11 +384,15 @@ export function Sidebar({
   onToggle,
   desktopCollapsed,
   onToggleCollapse,
+  collapsedWidth = 68,
+  expandedWidth  = 240,
 }: {
   mobileOpen: boolean;
   onToggle: () => void;
   desktopCollapsed: boolean;
   onToggleCollapse: () => void;
+  collapsedWidth?: number;
+  expandedWidth?: number;
 }) {
   const pathname = usePathname();
   const router   = useRouter();
@@ -429,7 +439,7 @@ export function Sidebar({
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
         className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-40 transition-[width] duration-200"
-        style={{ width: desktopCollapsed ? 56 : 240, ...sidebarStyle }}
+        style={{ width: desktopCollapsed ? collapsedWidth : expandedWidth, ...sidebarStyle }}
       >
         {/* Logo row + collapse toggle */}
         <div
