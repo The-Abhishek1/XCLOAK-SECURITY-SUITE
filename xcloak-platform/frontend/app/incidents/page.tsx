@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { incidentsAPI, aiAPI } from '@/lib/api';
 import { Incident } from '@/types';
@@ -9,26 +9,36 @@ import Link from 'next/link';
 import {
   AlertTriangle, X, Clock, Bot, Loader2,
   MessageSquare, Send, ChevronRight, Bell, TrendingUp,
+  Search, CheckSquare, Square, CheckCheck, Filter,
+  ShieldAlert, Flame, Activity,
 } from 'lucide-react';
 
-// SLA in hours per severity
 const INCIDENT_SLA: Record<string, number> = { critical: 4, high: 8, medium: 48, low: 120 };
+const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
+const STATUSES   = ['open', 'investigating', 'resolved', 'closed'] as const;
 
-function incidentSlaBreach(inc: { severity: string; status: string; created_at: string }): boolean {
-  if (inc.status === 'resolved' || inc.status === 'closed') return false;
-  const slaH = INCIDENT_SLA[inc.severity];
-  if (!slaH) return false;
-  return (Date.now() - new Date(inc.created_at).getTime()) / 3_600_000 > slaH;
+function slaInfo(sev: string, created_at: string, status: string): { breached: boolean; label: string } | null {
+  if (status === 'resolved' || status === 'closed') return null;
+  const slaH = INCIDENT_SLA[sev];
+  if (!slaH) return null;
+  const ageH = (Date.now() - new Date(created_at).getTime()) / 3_600_000;
+  const diffH = ageH - slaH;
+  if (diffH > 0) {
+    const h = Math.floor(diffH);
+    const m = Math.floor((diffH - h) * 60);
+    return { breached: true, label: `+${h}h${m ? ` ${m}m` : ''}` };
+  }
+  const rem = slaH - ageH;
+  const h = Math.floor(rem);
+  const m = Math.floor((rem - h) * 60);
+  return { breached: false, label: `${h}h${m ? ` ${m}m` : ''} left` };
 }
 
-function slaLabel(sev: string, created_at: string): string {
+function slaBreachDetail(sev: string, created_at: string): string {
   const slaH = INCIDENT_SLA[sev] ?? 0;
   const ageH = (Date.now() - new Date(created_at).getTime()) / 3_600_000;
-  const overH = Math.round(ageH - slaH);
-  return `SLA breached by ${overH}h (${slaH}h target for ${sev})`;
+  return `SLA breached by ${Math.round(ageH - slaH)}h (${slaH}h target for ${sev})`;
 }
-
-const STATUSES = ['open','investigating','resolved','closed'] as const;
 
 interface AISummary {
   summary: string;
@@ -38,26 +48,45 @@ interface AISummary {
 }
 
 export default function IncidentsPage() {
-  const [incidents, setIncidents]   = useState<Incident[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter]         = useState('all');
-  const [selected, setSelected]     = useState<Incident | null>(null);
-  const [events, setEvents]         = useState<any[]>([]);
-  const [evLoading, setEvLoading]   = useState(false);
-  const [updatingId, setUpdatingId] = useState<number | null>(null);
-  const [toast, setToast]           = useState<string | null>(null);
-  const [aiSummary, setAiSummary]   = useState<AISummary | null>(null);
-  const [aiLoading, setAiLoading]   = useState(false);
-  const [note, setNote]             = useState('');
-  const [addingNote, setAddingNote] = useState(false);
-  const [page, setPage]             = useState(1);
-  const [total, setTotal]           = useState(0);
+  const [incidents, setIncidents]     = useState<Incident[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [filter, setFilter]           = useState('all');
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIDs, setSelectedIDs] = useState<Set<number>>(new Set());
+  const [bulkStatus, setBulkStatus]   = useState('');
+  const [bulking, setBulking]         = useState(false);
+  const [selected, setSelected]       = useState<Incident | null>(null);
+  const [events, setEvents]           = useState<any[]>([]);
+  const [evLoading, setEvLoading]     = useState(false);
+  const [updatingId, setUpdatingId]   = useState<number | null>(null);
+  const [toast, setToast]             = useState<string | null>(null);
+  const [aiSummary, setAiSummary]     = useState<AISummary | null>(null);
+  const [aiLoading, setAiLoading]     = useState(false);
+  const [note, setNote]               = useState('');
+  const [addingNote, setAddingNote]   = useState(false);
+  const [page, setPage]               = useState(1);
+  const [total, setTotal]             = useState(0);
+  const [linkedAlerts, setLinkedAlerts]   = useState<any[]>([]);
+  const [linkedLoading, setLinkedLoading] = useState(false);
+  const [escalating, setEscalating]   = useState(false);
+  const [statusCounts, setStatusCounts]   = useState<Record<string, number>>({});
+  const [, setTick]                   = useState(0);
   const PER_PAGE = 25;
 
-  const [linkedAlerts, setLinkedAlerts] = useState<any[]>([]);
-  const [linkedLoading, setLinkedLoading] = useState(false);
-  const [escalating, setEscalating] = useState(false);
+  // Force re-render every 60s for live SLA countdowns
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Escape to close drawer
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const load = useCallback(async (p = page, status = filter, spin = false) => {
     if (spin) setRefreshing(true);
@@ -66,11 +95,14 @@ export default function IncidentsPage() {
       const data = r.data || {};
       setIncidents(data.data || []);
       setTotal(data.total || 0);
-    }
-    finally { setLoading(false); setRefreshing(false); }
+    } finally { setLoading(false); setRefreshing(false); }
   }, [page, filter]);
 
   useEffect(() => { load(page, filter); }, [page, filter]);
+
+  useEffect(() => {
+    incidentsAPI.getCounts().then(r => setStatusCounts(r.data || {})).catch(() => {});
+  }, []);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -93,7 +125,7 @@ export default function IncidentsPage() {
 
   const escalateSeverity = async () => {
     if (!selected) return;
-    const SEV = ['low','medium','high','critical'];
+    const SEV = ['low', 'medium', 'high', 'critical'];
     const idx = SEV.indexOf(selected.severity);
     if (idx >= SEV.length - 1) return;
     const next = SEV[idx + 1] as 'low' | 'medium' | 'high' | 'critical';
@@ -115,6 +147,30 @@ export default function IncidentsPage() {
       if (selected?.id === id) setSelected(s => s ? { ...s, status: status as any } : s);
       notify(`Status → ${status}`);
     } finally { setUpdatingId(null); }
+  };
+
+  const bulkUpdate = async () => {
+    if (!bulkStatus || selectedIDs.size === 0) return;
+    setBulking(true);
+    try {
+      await Promise.all([...selectedIDs].map(id => incidentsAPI.updateStatus(id, bulkStatus)));
+      setIncidents(p => p.map(i => selectedIDs.has(i.id) ? { ...i, status: bulkStatus as any } : i));
+      notify(`${selectedIDs.size} incident${selectedIDs.size !== 1 ? 's' : ''} → ${bulkStatus}`);
+      setSelectedIDs(new Set());
+      setBulkStatus('');
+    } catch { notify('Bulk update failed'); }
+    finally { setBulking(false); }
+  };
+
+  const toggleSelect = (id: number) => setSelectedIDs(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleSelectAll = () => {
+    if (selectedIDs.size === displayed.length) setSelectedIDs(new Set());
+    else setSelectedIDs(new Set(displayed.map(i => i.id)));
   };
 
   const runAISummary = async () => {
@@ -141,19 +197,22 @@ export default function IncidentsPage() {
     finally { setAddingNote(false); }
   };
 
-  // With server-side filtering, the entire page matches the filter.
-  // Keep counts state to show per-tab counts (loaded on first mount via all-status).
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const changeFilter = (f: string) => { setFilter(f); setPage(1); setSelectedIDs(new Set()); };
 
-  useEffect(() => {
-    incidentsAPI.getCounts().then(r => {
-      setStatusCounts(r.data || {});
-    }).catch(() => {});
-  }, []);
+  const displayed = incidents.filter(inc => {
+    if (severityFilter && inc.severity !== severityFilter) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return inc.title.toLowerCase().includes(q) || (inc.description || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
 
-  const changeFilter = (f: string) => { setFilter(f); setPage(1); };
-
-  const filtered = incidents; // already server-filtered
+  const totalCount    = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  const slaBreachedCount = incidents.filter(i =>
+    i.status !== 'resolved' && i.status !== 'closed' &&
+    slaInfo(i.severity, i.created_at, i.status)?.breached
+  ).length;
 
   return (
     <RootLayout title="Incidents" subtitle={total ? `${total} total` : ''}
@@ -166,11 +225,33 @@ export default function IncidentsPage() {
       )}
 
       <div className="space-y-4">
+        {/* KPI strip */}
+        {!loading && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total',        value: totalCount,                       color: 'var(--accent)',  icon: Activity },
+              { label: 'Open',         value: statusCounts.open        || 0,    color: 'var(--red)',     icon: Flame },
+              { label: 'Investigating',value: statusCounts.investigating || 0,  color: 'var(--orange)',  icon: ShieldAlert },
+              { label: 'SLA Breached', value: slaBreachedCount,                 color: slaBreachedCount > 0 ? 'var(--red)' : 'var(--green)', icon: Clock },
+            ].map(({ label, value, color, icon: Icon }) => (
+              <div key={label} className="g-card p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg" style={{ background: `${color}18` }}>
+                  <Icon className="h-4 w-4" style={{ color }} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold" style={{ color }}>{value}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Status filter tabs */}
         <div className="flex items-center gap-2 flex-wrap">
           {['all', ...STATUSES].map(s => {
             const count = s === 'all'
-              ? Object.values(statusCounts).reduce((a, b) => a + b, 0)
+              ? totalCount
               : (statusCounts[s] || 0);
             return (
               <button key={s} onClick={() => changeFilter(s)}
@@ -186,68 +267,148 @@ export default function IncidentsPage() {
           })}
         </div>
 
+        {/* Search + severity filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search incidents…"
+              className="g-input w-full text-xs pl-8" />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                style={{ color: 'var(--text-3)' }}>
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Filter className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--text-3)' }} />
+            {['', ...SEVERITIES].map(s => (
+              <button key={s || 'all'} onClick={() => setSeverityFilter(s)}
+                className="px-2.5 py-1 text-[11px] rounded-lg capitalize transition-all"
+                style={{
+                  background: severityFilter === s ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                  border: `1px solid ${severityFilter === s ? 'var(--accent-border)' : 'var(--border)'}`,
+                  color: severityFilter === s ? 'var(--accent)' : 'var(--text-2)',
+                }}>
+                {s || 'all'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bulk action bar */}
+        {selectedIDs.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+            style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+            <CheckCheck className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+            <span className="text-xs font-medium" style={{ color: 'var(--accent)' }}>
+              {selectedIDs.size} selected
+            </span>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
+                className="g-select text-xs" style={{ padding: '3px 8px' }}>
+                <option value="">Set status…</option>
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <button onClick={bulkUpdate} disabled={!bulkStatus || bulking}
+                className="g-btn g-btn-primary text-xs">
+                {bulking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+              </button>
+              <button onClick={() => setSelectedIDs(new Set())}
+                className="g-btn g-btn-ghost text-xs">Clear</button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="g-table">
-          <div className="g-thead grid gap-4 px-4"
-            style={{ gridTemplateColumns: '16px 1fr 110px 70px 80px 100px 60px 24px' }}>
-            <span /><span>Title</span><span>Status</span>
-            <span>Agent</span><span>Severity</span><span>Change</span><span>Time</span><span />
+          <div className="g-thead grid gap-3 px-4"
+            style={{ gridTemplateColumns: '16px 16px 1fr 110px 70px 80px 90px 80px 24px' }}>
+            <button onClick={toggleSelectAll} style={{ color: 'var(--text-3)' }}>
+              {selectedIDs.size > 0 && selectedIDs.size === displayed.length
+                ? <CheckSquare className="h-3.5 w-3.5" />
+                : <Square className="h-3.5 w-3.5" />}
+            </button>
+            <span />
+            <span>Title</span>
+            <span>Status</span>
+            <span>Agent</span>
+            <span>Severity</span>
+            <span>Change</span>
+            <span>SLA</span>
+            <span />
           </div>
 
           {loading ? (
             <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
-          ) : filtered.length === 0 ? (
+          ) : displayed.length === 0 ? (
             <div className="py-16 text-center">
               <AlertTriangle className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
               <p className="text-sm" style={{ color: 'var(--text-2)' }}>No incidents</p>
             </div>
-          ) : filtered.map(inc => (
-            <div key={inc.id} className="g-tr grid gap-4 items-center px-4"
-              style={{ gridTemplateColumns: '16px 1fr 110px 70px 80px 100px 60px 24px' }}>
-              <span className="h-1.5 w-1.5 rounded-full shrink-0"
-                style={{ background: inc.severity === 'critical' ? 'var(--red)' : inc.severity === 'high' ? 'var(--orange)' : inc.severity === 'medium' ? 'var(--yellow)' : 'var(--blue)' }} />
+          ) : displayed.map(inc => {
+            const sla = slaInfo(inc.severity, inc.created_at, inc.status);
+            return (
+              <div key={inc.id} className="g-tr grid gap-3 items-center px-4"
+                style={{ gridTemplateColumns: '16px 16px 1fr 110px 70px 80px 90px 80px 24px' }}>
 
-              <div className="min-w-0 cursor-pointer" onClick={() => openDetail(inc)}>
-                <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{inc.title}</p>
-                <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{inc.description}</p>
+                <button onClick={e => { e.stopPropagation(); toggleSelect(inc.id); }}
+                  style={{ color: selectedIDs.has(inc.id) ? 'var(--accent)' : 'var(--text-3)' }}>
+                  {selectedIDs.has(inc.id)
+                    ? <CheckSquare className="h-3.5 w-3.5" />
+                    : <Square className="h-3.5 w-3.5" />}
+                </button>
+
+                <span className="h-1.5 w-1.5 rounded-full shrink-0"
+                  style={{ background: inc.severity === 'critical' ? 'var(--red)' : inc.severity === 'high' ? 'var(--orange)' : inc.severity === 'medium' ? 'var(--yellow)' : 'var(--blue)' }} />
+
+                <div className="min-w-0 cursor-pointer" onClick={() => openDetail(inc)}>
+                  <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{inc.title}</p>
+                  <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{inc.description}</p>
+                </div>
+
+                <span className="text-[11px] rounded px-2 py-0.5 capitalize font-medium inline-block w-fit"
+                  style={
+                    inc.status === 'open'          ? { background: 'var(--red-bg)',    color: 'var(--red)',    border: '1px solid var(--red-border)' }
+                    : inc.status === 'investigating' ? { background: 'var(--orange-bg)', color: 'var(--orange)', border: '1px solid var(--orange-border)' }
+                    : inc.status === 'resolved'      ? { background: 'var(--green-bg)',  color: 'var(--green)',  border: '1px solid var(--green-border)' }
+                    :                                  { background: 'rgba(74,90,117,0.15)', color: 'var(--text-3)', border: '1px solid rgba(74,90,117,0.2)' }
+                  }>
+                  {inc.status}
+                </span>
+
+                <Link href={`/agents/${inc.agent_id}`} onClick={e => e.stopPropagation()}
+                  className="text-xs mono hover:underline" style={{ color: 'var(--accent)' }}>
+                  {inc.hostname || `#${inc.agent_id}`}
+                </Link>
+                <span className={sevClass(inc.severity)}>{inc.severity}</span>
+
+                <select value={inc.status} disabled={updatingId === inc.id}
+                  onChange={e => updateStatus(inc.id, e.target.value)}
+                  className="g-select text-[11px] py-1" style={{ width: 90 }}>
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+
+                {sla ? (
+                  <span className="flex items-center gap-1 text-[11px]"
+                    style={{ color: sla.breached ? 'var(--red)' : 'var(--text-3)' }}
+                    title={sla.breached ? slaBreachDetail(inc.severity, inc.created_at) : undefined}>
+                    <Clock className="h-3 w-3 shrink-0" />
+                    {sla.label}
+                  </span>
+                ) : (
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    {timeAgo(inc.created_at)}
+                  </span>
+                )}
+
+                <button onClick={() => openDetail(inc)} style={{ color: 'var(--text-3)' }}>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
               </div>
-
-              <span className="text-[11px] rounded px-2 py-0.5 capitalize font-medium inline-block w-fit"
-                style={
-                  inc.status === 'open'          ? { background: 'var(--red-bg)',    color: 'var(--red)',    border: '1px solid var(--red-border)' }
-                  : inc.status === 'investigating' ? { background: 'var(--orange-bg)', color: 'var(--orange)', border: '1px solid var(--orange-border)' }
-                  : inc.status === 'resolved'      ? { background: 'var(--green-bg)',  color: 'var(--green)',  border: '1px solid var(--green-border)' }
-                  :                                  { background: 'rgba(74,90,117,0.15)', color: 'var(--text-3)', border: '1px solid rgba(74,90,117,0.2)' }
-                }>
-                {inc.status}
-              </span>
-
-              <Link href={`/agents/${inc.agent_id}`}
-                onClick={e => e.stopPropagation()}
-                className="text-xs mono hover:underline"
-                style={{ color: 'var(--accent)' }}>
-                {inc.hostname || `#${inc.agent_id}`}
-              </Link>
-              <span className={sevClass(inc.severity)}>{inc.severity}</span>
-
-              <select value={inc.status} disabled={updatingId === inc.id}
-                onChange={e => updateStatus(inc.id, e.target.value)}
-                className="g-select text-[11px] py-1" style={{ width: 110 }}>
-                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-
-              <span className="flex items-center gap-1 text-[11px]"
-                style={{ color: incidentSlaBreach(inc) ? 'var(--red)' : 'var(--text-3)' }}
-                title={incidentSlaBreach(inc) ? slaLabel(inc.severity, inc.created_at) : undefined}>
-                {incidentSlaBreach(inc) && <Clock className="h-3 w-3 shrink-0" />}
-                {timeAgo(inc.created_at)}
-              </span>
-
-              <button onClick={() => openDetail(inc)} style={{ color: 'var(--text-3)' }}>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -255,11 +416,9 @@ export default function IncidentsPage() {
       {selected && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1" onClick={() => setSelected(null)} />
-
           <div className="w-full max-w-lg h-full overflow-y-auto"
             style={{ background: 'var(--bg-1)', borderLeft: '1px solid var(--border)' }}>
 
-            {/* Header */}
             <div className="sticky top-0 px-5 py-4 flex items-start justify-between"
               style={{ background: 'var(--bg-1)', borderBottom: '1px solid var(--border)', zIndex: 10 }}>
               <div className="flex-1 min-w-0">
@@ -284,18 +443,17 @@ export default function IncidentsPage() {
             </div>
 
             <div className="p-5 space-y-5">
-              {/* Description */}
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
                 {selected.description}
               </p>
 
               {/* SLA breach banner */}
-              {incidentSlaBreach(selected) && (
+              {slaInfo(selected.severity, selected.created_at, selected.status)?.breached && (
                 <div className="rounded-xl px-3 py-2.5 flex items-center gap-2"
                   style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)' }}>
                   <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--red)' }} />
                   <p className="text-[11px]" style={{ color: 'var(--red)' }}>
-                    {slaLabel(selected.severity, selected.created_at)}
+                    {slaBreachDetail(selected.severity, selected.created_at)}
                   </p>
                   {selected.severity !== 'critical' && (
                     <button onClick={escalateSeverity} disabled={escalating}
@@ -403,8 +561,7 @@ export default function IncidentsPage() {
                           <div className="absolute left-1.5 top-0 bottom-0 w-px" style={{ background: 'var(--border)' }} />
                           {aiSummary.timeline.map((step, i) => (
                             <div key={i} className="relative">
-                              <div className="absolute -left-3 top-1 h-2 w-2 rounded-full"
-                                style={{ background: 'var(--accent)' }} />
+                              <div className="absolute -left-3 top-1 h-2 w-2 rounded-full" style={{ background: 'var(--accent)' }} />
                               <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>{step}</p>
                             </div>
                           ))}
@@ -445,7 +602,6 @@ export default function IncidentsPage() {
                     Timeline ({events.length})
                   </p>
                 </div>
-
                 {evLoading ? (
                   <p className="text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</p>
                 ) : events.length === 0 ? (
@@ -455,23 +611,14 @@ export default function IncidentsPage() {
                     <div className="absolute left-1.5 top-0 bottom-0 w-px" style={{ background: 'var(--border)' }} />
                     {events.map((ev, i) => (
                       <div key={i} className="relative">
-                        <div className="absolute -left-3 top-1 h-2 w-2 rounded-full"
-                          style={{ background: 'var(--accent)' }} />
-                        <p className="text-xs font-medium capitalize" style={{ color: 'var(--text-2)' }}>
-                          {ev.event_type}
-                        </p>
-                        <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-1)' }}>
-                          {ev.details || ev.message}
-                        </p>
-                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
-                          {formatDate(ev.created_at)}
-                        </p>
+                        <div className="absolute -left-3 top-1 h-2 w-2 rounded-full" style={{ background: 'var(--accent)' }} />
+                        <p className="text-xs font-medium capitalize" style={{ color: 'var(--text-2)' }}>{ev.event_type}</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-1)' }}>{ev.details || ev.message}</p>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{formatDate(ev.created_at)}</p>
                       </div>
                     ))}
                   </div>
                 )}
-
-                {/* Add note */}
                 <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                   <input value={note} onChange={e => setNote(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addNote()}
@@ -479,9 +626,7 @@ export default function IncidentsPage() {
                     className="g-input flex-1 text-xs" />
                   <button onClick={addNote} disabled={addingNote || !note.trim()}
                     className="g-btn g-btn-primary" style={{ padding: '0 12px' }}>
-                    {addingNote
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Send className="h-3.5 w-3.5" />}
+                    {addingNote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               </div>
@@ -489,6 +634,7 @@ export default function IncidentsPage() {
           </div>
         </div>
       )}
+
       {/* Pagination */}
       {total > PER_PAGE && (
         <div className="flex items-center justify-between mt-4">

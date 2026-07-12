@@ -8,7 +8,7 @@ import { timeAgo } from '@/lib/utils';
 import {
   Play, Plus, Trash2, Edit2, ChevronDown, ChevronRight, X, Zap,
   ToggleLeft, ToggleRight, GitBranch, RefreshCw, AlertCircle, CheckCircle2,
-  SkipForward, Clock, BarChart3, Activity,
+  SkipForward, Clock, BarChart3, Activity, Search, Filter,
 } from 'lucide-react';
 
 const TRIGGERS = [
@@ -63,6 +63,10 @@ export default function PlaybooksPage() {
   const [triggerPB, setTriggerPB]         = useState<Playbook | null>(null);
   const [triggerAgent, setTriggerAgent]   = useState<number>(0);
   const [triggering, setTriggering]       = useState(false);
+
+  const [pbSearch, setPbSearch]             = useState('');
+  const [triggerFilter, setTriggerFilter]   = useState('');
+  const [execSearch, setExecSearch]         = useState('');
 
   // Execution drill-down
   const [expandedExec, setExpandedExec]     = useState<number | null>(null);
@@ -231,6 +235,37 @@ export default function PlaybooksPage() {
         )}
 
         {/* ── Playbook list ── */}
+        {!loading && playbooks.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+              <input value={pbSearch} onChange={e => setPbSearch(e.target.value)}
+                placeholder="Search playbooks…"
+                className="g-input w-full text-xs pl-8" />
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              <Filter className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--text-3)' }} />
+              <button onClick={() => setTriggerFilter('')}
+                className="px-2 py-1 text-[11px] rounded-lg transition-all"
+                style={{
+                  background: triggerFilter === '' ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                  border: `1px solid ${triggerFilter === '' ? 'var(--accent-border)' : 'var(--border)'}`,
+                  color: triggerFilter === '' ? 'var(--accent)' : 'var(--text-2)',
+                }}>all</button>
+              {TRIGGERS.map(t => (
+                <button key={t} onClick={() => setTriggerFilter(triggerFilter === t ? '' : t)}
+                  className="px-2 py-1 text-[11px] rounded-lg mono transition-all"
+                  style={{
+                    background: triggerFilter === t ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                    border: `1px solid ${triggerFilter === t ? 'var(--accent-border)' : 'var(--border)'}`,
+                    color: triggerFilter === t ? 'var(--accent)' : 'var(--text-2)',
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="py-20 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
         ) : playbooks.length === 0 ? (
@@ -240,7 +275,14 @@ export default function PlaybooksPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {playbooks.map(pb => (
+            {playbooks.filter(pb => {
+              if (triggerFilter && pb.trigger_type !== triggerFilter) return false;
+              if (pbSearch) return pb.name.toLowerCase().includes(pbSearch.toLowerCase());
+              return true;
+            }).map(pb => {
+              const lastExec = executions.find(e => (e as any).playbook_id === pb.id) ?? executions[0];
+              const lastExecStatus = (lastExec as any)?.overall_status || (lastExec as any)?.status;
+              return (
               <div key={pb.id} className="g-card overflow-hidden">
                 <div className="flex items-center gap-3 px-5 py-4">
                   <button onClick={() => togglePB(pb)} title={pb.enabled ? 'Disable' : 'Enable'}
@@ -260,6 +302,16 @@ export default function PlaybooksPage() {
                     </p>
                   </div>
 
+                  {lastExecStatus && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0 font-medium"
+                      style={{
+                        background: lastExecStatus === 'success' || lastExecStatus === 'completed' ? 'var(--green-bg)' : lastExecStatus === 'failed' ? '#f8514918' : 'var(--glass-bg)',
+                        color: lastExecStatus === 'success' || lastExecStatus === 'completed' ? 'var(--green)' : lastExecStatus === 'failed' ? 'var(--red)' : 'var(--text-3)',
+                        border: `1px solid ${lastExecStatus === 'success' || lastExecStatus === 'completed' ? 'var(--green-border)' : lastExecStatus === 'failed' ? 'rgba(248,81,73,0.3)' : 'var(--border)'}`,
+                      }}>
+                      {lastExecStatus}
+                    </span>
+                  )}
                   <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>{timeAgo(pb.created_at)}</span>
 
                   <button onClick={() => { setTriggerPB(pb); setTriggerAgent(agents[0]?.id || 0); }}
@@ -343,18 +395,32 @@ export default function PlaybooksPage() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {/* ── Execution log ── */}
         {executions.length > 0 && (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>
-              Execution Log
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                Execution Log
+              </p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+                <input value={execSearch} onChange={e => setExecSearch(e.target.value)}
+                  placeholder="Filter executions…"
+                  className="g-input text-xs pl-8" style={{ width: 180 }} />
+              </div>
+            </div>
             <div className="space-y-1">
-              {executions.slice(0, 20).map(ex => {
+              {executions.filter(ex => {
+                if (!execSearch) return true;
+                const q = execSearch.toLowerCase();
+                return (ex.alert_rule || '').toLowerCase().includes(q) ||
+                  agentName(ex.agent_id).toLowerCase().includes(q);
+              }).slice(0, 20).map(ex => {
                 const statusLabel = ex.overall_status || ex.status;
                 const isExpanded  = expandedExec === ex.id;
                 const hasSteps    = ex.steps_total > 0;
