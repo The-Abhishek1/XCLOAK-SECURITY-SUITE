@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
-import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI, sessionsAPI, securityPolicyAPI, integrationsAPI, authAPI, notificationsAPI } from '@/lib/api';
+import { usersAPI, auditAPI, apiKeysAPI, customRolesAPI, sessionsAPI, securityPolicyAPI, integrationsAPI, authAPI, notificationsAPI, billingAPI } from '@/lib/api';
 import type { UserSession, TenantSecurityPolicy } from '@/types';
 import { useUser } from '@/context/UserContext';
 import { timeAgo } from '@/lib/utils';
@@ -11,7 +11,7 @@ import {
   Users, UserCog, Shield, Server, ScrollText,
   Trash2, ToggleLeft, ToggleRight, ChevronDown, Search,
   Webhook, CheckCircle, XCircle, Send, Plus, Key, Copy, Eye, EyeOff,
-  Mail, Lock, Smartphone, QrCode, Building2,
+  Mail, Lock, Smartphone, QrCode, Building2, CreditCard, TrendingUp, Zap,
 } from 'lucide-react';
 
 const TABS = [
@@ -27,6 +27,7 @@ const TABS = [
   { id: 'audit',        label: 'Audit Log',        icon: ScrollText },
   { id: 'sessions',     label: 'Sessions',         icon: Lock      },
   { id: 'security',     label: 'Security Policy',  icon: Shield    },
+  { id: 'billing',      label: 'Billing & Plan',   icon: CreditCard },
 ] as const;
 type Tab = typeof TABS[number]['id'];
 
@@ -1614,6 +1615,8 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
           </div>
         )}
 
+        {tab === 'billing' && <BillingTab />}
+
       </div>
 
       {showInvite && (
@@ -1655,5 +1658,219 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
         </div>
       )}
     </RootLayout>
+  );
+}
+
+// ── Billing Tab ───────────────────────────────────────────────────────────────
+
+const PLAN_COLORS: Record<string, string> = {
+  trial: 'var(--text-3)',
+  starter: 'var(--accent)',
+  growth: 'var(--green)',
+  pro: 'var(--orange)',
+  enterprise: '#a855f7',
+};
+
+function BillingTab() {
+  const [data, setData]     = useState<any>(null);
+  const [plans, setPlans]   = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgradeTarget, setUpgradeTarget] = useState('');
+  const [upgradeMsg, setUpgradeMsg] = useState('');
+  const [requesting, setRequesting] = useState(false);
+  const [toast, setToast] = useState('');
+
+  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(''), 4000); };
+
+  useEffect(() => {
+    Promise.all([billingAPI.getSubscription(), billingAPI.getPlans()])
+      .then(([s, p]) => { setData(s.data); setPlans(p.data || []); })
+      .catch(() => { /* backend not yet running or SaaS endpoints not deployed */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const requestUpgrade = async () => {
+    if (!upgradeTarget) return;
+    setRequesting(true);
+    try {
+      await billingAPI.requestUpgrade(upgradeTarget, upgradeMsg);
+      notify('Upgrade request sent! We\'ll be in touch within 24 hours.');
+      setShowUpgrade(false);
+    } catch { notify('Failed to send request.'); }
+    finally { setRequesting(false); }
+  };
+
+  if (loading) return <div className="py-12 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>;
+  if (!data || !data.subscription) return (
+    <div className="g-card p-8 text-center max-w-lg">
+      <CreditCard className="mx-auto h-8 w-8 mb-3" style={{ color: 'var(--text-3)' }} />
+      <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-1)' }}>Billing not available</p>
+      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+        The billing API is not reachable. Make sure the backend is running with the latest migrations applied.
+      </p>
+    </div>
+  );
+
+  const sub = data.subscription;
+  const usage = data.usage;
+  const planColor = PLAN_COLORS[sub.plan_name] ?? 'var(--accent)';
+  const agentPct = sub.max_agents === -1 ? 0 : Math.min(100, Math.round((usage.agent_count / sub.max_agents) * 100));
+  const userPct  = sub.max_users  === -1 ? 0 : Math.min(100, Math.round((usage.user_count  / sub.max_users)  * 100));
+  const isExpired = sub.status === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date();
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      {toast && (
+        <div className="fixed bottom-5 right-5 px-4 py-3 text-sm rounded-xl shadow-lg z-50"
+          style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-1)', backdropFilter: 'blur(12px)' }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Current plan card */}
+      <div className="g-card p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <CreditCard className="h-4 w-4" style={{ color: planColor }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Current Plan</p>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold" style={{ color: planColor }}>{sub.plan_display_name}</span>
+              {sub.price_monthly > 0 && (
+                <span className="text-sm" style={{ color: 'var(--text-3)' }}>${sub.price_monthly}/mo</span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+              sub.status === 'active' ? 's-online' :
+              sub.status === 'trial' && !isExpired ? 'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20' :
+              's-offline'
+            }`}>
+              {isExpired ? 'Trial Expired' : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+            </span>
+            {sub.status === 'trial' && sub.trial_ends_at && !isExpired && (
+              <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                Trial ends {new Date(sub.trial_ends_at).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Usage bars */}
+        <div className="space-y-3">
+          <UsageBar label="Agents" used={usage.agent_count} max={sub.max_agents} pct={agentPct} color={planColor} />
+          <UsageBar label="Users"  used={usage.user_count}  max={sub.max_users}  pct={userPct}  color={planColor} />
+        </div>
+
+        {(sub.status === 'trial' || sub.status === 'active') && (
+          <button onClick={() => setShowUpgrade(true)} className="g-btn g-btn-primary w-full justify-center mt-4">
+            <TrendingUp className="h-3.5 w-3.5" /> Upgrade Plan
+          </button>
+        )}
+        {(isExpired || sub.status === 'suspended') && (
+          <div className="mt-4 rounded-xl px-4 py-3 text-sm text-center"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+            Your access is restricted. Please upgrade to restore full access.
+          </div>
+        )}
+      </div>
+
+      {/* Plan comparison */}
+      <div className="g-card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Zap className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Available Plans</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {plans.filter(p => p.name !== 'trial').map(p => {
+            const isCurrent = p.name === sub.plan_name;
+            const color = PLAN_COLORS[p.name] ?? 'var(--accent)';
+            return (
+              <div key={p.id} className="rounded-xl p-4"
+                style={{
+                  border: `1px solid ${isCurrent ? color : 'var(--border)'}`,
+                  background: isCurrent ? `${color}0a` : 'var(--glass-bg)',
+                }}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold" style={{ color }}>{p.display_name}</p>
+                  {isCurrent && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${color}20`, color }}>Current</span>}
+                </div>
+                <p className="text-xl font-bold mb-1" style={{ color: 'var(--text-1)' }}>
+                  {p.price_monthly > 0 ? `$${p.price_monthly}/mo` : 'Custom'}
+                </p>
+                <p className="text-[10px] mb-3" style={{ color: 'var(--text-3)' }}>
+                  {p.max_agents === -1 ? 'Unlimited' : p.max_agents} agents · {p.max_users === -1 ? 'Unlimited' : p.max_users} users
+                </p>
+                {!isCurrent && (
+                  <button onClick={() => { setUpgradeTarget(p.name); setShowUpgrade(true); }}
+                    className="g-btn g-btn-ghost text-[11px] w-full justify-center" style={{ padding: '4px 8px' }}>
+                    Select
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Upgrade request modal */}
+      {showUpgrade && (
+        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowUpgrade(false)}>
+          <div className="g-modal" style={{ maxWidth: 440 }}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Request Plan Upgrade</h2>
+              <button onClick={() => setShowUpgrade(false)} style={{ color: 'var(--text-2)' }}>✕</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Plan</label>
+                <select value={upgradeTarget} onChange={e => setUpgradeTarget(e.target.value)} className="g-select">
+                  <option value="">Select…</option>
+                  {plans.filter(p => p.name !== 'trial').map(p => (
+                    <option key={p.id} value={p.name}>{p.display_name} {p.price_monthly > 0 ? `— $${p.price_monthly}/mo` : '— Custom'}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Message (optional)</label>
+                <textarea value={upgradeMsg} onChange={e => setUpgradeMsg(e.target.value)}
+                  rows={3} placeholder="Any special requirements, number of agents needed, etc."
+                  className="g-input resize-none text-xs" />
+              </div>
+              <div className="rounded-xl px-3 py-2 text-[10px]"
+                style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--text-2)' }}>
+                Our team will contact you within 24 hours to complete the upgrade.
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 pt-0">
+              <button onClick={() => setShowUpgrade(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={requestUpgrade} disabled={!upgradeTarget || requesting} className="g-btn g-btn-primary flex-1 justify-center">
+                {requesting ? 'Sending…' : 'Send Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UsageBar({ label, used, max, pct, color }: { label: string; used: number; max: number; pct: number; color: string }) {
+  const unlimited = max === -1;
+  return (
+    <div>
+      <div className="flex justify-between text-[11px] mb-1">
+        <span style={{ color: 'var(--text-2)' }}>{label}</span>
+        <span style={{ color: 'var(--text-3)' }}>{used} / {unlimited ? '∞' : max}</span>
+      </div>
+      {!unlimited && (
+        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct > 85 ? 'var(--red)' : color }} />
+        </div>
+      )}
+    </div>
   );
 }

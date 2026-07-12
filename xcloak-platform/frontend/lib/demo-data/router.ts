@@ -950,6 +950,43 @@ export function demoRoute(
     });
   }
 
+  // ── Billing (tenant self-service) ────────────────────────────────────────
+  if (p === '/billing/plans') {
+    return ok([
+      { id: 1, name: 'trial',      display_name: 'Free Trial',  price_monthly: 0,   max_agents: 10,  max_users: 3,  features: {} },
+      { id: 2, name: 'starter',    display_name: 'Starter',     price_monthly: 149, max_agents: 25,  max_users: 5,  features: {} },
+      { id: 3, name: 'growth',     display_name: 'Growth',      price_monthly: 399, max_agents: 100, max_users: 15, features: {} },
+      { id: 4, name: 'pro',        display_name: 'Pro',         price_monthly: 999, max_agents: 500, max_users: 50, features: {} },
+      { id: 5, name: 'enterprise', display_name: 'Enterprise',  price_monthly: 0,   max_agents: -1,  max_users: -1, features: {} },
+    ]);
+  }
+
+  if (p === '/billing/subscription') {
+    return ok({
+      subscription: {
+        id: 1, tenant_id: 1, plan_id: 3,
+        plan_name: 'growth', plan_display_name: 'Growth',
+        price_monthly: 399, max_agents: 100, max_users: 15,
+        features: { dpi: true, yara: true, pdf_reports: true, api_keys: true },
+        status: 'active',
+        trial_ends_at: null,
+        current_period_start: new Date(Date.now() - 30 * 86400000).toISOString(),
+        current_period_end: new Date(Date.now() + 30 * 86400000).toISOString(),
+        created_at: new Date(Date.now() - 90 * 86400000).toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      usage: { agent_count: 4, user_count: 2, ioc_count: 47 },
+    });
+  }
+
+  if (p === '/billing/request-upgrade') return ok({ message: 'Request received (demo mode)' });
+
+  // ── SaaS Admin (platform admin) ───────────────────────────────────────────
+  if (p === '/platform/saas/mode')          return ok({ saas_mode: false });
+  if (p === '/platform/saas/stats')         return ok({ total_tenants: 3, active_tenants: 2, trial_tenants: 1, suspended_tenants: 0, mrr: 798 });
+  if (p === '/platform/saas/plans')         return ok([]);
+  if (p === '/platform/saas/subscriptions') return ok([]);
+
   // ── Fallback ─────────────────────────────────────────────────────────────
   return ok([]);
 }

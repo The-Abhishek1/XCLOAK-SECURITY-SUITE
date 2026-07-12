@@ -76,6 +76,7 @@ func main() {
 	}
 
 	services.InitRedis()
+	services.InitSaasMode()
 
 	// ── Immutable audit log export (MinIO + Object Lock) ──────
 	// Non-fatal: audit export is a compliance nice-to-have, not a hard
@@ -217,6 +218,9 @@ func main() {
 
 	// ── MDM compliance + command delivery ─────────────────────────
 	services.StartMDMScheduler()
+
+	// ── IOC auto-expiry (daily, disables never-fired / past-expiry IOCs) ──
+	go services.StartIOCExpiryScheduler()
 
 	// ── Deep Packet Inspection / Advanced Inspection ───────────────
 	services.StartDGAScheduler()

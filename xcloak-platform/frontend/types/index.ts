@@ -186,6 +186,9 @@ export interface IOC {
   description: string;
   enabled: boolean;
   created_at: string;
+  hit_count: number;
+  last_seen: string | null;
+  expires_at: string | null;
 }
 
 // Firewall has source_ip, destination_ip, port

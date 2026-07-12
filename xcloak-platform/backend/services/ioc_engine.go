@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 )
 
 // ipIOCMatches checks whether remoteAddr (host:port, IPv4 or bracketed
@@ -57,7 +58,8 @@ func CheckConnectionIOC(
 
 		case "ip":
 			if ipIOCMatches(connection.RemoteAddress, ioc.Indicator) {
-				alert := models.Alert{
+				repositories.RecordIOCHit(ioc.ID)
+				CreateAlert(models.Alert{
 					AgentID:        connection.AgentID,
 					Severity:       ioc.Severity,
 					RuleName:       "IOC Match",
@@ -66,19 +68,17 @@ func CheckConnectionIOC(
 					MitreTechnique: "T1071",
 					MitreName:      "Application Layer Protocol",
 					Fingerprint:    fmt.Sprintf("ioc-ip-%s-agent-%d", ioc.Indicator, connection.AgentID),
-				}
-				CreateAlert(alert)
+				})
 			}
 
 		case "domain":
-			// Match remote address against domain IOCs.
-			// RemoteAddress format: "domain.com:443" or "1.2.3.4:443"
 			remoteHost := connection.RemoteAddress
 			if idx := strings.LastIndex(remoteHost, ":"); idx > 0 {
 				remoteHost = remoteHost[:idx]
 			}
 			if strings.EqualFold(remoteHost, ioc.Indicator) ||
 				strings.HasSuffix(strings.ToLower(remoteHost), "."+strings.ToLower(ioc.Indicator)) {
+				repositories.RecordIOCHit(ioc.ID)
 				CreateAlert(models.Alert{
 					AgentID:        connection.AgentID,
 					Severity:       ioc.Severity,
@@ -93,6 +93,7 @@ func CheckConnectionIOC(
 
 		case "url":
 			if strings.Contains(strings.ToLower(connection.RemoteAddress), strings.ToLower(ioc.Indicator)) {
+				repositories.RecordIOCHit(ioc.ID)
 				CreateAlert(models.Alert{
 					AgentID:        connection.AgentID,
 					Severity:       ioc.Severity,

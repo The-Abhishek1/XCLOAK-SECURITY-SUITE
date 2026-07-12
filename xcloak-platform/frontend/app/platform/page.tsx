@@ -6,7 +6,7 @@ import { platformAPI } from '@/lib/api';
 import { useUser } from '@/context/UserContext';
 import { AgentRelease, TenantDomain } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload, Globe, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload, Globe, ChevronRight, ChevronDown, CreditCard, TrendingUp, Users, DollarSign, Activity, Edit2 } from 'lucide-react';
 
 interface Tenant {
   id: number;
@@ -98,9 +98,12 @@ function DomainsPanel({ tenantID }: { tenantID: number }) {
   );
 }
 
+type PTab = 'tenants' | 'saas';
+
 export default function PlatformPage() {
   const { profile } = useUser();
   const isPlatformAdmin = profile?.is_platform_admin ?? null;
+  const [ptab, setPtab]           = useState<PTab>('tenants');
   const [tenants, setTenants]     = useState<Tenant[]>([]);
   const [releases, setReleases]   = useState<AgentRelease[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -218,6 +221,24 @@ export default function PlatformPage() {
 
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
 
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 mb-5 rounded-xl w-fit" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+        {([['tenants', Building2, 'Tenants'], ['saas', CreditCard, 'SaaS & Billing']] as const).map(([id, Icon, label]) => (
+          <button key={id} onClick={() => setPtab(id as PTab)}
+            className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-all"
+            style={{
+              background: ptab === id ? 'var(--accent-glow)' : 'transparent',
+              color:      ptab === id ? 'var(--accent)' : 'var(--text-2)',
+              border:     ptab === id ? '1px solid var(--accent-border)' : '1px solid transparent',
+            }}>
+            <Icon className="h-3.5 w-3.5" />{label}
+          </button>
+        ))}
+      </div>
+
+      {ptab === 'saas' && <SaasAdminPanel notify={notify} />}
+
+      {ptab === 'tenants' && <>
       {/* ── Tenants ─────────────────────────────────────────── */}
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-3)' }}>Tenants</p>
@@ -308,6 +329,8 @@ export default function PlatformPage() {
           ))}
         </div>
       </div>
+
+      </>}
 
       {/* ── New Tenant modal ───────────────────────────────────── */}
       {showNew && (
@@ -420,5 +443,213 @@ export default function PlatformPage() {
         </div>
       )}
     </RootLayout>
+  );
+}
+
+// ── SaaS Admin Panel ──────────────────────────────────────────────────────────
+
+const PLAN_COLORS: Record<string, string> = {
+  trial: 'var(--text-3)', starter: 'var(--accent)',
+  growth: 'var(--green)', pro: 'var(--orange)', enterprise: '#a855f7',
+};
+const STATUS_OPTS = ['trial', 'active', 'suspended', 'cancelled'];
+const PLAN_OPTS   = ['trial', 'starter', 'growth', 'pro', 'enterprise'];
+
+function SaasAdminPanel({ notify }: { notify: (m: string) => void }) {
+  const [saasOn, setSaasOn]       = useState<boolean | null>(null);
+  const [toggling, setToggling]   = useState(false);
+  const [stats, setStats]         = useState<any>(null);
+  const [subs, setSubs]           = useState<any[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [editSub, setEditSub]     = useState<any | null>(null);
+  const [editForm, setEditForm]   = useState({ plan: '', status: '', notes: '' });
+  const [saving, setSaving]       = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      platformAPI.getSaasMode(),
+      platformAPI.getSaasStats(),
+      platformAPI.getAllSubscriptions(),
+    ]).then(([m, st, sb]) => {
+      setSaasOn(m.data?.saas_mode ?? false);
+      setStats(st.data);
+      setSubs(sb.data || []);
+    }).catch(() => { setSaasOn(false); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggleMode = async () => {
+    setToggling(true);
+    try {
+      const next = !saasOn;
+      await platformAPI.setSaasMode(next);
+      setSaasOn(next);
+      notify(next ? 'SaaS mode ENABLED — plan limits are now enforced' : 'SaaS mode DISABLED — running as self-hosted');
+    } catch { notify('Failed to toggle SaaS mode'); }
+    finally { setToggling(false); }
+  };
+
+  const openEdit = (sub: any) => {
+    setEditForm({ plan: sub.plan_name, status: sub.status, notes: sub.notes || '' });
+    setEditSub(sub);
+  };
+
+  const saveEdit = async () => {
+    if (!editSub) return;
+    setSaving(true);
+    try {
+      await platformAPI.updateSubscription(editSub.tenant_id, {
+        plan: editForm.plan,
+        status: editForm.status,
+        notes: editForm.notes || undefined,
+      });
+      setSubs(s => s.map(x => x.tenant_id === editSub.tenant_id
+        ? { ...x, plan_name: editForm.plan, status: editForm.status, notes: editForm.notes }
+        : x));
+      notify('Subscription updated');
+      setEditSub(null);
+    } catch { notify('Failed to update subscription'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>;
+
+  return (
+    <div className="space-y-5">
+
+      {/* SaaS Mode master toggle */}
+      <div className="g-card p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="h-4 w-4" style={{ color: saasOn ? 'var(--green)' : 'var(--text-3)' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>SaaS Mode</p>
+            </div>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+              {saasOn
+                ? 'Plan limits are enforced. Suspended/expired tenants are blocked.'
+                : 'Disabled — running as open-source self-hosted. No plan enforcement.'}
+            </p>
+          </div>
+          <button onClick={toggleMode} disabled={toggling}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: saasOn ? 'rgba(52,211,153,0.15)' : 'var(--glass-bg)',
+              border: `1px solid ${saasOn ? 'rgba(52,211,153,0.4)' : 'var(--border)'}`,
+              color: saasOn ? 'var(--green)' : 'var(--text-2)',
+            }}>
+            {saasOn ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+            {toggling ? '…' : saasOn ? 'ON' : 'OFF'}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      {stats && (
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { label: 'Total Tenants',    value: stats.total_tenants,     icon: Users,       color: 'var(--accent)' },
+            { label: 'Active (Paying)',  value: stats.active_tenants,    icon: Activity,    color: 'var(--green)' },
+            { label: 'On Trial',         value: stats.trial_tenants,     icon: TrendingUp,  color: 'var(--orange)' },
+            { label: 'MRR',              value: `$${stats.mrr.toLocaleString()}`, icon: DollarSign, color: '#a855f7' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="g-card p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+                <Icon className="h-4 w-4" style={{ color }} />
+              </div>
+              <div>
+                <p className="text-lg font-bold" style={{ color }}>{value}</p>
+                <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Subscriptions table */}
+      <div className="g-card">
+        <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>All Subscriptions</p>
+          </div>
+        </div>
+        <div className="g-table">
+          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 100px 80px 90px 100px 80px 40px' }}>
+            <span>Tenant</span><span>Plan</span><span>Price</span><span>Status</span><span>Agents</span><span>Updated</span><span></span>
+          </div>
+          {subs.length === 0 ? (
+            <div className="py-12 text-center text-sm" style={{ color: 'var(--text-3)' }}>No subscriptions yet.</div>
+          ) : subs.map(sub => {
+            const color = PLAN_COLORS[sub.plan_name] ?? 'var(--accent)';
+            return (
+              <div key={sub.tenant_id} className="g-tr grid gap-3 items-center px-4"
+                style={{ gridTemplateColumns: '1fr 100px 80px 90px 100px 80px 40px' }}>
+                <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>Tenant #{sub.tenant_id}</span>
+                <span className="text-xs font-semibold" style={{ color }}>{sub.plan_display_name}</span>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                  {sub.price_monthly > 0 ? `$${sub.price_monthly}` : 'Free'}
+                </span>
+                <span className="text-[11px]" style={{
+                  color: sub.status === 'active' ? 'var(--green)' : sub.status === 'trial' ? 'var(--orange)' : 'var(--red)'
+                }}>
+                  {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+                </span>
+                <span className="text-xs" style={{ color: 'var(--text-2)' }}>
+                  {sub.max_agents === -1 ? '∞' : sub.max_agents}
+                </span>
+                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(sub.updated_at)}</span>
+                <button onClick={() => openEdit(sub)} className="p-1 rounded transition-colors"
+                  style={{ color: 'var(--text-3)' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Edit subscription modal */}
+      {editSub && (
+        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setEditSub(null)}>
+          <div className="g-modal" style={{ maxWidth: 440 }}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                Edit Subscription — Tenant #{editSub.tenant_id}
+              </h2>
+              <button onClick={() => setEditSub(null)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Plan</label>
+                <select value={editForm.plan} onChange={e => setEditForm(f => ({ ...f, plan: e.target.value }))} className="g-select">
+                  {PLAN_OPTS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Status</label>
+                <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className="g-select">
+                  {STATUS_OPTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Notes (internal)</label>
+                <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2} placeholder="e.g. Paid via wire transfer, invoice #123"
+                  className="g-input resize-none text-xs" />
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setEditSub(null)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={saveEdit} disabled={saving} className="g-btn g-btn-primary flex-1 justify-center">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

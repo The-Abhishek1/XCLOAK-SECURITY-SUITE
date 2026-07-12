@@ -1,0 +1,5 @@
+DROP INDEX IF EXISTS idx_iocs_expiry;
+ALTER TABLE iocs
+  DROP COLUMN IF EXISTS hit_count,
+  DROP COLUMN IF EXISTS last_seen,
+  DROP COLUMN IF EXISTS expires_at;

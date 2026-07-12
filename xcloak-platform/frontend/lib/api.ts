@@ -416,6 +416,20 @@ export const platformAPI = {
   getTenantDomains: (id: number)                       => api.get(`/platform/tenants/${id}/domains`),
   addTenantDomain:  (id: number, domain: string)       => api.post(`/platform/tenants/${id}/domains`, { domain }),
   deleteTenantDomain: (tenantID: number, domainID: number) => api.delete(`/platform/tenants/${tenantID}/domains/${domainID}`),
+  // SaaS admin
+  getSaasMode:         ()                              => api.get('/platform/saas/mode'),
+  setSaasMode:         (enabled: boolean)              => api.post('/platform/saas/mode', { enabled }),
+  getSaasStats:        ()                              => api.get('/platform/saas/stats'),
+  getAllSubscriptions:  ()                              => api.get('/platform/saas/subscriptions'),
+  updateSubscription:  (tenantID: number, data: { plan: string; status: string; notes?: string }) =>
+    api.patch(`/platform/saas/subscriptions/${tenantID}`, data),
+  getAllPlans:          ()                              => api.get('/platform/saas/plans'),
+};
+
+export const billingAPI = {
+  getSubscription:   ()                              => api.get('/billing/subscription'),
+  getPlans:          ()                              => api.get('/billing/plans'),
+  requestUpgrade:    (plan: string, message?: string) => api.post('/billing/request-upgrade', { plan, message: message ?? '' }),
 };
 
 export const ssoAPI = {

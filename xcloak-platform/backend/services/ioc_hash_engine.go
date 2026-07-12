@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 )
 
 // CheckFileHashIOC checks a single file hash against all enabled hash-type IOCs.
@@ -25,15 +26,8 @@ func CheckFileHashIOC(hash models.FileHash) {
 		switch ioc.Type {
 
 		case "sha256":
-
 			if strings.EqualFold(hash.SHA256Hash, ioc.Indicator) {
-
-				fingerprint := fmt.Sprintf(
-					"ioc-sha256-%s-agent-%d",
-					hash.SHA256Hash,
-					hash.AgentID,
-				)
-
+				repositories.RecordIOCHit(ioc.ID)
 				CreateAlert(models.Alert{
 					AgentID:        hash.AgentID,
 					Severity:       ioc.Severity,
@@ -42,20 +36,13 @@ func CheckFileHashIOC(hash models.FileHash) {
 					MitreTactic:    "Execution",
 					MitreTechnique: "T1204",
 					MitreName:      "User Execution",
-					Fingerprint:    fingerprint,
+					Fingerprint:    fmt.Sprintf("ioc-sha256-%s-agent-%d", hash.SHA256Hash, hash.AgentID),
 				})
 			}
 
 		case "md5":
-
 			if strings.EqualFold(hash.MD5Hash, ioc.Indicator) {
-
-				fingerprint := fmt.Sprintf(
-					"ioc-md5-%s-agent-%d",
-					hash.MD5Hash,
-					hash.AgentID,
-				)
-
+				repositories.RecordIOCHit(ioc.ID)
 				CreateAlert(models.Alert{
 					AgentID:        hash.AgentID,
 					Severity:       ioc.Severity,
@@ -64,7 +51,7 @@ func CheckFileHashIOC(hash models.FileHash) {
 					MitreTactic:    "Execution",
 					MitreTechnique: "T1204",
 					MitreName:      "User Execution",
-					Fingerprint:    fingerprint,
+					Fingerprint:    fmt.Sprintf("ioc-md5-%s-agent-%d", hash.MD5Hash, hash.AgentID),
 				})
 			}
 		}

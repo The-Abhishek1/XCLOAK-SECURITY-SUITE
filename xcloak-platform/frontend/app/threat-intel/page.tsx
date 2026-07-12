@@ -23,7 +23,7 @@ const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 const FEED_TYPES = ['flatfile', 'otx', 'misp', 'taxii'] as const;
 const PAGE_SIZE  = 50;
 
-const emptyIOC   = { indicator: '', type: 'ip', severity: 'high', description: '', enabled: true };
+const emptyIOC   = { indicator: '', type: 'ip', severity: 'high', description: '', enabled: true, expires_at: '' };
 const emptyFeed  = { name: '', source: '', feed_type: 'flatfile', enabled: true, config: { api_key: '', collection_id: '', username: '', password: '' } };
 const emptySigma = { title: '', severity: 'high', mitre_tactic: '', mitre_technique: '', mitre_name: '', keywords: '', enabled: true };
 
@@ -122,11 +122,16 @@ export default function ThreatIntelPage() {
 
   // ── IOC CRUD ──────────────────────────────────────────────────────────────
 
+  const serializeIocForm = (f: typeof iocForm) => ({
+    ...f,
+    expires_at: f.expires_at ? f.expires_at : null,
+  });
+
   const addIOC = async () => {
     if (!iocForm.indicator.trim()) return;
     setSaving(true);
     try {
-      await iocsAPI.create(iocForm);
+      await iocsAPI.create(serializeIocForm(iocForm));
       loadIOCs(iocPage, debouncedIocSearch, typeFilter);
       setShowAddIOC(false); setIocForm({ ...emptyIOC }); notify('IOC added');
     } finally { setSaving(false); }
@@ -136,7 +141,7 @@ export default function ThreatIntelPage() {
     if (!showEditIOC) return;
     setSaving(true);
     try {
-      await iocsAPI.update(showEditIOC.id, iocForm);
+      await iocsAPI.update(showEditIOC.id, serializeIocForm(iocForm));
       loadIOCs(iocPage, debouncedIocSearch, typeFilter);
       setShowEditIOC(null); notify('IOC updated');
     } finally { setSaving(false); }
@@ -155,7 +160,11 @@ export default function ThreatIntelPage() {
   };
 
   const openEditIOC = (ioc: IOC) => {
-    setIocForm({ indicator: ioc.indicator, type: ioc.type, severity: ioc.severity, description: ioc.description, enabled: ioc.enabled });
+    setIocForm({
+      indicator: ioc.indicator, type: ioc.type, severity: ioc.severity,
+      description: ioc.description, enabled: ioc.enabled,
+      expires_at: ioc.expires_at ? ioc.expires_at.slice(0, 10) : '',
+    });
     setShowEditIOC(ioc);
   };
 
@@ -369,9 +378,9 @@ export default function ThreatIntelPage() {
             </div>
 
             <div className="g-table">
-              <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 70px 80px 1fr 80px 80px 60px' }}>
+              <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '1fr 70px 80px 1fr 90px 80px 80px 60px' }}>
                 <span>Indicator</span><span>Type</span><span>Severity</span><span>Description</span>
-                <span>Added</span><span>Status</span><span className="text-right">Actions</span>
+                <span>Hits</span><span>Last Seen</span><span>Status</span><span className="text-right">Actions</span>
               </div>
               {iocLoading
                 ? <LoadingRow />
@@ -379,13 +388,18 @@ export default function ThreatIntelPage() {
                   ? <EmptyRow icon={<Shield />} msg={iocSearch || typeFilter !== 'all' ? 'No IOCs match your filter.' : 'No IOCs yet. Add one or sync a feed.'} />
                   : iocs.map(ioc => (
                     <div key={ioc.id} className={`g-tr grid gap-3 items-center px-4 ${!ioc.enabled ? 'opacity-40' : ''}`}
-                      style={{ gridTemplateColumns: '1fr 70px 80px 1fr 80px 80px 60px' }}>
+                      style={{ gridTemplateColumns: '1fr 70px 80px 1fr 90px 80px 80px 60px' }}>
                       <span className="mono text-xs truncate" style={{ color: 'var(--text-1)' }}>{ioc.indicator}</span>
                       <span className="mono text-[10px] rounded px-1.5 py-0.5 uppercase inline-block w-fit"
                         style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>{ioc.type}</span>
                       <span className={sevClass(ioc.severity)}>{ioc.severity}</span>
                       <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{ioc.description}</span>
-                      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(ioc.created_at)}</span>
+                      <span className="text-xs font-mono" style={{ color: (ioc.hit_count ?? 0) > 0 ? 'var(--red)' : 'var(--text-3)' }}>
+                        {(ioc.hit_count ?? 0).toLocaleString()}
+                      </span>
+                      <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                        {ioc.last_seen ? timeAgo(ioc.last_seen) : '—'}
+                      </span>
                       <button type="button" onClick={() => toggleIOC(ioc)} className="flex items-center gap-1 text-[10px]"
                         style={{ color: ioc.enabled ? 'var(--green)' : 'var(--text-3)' }}>
                         {ioc.enabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
@@ -499,6 +513,13 @@ export default function ThreatIntelPage() {
               <MSelect label="Severity" value={iocForm.severity} onChange={v => setIocForm(f => ({ ...f, severity: v }))} options={SEVERITIES} capitalize />
             </div>
             <MInput label="Description" value={iocForm.description} onChange={v => setIocForm(f => ({ ...f, description: v }))} placeholder="Context, source, notes…" />
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+                Expires At <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(leave blank = auto-expire after 90 days if never matched)</span>
+              </label>
+              <input type="date" value={iocForm.expires_at} onChange={e => setIocForm(f => ({ ...f, expires_at: e.target.value }))}
+                className="g-input" />
+            </div>
           </div>
           <ModalActions onCancel={() => { setShowAddIOC(false); setShowEditIOC(null); }}
             onConfirm={showEditIOC ? updateIOC : addIOC} saving={saving}

@@ -1,6 +1,9 @@
 package services
 
 import (
+	"log/slog"
+	"time"
+
 	"xcloak-platform/models"
 	"xcloak-platform/repositories"
 )
@@ -75,4 +78,18 @@ func DisableIOC(
 ) error {
 
 	return repositories.DisableIOC(id, tenantID)
+}
+
+// StartIOCExpiryScheduler runs a daily job that auto-disables IOCs which have
+// exceeded their expires_at date or have never fired and are older than 90 days.
+func StartIOCExpiryScheduler() {
+	for {
+		n, err := repositories.ExpireStaleIOCs(90)
+		if err != nil {
+			slog.Error("IOCExpiry: failed to expire stale IOCs", "err", err)
+		} else if n > 0 {
+			slog.Info("IOCExpiry: disabled stale IOCs", "count", n)
+		}
+		time.Sleep(24 * time.Hour)
+	}
 }

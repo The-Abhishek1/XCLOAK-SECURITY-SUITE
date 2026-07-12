@@ -18,6 +18,9 @@ type IOCPage struct {
 	Limit int          `json:"limit"`
 }
 
+const iocSelectCols = `id, indicator, type, severity, description, enabled, tenant_id, created_at,
+	COALESCE(hit_count,0), last_seen, expires_at`
+
 func GetIOCsPaged(tenantID, page, limit int, search, iocType string) (IOCPage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -48,11 +51,10 @@ func GetIOCsPaged(tenantID, page, limit int, search, iocType string) (IOCPage, e
 	}
 
 	rows, err := queryIOCs(fmt.Sprintf(`
-		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
-		FROM iocs %s
-		ORDER BY id DESC
+		SELECT %s FROM iocs %s
+		ORDER BY hit_count DESC, id DESC
 		LIMIT $%d OFFSET $%d
-	`, where, i, i+1), append(args, limit, offset)...)
+	`, iocSelectCols, where, i, i+1), append(args, limit, offset)...)
 	if err != nil {
 		return IOCPage{}, err
 	}
@@ -82,15 +84,8 @@ func CreateIOC(
 	return database.WithTenantTx(context.Background(), tenantID, func(tx *sql.Tx) error {
 		_, err := tx.Exec(`
 			INSERT INTO iocs
-			(
-				indicator,
-				type,
-				severity,
-				description,
-				enabled,
-				tenant_id
-			)
-			VALUES ($1,$2,$3,$4,$5,$6)
+			(indicator, type, severity, description, enabled, tenant_id, expires_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7)
 		`,
 			ioc.Indicator,
 			ioc.Type,
@@ -98,6 +93,7 @@ func CreateIOC(
 			ioc.Description,
 			ioc.Enabled,
 			tenantID,
+			ioc.ExpiresAt,
 		)
 		return err
 	})
@@ -106,54 +102,44 @@ func CreateIOC(
 // GetIOCs returns IOCs belonging to tenantID only. Use this from
 // user-facing API paths that have a real tenant context from the request.
 func GetIOCs(tenantID int) ([]models.IOC, error) {
-	return queryIOCs(`
-		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
-		FROM iocs
+	return queryIOCs(fmt.Sprintf(`
+		SELECT %s FROM iocs
 		WHERE tenant_id = $1
-		ORDER BY id DESC
-	`, tenantID)
+		ORDER BY hit_count DESC, id DESC
+	`, iocSelectCols), tenantID)
 }
 
 // GetAllIOCs returns every IOC across every tenant. For internal background
 // jobs (compliance summary/scoring) with no per-request tenant context —
 // not for user-facing API responses, which must use GetIOCs(tenantID).
 func GetAllIOCs() ([]models.IOC, error) {
-	return queryIOCs(`
-		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
-		FROM iocs
-		ORDER BY id DESC
-	`)
+	return queryIOCs(fmt.Sprintf(`
+		SELECT %s FROM iocs ORDER BY id DESC
+	`, iocSelectCols))
 }
 
 // GetEnabledIOCsForAgent returns enabled IOCs for the tenant that owns
 // agentID — used by the connection/file-hash matching engines, which only
 // have an agent_id to work from (no per-request tenant context).
 func GetEnabledIOCsForAgent(agentID int) ([]models.IOC, error) {
-	return queryIOCs(`
-		SELECT id, indicator, type, severity, description, enabled, tenant_id, created_at
-		FROM iocs
+	return queryIOCs(fmt.Sprintf(`
+		SELECT %s FROM iocs
 		WHERE enabled = true
 		  AND tenant_id = (SELECT tenant_id FROM agents WHERE id = $1)
-	`, agentID)
+	`, iocSelectCols), agentID)
 }
 
 func queryIOCs(query string, args ...interface{}) ([]models.IOC, error) {
-
 	rows, err := database.DB.Query(query, args...)
-
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	var iocs []models.IOC
-
 	for rows.Next() {
-
 		var ioc models.IOC
-
-		err := rows.Scan(
+		if err := rows.Scan(
 			&ioc.ID,
 			&ioc.Indicator,
 			&ioc.Type,
@@ -162,16 +148,49 @@ func queryIOCs(query string, args ...interface{}) ([]models.IOC, error) {
 			&ioc.Enabled,
 			&ioc.TenantID,
 			&ioc.CreatedAt,
-		)
-
-		if err != nil {
+			&ioc.HitCount,
+			&ioc.LastSeen,
+			&ioc.ExpiresAt,
+		); err != nil {
 			continue
 		}
-
 		iocs = append(iocs, ioc)
 	}
-
 	return iocs, nil
+}
+
+// RecordIOCHit increments hit_count and stamps last_seen for an IOC.
+// Called by the match engines on every confirmed hit. Fire-and-forget safe —
+// a failed update does not suppress the alert that triggered it.
+func RecordIOCHit(iocID int) {
+	database.DB.Exec(`
+		UPDATE iocs
+		SET hit_count = hit_count + 1,
+		    last_seen  = NOW()
+		WHERE id = $1
+	`, iocID)
+}
+
+// ExpireStaleIOCs auto-disables IOCs that have exceeded their expiry date OR
+// have never fired and are older than staleDays. Returns the count disabled.
+func ExpireStaleIOCs(staleDays int) (int64, error) {
+	if staleDays <= 0 {
+		staleDays = 90
+	}
+	tag, err := database.DB.Exec(`
+		UPDATE iocs SET enabled = false
+		WHERE enabled = true
+		  AND (
+		    (expires_at IS NOT NULL AND expires_at <= NOW())
+		    OR
+		    (hit_count = 0 AND created_at < NOW() - ($1 || ' days')::INTERVAL)
+		  )
+	`, staleDays)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := tag.RowsAffected()
+	return n, nil
 }
 
 // GetIOCByID fetches a single IOC, scoped to tenantID — a request for
@@ -183,21 +202,9 @@ func GetIOCByID(
 
 	var ioc models.IOC
 
-	err := database.DB.QueryRow(`
-		SELECT
-			id,
-			indicator,
-			type,
-			severity,
-			description,
-			enabled,
-			tenant_id,
-			created_at
-		FROM iocs
-		WHERE id = $1 AND tenant_id = $2
-	`,
-		id,
-		tenantID,
+	err := database.DB.QueryRow(fmt.Sprintf(`
+		SELECT %s FROM iocs WHERE id = $1 AND tenant_id = $2
+	`, iocSelectCols), id, tenantID,
 	).Scan(
 		&ioc.ID,
 		&ioc.Indicator,
@@ -207,6 +214,9 @@ func GetIOCByID(
 		&ioc.Enabled,
 		&ioc.TenantID,
 		&ioc.CreatedAt,
+		&ioc.HitCount,
+		&ioc.LastSeen,
+		&ioc.ExpiresAt,
 	)
 
 	if err != nil {
@@ -229,14 +239,16 @@ func UpdateIOC(
 			type = $2,
 			severity = $3,
 			description = $4,
-			enabled = $5
-		WHERE id = $6 AND tenant_id = $7
+			enabled = $5,
+			expires_at = $6
+		WHERE id = $7 AND tenant_id = $8
 	`,
 		ioc.Indicator,
 		ioc.Type,
 		ioc.Severity,
 		ioc.Description,
 		ioc.Enabled,
+		ioc.ExpiresAt,
 		id,
 		tenantID,
 	)

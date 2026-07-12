@@ -21,6 +21,10 @@ func SetupRoutes(router *gin.Engine) {
 	// handler that touches the DB, without requiring per-handler checks.
 	router.Use(middleware.DBCircuit())
 
+	// SaaS guard — blocks suspended/expired tenants when SAAS_MODE is on.
+	// No-op when tenant_id is not in context (unauthenticated / health routes).
+	router.Use(middleware.SaasGuard())
+
 	// ── Firewall ──────────────────────────────────────────────────
 	router.POST("/api/firewall/rules", middleware.RequireAuth(), api.CreateRule)
 	router.GET("/api/firewall/rules", middleware.RequireAuth(), api.GetRules)
@@ -254,6 +258,19 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.PublishAgentRelease)
 	router.GET("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAgentReleases)
 	router.GET("/api/agent-releases/:platform", middleware.RequireAgentAuth(), api.GetLatestAgentRelease)
+
+	// ── SaaS Admin (platform admin only) ────────────────────────────
+	router.GET("/api/platform/saas/mode", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetSaasModeHandler)
+	router.POST("/api/platform/saas/mode", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.SetSaasModeHandler)
+	router.GET("/api/platform/saas/stats", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetSaasStatsHandler)
+	router.GET("/api/platform/saas/plans", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAllPlansHandler)
+	router.GET("/api/platform/saas/subscriptions", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAllSubscriptionsHandler)
+	router.PATCH("/api/platform/saas/subscriptions/:tenantID", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.UpdateSubscriptionHandler)
+
+	// ── Tenant Billing (any authenticated user) ──────────────────────
+	router.GET("/api/billing/subscription", middleware.RequireAuth(), api.GetMySubscriptionHandler)
+	router.GET("/api/billing/plans", middleware.RequireAuth(), api.GetPlansHandler)
+	router.POST("/api/billing/request-upgrade", middleware.RequireAuth(), api.RequestUpgradeHandler)
 
 	// ── MITRE ─────────────────────────────────────────────────────
 	router.GET("/api/mitre/mappings", middleware.RequireAuth(), api.GetMITREMappings)
