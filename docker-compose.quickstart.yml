@@ -1,0 +1,115 @@
+# XCloak Quickstart — minimal 5-service stack.
+#
+# No Kafka, no MinIO, no PgBouncer, no Grafana.
+# Perfect for trying XCloak locally in under 5 minutes.
+#
+# Usage:
+#   docker compose -f docker-compose.quickstart.yml up -d --build
+#
+# Services & URLs (first run takes ~3 min to build):
+#   Dashboard   → http://localhost:3000   (create admin on first signup)
+#   Backend API → http://localhost:8080/api/health
+#
+# For the full production stack (Kafka, MinIO, Grafana, PgBouncer):
+#   docker compose up -d --build
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: xcloak-qs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: xcloak
+      POSTGRES_PASSWORD: xcloak-dev
+      POSTGRES_DB: ngfw
+    volumes:
+      - qs_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xcloak -d ngfw"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: xcloak-qs-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./xcloak-platform/backend
+      dockerfile: Dockerfile
+    container_name: xcloak-qs-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database — direct connection (no PgBouncer in quickstart)
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: xcloak
+      DB_PASSWORD: xcloak-dev
+      DB_NAME: ngfw
+      # Redis
+      REDIS_ADDR: redis:6379
+      # Security — override these for any non-local deployment
+      JWT_SECRET: quickstart-jwt-secret-replace-in-production
+      METRICS_TOKEN: quickstart-metrics-token
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      # Kafka disabled — not needed for quickstart
+      KAFKA_ENABLED: "false"
+      # AI — Ollama (local) by default; set ANTHROPIC_API_KEY + LLM_PROVIDER=anthropic to use Claude
+      LLM_PROVIDER: ollama
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  seeder:
+    build:
+      context: ./xcloak-platform/backend
+      dockerfile: Dockerfile.seed
+    container_name: xcloak-qs-seeder
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: xcloak
+      DB_PASSWORD: xcloak-dev
+      DB_NAME: ngfw
+
+  frontend:
+    build:
+      context: ./xcloak-platform/frontend
+      dockerfile: Dockerfile
+    container_name: xcloak-qs-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8080
+    ports:
+      - "3000:3000"
+
+volumes:
+  qs_postgres_data:

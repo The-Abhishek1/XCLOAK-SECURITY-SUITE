@@ -2,19 +2,31 @@
 
 **[xcloak.tech](https://xcloak.tech)** · [docs.xcloak.tech](https://docs.xcloak.tech) · [blog.xcloak.tech](https://blog.xcloak.tech)
 
-First off — thank you. XCloak is a solo-maintained project and every
-contribution matters.
+First off — thank you. XCloak is open source and every contribution matters, whether it's a bug report, a new Sigma rule, or a full feature.
 
 ---
 
 ## Ways to Contribute
 
-- **Bug reports** — open an issue with the [bug report template](.github/ISSUE_TEMPLATE/bug_report.yml)
-- **Feature requests** — open an issue with the [feature request template](.github/ISSUE_TEMPLATE/feature_request.yml)
-- **Detection rules** — add Sigma rules to `xcloak-platform/backend/database/migrations/` (see below)
-- **Code contributions** — pick up an open issue tagged `good first issue` or `help wanted`
-- **Documentation** — fix typos, add examples, improve the deployment guide
-- **Security vulnerabilities** — see [SECURITY.md](SECURITY.md) — do not open a public issue
+| Type | Where to start |
+|------|---------------|
+| **Bug reports** | [Bug report template](.github/ISSUE_TEMPLATE/bug_report.yml) |
+| **Feature requests** | [Feature request template](.github/ISSUE_TEMPLATE/feature_request.yml) |
+| **Detection rules** | Add a Sigma/YARA rule — see [Writing Detection Rules](#writing-detection-rules) below |
+| **SOAR integrations** | Add a playbook action (Slack, Jira, PagerDuty, etc.) — see `xcloak-platform/backend/services/playbook_service.go` |
+| **Code** | Issues tagged [`good first issue`](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/labels/good%20first%20issue) or [`help wanted`](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/labels/help%20wanted) |
+| **Documentation** | Typos, examples, deployment guides at `docs/` or [docs.xcloak.tech](https://docs.xcloak.tech) |
+| **Translations** | UI string translations in `xcloak-platform/frontend/` |
+| **Security** | [SECURITY.md](SECURITY.md) — do not open a public issue for vulnerabilities |
+
+### Good First Issues
+
+If you're new to the codebase, these areas are well-scoped and documented:
+
+- **Add a Sigma rule** — pick a MITRE technique not yet covered and add it to `backend/database/migrations/`
+- **Demo data** — add realistic mock data for a page that shows "No data" in the demo
+- **Frontend component** — fix a UI bug tagged `frontend` in the issue tracker
+- **Docs** — any page on [docs.xcloak.tech](https://docs.xcloak.tech) that's missing or incomplete
 
 ---
 
@@ -25,7 +37,7 @@ contribution matters.
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Go | 1.21+ | Backend + agent |
-| Node.js | 18+ | Frontend (if you have access) |
+| Node.js | 18+ | Frontend |
 | PostgreSQL | 16 | Primary database |
 | Redis | 7+ | Rate limiting + sessions |
 | Docker | 24+ | Observability stack |

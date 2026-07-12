@@ -4,19 +4,35 @@
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24-02569B?logo=flutter)](https://flutter.dev)
 [![Helm](https://img.shields.io/badge/Helm-v0.2.0-0F1689?logo=helm)](charts/xcloak)
-[![License](https://img.shields.io/badge/License-BSL_1.1-brightgreen)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL_v3-blue)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/The-Abhishek1/XCLOAK-SECURITY-SUITE)](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases)
 
-**Open-core enterprise security platform.** NGFW + SIEM + EDR + SOAR + MDM in a single stack — built with Go, PostgreSQL, Next.js, and Flutter.
+**Open-source enterprise SOC platform.** SIEM + EDR + SOAR + DPI + MDM + NGFW in one stack — the unified alternative to running six separate security products.
+
+Built with Go, PostgreSQL, Next.js, and Flutter. Self-host in minutes or run managed at [suite.xcloak.tech](https://suite.xcloak.tech).
 
 <p>
   <a href="https://xcloak.tech"><img src="https://img.shields.io/badge/xcloak.tech-Website-2563eb?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website"/></a>
-  <a href="https://suite.xcloak.tech/demo"><img src="https://img.shields.io/badge/suite.xcloak.tech-Live%20Demo-0ea5e9?style=for-the-badge&logo=netlify&logoColor=white" alt="Live Demo"/></a>
+  <a href="https://suite.xcloak.tech"><img src="https://img.shields.io/badge/suite.xcloak.tech-Live%20Demo-0ea5e9?style=for-the-badge&logo=netlify&logoColor=white" alt="Live Demo"/></a>
   <a href="https://docs.xcloak.tech"><img src="https://img.shields.io/badge/docs.xcloak.tech-Docs-475569?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Docs"/></a>
   <a href="https://blog.xcloak.tech"><img src="https://img.shields.io/badge/blog.xcloak.tech-Blog-0f172a?style=for-the-badge&logo=rss&logoColor=white" alt="Blog"/></a>
 </p>
 
-> **Single maintainer project.** This is not a commercial product with an SLA. See [Current Status](#current-status) for an honest picture of what works and what doesn't yet.
+## Quickstart
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git && cd XCLOAK-SECURITY-SUITE
+docker compose -f docker-compose.quickstart.yml up -d --build
+# Dashboard → http://localhost:3000  (create admin on first visit)
+```
+
+> First build pulls ~1.5 GB of images and takes ~3 minutes. Subsequent starts take under 10 seconds.
 
 ---
 
@@ -84,8 +100,6 @@
 
 | Limitation | Detail |
 |------------|--------|
-| **Single maintainer** | Solo project — response times and release cadence reflect this |
-| **Frontend open-core** | Next.js dashboard is in this repo (`xcloak-platform/frontend`) but BSL 1.1 licensed |
 | **iOS mobile agent** | Does not exist yet — Android only |
 | **Screen lock detection** | Requires Device Owner / DPC profile; `has_passcode` is null in BYOD mode |
 | **PII in logs** | `parsed_fields` may contain emails/IPs — no automatic masking yet |
@@ -97,7 +111,7 @@
 
 ## Try It
 
-**[suite.xcloak.tech/demo](https://suite.xcloak.tech/demo)** — live demo, no account needed. Pure Next.js, zero backend, all data baked in.
+**[suite.xcloak.tech](https://suite.xcloak.tech)** — live demo, no account needed. Pure Next.js, zero backend, all data baked in. Click **Launch Live Demo**.
 
 ---
 
@@ -115,18 +129,22 @@ The platform has three modes depending on what you need:
 
 ### Mode 1 — Real Data & Services (full stack)
 
-Everything live — Go backend, PostgreSQL, Redis, real agent data.
+**Quickstart** (no Kafka/MinIO, perfect for evaluation):
 
 ```bash
 git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
-cd XCLOAK-SECURITY-SUITE/xcloak-platform
-
-docker compose up -d
-# Frontend: http://localhost:3000
-# Backend:  http://localhost:8080
+cd XCLOAK-SECURITY-SUITE
+docker compose -f docker-compose.quickstart.yml up -d --build
+# Dashboard: http://localhost:3000  (create admin on first signup)
 ```
 
-First signup creates the admin account. Data comes from your actual database.
+**Full production stack** (Kafka, MinIO, PgBouncer, Grafana, Prometheus):
+
+```bash
+cd XCLOAK-SECURITY-SUITE/xcloak-platform
+cp .env.example .env   # fill in JWT_SECRET, DB_PASSWORD, METRICS_TOKEN
+docker compose up -d --build
+```
 
 ### Mode 2 — Demo Data + Real Backend (seeded DB)
 
@@ -275,8 +293,8 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | Multi-tenancy | ✅ PostgreSQL RLS | ⚠️ | ✅ | ✅ |
 | Helm / K8s | ✅ | ✅ | ✅ | ✅ |
 | No Java dependency | ✅ Go-only | ❌ Java/JVM | ❌ JVM | ❌ JVM |
-| Open source | ✅ open-core | ✅ | ✅ | ❌ |
-| License cost | Free (BSL 1.1) | Free (GPL) | Free tier + paid | Free tier limited |
+| Open source | ✅ AGPL-3.0 | ✅ | ✅ | ❌ |
+| License cost | Free (AGPL-3.0) | Free (GPL) | Free tier + paid | Free tier limited |
 | Single-binary agent | ✅ | ❌ | ❌ | N/A |
 | eBPF support | ✅ | ⚠️ | ⚠️ | N/A |
 | Deception technology | ✅ | ❌ | ❌ | ❌ |
@@ -314,7 +332,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | Search | Elasticsearch / OpenSearch (optional dual-write) |
 | Metrics | Prometheus + Grafana |
 | Secrets | HashiCorp Vault (TOTP encryption, optional secret management) |
-| Frontend | Next.js 14 + TypeScript (open-core, not in this repo) |
+| Frontend | Next.js 14 + TypeScript (`xcloak-platform/frontend`) |
 | Go Agent | Go 1.25, `golang.org/x/sys`, `github.com/cilium/ebpf` (optional) |
 | Mobile Agent | Flutter 3.24.5 (Dart), Android API 26+ |
 | Infrastructure | Docker Compose (dev), Helm v0.2.0 (production), GitHub Actions (CI/CD) |
@@ -326,10 +344,10 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | | |
 |--|--|
 | Website | [xcloak.tech](https://xcloak.tech) |
-| Live Demo | [suite.xcloak.tech/demo](https://suite.xcloak.tech/demo) |
+| Live Demo | [suite.xcloak.tech](https://suite.xcloak.tech) |
 | Docs | [docs.xcloak.tech](https://docs.xcloak.tech) |
 | Blog | [blog.xcloak.tech](https://blog.xcloak.tech) |
-| GitHub | [The-Abhishek1/XCLOAK-SECURITY-SUITE](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE) |
+| GitHub Discussions | [Discussions](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/discussions) — questions, ideas, show and tell |
 | Issues | [github.com/.../issues](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/issues) |
 | Security | [SECURITY.md](SECURITY.md) — do not open a public issue for vulnerabilities |
 
@@ -337,9 +355,9 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 ## License
 
-Business Source License 1.1 — see [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
 
-The BSL converts to Apache 2.0 after 4 years (2029). Commercial use beyond the limits described in the LICENSE file requires a separate agreement.
+AGPL-3.0 means you can use, modify, and self-host XCloak freely. If you offer XCloak as a hosted service, you must release your modifications under the same license. Commercial licensing for proprietary modifications is available — contact [abhishekn1003@gmail.com](mailto:abhishekn1003@gmail.com).
 
 ---
 
