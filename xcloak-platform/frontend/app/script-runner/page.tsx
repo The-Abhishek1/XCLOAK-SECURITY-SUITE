@@ -7,7 +7,7 @@ import { timeAgo } from '@/lib/utils';
 import {
   Terminal, Play, Loader2, Copy, Check, ChevronDown,
   ChevronRight, Clock, CheckCircle, XCircle, History,
-  BookOpen, X, Cpu,
+  BookOpen, X, Cpu, Search, Trash2,
 } from 'lucide-react';
 
 interface Agent { id: number; hostname: string; ip_address: string; status: string; }
@@ -44,6 +44,8 @@ export default function ScriptRunnerPage() {
   const [expandedResult, setExpandedResult] = useState<number | null>(null);
   const [toast, setToast]               = useState<string | null>(null);
   const [copied, setCopied]             = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [templateSearch, setTemplateSearch] = useState('');
   const pollRef                         = useRef<Record<number, NodeJS.Timeout>>({});
   const textareaRef                     = useRef<HTMLTextAreaElement>(null);
 
@@ -85,7 +87,7 @@ export default function ScriptRunnerPage() {
   const pollResult = useCallback((result: RunResult) => {
     const poll = async () => {
       try {
-        const r = await scriptAPI.getResult(result.taskId);
+        const r = await scriptAPI.getResult(String(result.taskId));
         const { status, result: rawOutput } = r.data;
         // result is *string in Go — null when empty, string otherwise
         const output = rawOutput ?? '';
@@ -227,6 +229,7 @@ export default function ScriptRunnerPage() {
                 value={script}
                 onChange={e => setScript(e.target.value)}
                 onKeyDown={e => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); return; }
                   // Tab inserts 2 spaces instead of changing focus
                   if (e.key === 'Tab') {
                     e.preventDefault();
@@ -249,9 +252,15 @@ export default function ScriptRunnerPage() {
             {/* Results */}
             {results.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
-                  Output — {results.filter(r => r.status === 'completed').length}/{results.length} completed
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                    Output — {results.filter(r => r.status === 'completed').length}/{results.length} completed
+                  </p>
+                  <button onClick={() => setResults([])}
+                    className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    <Trash2 className="h-3 w-3" /> Clear
+                  </button>
+                </div>
                 {results.map(res => {
                   const isExpanded = expandedResult === res.taskId;
                   const elapsed = res.completedAt
@@ -404,47 +413,75 @@ export default function ScriptRunnerPage() {
       {/* ── Templates tab ───────────────────────────────────── */}
       {tab === 'templates' && (
         <div className="space-y-5">
-          {Object.entries(templates.by_category || {}).map(([category, tmps]) => (
-            <div key={category}>
-              <p className="text-[10px] font-bold uppercase tracking-wider mb-2"
-                style={{ color: 'var(--text-3)' }}>
-                {category}
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {(tmps as Template[]).map(t => (
-                  <div key={t.id} className="g-card p-4 cursor-pointer transition-all group"
-                    style={{ border: '1px solid var(--border)' }}
-                    onClick={() => applyTemplate(t)}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
-                        {t.label}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5"
+              style={{ color: 'var(--text-3)' }} />
+            <input value={templateSearch} onChange={e => setTemplateSearch(e.target.value)}
+              placeholder="Search templates…"
+              className="g-input w-full text-xs pl-8" />
+          </div>
+          {Object.entries(templates.by_category || {})
+            .map(([category, tmps]) => {
+              const filtered = templateSearch
+                ? (tmps as Template[]).filter(t =>
+                    t.label.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                    t.script.toLowerCase().includes(templateSearch.toLowerCase()))
+                : (tmps as Template[]);
+              if (filtered.length === 0) return null;
+              return { category, filtered };
+            })
+            .filter(Boolean)
+            .map(item => {
+              const { category, filtered } = item!;
+              return (
+              <div key={category}>
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-2"
+                  style={{ color: 'var(--text-3)' }}>
+                  {category}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {filtered.map((t: Template) => (
+                    <div key={t.id} className="g-card p-4 cursor-pointer transition-all group"
+                      style={{ border: '1px solid var(--border)' }}
+                      onClick={() => applyTemplate(t)}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>
+                          {t.label}
+                        </p>
+                        <span className="mono text-[10px] px-1.5 py-0.5 rounded"
+                          style={{ background: 'var(--glass-bg)', color: 'var(--accent)' }}>
+                          {t.shell}
+                        </span>
+                      </div>
+                      <pre className="text-[10px] font-mono truncate" style={{ color: 'var(--text-3)' }}>
+                        {t.script.split('\n')[0]}
+                      </pre>
+                      <p className="text-[10px] mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ color: 'var(--accent)' }}>
+                        Click to load →
                       </p>
-                      <span className="mono text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ background: 'var(--glass-bg)', color: 'var(--accent)' }}>
-                        {t.shell}
-                      </span>
                     </div>
-                    <pre className="text-[10px] font-mono truncate" style={{ color: 'var(--text-3)' }}>
-                      {t.script.split('\n')[0]}
-                    </pre>
-                    <p className="text-[10px] mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ color: 'var(--accent)' }}>
-                      Click to load →
-                    </p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* ── History tab ─────────────────────────────────────── */}
       {tab === 'history' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5"
+                style={{ color: 'var(--text-3)' }} />
+              <input value={historySearch} onChange={e => setHistorySearch(e.target.value)}
+                placeholder="Search by label, hostname…"
+                className="g-input w-full text-xs pl-8" />
+            </div>
             <select value={historyAgent} onChange={e => setHistoryAgent(e.target.value)}
               className="g-select text-xs">
               <option value="">All agents</option>
@@ -452,7 +489,7 @@ export default function ScriptRunnerPage() {
                 <option key={a.id} value={String(a.id)}>{a.hostname}</option>
               ))}
             </select>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+            <p className="text-xs shrink-0" style={{ color: 'var(--text-3)' }}>
               {history.length} executions
             </p>
           </div>
@@ -464,7 +501,13 @@ export default function ScriptRunnerPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {history.map(row => {
+              {history.filter(row => {
+                if (!historySearch) return true;
+                const q = historySearch.toLowerCase();
+                return (row.label || '').toLowerCase().includes(q) ||
+                  (row.hostname || '').toLowerCase().includes(q) ||
+                  (row.script || '').toLowerCase().includes(q);
+              }).map(row => {
                 const isExpanded = expandedResult === row.id;
                 return (
                   <div key={row.id} className="g-card overflow-hidden">
