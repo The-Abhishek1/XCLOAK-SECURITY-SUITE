@@ -907,6 +907,49 @@ export function demoRoute(
   // ── Live log stream ───────────────────────────────────────────────────────
   if (p === '/live-logs' || p === '/logs/live') return ok(LIVE_LOG_LINES);
 
+  // ── DPI ───────────────────────────────────────────────────────────────────
+  if (p === '/dpi/findings') {
+    const DPI_FINDINGS = [
+      { id: 1, agent_id: D.agents[0]?.id ?? 1, finding_type: 'dga',                 severity: 'high',     score: 87, indicator: 'xn--krpn3c.biz',       description: 'Domain matches DGA pattern (entropy 4.8, WHOIS age < 7d)', mitre_technique: 'T1568.002', raw_context: { entropy: 4.8, length: 14, tld: 'biz' }, alert_fired: true,  detected_at: new Date(Date.now() - 1800000).toISOString() },
+      { id: 2, agent_id: D.agents[0]?.id ?? 1, finding_type: 'tls_anomaly',         severity: 'critical', score: 94, indicator: '185.220.101.47:443',    description: 'TLS certificate issued to known C2 infrastructure; JA3 matches Cobalt Strike', mitre_technique: 'T1071.001', raw_context: { ja3: 'a0e9f5d64349fb13191bc781f81f42e1', issuer: 'Let\'s Encrypt' }, alert_fired: true,  detected_at: new Date(Date.now() - 3600000).toISOString() },
+      { id: 3, agent_id: D.agents[1]?.id ?? 2, finding_type: 'dns_tunnel',          severity: 'high',     score: 81, indicator: 'data.c2tunnel.net',     description: 'High-entropy DNS TXT queries indicating DNS tunneling exfiltration', mitre_technique: 'T1071.004', raw_context: { query_rate: 48, avg_entropy: 5.2, record_type: 'TXT' }, alert_fired: true,  detected_at: new Date(Date.now() - 5400000).toISOString() },
+      { id: 4, agent_id: D.agents[1]?.id ?? 2, finding_type: 'http_pattern',        severity: 'medium',   score: 63, indicator: '10.0.0.22:8080',        description: 'Beaconing pattern: HTTP POST every 60s to non-standard port, small fixed payload', mitre_technique: 'T1071.001', raw_context: { interval_seconds: 60, payload_size: 128, jitter_pct: 2 }, alert_fired: false, detected_at: new Date(Date.now() - 7200000).toISOString() },
+      { id: 5, agent_id: D.agents[2]?.id ?? 3, finding_type: 'proto_on_wrong_port', severity: 'medium',   score: 57, indicator: '10.0.0.5:53',           description: 'HTTP traffic detected on port 53 — possible protocol disguise to evade firewall', mitre_technique: 'T1571',     raw_context: { expected_proto: 'DNS', detected_proto: 'HTTP', port: 53 }, alert_fired: false, detected_at: new Date(Date.now() - 10800000).toISOString() },
+      { id: 6, agent_id: D.agents[0]?.id ?? 1, finding_type: 'icmp_tunnel',         severity: 'high',     score: 78, indicator: '203.0.113.42',          description: 'ICMP echo payload contains structured binary data consistent with tunneled traffic', mitre_technique: 'T1095',     raw_context: { payload_bytes: 1400, echo_rate_per_min: 22 }, alert_fired: true,  detected_at: new Date(Date.now() - 14400000).toISOString() },
+      { id: 7, agent_id: D.agents[3]?.id ?? 4, finding_type: 'tls_anomaly',         severity: 'low',      score: 38, indicator: 'api.dropbox.com:443',   description: 'Unusual TLS version (1.0) negotiated — client may be legacy or spoofed', mitre_technique: 'T1040',     raw_context: { tls_version: 'TLSv1.0', cipher: 'RC4-SHA' }, alert_fired: false, detected_at: new Date(Date.now() - 18000000).toISOString() },
+      { id: 8, agent_id: D.agents[1]?.id ?? 2, finding_type: 'http_connect_tunnel', severity: 'critical', score: 91, indicator: '185.220.101.47:22',     description: 'HTTP CONNECT tunnel established to SSH port — likely proxy-over-HTTP evasion', mitre_technique: 'T1572',     raw_context: { upstream_host: '185.220.101.47', upstream_port: 22, method: 'CONNECT' }, alert_fired: true,  detected_at: new Date(Date.now() - 21600000).toISOString() },
+      { id: 9, agent_id: D.agents[0]?.id ?? 1, finding_type: 'smtp_non_standard',   severity: 'high',     score: 76, indicator: '10.0.0.15:2525',        description: 'SMTP traffic to non-standard port with large attachment — possible data exfiltration', mitre_technique: 'T1048.003', raw_context: { attachment_size_kb: 4096, recipient: 'external@gmail.com' }, alert_fired: true,  detected_at: new Date(Date.now() - 25200000).toISOString() },
+      { id: 10, agent_id: D.agents[2]?.id ?? 3, finding_type: 'dns_tcp_tunnel',     severity: 'medium',   score: 61, indicator: 'exfil.attacker.io',     description: 'DNS-over-TCP with oversized query (> 512 bytes) — bypass of UDP-only DNS filters', mitre_technique: 'T1071.004', raw_context: { query_size: 892, record_type: 'NULL', ttl: 0 }, alert_fired: false, detected_at: new Date(Date.now() - 28800000).toISOString() },
+    ];
+    const typeF = sp.get('finding_type');
+    const sevF  = sp.get('severity');
+    const alertF = sp.get('alert_only');
+    const offset = parseInt(sp.get('offset') || '0');
+    const limit  = parseInt(sp.get('limit')  || '100');
+    let arr = [...DPI_FINDINGS];
+    if (typeF)  arr = arr.filter(f => f.finding_type === typeF);
+    if (sevF)   arr = arr.filter(f => f.severity === sevF);
+    if (alertF) arr = arr.filter(f => f.alert_fired);
+    const slice = arr.slice(offset, offset + limit);
+    return ok({ findings: slice, total: arr.length });
+  }
+  if (p === '/dpi/summary') {
+    return ok({
+      total_24h:   10,
+      alerted_24h: 5,
+      breakdown: [
+        { finding_type: 'tls_anomaly',         severity: 'critical', count: 2 },
+        { finding_type: 'dga',                 severity: 'high',     count: 2 },
+        { finding_type: 'dns_tunnel',          severity: 'high',     count: 1 },
+        { finding_type: 'http_connect_tunnel', severity: 'critical', count: 1 },
+        { finding_type: 'smtp_non_standard',   severity: 'high',     count: 1 },
+        { finding_type: 'http_pattern',        severity: 'medium',   count: 1 },
+        { finding_type: 'proto_on_wrong_port', severity: 'medium',   count: 1 },
+        { finding_type: 'icmp_tunnel',         severity: 'high',     count: 1 },
+      ],
+    });
+  }
+
   // ── Fallback ─────────────────────────────────────────────────────────────
   return ok([]);
 }
