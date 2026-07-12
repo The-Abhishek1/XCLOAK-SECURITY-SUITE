@@ -34,6 +34,15 @@ data:
   {{- end }}
   DB_SSLMODE: {{ .Values.backend.env.DB_SSLMODE | quote }}
 
+  {{- if .Values.postgresqlReadReplica.host }}
+  DB_READ_HOST: {{ .Values.postgresqlReadReplica.host | quote }}
+  DB_READ_PORT: {{ .Values.postgresqlReadReplica.port | quote }}
+  {{- end }}
+
+  {{- if .Values.backend.env.SAAS_MODE }}
+  SAAS_MODE: {{ .Values.backend.env.SAAS_MODE | quote }}
+  {{- end }}
+
   {{- if .Values.redis.enabled }}
   REDIS_ADDR: "{{ include "xcloak.redis.host" . }}:6379"
   {{- else if .Values.redisExternal.host }}

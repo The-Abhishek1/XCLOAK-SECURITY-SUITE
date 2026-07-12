@@ -81,6 +81,10 @@ backend:
     SMTP_USER: ""
     SMTP_TLS: "true"
     DB_SSLMODE: "disable"
+    # Pre-enable SaaS billing enforcement at startup without a DB write.
+    # Set to "true" to turn on SaaS mode from the first boot; otherwise
+    # toggle it live via the platform admin UI or the API.
+    SAAS_MODE: ""
 
   secrets:
     # If set, the chart creates NO Secret of its own and reads every key
@@ -204,6 +208,16 @@ postgresqlExternal:
   database: ngfw
   username: xcloak
   existingSecret: "" # key: password
+
+# Read-replica routing — works with bundled postgres, external postgres, HAProxy,
+# or Aurora reader endpoint. When set, the backend sends SELECT queries here and
+# writes to the primary (DB_HOST). Leave blank to route everything to the primary.
+# Example (Patroni via HAProxy):  host: haproxy-svc  port: 5001
+# Example (Aurora reader):        host: cluster-ro.us-east-1.rds.amazonaws.com
+postgresqlReadReplica:
+  host: ""
+  port: 5432
+
 redisExternal:
   host: ""
   port: 6379

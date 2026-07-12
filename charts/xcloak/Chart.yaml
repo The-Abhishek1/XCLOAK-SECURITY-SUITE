@@ -2,8 +2,8 @@ apiVersion: v2
 name: xcloak
 description: XCLOAK Security Suite — Go/Gin backend + Next.js SOC dashboard, with optional bundled Postgres/Redis/Kafka/MinIO for evaluation/trial installs.
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 
 # Bundled stateful infra is via community (Bitnami) charts, each gated by its
 # own `<name>.enabled` flag so customers with their own managed Postgres/
