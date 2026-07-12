@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 'standalone' is for Docker deployments; Netlify needs the default build output.
-  // output: 'standalone',
+  // Netlify sets NETLIFY=true in its build env and needs the default output.
+  // Docker and CI expect standalone — it collapses node_modules into a self-
+  // contained server.js + .next/static that the Dockerfile copies directly.
+  output: process.env.NETLIFY ? undefined : 'standalone',
   // NOTE: the /api/* proxy to the backend lives in middleware.ts, not here.
   // next.config.js's rewrites() is resolved ONCE into a static manifest at
   // build time (confirmed empirically — verified this the hard way after it
