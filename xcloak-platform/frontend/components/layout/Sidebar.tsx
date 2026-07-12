@@ -16,7 +16,7 @@ import {
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
   Cloud, Mail, Container, ShieldOff, Package,
   EyeOff, Wrench, Smartphone, DatabaseZap,
-  PanelLeft, PanelRight,
+  PanelLeft,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -500,7 +500,7 @@ export function Sidebar({
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
           >
-            <PanelRight className="h-4 w-4" />
+            <Logo iconOnly />
           </button>
         </div>
         <CollapsedNav pathname={pathname} onNavigate={undefined} logout={logout} profile={profile} badges={badges} />
