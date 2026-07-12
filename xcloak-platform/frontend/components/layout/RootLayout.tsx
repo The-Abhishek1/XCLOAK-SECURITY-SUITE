@@ -19,16 +19,52 @@ interface RootLayoutProps {
 }
 
 export function RootLayout({ children, title, subtitle, onRefresh, refreshing, actions }: RootLayoutProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen]           = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+
+  // Read localStorage after mount to avoid SSR hydration mismatch
+  useEffect(() => {
+    setDesktopCollapsed(localStorage.getItem('sidebar-collapsed') === 'true');
+  }, []);
+
   const toggleMenu = () => setMobileOpen(o => !o);
+
+  const toggleCollapse = () => {
+    setDesktopCollapsed(c => {
+      const next = !c;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  };
+
+  const sidebarW = desktopCollapsed ? 56 : 240;
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg-0)' }}>
       <div className="bg-mesh" />
-      <Sidebar mobileOpen={mobileOpen} onToggle={toggleMenu} />
-      <div className="flex flex-1 flex-col min-w-0 lg:ml-[240px]">
-        <AppHeader title={title} subtitle={subtitle} onRefresh={onRefresh} refreshing={refreshing} actions={actions} onToggleMenu={toggleMenu} />
-        <main className="flex-1 p-4 sm:p-6 relative z-10">{children}</main>
+      <Sidebar
+        mobileOpen={mobileOpen}
+        onToggle={toggleMenu}
+        desktopCollapsed={desktopCollapsed}
+        onToggleCollapse={toggleCollapse}
+      />
+      {/* Main area — margin tracks sidebar width with CSS transition */}
+      <div
+        className="flex flex-1 flex-col min-w-0 transition-[margin-left] duration-200"
+        style={{ marginLeft: `${sidebarW}px` }}
+        // Override the default lg:ml-[240px] — sidebar width is now managed above
+      >
+        <AppHeader
+          title={title}
+          subtitle={subtitle}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+          actions={actions}
+          onToggleMenu={toggleMenu}
+        />
+        {/* No z-10 here — fixed drawers inside children need to compete in the root
+            stacking context at their own z-index (z-50), above the header (z-30). */}
+        <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );
@@ -40,7 +76,9 @@ const ROLE_COLORS: Record<string, string> = {
   viewer:  'var(--text-3)',
 };
 
-function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMenu }: Omit<RootLayoutProps, 'children'> & { onToggleMenu: () => void }) {
+function AppHeader({
+  title, subtitle, onRefresh, refreshing, actions, onToggleMenu,
+}: Omit<RootLayoutProps, 'children'> & { onToggleMenu: () => void }) {
   const { notifications, unread, markRead, markAllRead, dismiss } = useNotifications();
   const { theme, toggle } = useTheme();
   const { profile } = useUser();
@@ -58,6 +96,7 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
     return () => clearInterval(t);
   }, []);
 
+  // Close bell on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
@@ -69,28 +108,32 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
   const notifIcon = (type: string) => {
     switch (type) {
       case 'alert':    return <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} />;
-      case 'incident': return <Zap className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} />;
-      case 'task':     return <Settings className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />;
-      default:         return <Bell className="h-3.5 w-3.5" style={{ color: 'var(--text-2)' }} />;
+      case 'incident': return <Zap          className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} />;
+      case 'task':     return <Settings     className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />;
+      default:         return <Bell         className="h-3.5 w-3.5" style={{ color: 'var(--text-2)' }} />;
     }
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between px-4 lg:px-5 gap-3"
+    <header
+      className="sticky top-0 z-30 flex h-14 items-center justify-between px-4 gap-2"
       style={{
         background: 'var(--glass-bg)',
         backdropFilter: 'var(--blur)',
         WebkitBackdropFilter: 'var(--blur)',
         borderBottom: '1px solid var(--border)',
-      }}>
-
-      {/* Hamburger — mobile only */}
-      <button onClick={onToggleMenu}
+      }}
+    >
+      {/* Hamburger — only when sidebar is hidden (below lg) */}
+      <button
+        onClick={onToggleMenu}
         className="flex lg:hidden h-8 w-8 items-center justify-center rounded-lg shrink-0 transition-colors"
-        style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+        style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+      >
         <Menu className="h-4 w-4" />
       </button>
 
+      {/* Page title */}
       <div className="min-w-0 flex-1">
         {title && (
           <div className="flex items-center gap-2 min-w-0">
@@ -105,79 +148,99 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
         )}
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Right-side actions */}
+      <div className="flex items-center gap-1.5 shrink-0">
         {actions}
         <DemoBadge />
 
-        {/* Search — icon only on mobile, full pill on desktop */}
+        {/* Global search */}
         <div className="hidden md:block"><GlobalSearch /></div>
         <div className="flex md:hidden"><GlobalSearch compact /></div>
 
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
-          style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
+        {/* Clock — hide on small screens */}
+        <div
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+          style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}
+        >
           <Clock className="h-3 w-3" style={{ color: 'var(--text-3)' }} />
           <span className="mono text-[11px]" style={{ color: 'var(--text-2)' }}>{time || '--:--:--'} UTC</span>
         </div>
 
         {onRefresh && (
-          <button onClick={onRefresh} disabled={refreshing}
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
             style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'}>
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'}
+          >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         )}
 
-        <button onClick={toggle}
+        <button
+          onClick={toggle}
           className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
           style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--accent)'}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'}>
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'}
+        >
           {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
 
-        {/* Notification bell */}
+        {/* Notification bell — dropdown rendered with fixed positioning on narrow viewports */}
         <div className="relative" ref={bellRef}>
-          <button onClick={() => setBellOpen(p => !p)}
+          <button
+            onClick={() => setBellOpen(p => !p)}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors relative"
             style={{
               background: bellOpen ? 'var(--accent-glow)' : 'var(--glass-bg-2)',
               border: `1px solid ${bellOpen ? 'var(--accent-border)' : 'var(--border)'}`,
               color: bellOpen ? 'var(--accent)' : 'var(--text-2)',
-            }}>
+            }}
+          >
             <Bell className="h-3.5 w-3.5" />
             {unread > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold"
-                style={{ background: 'var(--red)', color: '#fff' }}>
+              <span
+                className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold"
+                style={{ background: 'var(--red)', color: '#fff' }}
+              >
                 {unread > 9 ? '9+' : unread}
               </span>
             )}
           </button>
 
           {bellOpen && (
-            <div className="absolute right-0 top-10 w-80 rounded-xl overflow-hidden"
+            <div
+              className="absolute right-0 top-10 w-80 rounded-xl overflow-hidden"
               style={{
                 background: 'var(--glass-modal)',
                 backdropFilter: 'var(--blur)',
                 WebkitBackdropFilter: 'var(--blur)',
                 border: '1px solid var(--border-md)',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-                zIndex: 100,
-              }}>
-              <div className="flex items-center justify-between px-4 py-3"
-                style={{ borderBottom: '1px solid var(--border)' }}>
+                zIndex: 200,
+                // Clamp to viewport on narrow screens
+                maxWidth: 'calc(100vw - 16px)',
+              }}
+            >
+              <div
+                className="flex items-center justify-between px-4 py-3"
+                style={{ borderBottom: '1px solid var(--border)' }}
+              >
                 <div className="flex items-center gap-2">
                   <Bell className="h-3.5 w-3.5" style={{ color: 'var(--accent)' }} />
                   <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Notifications</span>
                   {unread > 0 && (
-                    <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold"
-                      style={{ background: 'var(--red)', color: '#fff' }}>{unread}</span>
+                    <span
+                      className="rounded-full px-1.5 py-0.5 text-[9px] font-bold"
+                      style={{ background: 'var(--red)', color: '#fff' }}
+                    >{unread}</span>
                   )}
                 </div>
                 {unread > 0 && (
-                  <button onClick={markAllRead} className="flex items-center gap-1 text-[10px]"
-                    style={{ color: 'var(--accent)' }}>
+                  <button onClick={markAllRead} className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--accent)' }}>
                     <Check className="h-3 w-3" /> Mark all read
                   </button>
                 )}
@@ -190,7 +253,8 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>No notifications</p>
                   </div>
                 ) : notifications.map(n => (
-                  <div key={n.id}
+                  <div
+                    key={n.id}
                     className="flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors"
                     style={{
                       background: n.read ? 'transparent' : 'var(--accent-glow)',
@@ -198,15 +262,19 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
                     }}
                     onClick={() => markRead(n.id)}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = n.read ? 'transparent' : 'var(--accent-glow)'}>
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = n.read ? 'transparent' : 'var(--accent-glow)'}
+                  >
                     <div className="mt-0.5 shrink-0">{notifIcon(n.type)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{n.title}</p>
                       <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-2)' }}>{n.message}</p>
                       <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{timeAgo(n.created_at)}</p>
                     </div>
-                    <button onClick={e => { e.stopPropagation(); dismiss(n.id); }}
-                      className="shrink-0 mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); dismiss(n.id); }}
+                      className="shrink-0 mt-0.5"
+                      style={{ color: 'var(--text-3)' }}
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </div>
@@ -216,15 +284,19 @@ function AppHeader({ title, subtitle, onRefresh, refreshing, actions, onToggleMe
           )}
         </div>
 
-        {/* User badge — hydrated from shared UserContext */}
+        {/* User badge — avatar always; text only on md+ */}
         {profile && (
-          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
-            style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
-            <div className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
+          <div
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+            style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}
+          >
+            <div
+              className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}
+            >
               {profile.username.charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 hidden md:block">
               <p className="text-[11px] font-semibold leading-none" style={{ color: 'var(--text-1)' }}>
                 {profile.username}
               </p>
@@ -258,10 +330,7 @@ function DemoBadge() {
       style={{ background: 'rgba(250,204,21,0.15)', border: '1px solid rgba(250,204,21,0.4)', color: '#ca8a04' }}
     >
       <FlaskConical className="h-3 w-3" />
-      {/* Text only on md+ to avoid pushing icons on tight viewports */}
-      <span className="hidden md:inline text-[10px] font-bold uppercase tracking-wide whitespace-nowrap">
-        Demo
-      </span>
+      <span className="hidden md:inline text-[10px] font-bold uppercase tracking-wide whitespace-nowrap">Demo</span>
     </a>
   );
 }

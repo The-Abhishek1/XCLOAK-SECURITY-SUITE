@@ -16,6 +16,7 @@ import {
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
   Cloud, Mail, Container, ShieldOff, Package,
   EyeOff, Wrench, Smartphone, DatabaseZap,
+  PanelLeft, PanelRight,
 } from 'lucide-react';
 import api from '@/lib/api';
 import type { UserProfile } from '@/types';
@@ -96,19 +97,50 @@ const NAV = [
   { group: 'PLATFORM', icon: Building2, platformOnly: true, items: [
     { href: '/platform', label: 'Tenants', icon: Building2 },
   ]},
-];
+] as const;
 
 function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold"
-      style={{ background: 'var(--red)', color: '#fff', lineHeight: 1 }}>
+    <span
+      className="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold"
+      style={{ background: 'var(--red)', color: '#fff', lineHeight: 1 }}
+    >
       {count > 99 ? '99+' : count}
     </span>
   );
 }
 
-function NavContent({
+function Logo({ iconOnly = false }: { iconOnly?: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className="flex h-8 w-8 items-center justify-center rounded-xl shrink-0"
+        style={{
+          background: 'var(--accent-glow)',
+          border: '1px solid var(--accent-border)',
+          boxShadow: '0 0 16px var(--accent-glow)',
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z"
+            fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
+          <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+        </svg>
+      </div>
+      {!iconOnly && (
+        <div>
+          <p className="text-sm font-bold tracking-wide" style={{ color: 'var(--text-1)' }}>XCloak</p>
+          <p className="text-[9px] tracking-widest uppercase font-medium" style={{ color: 'var(--text-3)' }}>Security Suite</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Collapsed icon rail ──────────────────────────────────────────────────────
+
+function CollapsedNav({
   pathname,
   onNavigate,
   logout,
@@ -121,16 +153,86 @@ function NavContent({
   profile: UserProfile | null;
   badges: Record<string, number>;
 }) {
+  const visibleNav = (NAV as unknown as any[]).filter((s: any) => !s.platformOnly || profile?.is_platform_admin);
+
+  return (
+    <>
+      <nav className="flex-1 overflow-y-auto py-2 flex flex-col items-center gap-0.5">
+        {visibleNav.flatMap((section: any) =>
+          section.items.map((item: any) => {
+            const Icon = item.icon;
+            const active = pathname === item.href || pathname?.startsWith(item.href + '/');
+            const badge  = badges[item.href] ?? 0;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.label}
+                onClick={onNavigate}
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-all"
+                style={{
+                  background: active ? 'var(--accent-glow)' : 'transparent',
+                  color:      active ? 'var(--accent)' : 'var(--text-2)',
+                  border:     active ? '1px solid var(--accent-border)' : '1px solid transparent',
+                }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; }}
+                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {badge > 0 && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold"
+                    style={{ background: 'var(--red)', color: '#fff' }}
+                  >
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })
+        )}
+      </nav>
+
+      <div
+        className="flex justify-center pb-4 shrink-0"
+        style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}
+      >
+        <button
+          onClick={logout}
+          title="Sign out"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-all"
+          style={{ color: 'var(--text-2)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--red-bg)'; (e.currentTarget as HTMLElement).style.color = 'var(--red)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ── Full expanded nav content ────────────────────────────────────────────────
+
+function NavContent({
+  pathname, onNavigate, logout, profile, badges,
+}: {
+  pathname: string | null;
+  onNavigate?: () => void;
+  logout: () => void;
+  profile: UserProfile | null;
+  badges: Record<string, number>;
+}) {
   const [query, setQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  const visibleNav = NAV.filter(s => !s.platformOnly || profile?.is_platform_admin);
+  const visibleNav = (NAV as unknown as any[]).filter((s: any) => !s.platformOnly || profile?.is_platform_admin);
 
   const lq = query.toLowerCase().trim();
   const displayed = lq
     ? visibleNav
-        .map(s => ({ ...s, items: s.items.filter(i => i.label.toLowerCase().includes(lq)) }))
-        .filter(s => s.items.length > 0)
+        .map((s: any) => ({ ...s, items: s.items.filter((i: any) => i.label.toLowerCase().includes(lq)) }))
+        .filter((s: any) => s.items.length > 0)
     : visibleNav;
 
   const toggleGroup = (group: string) =>
@@ -146,8 +248,10 @@ function NavContent({
     <>
       {/* Sidebar search */}
       <div className="px-3 pt-3 pb-2">
-        <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors"
-          style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
+        <div
+          className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors"
+          style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}
+        >
           <Search className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--text-3)' }} />
           <input
             value={query}
@@ -172,22 +276,22 @@ function NavContent({
           </p>
         )}
 
-        {displayed.map(section => {
+        {displayed.map((section: any) => {
           const sectionCollapsed = isGroupCollapsed(section.group);
           const GroupIcon = section.icon;
           const hasActiveItem = section.items.some(
-            i => pathname === i.href || pathname?.startsWith(i.href + '/'));
-          const hasBadge = section.items.some(i => (badges[i.href] ?? 0) > 0);
+            (i: any) => pathname === i.href || pathname?.startsWith(i.href + '/'));
+          const hasBadge = section.items.some((i: any) => (badges[i.href] ?? 0) > 0);
 
           return (
             <div key={section.group} className="mb-1">
-              {/* Group header */}
               <button
                 onClick={() => toggleGroup(section.group)}
                 className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg transition-colors"
                 style={{ color: 'var(--text-3)' }}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+              >
                 <div className="flex items-center gap-2">
                   <GroupIcon className="h-3 w-3 shrink-0" />
                   <span className="text-[9.5px] font-bold tracking-widest uppercase">{section.group}</span>
@@ -199,31 +303,37 @@ function NavContent({
                   {hasActiveItem && !sectionCollapsed && (
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   )}
-                  <ChevronDown className="h-3 w-3 transition-transform duration-200"
-                    style={{ transform: sectionCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }} />
+                  <ChevronDown
+                    className="h-3 w-3 transition-transform duration-200"
+                    style={{ transform: sectionCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}
+                  />
                 </div>
               </button>
 
-              {/* Items */}
-              <div className="overflow-hidden transition-all duration-200"
-                style={{ maxHeight: sectionCollapsed ? 0 : 9999, opacity: sectionCollapsed ? 0 : 1 }}>
+              <div
+                className="overflow-hidden transition-all duration-200"
+                style={{ maxHeight: sectionCollapsed ? 0 : 9999, opacity: sectionCollapsed ? 0 : 1 }}
+              >
                 <div className="space-y-0.5 pl-1 pr-0.5 pb-1">
-                  {section.items.map(item => {
+                  {section.items.map((item: any) => {
                     const Icon = item.icon;
                     const active = pathname === item.href || pathname?.startsWith(item.href + '/');
-                    const badge = badges[item.href] ?? 0;
+                    const badge  = badges[item.href] ?? 0;
                     return (
-                      <Link key={item.href} href={item.href}
+                      <Link
+                        key={item.href}
+                        href={item.href}
                         data-tour={item.href.slice(1)}
                         onClick={onNavigate}
                         className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[12.5px] font-medium transition-all duration-100"
                         style={{
                           background: active ? 'var(--accent-glow)' : 'transparent',
-                          color: active ? 'var(--accent)' : 'var(--text-2)',
-                          border: active ? '1px solid var(--accent-border)' : '1px solid transparent',
+                          color:      active ? 'var(--accent)' : 'var(--text-2)',
+                          border:     active ? '1px solid var(--accent-border)' : '1px solid transparent',
                         }}
                         onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--glass-hover)'; }}
-                        onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+                        onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                      >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Icon className="h-3.5 w-3.5 shrink-0" />
                           <span className="truncate">{item.label}</span>
@@ -243,12 +353,17 @@ function NavContent({
       </nav>
 
       {/* Sign out */}
-      <div className="px-2.5 pb-4 shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-        <button onClick={logout}
+      <div
+        className="px-2.5 pb-4 shrink-0"
+        style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}
+      >
+        <button
+          onClick={logout}
           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all"
           style={{ color: 'var(--text-2)' }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--red-bg)'; (e.currentTarget as HTMLElement).style.color = 'var(--red)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}>
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
+        >
           <LogOut className="h-4 w-4" /> Sign out
         </button>
       </div>
@@ -256,25 +371,19 @@ function NavContent({
   );
 }
 
-function Logo() {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-8 w-8 items-center justify-center rounded-xl shrink-0"
-        style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', boxShadow: '0 0 16px var(--accent-glow)' }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
-          <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-        </svg>
-      </div>
-      <div>
-        <p className="text-sm font-bold tracking-wide" style={{ color: 'var(--text-1)' }}>XCloak</p>
-        <p className="text-[9px] tracking-widest uppercase font-medium" style={{ color: 'var(--text-3)' }}>Security Suite</p>
-      </div>
-    </div>
-  );
-}
+// ── Main export ──────────────────────────────────────────────────────────────
 
-export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggle: () => void }) {
+export function Sidebar({
+  mobileOpen,
+  onToggle,
+  desktopCollapsed,
+  onToggleCollapse,
+}: {
+  mobileOpen: boolean;
+  onToggle: () => void;
+  desktopCollapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   const pathname = usePathname();
   const router   = useRouter();
   const { profile } = useUser();
@@ -297,7 +406,6 @@ export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggl
       }
       setBadges(next);
     };
-
     loadBadges();
     const t = setInterval(loadBadges, 60000);
     return () => clearInterval(t);
@@ -309,35 +417,63 @@ export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggl
     router.push('/login');
   };
 
+  const sidebarStyle = {
+    background: 'var(--glass-bg)',
+    backdropFilter: 'var(--blur)',
+    WebkitBackdropFilter: 'var(--blur)',
+    borderRight: '1px solid var(--border)',
+  } as const;
+
   return (
     <>
-      {/* ── DESKTOP SIDEBAR ───────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-40"
-        style={{
-          width: 240,
-          background: 'var(--glass-bg)',
-          backdropFilter: 'var(--blur)',
-          WebkitBackdropFilter: 'var(--blur)',
-          borderRight: '1px solid var(--border)',
-        }}>
-
-        <div className="flex items-center gap-3 px-5 h-14 shrink-0"
-          style={{ borderBottom: '1px solid var(--border)' }}>
-          <Logo />
+      {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
+      <aside
+        className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-40 transition-[width] duration-200"
+        style={{ width: desktopCollapsed ? 56 : 240, ...sidebarStyle }}
+      >
+        {/* Logo row + collapse toggle */}
+        <div
+          className="flex items-center h-14 shrink-0 px-3"
+          style={{
+            borderBottom: '1px solid var(--border)',
+            justifyContent: desktopCollapsed ? 'center' : 'space-between',
+          }}
+        >
+          {desktopCollapsed ? (
+            <button
+              onClick={onToggleCollapse}
+              title="Expand sidebar"
+              className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+              style={{ color: 'var(--accent)' }}
+            >
+              <Logo iconOnly />
+            </button>
+          ) : (
+            <>
+              <Logo />
+              <button
+                onClick={onToggleCollapse}
+                title="Collapse sidebar"
+                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors shrink-0"
+                style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+              >
+                <PanelLeft className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
 
-        <NavContent
-          pathname={pathname}
-          logout={logout}
-          profile={profile}
-          badges={badges}
-        />
+        {desktopCollapsed ? (
+          <CollapsedNav pathname={pathname} logout={logout} profile={profile} badges={badges} />
+        ) : (
+          <NavContent pathname={pathname} logout={logout} profile={profile} badges={badges} />
+        )}
       </aside>
 
-      {/* ── MOBILE: backdrop + slide-out drawer ──────────── */}
+      {/* ── MOBILE: backdrop + slide-out drawer ─────────────── */}
       <div className="lg:hidden">
-
-        {/* Backdrop */}
         {mobileOpen && (
           <div
             className="fixed inset-0 z-40"
@@ -346,7 +482,6 @@ export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggl
           />
         )}
 
-        {/* Slide-out drawer */}
         <aside
           className="fixed top-0 left-0 h-screen z-50 flex flex-col transition-transform duration-300 ease-in-out"
           style={{
@@ -354,10 +489,12 @@ export function Sidebar({ mobileOpen, onToggle }: { mobileOpen: boolean; onToggl
             background: 'var(--bg-1)',
             borderRight: '1px solid var(--border)',
             transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
-          }}>
-
-          <div className="flex items-center justify-between px-4 h-14 shrink-0"
-            style={{ borderBottom: '1px solid var(--border)' }}>
+          }}
+        >
+          <div
+            className="flex items-center justify-between px-4 h-14 shrink-0"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
             <Logo />
             <button onClick={onToggle} style={{ color: 'var(--text-2)' }}>
               <X className="h-4 w-4" />

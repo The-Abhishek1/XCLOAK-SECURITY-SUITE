@@ -305,19 +305,166 @@ func seedIncidents(db *sql.DB, agentIDs []int) []int {
 	return ids
 }
 
+type pbStep struct {
+	stepOrder  int
+	actionType string
+	payload    string
+	condition  string
+	stepName   string
+}
+
+type prebuiltPB struct {
+	name        string
+	triggerType string
+	actionType  string
+	steps       []pbStep
+}
+
 func seedPlaybooks(db *sql.DB, agentIDs []int, incidentIDs []int) []int {
-	playbooks := []struct {
-		name        string
-		triggerType string
-		actionType  string
-	}{
-		{"Auto-Isolate on Ransomware Detection", "alert", "isolate_agent"},
-		{"Notify SOC on Critical C2 Beacon", "alert", "notify_slack"},
-		{"Block IP on Brute Force Threshold", "alert", "block_ip"},
-		{"Create DFIR Case on Incident Escalation", "incident", "create_case"},
+	prebuilt := []prebuiltPB{
+		// ── 1 ──────────────────────────────────────────────────────────────────
+		{
+			name: "Ransomware: Full Containment Response", triggerType: "alert_critical", actionType: "isolate_host",
+			steps: []pbStep{
+				{1, "isolate_host", `{}`, ``, "isolate"},
+				{2, "collect_processes", `{}`, ``, "snapshot_procs"},
+				{3, "collect_file_hashes", `{}`, ``, "snapshot_hashes"},
+				{4, "pagerduty_incident", `{"severity":"critical","component":"endpoint","summary":"Ransomware containment initiated"}`, ``, "page_oncall"},
+			},
+		},
+		// ── 2 ──────────────────────────────────────────────────────────────────
+		{
+			name: "C2 Beacon: Block and Collect", triggerType: "alert_high", actionType: "collect_connections",
+			steps: []pbStep{
+				{1, "collect_connections", `{}`, ``, "collect_net"},
+				{2, "collect_processes", `{}`, ``, "collect_procs"},
+				{3, "webhook", `{"url":"{{SIEM_WEBHOOK}}","method":"POST","body":{"event":"c2_beacon","agent":"{{alert.agent_id}}"}}`, ``, "alert_siem"},
+				{4, "slack_message", `{"channel":"#soc-alerts","text":"C2 beacon detected on {{alert.hostname}} — connections collected, review dashboard."}`, ``, "notify_slack"},
+			},
+		},
+		// ── 3 ──────────────────────────────────────────────────────────────────
+		{
+			name: "YARA Malware Match: Quarantine and DFIR", triggerType: "YARA Match", actionType: "quarantine_file",
+			steps: []pbStep{
+				{1, "quarantine_file", `{"path":"{{alert.file_path}}"}`, ``, "quarantine"},
+				{2, "collect_file_hashes", `{}`, ``, "hash_scan"},
+				{3, "collect_processes", `{}`, ``, "proc_snap"},
+				{4, "pagerduty_incident", `{"severity":"high","component":"malware","summary":"YARA match quarantine — {{alert.rule_name}}"}`, ``, "page_soc"},
+			},
+		},
+		// ── 4 ──────────────────────────────────────────────────────────────────
+		{
+			name: "Brute Force: Block and Alert", triggerType: "alert_high", actionType: "webhook",
+			steps: []pbStep{
+				{1, "webhook", `{"url":"{{FIREWALL_API}}","method":"POST","body":{"action":"block","ip":"{{alert.src_ip}}"}}`, ``, "block_ip"},
+				{2, "slack_message", `{"channel":"#soc-alerts","text":"Brute-force source {{alert.src_ip}} blocked via firewall."}`, ``, "notify"},
+				{3, "collect_auth_logs", `{}`, ``, "collect_auth"},
+			},
+		},
+		// ── 5 ──────────────────────────────────────────────────────────────────
+		{
+			name: "Data Exfiltration: Isolate and Notify", triggerType: "alert_critical", actionType: "isolate_host",
+			steps: []pbStep{
+				{1, "collect_connections", `{}`, ``, "capture_net"},
+				{2, "isolate_host", `{}`, ``, "isolate"},
+				{3, "email_alert", `{"to":"ciso@company.com","subject":"Exfiltration alert — host isolated","body":"Agent {{alert.hostname}} isolated after exfiltration detection. Review DFIR snapshot."}`, ``, "email_ciso"},
+				{4, "pagerduty_incident", `{"severity":"critical","component":"data-loss","summary":"Potential exfiltration — host isolated"}`, ``, "page_oncall"},
+			},
+		},
+		// ── 6 ──────────────────────────────────────────────────────────────────
+		{
+			name: "IOC Match: Enrich and Block", triggerType: "IOC Match", actionType: "webhook",
+			steps: []pbStep{
+				{1, "collect_connections", `{}`, ``, "capture"},
+				{2, "webhook", `{"url":"{{FIREWALL_API}}","method":"POST","body":{"action":"block","ip":"{{alert.ioc_value}}"}}`, ``, "block"},
+				{3, "slack_message", `{"channel":"#threat-intel","text":"IOC match on {{alert.hostname}}: {{alert.ioc_value}} blocked."}`, ``, "notify"},
+			},
+		},
+		// ── 7 ──────────────────────────────────────────────────────────────────
+		{
+			name: "Privilege Escalation: Collect and Page", triggerType: "alert_high", actionType: "collect_processes",
+			steps: []pbStep{
+				{1, "collect_processes", `{}`, ``, "proc_snap"},
+				{2, "collect_users", `{}`, ``, "user_snap"},
+				{3, "collect_auth_logs", `{}`, ``, "auth_snap"},
+				{4, "pagerduty_incident", `{"severity":"high","component":"identity","summary":"Privilege escalation detected — {{alert.hostname}}"}`, ``, "page"},
+			},
+		},
+		// ── 8 ──────────────────────────────────────────────────────────────────
+		{
+			name: "Lateral Movement: Isolate Source Host", triggerType: "alert_critical", actionType: "isolate_host",
+			steps: []pbStep{
+				{1, "collect_connections", `{}`, ``, "net_snap"},
+				{2, "collect_processes", `{}`, ``, "proc_snap"},
+				{3, "isolate_host", `{}`, `severity == "critical"`, "isolate"},
+				{4, "slack_message", `{"channel":"#soc-critical","text":"Lateral movement on {{alert.hostname}} — host isolated. Connections captured."}`, ``, "notify"},
+			},
+		},
+		// ── 9 ──────────────────────────────────────────────────────────────────
+		{
+			name: "Port Scan: Firewall Block and Log", triggerType: "alert_medium", actionType: "webhook",
+			steps: []pbStep{
+				{1, "collect_connections", `{}`, ``, "capture_net"},
+				{2, "webhook", `{"url":"{{FIREWALL_API}}","method":"POST","body":{"action":"rate_limit","ip":"{{alert.src_ip}}"}}`, ``, "rate_limit"},
+				{3, "slack_message", `{"channel":"#soc-alerts","text":"Port scan from {{alert.src_ip}} — rate-limited at firewall."}`, ``, "notify"},
+			},
+		},
+		// ── 10 ─────────────────────────────────────────────────────────────────
+		{
+			name: "Insider Threat: Snapshot and Escalate", triggerType: "alert_high", actionType: "collect_processes",
+			steps: []pbStep{
+				{1, "collect_processes", `{}`, ``, "proc_snap"},
+				{2, "collect_connections", `{}`, ``, "net_snap"},
+				{3, "collect_auth_logs", `{}`, ``, "auth_snap"},
+				{4, "email_alert", `{"to":"hr-security@company.com","subject":"Insider threat alert","body":"User activity on {{alert.hostname}} flagged. Evidence collected. Review case."}`, ``, "email_hr"},
+			},
+		},
+		// ── 11 ─────────────────────────────────────────────────────────────────
+		{
+			name: "Phishing Response: Quarantine and Notify", triggerType: "alert_medium", actionType: "quarantine_file",
+			steps: []pbStep{
+				{1, "quarantine_file", `{"path":"{{alert.file_path}}"}`, ``, "quarantine"},
+				{2, "email_alert", `{"to":"security@company.com","subject":"Phishing attachment quarantined","body":"File quarantined on {{alert.hostname}}. User notified."}`, ``, "notify_user"},
+				{3, "slack_message", `{"channel":"#soc-alerts","text":"Phishing file quarantined on {{alert.hostname}} — rule: {{alert.rule_name}}"}`, ``, "notify_soc"},
+			},
+		},
+		// ── 12 ─────────────────────────────────────────────────────────────────
+		{
+			name: "Supply Chain: Full Audit Snapshot", triggerType: "alert_critical", actionType: "collect_packages",
+			steps: []pbStep{
+				{1, "collect_packages", `{}`, ``, "pkg_snap"},
+				{2, "collect_file_hashes", `{}`, ``, "hash_snap"},
+				{3, "collect_processes", `{}`, ``, "proc_snap"},
+				{4, "pagerduty_incident", `{"severity":"critical","component":"supply-chain","summary":"Supply chain compromise suspected on {{alert.hostname}}"}`, ``, "page"},
+			},
+		},
+		// ── 13 ─────────────────────────────────────────────────────────────────
+		{
+			name: "Critical Incident: Auto-DFIR Collection", triggerType: "incident_created", actionType: "collect_processes",
+			steps: []pbStep{
+				{1, "collect_processes", `{}`, ``, "proc_snap"},
+				{2, "collect_connections", `{}`, ``, "net_snap"},
+				{3, "collect_file_hashes", `{}`, ``, "hash_snap"},
+				{4, "collect_auth_logs", `{}`, ``, "auth_snap"},
+				{5, "slack_message", `{"channel":"#soc-incidents","text":"Auto-DFIR snapshot collected for new incident #{{incident.id}} on {{alert.hostname}}."}`, ``, "notify"},
+			},
+		},
+		// ── 14 ─────────────────────────────────────────────────────────────────
+		{
+			name: "Zero-Day Exploit: Emergency Isolation", triggerType: "alert_critical", actionType: "isolate_host",
+			steps: []pbStep{
+				{1, "isolate_host", `{}`, ``, "isolate"},
+				{2, "collect_processes", `{}`, ``, "proc_snap"},
+				{3, "collect_connections", `{}`, ``, "net_snap"},
+				{4, "collect_file_hashes", `{}`, ``, "hash_snap"},
+				{5, "pagerduty_incident", `{"severity":"critical","component":"zero-day","summary":"Zero-day exploit suspected — {{alert.hostname}} isolated for emergency DFIR"}`, ``, "page_ciso"},
+				{6, "email_alert", `{"to":"ciso@company.com","subject":"[CRITICAL] Zero-day response initiated","body":"Host {{alert.hostname}} isolated. DFIR snapshot underway. Playbook executed automatically."}`, ``, "email_ciso"},
+			},
+		},
 	}
+
 	var pbIDs []int
-	for _, p := range playbooks {
+	for _, p := range prebuilt {
 		var id int
 		err := db.QueryRow(`
 			INSERT INTO playbooks (name, trigger_type, action_type, enabled, tenant_id)
@@ -326,25 +473,50 @@ func seedPlaybooks(db *sql.DB, agentIDs []int, incidentIDs []int) []int {
 			p.name, p.triggerType, p.actionType,
 		).Scan(&id)
 		if err != nil {
-			log.Printf("playbook: %v", err)
+			log.Printf("playbook insert: %v", err)
 			continue
 		}
 		pbIDs = append(pbIDs, id)
+
+		// Seed multi-step actions for this playbook
+		for _, s := range p.steps {
+			payload := s.payload
+			if payload == "" {
+				payload = "{}"
+			}
+			_, aerr := db.Exec(`
+				INSERT INTO playbook_actions
+					(playbook_id, step_order, action_type, payload, condition_expr,
+					 max_retries, retry_delay_secs, timeout_seconds, run_parallel,
+					 step_name, tenant_id)
+				VALUES ($1,$2,$3,$4::jsonb,$5,0,5,60,false,$6,9999)`,
+				id, s.stepOrder, s.actionType, payload, s.condition, s.stepName,
+			)
+			if aerr != nil {
+				log.Printf("playbook action (pb %d step %d): %v", id, s.stepOrder, aerr)
+			}
+		}
 	}
 
-	// Seed pending approval executions so SOAR queue has visible items
-	if len(pbIDs) > 0 && len(agentIDs) > 0 {
+	// Seed pending-approval executions so SOAR queue has visible items
+	if len(pbIDs) >= 3 && len(agentIDs) >= 2 {
 		mustExec(db, `
 			INSERT INTO playbook_executions
 				(playbook_id, agent_id, action_type, status, created_at, tenant_id)
-			VALUES ($1,$2,'isolate_agent','pending_approval',$3,9999)`,
+			VALUES ($1,$2,'isolate_host','pending_approval',$3,9999)`,
 			pbIDs[0], agentIDs[0], time.Now().Add(-10*time.Minute),
 		)
 		mustExec(db, `
 			INSERT INTO playbook_executions
 				(playbook_id, agent_id, action_type, status, created_at, tenant_id)
-			VALUES ($1,$2,'block_ip','pending_approval',$3,9999)`,
+			VALUES ($1,$2,'quarantine_file','pending_approval',$3,9999)`,
 			pbIDs[2], agentIDs[1], time.Now().Add(-5*time.Minute),
+		)
+		mustExec(db, `
+			INSERT INTO playbook_executions
+				(playbook_id, agent_id, action_type, status, created_at, tenant_id)
+			VALUES ($1,$2,'isolate_host','pending_approval',$3,9999)`,
+			pbIDs[7], agentIDs[0], time.Now().Add(-2*time.Minute),
 		)
 	}
 	return pbIDs
