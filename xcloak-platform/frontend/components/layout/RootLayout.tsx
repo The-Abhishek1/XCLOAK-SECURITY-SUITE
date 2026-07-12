@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock, Menu, FlaskConical } from 'lucide-react';
+import { RefreshCw, Bell, X, Sun, Moon, Check, AlertTriangle, Zap, Settings, Clock, FlaskConical } from 'lucide-react';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { timeAgo } from '@/lib/utils';
 
@@ -64,7 +64,7 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
       {/* Margin only on desktop — sidebar is hidden (display:none) below lg */}
       <div
         className="flex flex-1 flex-col min-w-0 transition-[margin-left] duration-200"
-        style={{ marginLeft: isDesktop ? `${sidebarW}px` : 0 }}
+        style={{ marginLeft: isDesktop ? `${sidebarW}px` : `${COLLAPSED_W}px` }}
       >
         <AppHeader
           title={title}
@@ -72,7 +72,6 @@ export function RootLayout({ children, title, subtitle, onRefresh, refreshing, a
           onRefresh={onRefresh}
           refreshing={refreshing}
           actions={actions}
-          onToggleMenu={toggleMenu}
         />
         {/* No z-10 here — fixed drawers inside children need to compete in the root
             stacking context at their own z-index (z-50), above the header (z-30). */}
@@ -89,8 +88,8 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 function AppHeader({
-  title, subtitle, onRefresh, refreshing, actions, onToggleMenu,
-}: Omit<RootLayoutProps, 'children'> & { onToggleMenu: () => void }) {
+  title, subtitle, onRefresh, refreshing, actions,
+}: Omit<RootLayoutProps, 'children'> & { onToggleMenu?: () => void }) {
   const { notifications, unread, markRead, markAllRead, dismiss } = useNotifications();
   const { theme, toggle } = useTheme();
   const { profile } = useUser();
@@ -136,15 +135,6 @@ function AppHeader({
         borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* Hamburger — only when sidebar is hidden (below lg) */}
-      <button
-        onClick={onToggleMenu}
-        className="flex lg:hidden h-8 w-8 items-center justify-center rounded-lg shrink-0 transition-colors"
-        style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-      >
-        <Menu className="h-4 w-4" />
-      </button>
-
       {/* Page title */}
       <div className="min-w-0 flex-1">
         {title && (

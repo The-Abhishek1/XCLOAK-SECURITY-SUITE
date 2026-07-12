@@ -473,6 +473,12 @@ export default function NetworkMapPage() {
       if (zoneFilter !== 'all' && n.zone !== zoneFilter) continue;
       if (!showOffline && n.type === 'agent' && n.status === 'offline') continue;
       if (q && !`${n.hostname || ''} ${n.ip || ''}`.toLowerCase().includes(q)) continue;
+      // Drop external_ip nodes with garbage IPs (hex strings, brackets, etc.)
+      if (n.type === 'external_ip' && n.ip) {
+        const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(n.ip);
+        const ipv6 = n.ip.includes(':') && /^[0-9a-fA-F:]+$/.test(n.ip);
+        if (!ipv4 && !ipv6) continue;
+      }
       ids.add(n.id);
     }
     return ids;
@@ -516,46 +522,145 @@ export default function NetworkMapPage() {
   };
 
   const drawNode = useCallback((n: any, ctx: CanvasRenderingContext2D) => {
-    const r = Math.max(4, n.val || 4);
-    const ring = zoneColors[n.zone] || '#64748b';
+    const isAgent = n.type === 'agent';
+    const isExt   = n.type === 'external_ip';
+    const r       = Math.max(4, n.val || 4);
+    const fill    = nodeColor(n);
+    const ring    = zoneColors[n.zone] || '#64748b';
+    const offline = n.status === 'offline';
 
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = nodeColor(n);
-    ctx.fill();
+    if (isAgent) {
+      // Glow for high/critical risk online agents
+      if (!offline && (n.risk_level === 'critical' || n.risk_level === 'high')) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + 6, 0, 2 * Math.PI);
+        ctx.fillStyle = fill + '22';
+        ctx.fill();
+      }
 
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r + 2, 0, 2 * Math.PI);
-    ctx.strokeStyle = n.status === 'offline' ? ring + '44' : ring;
-    ctx.lineWidth = n.zone === 'dmz' ? 2 : 1;
-    ctx.stroke();
-
-    if (n.alert_count > 0) {
+      // Main circle
       ctx.beginPath();
-      ctx.arc(n.x + (r + 2) * 0.7, n.y - (r + 2) * 0.7, 3.5, 0, 2 * Math.PI);
-      ctx.fillStyle = '#f85149';
+      ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = offline ? fill + '44' : fill;
       ctx.fill();
-    }
 
-    if (n.is_ioc) {
+      // Ring — dashed for offline
+      if (offline) {
+        ctx.setLineDash([3, 3]);
+      }
       ctx.beginPath();
-      ctx.arc(n.x - (r + 2) * 0.7, n.y - (r + 2) * 0.7, 3, 0, 2 * Math.PI);
-      ctx.fillStyle = '#e879f9';
-      ctx.fill();
-    }
+      ctx.arc(n.x, n.y, r + 2, 0, 2 * Math.PI);
+      ctx.strokeStyle = offline ? ring + '55' : ring;
+      ctx.lineWidth = n.zone === 'dmz' ? 2.5 : 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
 
-    if (n.type === 'agent' || n.is_ioc) {
-      const label = n.hostname
-        ? (n.hostname.length > 14 ? n.hostname.slice(0, 12) + '…' : n.hostname)
+      // Alert badge (top-right red dot)
+      if (n.alert_count > 0) {
+        ctx.beginPath();
+        ctx.arc(n.x + (r + 2) * 0.72, n.y - (r + 2) * 0.72, 3.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#f85149';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(n.x + (r + 2) * 0.72, n.y - (r + 2) * 0.72, 3.5, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      // Hostname label with background pill
+      const label    = n.hostname
+        ? (n.hostname.length > 16 ? n.hostname.slice(0, 14) + '…' : n.hostname)
         : (n.ip || n.id);
-      const fontSize = Math.max(5, r * 0.9);
-      ctx.font = `bold ${fontSize}px sans-serif`;
-      ctx.textAlign = 'center';
+      const fontSize = Math.max(6, Math.min(r * 0.95, 9));
+      ctx.font = `600 ${fontSize}px sans-serif`;
+      const tw   = ctx.measureText(label).width;
+      const ly   = n.y + r + 4;
+      const pad  = 3;
+      ctx.fillStyle = 'rgba(15,23,42,0.72)';
+      ctx.beginPath();
+      const bx = n.x - tw / 2 - pad;
+      const bw = tw + pad * 2;
+      const bh = fontSize + pad * 1.5;
+      const br = 3;
+      ctx.moveTo(bx + br, ly); ctx.lineTo(bx + bw - br, ly);
+      ctx.arcTo(bx + bw, ly, bx + bw, ly + bh, br);
+      ctx.lineTo(bx + bw, ly + bh - br);
+      ctx.arcTo(bx + bw, ly + bh, bx + bw - br, ly + bh, br);
+      ctx.lineTo(bx + br, ly + bh);
+      ctx.arcTo(bx, ly + bh, bx, ly + bh - br, br);
+      ctx.lineTo(bx, ly + br);
+      ctx.arcTo(bx, ly, bx + br, ly, br);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = n.status === 'offline' ? 'rgba(148,163,184,0.45)' : 'rgba(226,232,240,0.92)';
-      ctx.fillText(label, n.x, n.y + r + 3);
+      ctx.fillStyle    = offline ? 'rgba(148,163,184,0.5)' : 'rgba(226,232,240,0.95)';
+      ctx.fillText(label, n.x, ly + pad * 0.75);
+
+    } else if (isExt) {
+      // Diamond shape for external IPs
+      const threat  = n.is_ioc || (n.ip && enrichMap.get(n.ip) && enrichMap.get(n.ip) !== 'none');
+      const extFill = fill;
+      const dr      = r + (threat ? 2 : 0);
+
+      if (threat) {
+        // Glow for IOC/enriched nodes
+        ctx.beginPath();
+        ctx.moveTo(n.x, n.y - dr - 5);
+        ctx.lineTo(n.x + dr + 5, n.y);
+        ctx.lineTo(n.x, n.y + dr + 5);
+        ctx.lineTo(n.x - dr - 5, n.y);
+        ctx.closePath();
+        ctx.fillStyle = extFill + '30';
+        ctx.fill();
+      }
+
+      // Diamond fill
+      ctx.beginPath();
+      ctx.moveTo(n.x, n.y - dr);
+      ctx.lineTo(n.x + dr, n.y);
+      ctx.lineTo(n.x, n.y + dr);
+      ctx.lineTo(n.x - dr, n.y);
+      ctx.closePath();
+      ctx.fillStyle = extFill + (threat ? 'cc' : '99');
+      ctx.fill();
+
+      // Diamond stroke
+      ctx.beginPath();
+      ctx.moveTo(n.x, n.y - dr);
+      ctx.lineTo(n.x + dr, n.y);
+      ctx.lineTo(n.x, n.y + dr);
+      ctx.lineTo(n.x - dr, n.y);
+      ctx.closePath();
+      ctx.strokeStyle = threat ? extFill : (ring + '88');
+      ctx.lineWidth   = threat ? 1.5 : 0.8;
+      ctx.stroke();
+
+      // IOC badge (top-right purple dot)
+      if (n.is_ioc) {
+        ctx.beginPath();
+        ctx.arc(n.x + dr * 0.65, n.y - dr * 0.65, 2.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#e879f9';
+        ctx.fill();
+      }
+
+      // Label for IOC nodes or enriched threats — abbreviated IP
+      if (threat && n.ip) {
+        const parts  = (n.ip as string).split('.');
+        const abbrev = parts.length === 4
+          ? `${parts[0]}.*.${parts[3]}`
+          : (n.ip.length > 12 ? n.ip.slice(0, 10) + '…' : n.ip);
+        const fontSize = Math.max(5, dr * 0.85);
+        ctx.font       = `500 ${fontSize}px sans-serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle  = extFill;
+        ctx.fillText(abbrev, n.x, n.y + dr + 2);
+      }
     }
-  }, [zoneColors, nodeColor]);
+  }, [zoneColors, nodeColor, enrichMap]);
 
   const s = graph?.summary;
 

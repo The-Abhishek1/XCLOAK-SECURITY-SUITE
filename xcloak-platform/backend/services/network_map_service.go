@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -196,6 +197,10 @@ func BuildNetworkMap(tenantID int, since time.Time, limit int) (*NetworkMapGraph
 
 		host := hostFromAddress(ev.RemoteAddress)
 		if isListenPlaceholder(host) {
+			continue
+		}
+		// Drop any address that doesn't parse as a valid IP (hex artefacts, brackets, etc.)
+		if net.ParseIP(host) == nil {
 			continue
 		}
 

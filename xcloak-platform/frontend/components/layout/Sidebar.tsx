@@ -436,7 +436,7 @@ export function Sidebar({
 
   return (
     <>
-      {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
+      {/* ── DESKTOP SIDEBAR (≥ lg) ──────────────────────────── */}
       <aside
         className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-40 transition-[width] duration-200"
         style={{ width: desktopCollapsed ? collapsedWidth : expandedWidth, ...sidebarStyle }}
@@ -482,20 +482,44 @@ export function Sidebar({
         )}
       </aside>
 
-      {/* ── MOBILE: backdrop + slide-out drawer ─────────────── */}
+      {/* ── MOBILE ICON RAIL (< lg) — always visible ─────────── */}
+      <aside
+        className="lg:hidden flex flex-col fixed left-0 top-0 h-screen z-40"
+        style={{ width: collapsedWidth, ...sidebarStyle }}
+      >
+        {/* Header: logo icon + expand button */}
+        <div
+          className="flex flex-col items-center h-14 shrink-0 justify-center gap-1 pt-1"
+          style={{ borderBottom: '1px solid var(--border)' }}
+        >
+          <button
+            onClick={onToggle}
+            title="Open menu"
+            className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors"
+            style={{ color: 'var(--accent)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+          >
+            <PanelRight className="h-4 w-4" />
+          </button>
+        </div>
+        <CollapsedNav pathname={pathname} onNavigate={undefined} logout={logout} profile={profile} badges={badges} />
+      </aside>
+
+      {/* ── MOBILE: full-screen overlay drawer (Discord-style) ── */}
       <div className="lg:hidden">
         {mobileOpen && (
           <div
-            className="fixed inset-0 z-40"
-            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+            className="fixed inset-0 z-50"
+            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
             onClick={onToggle}
           />
         )}
 
         <aside
-          className="fixed top-0 left-0 h-screen z-50 flex flex-col transition-transform duration-300 ease-in-out"
+          className="fixed top-0 left-0 h-screen z-[60] flex flex-col transition-transform duration-300 ease-in-out"
           style={{
-            width: 270,
+            width: expandedWidth,
             background: 'var(--bg-1)',
             borderRight: '1px solid var(--border)',
             transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
