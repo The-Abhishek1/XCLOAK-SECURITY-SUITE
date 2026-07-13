@@ -315,13 +315,15 @@ export default function PlatformPage() {
                     {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
                     {t.is_active ? 'Suspend' : 'Reactivate'}
                   </button>
-                  <button
-                    title="Delete tenant permanently"
-                    onClick={() => { setDeletingTenant(t); setDeleteConfirm(''); }}
-                    className="g-btn text-xs"
-                    style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)' }}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {t.id !== 1 && (
+                    <button
+                      title="Delete tenant permanently"
+                      onClick={() => { setDeletingTenant(t); setDeleteConfirm(''); }}
+                      className="g-btn text-xs"
+                      style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)' }}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
               {expandedTenant === t.id && (
