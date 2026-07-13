@@ -195,8 +195,6 @@ helm install xcloak charts/xcloak \
   --set backend.env.METRICS_TOKEN=$(openssl rand -hex 32)
 ```
 
-See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elasticsearch, and production hardening.
-
 ### Pre-built binaries
 
 Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases):
@@ -205,6 +203,8 @@ Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/
 - `xcloak-agent-windows-amd64.exe`
 - `xcloak-agent-android.apk`
 - `xcloak-*.tgz` (Helm chart)
+
+See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elasticsearch, and production hardening.
 
 ---
 

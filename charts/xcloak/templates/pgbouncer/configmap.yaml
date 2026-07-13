@@ -26,7 +26,7 @@ data:
     reserve_pool_timeout = 3
     query_wait_timeout = {{ .Values.pgbouncer.pool.queryWaitTimeout }}
     server_idle_timeout = {{ .Values.pgbouncer.pool.serverIdleTimeout }}
-    auth_type = md5
+    auth_type = scram-sha-256
     auth_file = /etc/pgbouncer/userlist.txt
     log_connections = 0
     log_disconnections = 0

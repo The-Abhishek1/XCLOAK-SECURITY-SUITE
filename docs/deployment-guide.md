@@ -7,9 +7,10 @@ For operators deploying and maintaining XCloak in production.
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Quick Start (Docker Compose)](#quick-start-docker-compose)
-3. [Production Deployment (Kubernetes / Helm)](#production-deployment-kubernetes--helm)
-4. [Environment Variables Reference](#environment-variables-reference)
+2. [Quick Start](#quick-start)
+3. [Production Docker Compose](#production-docker-compose)
+4. [Kubernetes / Helm](#kubernetes--helm)
+5. [Environment Variables Reference](#environment-variables-reference)
 5. [Database](#database)
 6. [Redis](#redis)
 7. [Kafka](#kafka)
@@ -45,59 +46,27 @@ Optional but recommended for production:
 
 ---
 
-## Quick Start (Docker Compose)
+## Quick Start
 
-For evaluation or small deployments.
-
-### 1. Clone and configure
+For evaluation or trying XCloak locally. No config required — secrets are generated automatically.
 
 ```bash
-git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
+curl -fsSL https://raw.githubusercontent.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone --depth 1 https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
 cd XCLOAK-SECURITY-SUITE
-
-cd xcloak-platform/backend
-cp .env.example .env
-```
-
-Edit `.env` — at minimum set:
-
-```env
-DB_PASSWORD=<strong-password>
-JWT_SECRET=<openssl rand -hex 32>
-METRICS_TOKEN=<openssl rand -hex 32>
-```
-
-### 2. Start the observability stack
-
-```bash
-cd XCLOAK-SECURITY-SUITE
-docker compose up -d
-```
-
-This starts PostgreSQL, Redis, Kafka, Kafka UI, Prometheus, Grafana, and MinIO.
-
-### 3. Start the backend
-
-```bash
-cd xcloak-platform/backend
-go run main.go
-# or with hot reload:
-air
-```
-
-Migrations run automatically on startup. On first start you will see ~55 migration steps logged.
-
-### 4. Start the frontend
-
-```bash
-cd xcloak-platform/frontend
-npm install
-npm run dev
+docker compose -f docker-compose.quickstart.yml up -d --build
 ```
 
 Open `http://localhost:3000`. The first registered user becomes the tenant admin.
 
-### 5. Enroll the first agent
+Migrations run automatically on backend startup. On first start you will see ~70 migration steps logged.
+
+### Enroll the first agent
 
 ```bash
 cd xcloak-agent-desktop
@@ -122,13 +91,59 @@ Generate an install token from **Settings → Integrations → Install Tokens** 
 
 ---
 
-## Production Deployment (Kubernetes / Helm)
+## Production Docker Compose
+
+Use `docker-compose.yml` (the full stack) for production. It includes Kafka, MinIO, PgBouncer, Prometheus, and Grafana.
+
+### 1. Configure
+
+```bash
+git clone --depth 1 https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
+cd XCLOAK-SECURITY-SUITE
+cp .env.example .env
+```
+
+Edit `.env` — at minimum set:
+
+```env
+DB_PASSWORD=<strong-password>
+JWT_SECRET=$(openssl rand -hex 64)
+METRICS_TOKEN=$(openssl rand -hex 32)
+CORS_ALLOWED_ORIGINS=https://xcloak.yourdomain.com
+APP_BASE_URL=https://xcloak.yourdomain.com
+```
+
+### 2. Start
+
+```bash
+docker compose up -d --build
+```
+
+This starts: PostgreSQL, Redis, Zookeeper, Kafka, Kafka UI, MinIO, PgBouncer, backend, seeder, frontend, Prometheus, Grafana.
+
+### 3. TLS
+
+Terminate TLS at a reverse proxy (Caddy, nginx, Traefik) in front of port 3000 (frontend) and 8080 (API). Leave `TLS_CERT_FILE` and `TLS_KEY_FILE` empty in `.env`.
+
+### High availability
+
+The backend is stateless — you can run multiple replicas behind a load balancer. Redis pub/sub ensures WebSocket alerts reach clients regardless of which replica they are connected to. All replicas must share the same PostgreSQL and Redis instances.
+
+---
+
+## Kubernetes / Helm
 
 ### Add the chart
 
 ```bash
-helm repo add xcloak https://charts.xcloak.io  # or use the local charts/ directory
-helm repo update
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+helm dependency update charts/xcloak
+helm install xcloak charts/xcloak \
+  --namespace xcloak --create-namespace \
+  --set global.ingress.host=xcloak.yourdomain.com \
+  --set backend.env.JWT_SECRET=$(openssl rand -hex 32) \
+  --set backend.env.METRICS_TOKEN=$(openssl rand -hex 32)
 ```
 
 ### Minimal values file
@@ -351,7 +366,7 @@ The agent reads `.env` from its working directory on startup (same precedence ru
 
 ### Migrations
 
-Migrations run automatically on backend startup via `golang-migrate`. The migration files are in `backend/database/migrations/`. There are 55 migrations as of the latest release.
+Migrations run automatically on backend startup via `golang-migrate`. The migration files are in `backend/database/migrations/`. There are 70 migrations as of the latest release.
 
 To run migrations manually:
 
@@ -397,7 +412,9 @@ Kafka is optional. When disabled (`KAFKA_ENABLED=false`) all event bus operation
 
 ### Production cluster (3-broker)
 
-Enable the bundled Kafka StatefulSet in Helm:
+The bundled `docker-compose.yml` runs a single Kafka broker sufficient for most deployments.
+
+In Helm, enable the bundled Kafka StatefulSet:
 
 ```yaml
 kafka:
@@ -481,9 +498,9 @@ mc retention set --default GOVERNANCE 365d minio/xcloak-audit-log
 
 ## TLS
 
-### Option 1 — Terminate at ingress (recommended)
+### Option 1 — Terminate at reverse proxy (recommended)
 
-Configure TLS in your ingress controller (nginx, Traefik, etc.) or load balancer. Leave `TLS_CERT_FILE` and `TLS_KEY_FILE` empty in the backend config.
+Configure TLS in Caddy, nginx, or Traefik in front of port 8080 and 3000. Leave `TLS_CERT_FILE` and `TLS_KEY_FILE` empty in `.env`.
 
 ### Option 2 — Backend TLS
 
@@ -493,6 +510,8 @@ Set `TLS_CERT_FILE` and `TLS_KEY_FILE` to the paths of your certificate and priv
 TLS_CERT_FILE=/etc/xcloak/tls/tls.crt
 TLS_KEY_FILE=/etc/xcloak/tls/tls.key
 ```
+
+Mount the cert files into the backend container via a `volumes:` entry in `docker-compose.yml`.
 
 In Helm, set `backend.tls.enabled=true` and provide a cert secret:
 
@@ -515,6 +534,8 @@ PgBouncer sits between the backend and PostgreSQL. It pools connections and redu
 
 **Required mode: transaction pooling** — session pooling breaks RLS because the `SET LOCAL app.tenant_id` GUC would persist across different tenants' requests.
 
+PgBouncer is included in `docker-compose.yml`. The backend's `DB_HOST` points to `pgbouncer:6432` rather than `postgres:5432`.
+
 In Helm, enable PgBouncer:
 
 ```yaml
@@ -534,7 +555,9 @@ Vault integration is optional. When enabled, it provides:
 - **KV secrets** — per-tenant integration credentials (OIDC client secrets, Slack tokens, etc.) stored in Vault rather than Postgres
 - **Transit engine** — TOTP secrets are encrypted/decrypted via Vault's transit engine instead of stored directly
 
-Enable in Helm:
+Set `VAULT_ADDR` and `VAULT_TOKEN` in `.env`. The backend falls back to Postgres-only storage when Vault is not configured.
+
+In Helm:
 
 ```yaml
 vault:
@@ -542,8 +565,6 @@ vault:
   addr: https://vault.yourdomain.com
   existingSecret: xcloak-vault-token  # key: token
 ```
-
-The backend falls back to Postgres-only storage when Vault is disabled.
 
 ---
 
@@ -635,6 +656,10 @@ Backups are pruned after `RETENTION_DAYS` days (default: 14). Set this in `scrip
 ```
 
 Always take a fresh backup before restoring.
+
+### Docker volume backups
+
+For Docker Compose deployments, supplement `pg_dump` with Docker volume backups using `docker run --rm -v postgres_data:/data -v /backups:/out busybox tar czf /out/postgres_data.tar.gz /data`.
 
 ### Kubernetes / persistent volumes
 

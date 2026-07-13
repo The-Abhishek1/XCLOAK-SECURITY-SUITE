@@ -1,4 +1,4 @@
-FROM postgres:16
+FROM timescale/timescaledb:latest-pg16
 
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
@@ -9,10 +9,11 @@ RUN apt-get update -qq \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-COPY entrypoint.sh /entrypoint.sh
-COPY bootstrap.yml  /etc/patroni/bootstrap.yml
+COPY entrypoint.sh    /entrypoint.sh
+COPY bootstrap.yml    /etc/patroni/bootstrap.yml
+COPY post_init.sh     /scripts/post_init.sh
 
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /scripts/post_init.sh
 
 EXPOSE 5432 8008
 

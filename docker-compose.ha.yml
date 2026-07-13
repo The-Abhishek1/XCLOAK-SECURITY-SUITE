@@ -147,10 +147,12 @@ services:
       - "5433:5001"    # Read  (replica) — external port 5433 maps to HAProxy read
       - "7000:7000"    # HAProxy stats dashboard
     healthcheck:
-      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      # Check config syntax AND that the write port is actually accepting connections.
+      test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg && wget -qO- http://localhost:7000/ >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
 
   # ── Redis ───────────────────────────────────────────────────────────────────
   redis:

@@ -33,6 +33,10 @@ bootstrap:
         checkpoint_completion_target: 0.9
         archive_mode: "off"
 
+  # Runs once after the cluster is first initialised on the primary node.
+  # Creates the application database so the backend can connect on first start.
+  post_init: /scripts/post_init.sh
+
   initdb:
     - encoding: UTF8
     - data-checksums
