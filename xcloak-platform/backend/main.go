@@ -77,6 +77,8 @@ func main() {
 
 	services.InitRedis()
 	services.InitSaasMode()
+	services.InitLicenseMode()
+	go services.StartLicenseChecker()
 
 	// ── Immutable audit log export (MinIO + Object Lock) ──────
 	// Non-fatal: audit export is a compliance nice-to-have, not a hard

@@ -259,6 +259,15 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/platform/agent-releases", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetAgentReleases)
 	router.GET("/api/agent-releases/:platform", middleware.RequireAgentAuth(), api.GetLatestAgentRelease)
 
+	// ── License (public check + admin management) ───────────────────
+	router.POST("/api/license/check", api.CheckLicenseHandler)
+	router.GET("/api/platform/license/mode", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetLicenseModeHandler)
+	router.POST("/api/platform/license/mode", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.SetLicenseModeHandler)
+	router.GET("/api/platform/license/keys", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.ListLicenseKeysHandler)
+	router.POST("/api/platform/license/keys", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GenerateLicenseKeyHandler)
+	router.DELETE("/api/platform/license/keys/:keyID", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.RevokeLicenseKeyHandler)
+	router.POST("/api/platform/license/keys/:keyID/regenerate", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.RegenerateLicenseTokenHandler)
+
 	// ── SaaS Admin (platform admin only) ────────────────────────────
 	router.GET("/api/platform/saas/mode", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetSaasModeHandler)
 	router.POST("/api/platform/saas/mode", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.SetSaasModeHandler)

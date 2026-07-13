@@ -424,6 +424,17 @@ export const platformAPI = {
   updateSubscription:  (tenantID: number, data: { plan: string; status: string; notes?: string }) =>
     api.patch(`/platform/saas/subscriptions/${tenantID}`, data),
   getAllPlans:          ()                              => api.get('/platform/saas/plans'),
+  // License admin
+  getLicenseMode:      ()                              => api.get('/platform/license/mode'),
+  setLicenseMode:      (enabled: boolean)              => api.post('/platform/license/mode', { enabled }),
+  getLicenseKeys:      ()                              => api.get('/platform/license/keys'),
+  generateLicenseKey:  (data: {
+    customer_name: string; customer_email: string; tier: string;
+    agent_limit: number; user_limit: number; expires_at: string; notes?: string;
+  })                                                   => api.post('/platform/license/keys', data),
+  revokeLicenseKey:    (keyID: string, reason?: string) =>
+    api.delete(`/platform/license/keys/${keyID}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`),
+  regenerateLicenseToken: (keyID: string)              => api.post(`/platform/license/keys/${keyID}/regenerate`, {}),
 };
 
 export const billingAPI = {

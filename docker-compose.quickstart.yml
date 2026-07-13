@@ -72,6 +72,10 @@ services:
       # AGENT_RELEASE_SIGNING_KEY: ""
       # AGENT_RELEASE_PUBLIC_KEY: ""
       # AGENT_RELEASE_CI_TOKEN: ""
+      # If THIS compose file runs your own server (the license authority), set:
+      SKIP_LICENSE_CHECK: "true"
+      # Self-hosted CUSTOMER deployments: set XCLOAK_LICENSE_KEY instead:
+      # XCLOAK_LICENSE_KEY: "xlk_v1...."
       # AI — Ollama (local) by default; set ANTHROPIC_API_KEY + LLM_PROVIDER=anthropic to use Claude
       LLM_PROVIDER: ollama
       OLLAMA_URL: http://host.docker.internal:11434

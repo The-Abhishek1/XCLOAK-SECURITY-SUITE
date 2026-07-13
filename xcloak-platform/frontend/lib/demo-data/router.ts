@@ -987,6 +987,15 @@ export function demoRoute(
   if (p === '/platform/saas/plans')         return ok([]);
   if (p === '/platform/saas/subscriptions') return ok([]);
 
+  // ── License Admin (platform admin) ───────────────────────────────────────
+  if (p === '/platform/license/mode')  return ok({ license_mode: false });
+  if (p === '/platform/license/keys')  return ok([]);
+  if (p === '/license/check')          return ok({ enforcement: false, valid: false, message: 'Demo mode — enforcement not active.' });
+  if (method === 'POST' && p === '/platform/license/mode')          return demoBlock();
+  if (method === 'POST' && p === '/platform/license/keys')          return demoBlock();
+  if (method === 'DELETE' && p.startsWith('/platform/license/keys/')) return demoBlock();
+  if (method === 'POST' && p.includes('/platform/license/keys/') && p.endsWith('/regenerate')) return demoBlock();
+
   // ── Fallback ─────────────────────────────────────────────────────────────
   return ok([]);
 }

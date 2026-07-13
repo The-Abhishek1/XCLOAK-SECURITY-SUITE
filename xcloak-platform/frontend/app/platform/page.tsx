@@ -6,7 +6,7 @@ import { platformAPI } from '@/lib/api';
 import { useUser } from '@/context/UserContext';
 import { AgentRelease, TenantDomain } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload, Globe, ChevronRight, ChevronDown, CreditCard, TrendingUp, Users, DollarSign, Activity, Edit2 } from 'lucide-react';
+import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Upload, Globe, ChevronRight, ChevronDown, CreditCard, TrendingUp, Users, DollarSign, Activity, Edit2, Key, Copy, RefreshCw, Trash2, Server, Cloud } from 'lucide-react';
 
 interface Tenant {
   id: number;
@@ -98,7 +98,7 @@ function DomainsPanel({ tenantID }: { tenantID: number }) {
   );
 }
 
-type PTab = 'tenants' | 'saas';
+type PTab = 'tenants' | 'deployment' | 'saas';
 
 export default function PlatformPage() {
   const { profile } = useUser();
@@ -223,7 +223,7 @@ export default function PlatformPage() {
 
       {/* Tab bar */}
       <div className="flex gap-1 p-1 mb-5 rounded-xl w-fit" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-        {([['tenants', Building2, 'Tenants'], ['saas', CreditCard, 'SaaS & Billing']] as const).map(([id, Icon, label]) => (
+        {([['tenants', Building2, 'Tenants'], ['deployment', Server, 'Deployment Mode'], ['saas', CreditCard, 'SaaS & Billing']] as const).map(([id, Icon, label]) => (
           <button key={id} onClick={() => setPtab(id as PTab)}
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-all"
             style={{
@@ -236,6 +236,7 @@ export default function PlatformPage() {
         ))}
       </div>
 
+      {ptab === 'deployment' && <DeploymentModePanel notify={notify} />}
       {ptab === 'saas' && <SaasAdminPanel notify={notify} />}
 
       {ptab === 'tenants' && <>
@@ -443,6 +444,384 @@ export default function PlatformPage() {
         </div>
       )}
     </RootLayout>
+  );
+}
+
+// ── Deployment Mode Panel ─────────────────────────────────────────────────────
+
+interface LicenseKey {
+  id: number;
+  key_id: string;
+  customer_name: string;
+  customer_email: string;
+  tier: string;
+  agent_limit: number;
+  user_limit: number;
+  expires_at: string;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+  token?: string;
+}
+
+const TIER_COLOR: Record<string, string> = {
+  community: 'var(--text-3)',
+  pro: 'var(--accent)',
+  enterprise: '#a855f7',
+};
+
+function DeploymentModePanel({ notify }: { notify: (m: string) => void }) {
+  const [licenseOn, setLicenseOn]   = useState<boolean | null>(null);
+  const [saasOn,    setSaasOnLocal] = useState<boolean | null>(null);
+  const [togLic,    setTogLic]      = useState(false);
+  const [togSaas,   setTogSaas]     = useState(false);
+  const [keys,      setKeys]        = useState<LicenseKey[]>([]);
+  const [loading,   setLoading]     = useState(true);
+  const [showGen,   setShowGen]     = useState(false);
+  const [genForm,   setGenForm]     = useState({
+    customer_name: '', customer_email: '', tier: 'pro',
+    agent_limit: 25, user_limit: 10, expires_at: '', notes: '',
+  });
+  const [generating, setGenerating] = useState(false);
+  const [newToken,   setNewToken]   = useState<string | null>(null);
+  const [revoking,   setRevoking]   = useState<string | null>(null);
+  const [copied,     setCopied]     = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      platformAPI.getLicenseMode(),
+      platformAPI.getSaasMode(),
+      platformAPI.getLicenseKeys(),
+    ]).then(([lm, sm, keys]) => {
+      setLicenseOn(lm.data?.license_mode ?? false);
+      setSaasOnLocal(sm.data?.saas_mode ?? false);
+      setKeys(keys.data || []);
+    }).catch(() => { setLicenseOn(false); setSaasOnLocal(false); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggleLicense = async () => {
+    setTogLic(true);
+    try {
+      const next = !licenseOn;
+      await platformAPI.setLicenseMode(next);
+      setLicenseOn(next);
+      notify(next
+        ? 'License enforcement ON — self-hosted instances now require a key'
+        : 'License enforcement OFF — full open-source access restored');
+    } catch { notify('Failed to toggle license mode'); }
+    finally { setTogLic(false); }
+  };
+
+  const toggleSaas = async () => {
+    setTogSaas(true);
+    try {
+      const next = !saasOn;
+      await platformAPI.setSaasMode(next);
+      setSaasOnLocal(next);
+      notify(next
+        ? 'SaaS mode ON — subscription billing is now enforced'
+        : 'SaaS mode OFF — running as open-source / self-hosted');
+    } catch { notify('Failed to toggle SaaS mode'); }
+    finally { setTogSaas(false); }
+  };
+
+  const generate = async () => {
+    if (!genForm.customer_name || !genForm.customer_email) {
+      notify('Customer name and email are required');
+      return;
+    }
+    setGenerating(true);
+    try {
+      const res = await platformAPI.generateLicenseKey({
+        ...genForm,
+        expires_at: genForm.expires_at || new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
+      });
+      setKeys(k => [res.data, ...k]);
+      setNewToken(res.data.token || null);
+      setShowGen(false);
+      setGenForm({ customer_name: '', customer_email: '', tier: 'pro', agent_limit: 25, user_limit: 10, expires_at: '', notes: '' });
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to generate license key');
+    } finally { setGenerating(false); }
+  };
+
+  const revoke = async (keyID: string) => {
+    if (!confirm('Revoke this license key? This cannot be undone.')) return;
+    setRevoking(keyID);
+    try {
+      await platformAPI.revokeLicenseKey(keyID, 'revoked by platform admin');
+      setKeys(k => k.map(x => x.key_id === keyID ? { ...x, revoked_at: new Date().toISOString() } : x));
+      notify('License key revoked');
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to revoke');
+    } finally { setRevoking(null); }
+  };
+
+  const copyToken = (token: string) => {
+    navigator.clipboard.writeText(token).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (loading) return <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>;
+
+  return (
+    <div className="space-y-5">
+
+      {/* Two master toggle cards */}
+      <div className="grid grid-cols-2 gap-4">
+
+        {/* Self-hosted License Mode */}
+        <div className="g-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Server className="h-4 w-4 flex-shrink-0" style={{ color: licenseOn ? 'var(--orange)' : 'var(--text-3)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Self-hosted License</p>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0"
+                  style={{
+                    background: licenseOn ? 'rgba(251,146,60,0.15)' : 'var(--glass-bg)',
+                    color: licenseOn ? 'var(--orange)' : 'var(--text-3)',
+                    border: `1px solid ${licenseOn ? 'rgba(251,146,60,0.4)' : 'var(--border)'}`,
+                  }}>
+                  {licenseOn ? 'ENFORCED' : 'FREE'}
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+                {licenseOn
+                  ? 'Self-hosted instances must present a valid license key. Instances without a key enter a 30-day grace period, then degrade to community limits.'
+                  : 'OFF — users enjoy full product capabilities for free. Flip this when ready to monetize self-hosted deployments.'}
+              </p>
+            </div>
+            <button onClick={toggleLicense} disabled={togLic}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0"
+              style={{
+                background: licenseOn ? 'rgba(251,146,60,0.15)' : 'var(--glass-bg)',
+                border: `1px solid ${licenseOn ? 'rgba(251,146,60,0.4)' : 'var(--border)'}`,
+                color: licenseOn ? 'var(--orange)' : 'var(--text-2)',
+              }}>
+              {licenseOn ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+              {togLic ? '…' : licenseOn ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
+
+        {/* SaaS Mode */}
+        <div className="g-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Cloud className="h-4 w-4 flex-shrink-0" style={{ color: saasOn ? 'var(--green)' : 'var(--text-3)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>SaaS Mode</p>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0"
+                  style={{
+                    background: saasOn ? 'rgba(52,211,153,0.15)' : 'var(--glass-bg)',
+                    color: saasOn ? 'var(--green)' : 'var(--text-3)',
+                    border: `1px solid ${saasOn ? 'rgba(52,211,153,0.4)' : 'var(--border)'}`,
+                  }}>
+                  {saasOn ? 'BILLING ON' : 'FREE'}
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+                {saasOn
+                  ? 'Subscription billing enforced. Suspended or expired tenants are blocked from accessing the platform.'
+                  : 'OFF — your hosted instance runs without subscription enforcement. Flip this when you\'re ready to offer paid SaaS tiers.'}
+              </p>
+            </div>
+            <button onClick={toggleSaas} disabled={togSaas}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0"
+              style={{
+                background: saasOn ? 'rgba(52,211,153,0.15)' : 'var(--glass-bg)',
+                border: `1px solid ${saasOn ? 'rgba(52,211,153,0.4)' : 'var(--border)'}`,
+                color: saasOn ? 'var(--green)' : 'var(--text-2)',
+              }}>
+              {saasOn ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+              {togSaas ? '…' : saasOn ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Phase roadmap hint */}
+      {!licenseOn && !saasOn && (
+        <div className="rounded-xl p-4 text-[11px] leading-relaxed"
+          style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--text-2)' }}>
+          <span className="font-semibold" style={{ color: 'var(--accent)' }}>Phase 1 (now):</span> Both OFF — users get full product, no friction.
+          Build adoption, get stars.{' '}
+          <span className="font-semibold" style={{ color: 'var(--orange)' }}>Phase 2:</span> Flip Self-hosted ON — generate and sell license keys.{' '}
+          <span className="font-semibold" style={{ color: 'var(--green)' }}>Phase 3:</span> Use license revenue to fund VPS, then flip SaaS ON.
+        </div>
+      )}
+
+      {/* License Keys */}
+      <div className="g-card">
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-2">
+            <Key className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>License Keys</p>
+            <span className="text-[10px] px-1.5 py-0.5 rounded mono"
+              style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+              {keys.length}
+            </span>
+          </div>
+          <button onClick={() => setShowGen(true)} className="g-btn g-btn-primary text-xs">
+            <Plus className="h-3.5 w-3.5" /> Generate Key
+          </button>
+        </div>
+
+        {keys.length === 0 ? (
+          <div className="py-12 text-center">
+            <Key className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
+            <p className="text-sm" style={{ color: 'var(--text-2)' }}>No license keys yet.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+              Generate keys for customers before enabling license enforcement.
+            </p>
+          </div>
+        ) : (
+          <div className="g-table">
+            <div className="g-thead grid gap-3 px-4"
+              style={{ gridTemplateColumns: '1fr 140px 70px 60px 60px 100px 80px 40px' }}>
+              <span>Customer</span><span>Key ID</span><span>Tier</span><span>Agents</span><span>Users</span><span>Expires</span><span>Status</span><span></span>
+            </div>
+            {keys.map(k => (
+              <div key={k.key_id} className="g-tr grid gap-3 items-center px-4"
+                style={{ gridTemplateColumns: '1fr 140px 70px 60px 60px 100px 80px 40px' }}>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{k.customer_name}</p>
+                  <p className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>{k.customer_email}</p>
+                </div>
+                <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{k.key_id}</span>
+                <span className="text-[11px] font-semibold" style={{ color: TIER_COLOR[k.tier] ?? 'var(--accent)' }}>
+                  {k.tier.charAt(0).toUpperCase() + k.tier.slice(1)}
+                </span>
+                <span className="text-xs" style={{ color: 'var(--text-2)' }}>{k.agent_limit === -1 ? '∞' : k.agent_limit}</span>
+                <span className="text-xs" style={{ color: 'var(--text-2)' }}>{k.user_limit === -1 ? '∞' : k.user_limit}</span>
+                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                  {new Date(k.expires_at).toLocaleDateString()}
+                </span>
+                <span className="text-[11px] font-semibold"
+                  style={{ color: k.revoked_at ? 'var(--red)' : new Date(k.expires_at) < new Date() ? 'var(--orange)' : 'var(--green)' }}>
+                  {k.revoked_at ? 'Revoked' : new Date(k.expires_at) < new Date() ? 'Expired' : 'Active'}
+                </span>
+                <button onClick={() => revoke(k.key_id)} disabled={!!k.revoked_at || revoking === k.key_id}
+                  title="Revoke key"
+                  className="p-1 rounded transition-colors disabled:opacity-30"
+                  style={{ color: 'var(--text-3)' }}
+                  onMouseEnter={e => { if (!k.revoked_at) (e.currentTarget as HTMLElement).style.color = 'var(--red)'; }}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Generate key modal */}
+      {showGen && (
+        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowGen(false)}>
+          <div className="g-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Generate License Key</h2>
+              </div>
+              <button onClick={() => setShowGen(false)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Customer name *</label>
+                  <input value={genForm.customer_name}
+                    onChange={e => setGenForm(f => ({ ...f, customer_name: e.target.value }))}
+                    placeholder="Acme Corp" className="g-input w-full" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Customer email *</label>
+                  <input value={genForm.customer_email}
+                    onChange={e => setGenForm(f => ({ ...f, customer_email: e.target.value }))}
+                    placeholder="admin@acme.com" className="g-input w-full" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Tier</label>
+                  <select value={genForm.tier} onChange={e => setGenForm(f => ({ ...f, tier: e.target.value }))} className="g-select w-full">
+                    <option value="community">Community</option>
+                    <option value="pro">Pro</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Agent limit</label>
+                  <input type="number" min={1} value={genForm.agent_limit}
+                    onChange={e => setGenForm(f => ({ ...f, agent_limit: +e.target.value }))}
+                    className="g-input w-full mono" />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>User limit</label>
+                  <input type="number" min={1} value={genForm.user_limit}
+                    onChange={e => setGenForm(f => ({ ...f, user_limit: +e.target.value }))}
+                    className="g-input w-full mono" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Expires (leave blank = 1 year)</label>
+                <input type="date" value={genForm.expires_at}
+                  onChange={e => setGenForm(f => ({ ...f, expires_at: e.target.value }))}
+                  className="g-input w-full mono" />
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Internal notes</label>
+                <input value={genForm.notes}
+                  onChange={e => setGenForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="e.g. Invoice #42, paid via Stripe" className="g-input w-full" />
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setShowGen(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+              <button onClick={generate} disabled={generating || !genForm.customer_name || !genForm.customer_email}
+                className="g-btn g-btn-primary flex-1 justify-center">
+                {generating ? 'Generating…' : 'Generate Key'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Show newly generated token */}
+      {newToken && (
+        <div className="g-modal-backdrop" onClick={() => setNewToken(null)}>
+          <div className="g-modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4" style={{ color: 'var(--green)' }} />
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>License Key Generated</h2>
+              </div>
+              <button onClick={() => setNewToken(null)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-xl p-3 text-[11px]"
+                style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.3)', color: 'var(--text-2)' }}>
+                Copy this key now — it will not be shown again. Send it to the customer via email.
+                They set it as <span className="mono font-semibold">XCLOAK_LICENSE_KEY</span> in their <span className="mono">.env</span>.
+              </div>
+              <div className="rounded-xl p-3 mono text-[10px] break-all select-all"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                {newToken}
+              </div>
+              <button onClick={() => copyToken(newToken)}
+                className="g-btn g-btn-primary w-full justify-center">
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? 'Copied!' : 'Copy to Clipboard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
