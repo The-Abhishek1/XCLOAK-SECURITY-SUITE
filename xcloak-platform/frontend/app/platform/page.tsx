@@ -118,6 +118,9 @@ export default function PlatformPage() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast]         = useState<string | null>(null);
   const [toggling, setToggling]   = useState<number | null>(null);
+  const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 4000); };
 
@@ -168,6 +171,20 @@ export default function PlatformPage() {
     } catch (e: any) {
       notify(e?.response?.data?.error || 'Failed to update tenant');
     } finally { setToggling(null); }
+  };
+
+  const confirmDeleteTenant = async () => {
+    if (!deletingTenant) return;
+    setDeleteInProgress(true);
+    try {
+      await platformAPI.deleteTenant(deletingTenant.id);
+      setTenants(ts => ts.filter(x => x.id !== deletingTenant.id));
+      notify(`Tenant "${deletingTenant.name}" permanently deleted`);
+      setDeletingTenant(null);
+      setDeleteConfirm('');
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Failed to delete tenant');
+    } finally { setDeleteInProgress(false); }
   };
 
   const publishRelease = async () => {
@@ -256,7 +273,7 @@ export default function PlatformPage() {
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-3)' }}>Tenants</p>
         <div className="g-table">
-          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '24px 1fr 160px 90px 90px 140px 100px' }}>
+          <div className="g-thead grid gap-3 px-4" style={{ gridTemplateColumns: '24px 1fr 160px 90px 90px 140px 1fr' }}>
             <span></span><span>Name</span><span>Slug</span><span>Users</span><span>Status</span><span>Created</span><span></span>
           </div>
 
@@ -270,7 +287,7 @@ export default function PlatformPage() {
           ) : tenants.map(t => (
             <div key={t.id}>
               <div className="g-tr grid gap-3 items-center px-4"
-                style={{ gridTemplateColumns: '24px 1fr 160px 90px 90px 140px 100px' }}>
+                style={{ gridTemplateColumns: '24px 1fr 160px 90px 90px 140px 1fr' }}>
                 <button onClick={() => setExpandedTenant(expandedTenant === t.id ? null : t.id)}
                   style={{ color: 'var(--text-3)' }}>
                   {expandedTenant === t.id
@@ -284,19 +301,28 @@ export default function PlatformPage() {
                   {t.is_active ? 'Active' : 'Suspended'}
                 </span>
                 <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{timeAgo(t.created_at)}</span>
-                <button
-                  title={t.is_active ? 'Suspend tenant' : 'Reactivate tenant'}
-                  onClick={() => toggleTenant(t)}
-                  disabled={toggling === t.id}
-                  className="g-btn text-xs"
-                  style={{
-                    background: t.is_active ? 'var(--red-bg)' : 'rgba(52,211,153,0.15)',
-                    color: t.is_active ? 'var(--red)' : 'var(--green)',
-                    border: t.is_active ? '1px solid var(--red-border)' : '1px solid rgba(52,211,153,0.3)',
-                  }}>
-                  {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
-                  {t.is_active ? 'Suspend' : 'Reactivate'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    title={t.is_active ? 'Suspend tenant' : 'Reactivate tenant'}
+                    onClick={() => toggleTenant(t)}
+                    disabled={toggling === t.id}
+                    className="g-btn text-xs"
+                    style={{
+                      background: t.is_active ? 'var(--red-bg)' : 'rgba(52,211,153,0.15)',
+                      color: t.is_active ? 'var(--red)' : 'var(--green)',
+                      border: t.is_active ? '1px solid var(--red-border)' : '1px solid rgba(52,211,153,0.3)',
+                    }}>
+                    {t.is_active ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
+                    {t.is_active ? 'Suspend' : 'Reactivate'}
+                  </button>
+                  <button
+                    title="Delete tenant permanently"
+                    onClick={() => { setDeletingTenant(t); setDeleteConfirm(''); }}
+                    className="g-btn text-xs"
+                    style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)' }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
               {expandedTenant === t.id && (
                 <div style={{ borderTop: '1px solid var(--border)', background: 'var(--glass-bg)' }}>
@@ -344,6 +370,51 @@ export default function PlatformPage() {
       </div>
 
       </>}
+
+      {/* ── Delete Tenant confirmation modal ──────────────────── */}
+      {deletingTenant && (
+        <div className="g-modal-backdrop" onClick={() => setDeletingTenant(null)}>
+          <div className="g-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--red)' }}>Delete Tenant</h2>
+              <button onClick={() => setDeletingTenant(null)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm" style={{ color: 'var(--text-1)' }}>
+                This will permanently delete <strong>{deletingTenant.name}</strong> and all its users, agents, alerts, and data. This cannot be undone.
+              </p>
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>
+                  Type <span className="mono font-semibold" style={{ color: 'var(--text-1)' }}>{deletingTenant.slug}</span> to confirm
+                </label>
+                <input
+                  className="g-input w-full text-sm"
+                  value={deleteConfirm}
+                  onChange={e => setDeleteConfirm(e.target.value)}
+                  placeholder={deletingTenant.slug}
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button className="g-btn text-xs" onClick={() => setDeletingTenant(null)}>Cancel</button>
+                <button
+                  className="g-btn text-xs"
+                  disabled={deleteConfirm !== deletingTenant.slug || deleteInProgress}
+                  onClick={confirmDeleteTenant}
+                  style={{
+                    background: 'var(--red-bg)',
+                    color: 'var(--red)',
+                    border: '1px solid var(--red-border)',
+                    opacity: deleteConfirm !== deletingTenant.slug ? 0.4 : 1,
+                  }}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {deleteInProgress ? 'Deleting…' : 'Delete Permanently'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── New Tenant modal ───────────────────────────────────── */}
       {showNew && (

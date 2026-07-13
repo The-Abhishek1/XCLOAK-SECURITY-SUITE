@@ -998,6 +998,7 @@ export function demoRoute(
   if (method === 'POST' && p === '/platform/license/keys')          return demoBlock();
   if (method === 'DELETE' && p.startsWith('/platform/license/keys/')) return demoBlock();
   if (method === 'POST' && p.includes('/platform/license/keys/') && p.endsWith('/regenerate')) return demoBlock();
+  if (method === 'DELETE' && /^\/platform\/tenants\/\d+$/.test(p)) return demoBlock();
 
   // ── Fallback ─────────────────────────────────────────────────────────────
   return ok([]);

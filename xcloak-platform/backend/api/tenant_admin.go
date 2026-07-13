@@ -92,6 +92,40 @@ func ToggleTenantActiveHandler(c *gin.Context) {
 	c.JSON(200, gin.H{"message": msg})
 }
 
+// DeleteTenantHandler — DELETE /api/platform/tenants/:id (platform admin only)
+// Refuses to delete tenant 1 (the platform operator's own workspace).
+// Cascades: users, agents, and all associated data are removed via FK ON DELETE CASCADE.
+func DeleteTenantHandler(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid tenant id"})
+		return
+	}
+	if id == 1 {
+		c.JSON(400, gin.H{"error": "cannot delete the platform operator workspace (tenant 1)"})
+		return
+	}
+	// Safety: prevent the caller from deleting their own tenant.
+	callerTenant := 0
+	if v, ok := c.Get("tenant_id"); ok {
+		switch t := v.(type) {
+		case int:
+			callerTenant = t
+		case float64:
+			callerTenant = int(t)
+		}
+	}
+	if callerTenant != 0 && callerTenant == id {
+		c.JSON(400, gin.H{"error": "cannot delete your own tenant"})
+		return
+	}
+	if err := services.DeleteTenant(id); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "tenant deleted"})
+}
+
 // GetTenantDomains — GET /api/platform/tenants/:id/domains (platform admin)
 func GetTenantDomains(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))

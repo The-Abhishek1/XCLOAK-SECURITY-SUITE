@@ -411,6 +411,7 @@ export const platformAPI = {
   createTenant:     (name: string, slug: string, adminUsername: string, adminEmail: string)        =>
     api.post('/platform/tenants', { name, slug, admin_username: adminUsername, admin_email: adminEmail }),
   toggleTenant:     (id: number, active: boolean)                                                  => api.patch(`/platform/tenants/${id}/toggle`, { is_active: active }),
+  deleteTenant:     (id: number)                                                                   => api.delete(`/platform/tenants/${id}`),
   getReleases:      ()                                                                            => api.get('/platform/agent-releases'),
   publishRelease:   (data: { platform: string; version: string; sha256: string; download_url: string }) =>
     api.post('/platform/agent-releases', data),

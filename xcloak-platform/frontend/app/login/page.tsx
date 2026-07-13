@@ -204,8 +204,9 @@ function LoginContent() {
 
   // Login form
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  // Register form
-  const [regForm, setRegForm]     = useState({ username: '', email: '', password: '' });
+  // Register form — org_name + slug so each signup gets its own isolated tenant
+  const [regForm, setRegForm] = useState({ org_name: '', slug: '', username: '', email: '', password: '' });
+  const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
 
@@ -291,16 +292,19 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true); setError(''); setSuccess('');
     try {
-      const res  = await fetch('/api/auth/register', {
+      // Use /api/auth/signup — provisions a dedicated tenant so each
+      // organization is fully isolated. /api/auth/register (no tenant)
+      // is only for the initial platform bootstrap.
+      const res  = await fetch('/api/auth/signup', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(regForm),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed');
-      setSuccess('Account created! You can now sign in.');
-      setTab('login');
-      setLoginForm(f => ({ ...f, username: regForm.username }));
+      // signup sets the auth cookie and redirects straight to dashboard
+      router.push('/dashboard');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -535,9 +539,25 @@ function LoginContent() {
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="rounded-xl p-3 text-xs"
                     style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>
-                    The first account created gets admin access. All subsequent accounts are analyst-level.
+                    Each registration creates a fully isolated workspace. Your team logs in using your org slug.
                   </div>
-                  <Field label="Username">
+                  <Field label="Organization name">
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
+                      <input value={regForm.org_name}
+                        onChange={e => setRegForm(f => ({ ...f, org_name: e.target.value, slug: f.slug || slugify(e.target.value) }))}
+                        placeholder="Acme Corp" required className="g-input pl-9" />
+                    </div>
+                  </Field>
+                  <Field label="Org slug (used for SSO login)">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono" style={{ color: 'var(--text-3)' }}>@</span>
+                      <input value={regForm.slug}
+                        onChange={e => setRegForm(f => ({ ...f, slug: slugify(e.target.value) }))}
+                        placeholder="acme-corp" required className="g-input pl-7 font-mono" />
+                    </div>
+                  </Field>
+                  <Field label="Admin username">
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
                       <input value={regForm.username} onChange={e => setRegForm(f => ({ ...f, username: e.target.value }))}
@@ -564,7 +584,7 @@ function LoginContent() {
                     </div>
                   </Field>
                   {error && <ErrMsg msg={error} />}
-                  <SubmitBtn loading={loading} label="Create Account" />
+                  <SubmitBtn loading={loading} label="Create Workspace" />
                 </form>
               )}
             </>

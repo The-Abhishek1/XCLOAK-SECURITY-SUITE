@@ -253,6 +253,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.CreateTenantHandler)
 	router.GET("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantsHandler)
 	router.PATCH("/api/platform/tenants/:id/toggle", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.ToggleTenantActiveHandler)
+	router.DELETE("/api/platform/tenants/:id", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.DeleteTenantHandler)
 	router.GET("/api/platform/tenants/:id/domains", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantDomains)
 	router.POST("/api/platform/tenants/:id/domains", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.AddTenantDomain)
 	router.DELETE("/api/platform/tenants/:id/domains/:did", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.DeleteTenantDomain)

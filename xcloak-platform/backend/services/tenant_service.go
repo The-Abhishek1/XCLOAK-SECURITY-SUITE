@@ -131,3 +131,14 @@ func GetTenants() ([]models.Tenant, error) {
 func SetTenantActive(id int, active bool) error {
 	return repositories.SetTenantActive(id, active)
 }
+
+// DeleteTenant permanently removes a tenant and all its data.
+// The caller is responsible for the safety checks (not tenant 1, not own tenant).
+func DeleteTenant(id int) error {
+	err := repositories.DeleteTenant(id)
+	if err != nil {
+		return err
+	}
+	LogEvent("DELETE_TENANT", fmt.Sprintf("tenant id=%d permanently deleted", id), "platform_admin")
+	return nil
+}
