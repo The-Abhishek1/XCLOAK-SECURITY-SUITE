@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>XCloak Security Suite — Unified NGFW · SIEM · EDR · SOAR</title>
-<meta name="description" content="XCloak is an open-core security platform unifying NGFW, SIEM, EDR, SOAR, ITDR and MDM in one Go + Next.js codebase. One agent, one backend, one dashboard." />
+<meta name="description" content="XCloak is an open-source security platform unifying NGFW, SIEM, EDR, SOAR, ITDR and MDM in one Go + Next.js codebase. One agent, one backend, one dashboard. AGPL-3.0." />
 <link rel="canonical" href="https://xcloak.tech/" />
 <meta name="theme-color" content="#2563eb" />
 
@@ -21,7 +21,7 @@
 <meta property="og:url" content="https://xcloak.tech/" />
 <meta property="og:site_name" content="XCloak" />
 <meta property="og:title" content="XCloak — Stop managing six security products." />
-<meta property="og:description" content="Open-core NGFW, SIEM, EDR, SOAR, ITDR, and MDM in one platform. Self-hosted, free up to 10 agents." />
+<meta property="og:description" content="Open-source NGFW, SIEM, EDR, SOAR, ITDR, and MDM in one platform. Self-hosted, AGPL-3.0." />
 <meta property="og:image" content="https://xcloak.tech/assets/og-image.jpg" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -30,7 +30,7 @@
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="XCloak — Stop managing six security products." />
-<meta name="twitter:description" content="Open-core NGFW, SIEM, EDR, SOAR, ITDR, and MDM in one platform. Self-hosted, free up to 10 agents." />
+<meta name="twitter:description" content="Open-source NGFW, SIEM, EDR, SOAR, ITDR, and MDM in one platform. Self-hosted, AGPL-3.0." />
 <meta name="twitter:image" content="https://xcloak.tech/assets/og-image.jpg" />
 
 <script src="https://cdn.tailwindcss.com"></script>
@@ -181,7 +181,7 @@
     <div class="max-w-3xl mx-auto text-center mb-12">
       <div class="inline-flex items-center gap-2 text-xs font-mono text-brand glass rounded-full px-3.5 py-1.5 mb-7">
         <span class="w-1.5 h-1.5 rounded-full bg-brand pulse-dot"></span>
-        Open-core · Self-hosted · Free up to 10 agents
+        Open-source · Self-hosted · AGPL-3.0
       </div>
 
       <h1 class="text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold tracking-tight leading-[1.1] mb-6 text-ink">
@@ -586,7 +586,7 @@
         <div class="pt-6 mt-6 border-t border-line">
           <div class="grid sm:grid-cols-2 gap-3 mb-4">
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Rule engine</p><p class="text-xs text-sub mt-1">43 detection rules, checked against every log</p></div>
-            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Behavioral detectors</p><p class="text-xs text-sub mt-1">29 engines watching for attack patterns over time</p></div>
+            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Behavioral detectors</p><p class="text-xs text-sub mt-1">17 engines watching for attack patterns over time</p></div>
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Malware scanning</p><p class="text-xs text-sub mt-1">Signature matching on the endpoint itself</p></div>
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Threat intel feeds</p><p class="text-xs text-sub mt-1">Known-bad IPs, domains, and file hashes</p></div>
           </div>
@@ -627,7 +627,7 @@
         <div class="pt-6 mt-6 border-t border-line">
           <div class="grid grid-cols-3 gap-4 text-center mb-4">
             <div><div class="text-xl font-semibold text-ink font-mono">127</div><div class="text-xs text-faint mt-1">tables</div></div>
-            <div><div class="text-xl font-semibold text-ink font-mono">56</div><div class="text-xs text-faint mt-1">migrations</div></div>
+            <div><div class="text-xl font-semibold text-ink font-mono">70</div><div class="text-xs text-faint mt-1">migrations</div></div>
             <div><div class="text-xl font-semibold text-ink font-mono">100%</div><div class="text-xs text-faint mt-1">tenant-scoped</div></div>
           </div>
           <p class="text-xs text-faint">PostgreSQL, with every table checked against the current tenant on every query, plus database-level isolation rules as an extra safeguard still being rolled out.</p>
@@ -731,16 +731,13 @@
         <span class="text-xs font-mono text-slate-400">terminal</span>
         <span class="text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-400/10 border border-emerald-400/20">5 minutes to first alert</span>
       </div>
-      <pre class="overflow-x-auto p-5 text-[12.5px] leading-relaxed font-mono text-slate-200"><code><span class="text-slate-500"># clone and start the stack</span>
+      <pre class="overflow-x-auto p-5 text-[12.5px] leading-relaxed font-mono text-slate-200"><code><span class="text-slate-500"># clone and start with one command</span>
 git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
-cd XCLOAK-SECURITY-SUITE &amp;&amp; docker compose up -d
-
-<span class="text-slate-500"># start the backend</span>
-cd xcloak-platform/backend
-cp .env.example .env &amp;&amp; go run ./main.go
+cd XCLOAK-SECURITY-SUITE
+docker compose -f docker-compose.quickstart.yml up -d --build
 
 <span class="text-slate-500"># → open http://localhost:3000 · first signup creates admin</span>
-<span class="text-slate-500"># → 43 Sigma rules seeded automatically · first agent enrolled in &lt; 1 min</span></code></pre>
+<span class="text-slate-500"># → 43 Sigma rules seeded automatically · enroll first agent in &lt; 1 min</span></code></pre>
     </div>
   </div>
 </section>
@@ -881,7 +878,7 @@ cp .env.example .env &amp;&amp; go run ./main.go
           <tr class="border-b border-line bg-white/40"><td class="p-4 text-ink">Multi-tenancy</td><td class="p-4 text-emerald-600 font-medium">✓ PostgreSQL RLS</td><td class="p-4 text-amber-600">~</td><td class="p-4 text-emerald-600 font-medium">✓</td><td class="p-4 text-emerald-600 font-medium">✓</td></tr>
           <tr class="border-b border-line"><td class="p-4 text-ink">Deception technology</td><td class="p-4 text-emerald-600 font-medium">✓</td><td class="p-4 text-rose-500">✗</td><td class="p-4 text-rose-500">✗</td><td class="p-4 text-rose-500">✗</td></tr>
           <tr class="border-b border-line bg-white/40"><td class="p-4 text-ink">No Java required</td><td class="p-4 text-emerald-600 font-medium">✓ Go-only</td><td class="p-4 text-rose-500">✗</td><td class="p-4 text-rose-500">✗</td><td class="p-4 text-rose-500">✗</td></tr>
-          <tr class="border-b border-line"><td class="p-4 text-ink">License cost (core)</td><td class="p-4 text-ink">Free (BSL 1.1)</td><td class="p-4 text-ink">Free (GPL)</td><td class="p-4 text-ink">Free tier</td><td class="p-4 text-ink">Free tier</td></tr>
+          <tr class="border-b border-line"><td class="p-4 text-ink">License</td><td class="p-4 text-ink">AGPL-3.0</td><td class="p-4 text-ink">GPL</td><td class="p-4 text-ink">Free tier + paid</td><td class="p-4 text-ink">Free tier limited</td></tr>
           <tr class="border-b border-line bg-white/40"><td class="p-4 text-ink">Kubernetes / Helm</td><td class="p-4 text-emerald-600 font-medium">✓</td><td class="p-4 text-emerald-600 font-medium">✓</td><td class="p-4 text-emerald-600 font-medium">✓</td><td class="p-4 text-emerald-600 font-medium">✓</td></tr>
           <tr><td class="p-4 text-ink">Self-hostable in 5 min</td><td class="p-4 text-emerald-600 font-medium">✓ Docker Compose</td><td class="p-4 text-amber-600">~ complex</td><td class="p-4 text-amber-600">~</td><td class="p-4 text-rose-500">✗</td></tr>
         </tbody>
@@ -965,7 +962,7 @@ cp .env.example .env &amp;&amp; go run ./main.go
           Is XCloak really free?
           <svg class="w-4 h-4 text-faint group-open:rotate-45 transition-transform shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
         </summary>
-        <p class="text-sm text-sub mt-3">Yes — free for self-hosted use up to 10 agents.</p>
+        <p class="text-sm text-sub mt-3">Yes — AGPL-3.0, completely free to self-host with no agent limits. The source code is open and inspectable.</p>
       </details>
       <details class="reveal glass rounded-xl p-5 group">
         <summary class="font-medium text-ink cursor-pointer list-none flex justify-between items-center">
@@ -1002,7 +999,7 @@ cp .env.example .env &amp;&amp; go run ./main.go
       team one platform that speaks one language, instead of six vendors that don't.
     </p>
     <p class="reveal text-sm text-faint">
-      Built by <a href="https://github.com/The-Abhishek1" target="_blank" rel="noopener" class="text-brand hover:underline">0xIdiot</a> — open-core, self-hosted, and free to inspect.
+      Built by <a href="https://github.com/The-Abhishek1" target="_blank" rel="noopener" class="text-brand hover:underline">0xIdiot</a> — open-source, self-hosted, and free to inspect.
     </p>
   </div>
 </section>
@@ -1013,21 +1010,22 @@ cp .env.example .env &amp;&amp; go run ./main.go
     <div class="reveal grid lg:grid-cols-2 gap-14 items-center">
       <div>
         <span class="text-xs font-mono text-brand">LICENSE</span>
-        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-5 text-ink">Business Source License 1.1</h2>
+        <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-5 text-ink">GNU Affero General Public License v3.0</h2>
         <p class="text-sub leading-relaxed mb-4">
-          Free for self-hosted use up to 10 agents. A commercial license is needed for production
-          SaaS or larger deployments. Converts to Apache 2.0 on 2029-01-01.
+          Free to use, modify, and self-host — no agent limits, no paid tier, no feature gating.
+          If you distribute a modified version or run it as a hosted service for others, your
+          modifications must be released under the same license.
         </p>
-        <a href="mailto:abhishekn1003@gmail.com?subject=XCloak%20Commercial%20License" class="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
-          Request a commercial license
+        <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/blob/main/LICENSE" target="_blank" rel="noopener" class="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
+          Read the full license
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       </div>
       <div class="glass rounded-2xl p-6 font-mono text-sm space-y-4">
-        <div class="flex justify-between border-b border-line pb-3"><span class="text-faint">Licensor</span><span class="text-ink">Abhishek N</span></div>
-        <div class="flex justify-between border-b border-line pb-3"><span class="text-faint">Free tier</span><span class="text-emerald-600">≤ 10 agents</span></div>
-        <div class="flex justify-between border-b border-line pb-3"><span class="text-faint">Change date</span><span class="text-ink">2029-01-01</span></div>
-        <div class="flex justify-between"><span class="text-faint">Change license</span><span class="text-ink">Apache 2.0</span></div>
+        <div class="flex justify-between border-b border-line pb-3"><span class="text-faint">License</span><span class="text-ink">AGPL-3.0</span></div>
+        <div class="flex justify-between border-b border-line pb-3"><span class="text-faint">Agent limit</span><span class="text-emerald-600">None</span></div>
+        <div class="flex justify-between border-b border-line pb-3"><span class="text-faint">Source</span><span class="text-emerald-600">Fully open</span></div>
+        <div class="flex justify-between"><span class="text-faint">Copyleft</span><span class="text-ink">Strong — modifications must be shared</span></div>
       </div>
     </div>
   </div>
@@ -1071,12 +1069,11 @@ cp .env.example .env &amp;&amp; go run ./main.go
         <p class="text-sm text-sub leading-relaxed">Extend endpoint coverage to macOS — same single-binary, no runtime.</p>
       </div>
       <div class="reveal lift glass rounded-2xl p-6">
-        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-4">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2" stroke-linecap="round"/></svg>
+        <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.7"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <h3 class="font-semibold text-ink mb-2">Live demo instance</h3>
-        <p class="text-sm text-sub leading-relaxed mb-3">Try the full platform without installing anything.</p>
-        <a href="https://suite.xcloak.tech/demo" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Try demo →</a>
+        <h3 class="font-semibold text-ink mb-2">iOS mobile agent</h3>
+        <p class="text-sm text-sub leading-relaxed">Extend MDM coverage to iOS — same posture model, App Store distribution.</p>
       </div>
     </div>
     <p class="text-xs text-faint mt-8 font-mono text-center">
@@ -1090,8 +1087,8 @@ cp .env.example .env &amp;&amp; go run ./main.go
   <div class="max-w-4xl mx-auto px-5 sm:px-8 text-center">
     <h2 class="reveal text-3xl sm:text-4xl font-semibold tracking-tight text-ink mb-5">Try it free. Five minutes to your first alert.</h2>
     <div class="reveal flex flex-wrap justify-center gap-3">
-      <a href="#deployment" class="px-6 py-3 rounded-full bg-ink text-white font-medium text-sm hover:bg-brand transition-colors shadow-lg shadow-slate-300/50">Start Free (self-hosted)</a>
-      <a href="mailto:abhishekn1003@gmail.com?subject=XCloak%20Demo%20Request" class="px-6 py-3 rounded-full glass text-ink font-medium text-sm hover:border-brand/40 transition-colors">Request Demo</a>
+      <a href="#deployment" class="px-6 py-3 rounded-full bg-ink text-white font-medium text-sm hover:bg-brand transition-colors shadow-lg shadow-slate-300/50">Self-host — it's free</a>
+      <a href="https://suite.xcloak.tech/demo" target="_blank" rel="noopener" class="px-6 py-3 rounded-full bg-brand text-white font-medium text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200/60">Live Demo →</a>
     </div>
   </div>
 </section>
@@ -1110,7 +1107,7 @@ cp .env.example .env &amp;&amp; go run ./main.go
           </svg>
           <span class="font-semibold tracking-tight text-ink">XCloak</span>
         </a>
-        <p class="text-sm text-sub leading-relaxed">Open-core NGFW, SIEM, EDR, SOAR, ITDR, and MDM. Self-hosted, BUSL-1.1.</p>
+        <p class="text-sm text-sub leading-relaxed">Open-source NGFW, SIEM, EDR, SOAR, ITDR, and MDM. Self-hosted, AGPL-3.0.</p>
       </div>
       <div class="flex flex-wrap gap-x-12 gap-y-6">
         <div>
@@ -1143,7 +1140,7 @@ cp .env.example .env &amp;&amp; go run ./main.go
     </div>
     <div class="pt-6 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
       <span>© 2025–2026 Abhishek N. XCloak Security Suite.</span>
-      <span>Licensed under BUSL-1.1 · converts to Apache 2.0 on 2029-01-01</span>
+      <span>Licensed under AGPL-3.0</span>
     </div>
   </div>
 </footer>
