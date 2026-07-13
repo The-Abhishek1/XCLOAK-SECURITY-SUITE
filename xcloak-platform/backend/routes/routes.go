@@ -249,6 +249,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.DELETE("/api/custom-roles/:id", middleware.RequireAuth(), middleware.RequireRole("admin"), api.DeleteCustomRoleHandler)
 
 	// ── Platform Admin (tenant provisioning) ────────────────────────
+	router.GET("/api/platform/capabilities", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetPlatformCapabilities)
 	router.POST("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.CreateTenantHandler)
 	router.GET("/api/platform/tenants", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.GetTenantsHandler)
 	router.PATCH("/api/platform/tenants/:id/toggle", middleware.RequireAuth(), middleware.RequirePlatformAdmin(), api.ToggleTenantActiveHandler)

@@ -981,6 +981,9 @@ export function demoRoute(
 
   if (p === '/billing/request-upgrade') return ok({ message: 'Request received (demo mode)' });
 
+  // ── Platform capabilities (controls tab visibility) ──────────────────────
+  if (p === '/platform/capabilities') return ok({ is_authority: true, license_mode: false, saas_mode: false });
+
   // ── SaaS Admin (platform admin) ───────────────────────────────────────────
   if (p === '/platform/saas/mode')          return ok({ saas_mode: false });
   if (p === '/platform/saas/stats')         return ok({ total_tenants: 3, active_tenants: 2, trial_tenants: 1, suspended_tenants: 0, mrr: 798 });

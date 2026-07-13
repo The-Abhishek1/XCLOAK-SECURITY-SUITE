@@ -2,12 +2,33 @@ package api
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
+
+// GetPlatformCapabilities — GET /api/platform/capabilities
+// Tells the frontend what this deployment can do, so the UI hides irrelevant
+// admin tabs on self-hosted customer instances.
+//
+// is_authority = true  → this IS the license server (has LICENSE_SIGNING_KEY or
+//                        AGENT_RELEASE_SIGNING_KEY set). Shows Deployment Mode
+//                        + SaaS & Billing tabs in the Platform page.
+// is_authority = false → customer self-hosted copy. Platform page shows
+//                        only the Tenants tab. Billing lives in Settings.
+func GetPlatformCapabilities(c *gin.Context) {
+	hasSigningKey := os.Getenv("LICENSE_SIGNING_KEY") != "" ||
+		os.Getenv("AGENT_RELEASE_SIGNING_KEY") != ""
+
+	c.JSON(http.StatusOK, gin.H{
+		"is_authority": hasSigningKey,
+		"license_mode": services.LicenseModeEnabled(),
+		"saas_mode":    services.SaasModeEnabled(),
+	})
+}
 
 // GetPlatformSummary returns agent + asset counts grouped by platform_category.
 // GET /api/assets/platform-summary

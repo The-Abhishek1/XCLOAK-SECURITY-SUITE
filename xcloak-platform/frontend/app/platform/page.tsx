@@ -103,6 +103,7 @@ type PTab = 'tenants' | 'deployment' | 'saas';
 export default function PlatformPage() {
   const { profile } = useUser();
   const isPlatformAdmin = profile?.is_platform_admin ?? null;
+  const [isAuthority, setIsAuthority] = useState<boolean | null>(null);
   const [ptab, setPtab]           = useState<PTab>('tenants');
   const [tenants, setTenants]     = useState<Tenant[]>([]);
   const [releases, setReleases]   = useState<AgentRelease[]>([]);
@@ -123,12 +124,15 @@ export default function PlatformPage() {
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
     try {
-      const [tRes, rRes] = await Promise.allSettled([
+      const [tRes, rRes, capRes] = await Promise.allSettled([
         platformAPI.getTenants(),
         platformAPI.getReleases(),
+        platformAPI.getCapabilities(),
       ]);
       if (tRes.status === 'fulfilled') setTenants(tRes.value.data || []);
       if (rRes.status === 'fulfilled') setReleases(rRes.value.data || []);
+      if (capRes.status === 'fulfilled') setIsAuthority(capRes.value.data?.is_authority ?? false);
+      else setIsAuthority(false);
     } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -223,7 +227,15 @@ export default function PlatformPage() {
 
       {/* Tab bar */}
       <div className="flex gap-1 p-1 mb-5 rounded-xl w-fit" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-        {([['tenants', Building2, 'Tenants'], ['deployment', Server, 'Deployment Mode'], ['saas', CreditCard, 'SaaS & Billing']] as const).map(([id, Icon, label]) => (
+        {(
+          [
+            ['tenants',    Building2,  'Tenants']    as const,
+            ...(isAuthority ? [
+              ['deployment', Server,   'Deployment Mode'] as const,
+              ['saas',       CreditCard, 'SaaS & Billing'] as const,
+            ] : []),
+          ]
+        ).map(([id, Icon, label]) => (
           <button key={id} onClick={() => setPtab(id as PTab)}
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-all"
             style={{

@@ -406,6 +406,7 @@ export const customRolesAPI = {
 };
 
 export const platformAPI = {
+  getCapabilities:  ()                                                                            => api.get('/platform/capabilities'),
   getTenants:       ()                                                                            => api.get('/platform/tenants'),
   createTenant:     (name: string, slug: string, adminUsername: string, adminEmail: string)        =>
     api.post('/platform/tenants', { name, slug, admin_username: adminUsername, admin_email: adminEmail }),
