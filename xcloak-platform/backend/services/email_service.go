@@ -47,6 +47,32 @@ func loadSMTPConfig() *SMTPConfig {
 	}
 }
 
+// LoadSMTPConfigForTenant returns the tenant's own SMTP config if configured,
+// falling back to the system .env SMTP. Returns nil when neither is available.
+func LoadSMTPConfigForTenant(tenantID int) *SMTPConfig {
+	if tenantID > 0 {
+		if row, err := loadTenantSMTPRow(tenantID); err == nil && row.Host != "" {
+			return row
+		}
+	}
+	return loadSMTPConfig()
+}
+
+// loadTenantSMTPRow reads the per-tenant SMTP config from DB.
+// Imported lazily to avoid an import cycle (repositories → services).
+var loadTenantSMTPRow = func(tenantID int) (*SMTPConfig, error) {
+	var host, port, user, pass, from string
+	var tls bool
+	err := database.DB.QueryRow(`
+		SELECT host, port, username, password, from_addr, tls
+		FROM tenant_smtp_configs WHERE tenant_id=$1 AND host != ''
+	`, tenantID).Scan(&host, &port, &user, &pass, &from, &tls)
+	if err != nil {
+		return nil, err
+	}
+	return &SMTPConfig{Host: host, Port: port, Username: user, Password: pass, From: from, TLS: tls}, nil
+}
+
 func appURL() string {
 	// Check both APP_URL and the legacy APP_BASE_URL env var.
 	for _, key := range []string{"APP_URL", "APP_BASE_URL"} {
@@ -292,9 +318,9 @@ func renderText(d emailData) string {
 
 // SendAlertEmail delivers a critical/high alert notification email.
 func SendAlertEmail(alert models.Alert, recipients []string) error {
-	cfg := loadSMTPConfig()
+	cfg := LoadSMTPConfigForTenant(alert.TenantID)
 	if cfg == nil {
-		return fmt.Errorf("SMTP not configured — set SMTP_HOST in .env")
+		return fmt.Errorf("SMTP not configured — set SMTP_HOST in .env or configure per-tenant SMTP")
 	}
 	if len(recipients) == 0 {
 		return nil
@@ -335,7 +361,7 @@ func SendAlertEmail(alert models.Alert, recipients []string) error {
 
 // SendCriticalIncidentEmail delivers an incident escalation email.
 func SendCriticalIncidentEmail(incident models.Incident, recipients []string) error {
-	cfg := loadSMTPConfig()
+	cfg := LoadSMTPConfigForTenant(incident.TenantID)
 	if cfg == nil {
 		return nil
 	}
@@ -375,10 +401,11 @@ func SendCriticalIncidentEmail(incident models.Incident, recipients []string) er
 }
 
 // SendTestEmail sends a one-off test message to verify SMTP configuration.
-func SendTestEmail(recipient string) error {
-	cfg := loadSMTPConfig()
+// Pass tenantID > 0 to test that tenant's own SMTP config; 0 uses system config.
+func SendTestEmail(recipient string, tenantID int) error {
+	cfg := LoadSMTPConfigForTenant(tenantID)
 	if cfg == nil {
-		return fmt.Errorf("SMTP not configured — set SMTP_HOST in .env")
+		return fmt.Errorf("SMTP not configured — set SMTP_HOST in .env or configure per-tenant SMTP in Settings")
 	}
 
 	base := appURL()

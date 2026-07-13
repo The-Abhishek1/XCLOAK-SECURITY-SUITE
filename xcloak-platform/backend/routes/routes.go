@@ -403,6 +403,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/notifications/email", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.CreateEmailRule)
 	router.PATCH("/api/notifications/email/:id/toggle", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.ToggleEmailRule)
 	router.DELETE("/api/notifications/email/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.DeleteEmailRule)
+	router.GET("/api/settings/smtp", middleware.RequireAuth(), api.GetTenantSMTPConfig)
+	router.PUT("/api/settings/smtp", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.SaveTenantSMTPConfig)
 	router.POST("/api/auth/2fa/setup", middleware.RequireAuth(), api.Setup2FA)
 	router.POST("/api/auth/2fa/verify", middleware.RequireAuth(), api.Verify2FA)
 	router.DELETE("/api/auth/2fa", middleware.RequireAuth(), api.Disable2FA)

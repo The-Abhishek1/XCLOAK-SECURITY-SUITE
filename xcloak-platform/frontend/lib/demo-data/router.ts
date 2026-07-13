@@ -1000,6 +1000,12 @@ export function demoRoute(
   if (method === 'POST' && p.includes('/platform/license/keys/') && p.endsWith('/regenerate')) return demoBlock();
   if (method === 'DELETE' && /^\/platform\/tenants\/\d+$/.test(p)) return demoBlock();
 
+  // ── Per-tenant SMTP config ───────────────────────────────────────────────
+  if (p === '/settings/smtp') {
+    if (method === 'GET') return ok({ host: '', port: '587', username: '', from_addr: '', tls: true });
+    if (method === 'PUT') return demoBlock();
+  }
+
   // ── Fallback ─────────────────────────────────────────────────────────────
   return ok([]);
 }

@@ -3,8 +3,44 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
+
+// GetTenantSMTPConfig — GET /api/settings/smtp
+func GetTenantSMTPConfig(c *gin.Context) {
+	cfg, err := repositories.GetTenantSMTPConfig(tenantIDFromContext(c))
+	if err != nil {
+		// No row yet — return empty defaults so the form renders cleanly.
+		c.JSON(200, models.TenantSMTPConfig{TenantID: tenantIDFromContext(c), Port: "587", TLS: true})
+		return
+	}
+	// Never return the password to the client.
+	cfg.Password = ""
+	c.JSON(200, cfg)
+}
+
+// SaveTenantSMTPConfig — PUT /api/settings/smtp
+func SaveTenantSMTPConfig(c *gin.Context) {
+	var body models.TenantSMTPConfig
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	body.TenantID = tenantIDFromContext(c)
+	// If password is blank, preserve the existing one.
+	if body.Password == "" {
+		if existing, err := repositories.GetTenantSMTPConfig(body.TenantID); err == nil {
+			body.Password = existing.Password
+		}
+	}
+	if err := repositories.UpsertTenantSMTPConfig(body); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "SMTP configuration saved"})
+}
 
 // GetEmailRules — GET /api/notifications/email
 func GetEmailRules(c *gin.Context) {
@@ -100,7 +136,7 @@ func TestEmailRule(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "recipient required"})
 		return
 	}
-	if err := services.SendTestEmail(body.Recipient); err != nil {
+	if err := services.SendTestEmail(body.Recipient, tenantIDFromContext(c)); err != nil {
 		c.JSON(502, gin.H{"error": "failed to send test email: " + err.Error()})
 		return
 	}

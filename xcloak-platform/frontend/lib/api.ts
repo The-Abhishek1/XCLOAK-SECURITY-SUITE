@@ -124,6 +124,8 @@ export const notificationsAPI = {
   createEmailRule:  (data: any)     => api.post('/notifications/email', data),
   toggleEmailRule:  (id: number, enabled: boolean) => api.patch(`/notifications/email/${id}/toggle`, { enabled }),
   deleteEmailRule:  (id: number)    => api.delete(`/notifications/email/${id}`),
+  getSMTPConfig:    ()              => api.get('/settings/smtp'),
+  saveSMTPConfig:   (data: any)     => api.put('/settings/smtp', data),
 };
 
 export const agentsAPI = {

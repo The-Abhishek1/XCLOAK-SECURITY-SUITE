@@ -46,8 +46,13 @@ interface AuditPage {
 export default function SettingsPage() {
   const { profile: authProfile } = useUser();
   const currentUsername = authProfile?.username || '';
-  const isAdmin = authProfile?.role === 'admin' || authProfile?.is_platform_admin === true;
-  const TABS = ALL_TABS.filter(t => !t.adminOnly || isAdmin);
+  const isPlatformAdmin = authProfile?.is_platform_admin === true;
+  const isAdmin = authProfile?.role === 'admin' || isPlatformAdmin;
+  // Billing tab is irrelevant for the platform operator — they ARE the platform.
+  const TABS = ALL_TABS.filter(t => {
+    if (t.id === 'billing') return isAdmin && !isPlatformAdmin;
+    return !t.adminOnly || isAdmin;
+  });
   const defaultTab: Tab = isAdmin ? 'users' : 'profile';
   const [tab, setTab]     = useState<Tab>(defaultTab);
 
@@ -121,6 +126,11 @@ export default function SettingsPage() {
   const [emailRules, setEmailRules] = useState<any[]>([]);
   const [emailLoading, setEmailLoading] = useState(false);
   const [newRule, setNewRule]       = useState({ name: '', severity: 'critical', recipient: '' });
+
+  // ── Per-tenant SMTP config ───────────────────────────────────
+  const [smtpForm, setSmtpForm] = useState({ host: '', port: '587', username: '', password: '', from_addr: '', tls: true });
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpMsg, setSmtpMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // ── 2FA ──────────────────────────────────────────────────────
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
@@ -307,6 +317,14 @@ export default function SettingsPage() {
     finally { setEmailLoading(false); }
   }, []);
 
+  const loadSMTPConfig = useCallback(async () => {
+    try {
+      const r = await notificationsAPI.getSMTPConfig();
+      const d = r.data;
+      setSmtpForm(f => ({ ...f, host: d.host || '', port: d.port || '587', username: d.username || '', from_addr: d.from_addr || '', tls: d.tls ?? true }));
+    } catch {}
+  }, []);
+
   const loadSessions = useCallback(async () => {
     try {
       const calls: Promise<any>[] = [sessionsAPI.getMy()];
@@ -363,7 +381,7 @@ export default function SettingsPage() {
     if (tab === 'apikeys')      { loadAPIKeys(); loadCustomRoles(); }
     if (tab === 'roles')        loadCustomRoles();
     if (tab === 'profile')      loadProfile();
-    if (tab === 'email')        loadEmailRules();
+    if (tab === 'email')        { loadEmailRules(); loadSMTPConfig(); }
     if (tab === '2fa')          load2FAStatus();
     if (tab === 'audit')        { loadAudit(1, ''); loadExportStatus(); }
     if (tab === 'sessions')     { loadSessions(); }
@@ -1235,13 +1253,61 @@ export default function SettingsPage() {
                 <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>Email Alert Rules</p>
               </div>
 
-              <div className="mx-5 mt-4 p-3 rounded-xl text-xs"
+              {/* ── Per-tenant SMTP config form ── */}
+              <div className="mx-5 mt-4 p-4 rounded-xl space-y-3"
                 style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-                <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>SMTP Configuration (backend .env)</p>
-                <pre className="font-mono text-[10px]" style={{ color: 'var(--text-3)' }}>{
-`SMTP_HOST=smtp.gmail.com   SMTP_PORT=587
-SMTP_USER=your@email.com   SMTP_PASS=app_password`
-                }</pre>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>SMTP Configuration</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                  Emails (invites, alert notifications) will be sent from this address. Leave blank to use the platform default.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] mb-1 block" style={{ color: 'var(--text-3)' }}>SMTP Host</label>
+                    <input value={smtpForm.host} onChange={e => setSmtpForm(f => ({ ...f, host: e.target.value }))}
+                      placeholder="smtp.gmail.com" className="g-input w-full text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] mb-1 block" style={{ color: 'var(--text-3)' }}>Port</label>
+                    <input value={smtpForm.port} onChange={e => setSmtpForm(f => ({ ...f, port: e.target.value }))}
+                      placeholder="587" className="g-input w-full text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] mb-1 block" style={{ color: 'var(--text-3)' }}>Username</label>
+                    <input value={smtpForm.username} onChange={e => setSmtpForm(f => ({ ...f, username: e.target.value }))}
+                      placeholder="you@gmail.com" className="g-input w-full text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] mb-1 block" style={{ color: 'var(--text-3)' }}>Password / App Password</label>
+                    <input value={smtpForm.password} onChange={e => setSmtpForm(f => ({ ...f, password: e.target.value }))}
+                      placeholder="••••••••" type="password" autoComplete="new-password" className="g-input w-full text-xs" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[11px] mb-1 block" style={{ color: 'var(--text-3)' }}>From address</label>
+                    <input value={smtpForm.from_addr} onChange={e => setSmtpForm(f => ({ ...f, from_addr: e.target.value }))}
+                      placeholder="XCloak Alerts <you@gmail.com>" className="g-input w-full text-xs" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs" style={{ color: 'var(--text-2)' }}>
+                    <input type="checkbox" checked={smtpForm.tls} onChange={e => setSmtpForm(f => ({ ...f, tls: e.target.checked }))}
+                      className="rounded" />
+                    TLS / STARTTLS
+                  </label>
+                  <button onClick={async () => {
+                    setSmtpSaving(true); setSmtpMsg(null);
+                    try {
+                      await notificationsAPI.saveSMTPConfig(smtpForm);
+                      setSmtpMsg({ ok: true, text: 'SMTP configuration saved' });
+                    } catch (e: any) {
+                      setSmtpMsg({ ok: false, text: e?.response?.data?.error || 'Save failed' });
+                    } finally { setSmtpSaving(false); }
+                  }} disabled={smtpSaving} className="g-btn g-btn-primary text-xs ml-auto">
+                    {smtpSaving ? 'Saving…' : 'Save SMTP'}
+                  </button>
+                </div>
+                {smtpMsg && (
+                  <p className="text-[11px]" style={{ color: smtpMsg.ok ? 'var(--green)' : 'var(--red)' }}>{smtpMsg.text}</p>
+                )}
               </div>
 
               <div className="p-5 space-y-3">

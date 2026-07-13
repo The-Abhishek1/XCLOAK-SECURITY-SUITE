@@ -10,6 +10,7 @@ import { Plus, X, ShieldAlert, Building2, ToggleLeft, ToggleRight, Package, Uplo
 
 interface Tenant {
   id: number;
+  workspace_id: string;
   name: string;
   slug: string;
   is_active: boolean;
@@ -302,7 +303,18 @@ export default function PlatformPage() {
                     ? <ChevronDown className="h-3.5 w-3.5" />
                     : <ChevronRight className="h-3.5 w-3.5" />}
                 </button>
-                <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{t.name}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium truncate" style={{ color: 'var(--text-1)' }}>{t.name}</span>
+                  {t.workspace_id && (
+                    <button
+                      title={`Copy workspace ID: ${t.workspace_id}`}
+                      onClick={() => { navigator.clipboard.writeText(t.workspace_id); notify('Workspace ID copied'); }}
+                      className="shrink-0 opacity-40 hover:opacity-100 transition-opacity"
+                      style={{ color: 'var(--text-3)' }}>
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
                 <span className="mono text-[11px] truncate" style={{ color: 'var(--text-3)' }}>{t.slug}</span>
                 <span className="text-xs" style={{ color: 'var(--text-2)' }}>{t.user_count ?? 0}</span>
                 <span className="text-[11px] font-semibold" style={{ color: t.is_active ? 'var(--green)' : 'var(--red)' }}>

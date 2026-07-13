@@ -38,7 +38,7 @@ func CreateTenant(name, slug string) (*models.Tenant, error) {
 func GetTenants() ([]models.Tenant, error) {
 
 	rows, err := database.DB.Query(`
-		SELECT t.id, t.name, t.slug, t.is_active, t.created_at,
+		SELECT t.id, t.workspace_id, t.name, t.slug, t.is_active, t.created_at,
 		       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS user_count
 		FROM tenants t
 		ORDER BY t.created_at DESC
@@ -52,7 +52,7 @@ func GetTenants() ([]models.Tenant, error) {
 	var tenants []models.Tenant
 	for rows.Next() {
 		var t models.Tenant
-		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt, &t.UserCount); err == nil {
+		if err := rows.Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt, &t.UserCount); err == nil {
 			tenants = append(tenants, t)
 		}
 	}
@@ -67,9 +67,9 @@ func GetTenantBySlug(slug string) (*models.Tenant, error) {
 	var t models.Tenant
 
 	err := database.DB.QueryRow(`
-		SELECT id, name, slug, is_active, created_at
+		SELECT id, workspace_id, name, slug, is_active, created_at
 		FROM tenants WHERE slug = $1
-	`, slug).Scan(&t.ID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt)
+	`, slug).Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -106,12 +106,39 @@ func SetTenantActive(id int, active bool) error {
 func GetTenantByID(id int) (*models.Tenant, error) {
 	var t models.Tenant
 	err := database.DB.QueryRow(`
-		SELECT id, name, slug, is_active, created_at FROM tenants WHERE id=$1
-	`, id).Scan(&t.ID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt)
+		SELECT id, workspace_id, name, slug, is_active, created_at FROM tenants WHERE id=$1
+	`, id).Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &t, nil
+}
+
+// ── Tenant SMTP config ───────────────────────────────────────────────────────
+
+func GetTenantSMTPConfig(tenantID int) (*models.TenantSMTPConfig, error) {
+	var c models.TenantSMTPConfig
+	err := database.DB.QueryRow(`
+		SELECT tenant_id, host, port, username, password, from_addr, tls
+		FROM tenant_smtp_configs WHERE tenant_id=$1
+	`, tenantID).Scan(&c.TenantID, &c.Host, &c.Port, &c.Username, &c.Password, &c.FromAddr, &c.TLS)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func UpsertTenantSMTPConfig(c models.TenantSMTPConfig) error {
+	_, err := database.DB.Exec(`
+		INSERT INTO tenant_smtp_configs (tenant_id, host, port, username, password, from_addr, tls, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+		ON CONFLICT (tenant_id) DO UPDATE SET
+			host=EXCLUDED.host, port=EXCLUDED.port,
+			username=EXCLUDED.username, password=EXCLUDED.password,
+			from_addr=EXCLUDED.from_addr, tls=EXCLUDED.tls,
+			updated_at=NOW()
+	`, c.TenantID, c.Host, c.Port, c.Username, c.Password, c.FromAddr, c.TLS)
+	return err
 }
 
 // ── Tenant domain management ─────────────────────────────────────────────────
