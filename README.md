@@ -7,9 +7,9 @@
 [![License](https://img.shields.io/badge/License-AGPL_v3-blue)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/The-Abhishek1/XCLOAK-SECURITY-SUITE)](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases)
 
-**Open-source enterprise SOC platform.** SIEM + EDR + SOAR + DPI + MDM + NGFW in one stack — the unified alternative to running six separate security products.
+**Open-source enterprise SOC platform.** SIEM + EDR + SOAR + DPI + MDM + NGFW in one self-hosted stack — no JVM, no six-product sprawl, no per-seat licensing.
 
-Built with Go, PostgreSQL, Next.js, and Flutter. Self-host in minutes or run managed at [suite.xcloak.tech](https://suite.xcloak.tech).
+Built with Go, PostgreSQL, Next.js, and Flutter. Try the live demo at [suite.xcloak.tech](https://suite.xcloak.tech).
 
 <p>
   <a href="https://xcloak.tech"><img src="https://img.shields.io/badge/xcloak.tech-Website-2563eb?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website"/></a>
@@ -27,9 +27,10 @@ curl -fsSL https://raw.githubusercontent.com/The-Abhishek1/XCLOAK-SECURITY-SUITE
 Or manually:
 
 ```bash
-git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git && cd XCLOAK-SECURITY-SUITE
+git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
+cd XCLOAK-SECURITY-SUITE
 docker compose -f docker-compose.quickstart.yml up -d --build
-# Dashboard → http://localhost:3000  (create admin on first visit)
+# Dashboard → http://localhost:3000  (create your admin account on first visit)
 ```
 
 > First build pulls ~1.5 GB of images and takes ~3 minutes. Subsequent starts take under 10 seconds.
@@ -40,7 +41,13 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 
 | Dashboard Overview | Alert Detail | Posture (Mobile) |
 |-------------------|--------------|-----------------|
-| ![dashboard](docs/dashboard.png) | ![alers](docs/alerts.png) | ![mobile](docs/mobile.png) |
+| ![dashboard](docs/dashboard.png) | ![alerts](docs/alerts.png) | ![mobile](docs/mobile.png) |
+
+---
+
+## Try It
+
+**[suite.xcloak.tech](https://suite.xcloak.tech)** — live demo, no account needed. Pure Next.js, zero backend, all data baked in. Click **Launch Live Demo**.
 
 ---
 
@@ -51,7 +58,7 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 │                         XCloak Platform                              │
 │                                                                      │
 │  ┌─────────────┐   ┌──────────────────────────────────────────────┐ │
-│  │  Next.js 14 │   │           Go / Gin Backend                   │ │
+│  │  Next.js    │   │           Go / Gin Backend                   │ │
 │  │  Dashboard  │◄──┤  Auth · SIEM · SOAR · MDM · Detection        │ │
 │  │  Port 3000  │   │  Port 8080                                   │ │
 │  └─────────────┘   └──────────┬───────────────────────────────────┘ │
@@ -86,7 +93,7 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Backend API | ✅ Production-grade | Go/Gin, 56 migrations, RLS, httpOnly cookies, refresh rotation |
+| Backend API | ✅ Production-grade | Go/Gin, 70 migrations, RLS, httpOnly cookies, refresh rotation |
 | Detection engines | ✅ Working | 17 behavioral detectors (incl. DPI: DGA, TLS anomaly, HTTP inspection, protocol anomaly), 43 Sigma rules, YARA, IOC |
 | Go agent (Linux) | ✅ Production-grade | 15 autonomous collectors, slog, eBPF (optional) |
 | Go agent (Windows) | ✅ Working | Same collectors, Windows-native telemetry |
@@ -94,7 +101,7 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 | SOAR / Playbooks | ✅ Working | AI-recommended, human-approval gate, FIM/YARA auto-quarantine |
 | Kafka event bus | ✅ Working | 7 consumer groups wired end-to-end |
 | Helm chart | ✅ Working | v0.2.0, tested on kind and GKE |
-| Multi-tenancy | ✅ Working | PostgreSQL RLS, custom roles, OIDC/SSO |
+| Multi-tenancy | ✅ Working | PostgreSQL RLS, custom roles, OIDC/SSO, per-tenant SMTP |
 
 ### Known Limitations
 
@@ -109,17 +116,11 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 
 ---
 
-## Try It
-
-**[suite.xcloak.tech](https://suite.xcloak.tech)** — live demo, no account needed. Pure Next.js, zero backend, all data baked in. Click **Launch Live Demo**.
-
----
-
 ## Running Locally
 
-The platform has three modes depending on what you need:
+Three ways to run, depending on what you need:
 
-| | Mode 1 | Mode 2 | Mode 3 |
+| | Full stack | Seeded backend | Static demo |
 |---|---|---|---|
 | Go backend | ✅ | ✅ | ❌ |
 | PostgreSQL | ✅ | ✅ | ❌ |
@@ -127,18 +128,18 @@ The platform has three modes depending on what you need:
 | Mutations work | ✅ | ✅ | ❌ blocked |
 | Netlify-deployable | ❌ | ❌ | ✅ |
 
-### Mode 1 — Real Data & Services (full stack)
+### Full stack — real data, all services
 
-**Quickstart** (no Kafka/MinIO, perfect for evaluation):
+**Quickstart** (no Kafka/MinIO — perfect for evaluation):
 
 ```bash
 git clone https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE.git
 cd XCLOAK-SECURITY-SUITE
 docker compose -f docker-compose.quickstart.yml up -d --build
-# Dashboard: http://localhost:3000  (create admin on first signup)
+# Dashboard: http://localhost:3000  (create your admin account on first visit)
 ```
 
-**Full production stack** (Kafka, MinIO, PgBouncer, Grafana, Prometheus):
+**Production stack** (Kafka, MinIO, PgBouncer, Grafana, Prometheus):
 
 ```bash
 cd XCLOAK-SECURITY-SUITE/xcloak-platform
@@ -146,13 +147,12 @@ cp .env.example .env   # fill in JWT_SECRET, DB_PASSWORD, METRICS_TOKEN
 docker compose up -d --build
 ```
 
-### Mode 2 — Demo Data + Real Backend (seeded DB)
+### Seeded backend — demo data + real API
 
-Go backend running but pre-seeded with synthetic data. Useful for testing backend features with realistic data without touching production.
+Go backend running with synthetic data pre-loaded. Good for testing backend features with realistic data.
 
 ```bash
 cd XCLOAK-SECURITY-SUITE/xcloak-platform
-
 docker compose -f docker-compose.demo.yml up -d
 
 # Seed demo data (first time only)
@@ -161,33 +161,32 @@ docker exec xcloak-demo-backend ./seed-demo
 # Frontend: http://localhost:3000 — visit /demo to start a session
 ```
 
-All API calls go through the real Go backend, but the database has 200 synthetic alerts, 30 agents, incidents, playbook executions, etc.
+200 synthetic alerts, 30 agents, incidents, playbook executions — all queryable through the real backend.
 
-### Mode 3 — Demo Data, No Backend (static / Netlify)
+### Static demo — no backend required
 
-Pure Next.js, zero backend required. All data is baked into the JS bundle. This is what runs at [suite.xcloak.tech](https://suite.xcloak.tech/demo).
+Pure Next.js, zero backend. All data is baked into the JS bundle. This is what runs at [suite.xcloak.tech](https://suite.xcloak.tech/demo).
 
 ```bash
 cd XCLOAK-SECURITY-SUITE/xcloak-platform/frontend
 npm install
 
-# Dev (hot-reload):
+# Dev server:
 NEXT_PUBLIC_DEMO_ONLY=true npm run dev
 
-# Production build (what Netlify runs):
+# Production build:
 NEXT_PUBLIC_DEMO_ONLY=true npm run build
 NEXT_PUBLIC_DEMO_ONLY=true npx next start -p 3333
 # Visit http://localhost:3333/demo
 ```
 
-No Docker, no database, no Go binary needed. All demo data (alerts, sigma rules, agents, playbooks, etc.) comes from `lib/demo-data/data.json` via the static router.
+No Docker, no database, no Go binary needed.
 
-### Option B — Kubernetes / Helm
+### Kubernetes / Helm
 
 ```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
-# From this repo
 helm dependency update charts/xcloak
 helm install xcloak charts/xcloak \
   --namespace xcloak --create-namespace \
@@ -198,7 +197,7 @@ helm install xcloak charts/xcloak \
 
 See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elasticsearch, and production hardening.
 
-### Option C — Pre-built binaries (GitHub Releases)
+### Pre-built binaries
 
 Download from [Releases](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases):
 - `xcloak-agent-linux-amd64`
@@ -294,7 +293,6 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | Helm / K8s | ✅ | ✅ | ✅ | ✅ |
 | No Java dependency | ✅ Go-only | ❌ Java/JVM | ❌ JVM | ❌ JVM |
 | Open source | ✅ AGPL-3.0 | ✅ | ✅ | ❌ |
-| License cost | Free (AGPL-3.0) | Free (GPL) | Free tier + paid | Free tier limited |
 | Single-binary agent | ✅ | ❌ | ❌ | N/A |
 | eBPF support | ✅ | ⚠️ | ⚠️ | N/A |
 | Deception technology | ✅ | ❌ | ❌ | ❌ |
@@ -312,7 +310,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | [Deployment Guide](docs/deployment-guide.md) | Operators — production setup, Kubernetes/Helm, TLS, Kafka, Elasticsearch, MDM |
 | [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, MDM, AI tools |
 | [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing the Go agent on Linux/Windows |
-| [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps (Phase 1–8) |
+| [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps |
 | [Roadmap](roadmap.md) | Everyone — planned features and honest limitations |
 | [Changelog](CHANGELOG.md) | Everyone — what changed in each release |
 | [Contributing](CONTRIBUTING.md) | Contributors — dev setup, code guidelines, PR process |
@@ -324,7 +322,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.25, Gin, golang-migrate (56 migrations) |
+| Backend | Go 1.25, Gin, golang-migrate (70 migrations) |
 | Database | PostgreSQL 16 with Row-Level Security (tenant isolation) |
 | Cache / State | Redis 7 (rate limiting, session revocation, Lua atomic scripts) |
 | Event bus | Apache Kafka (optional; 7 consumer groups) |
@@ -332,7 +330,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | Search | Elasticsearch / OpenSearch (optional dual-write) |
 | Metrics | Prometheus + Grafana |
 | Secrets | HashiCorp Vault (TOTP encryption, optional secret management) |
-| Frontend | Next.js 14 + TypeScript (`xcloak-platform/frontend`) |
+| Frontend | Next.js + TypeScript (`xcloak-platform/frontend`) |
 | Go Agent | Go 1.25, `golang.org/x/sys`, `github.com/cilium/ebpf` (optional) |
 | Mobile Agent | Flutter 3.24.5 (Dart), Android API 26+ |
 | Infrastructure | Docker Compose (dev), Helm v0.2.0 (production), GitHub Actions (CI/CD) |
@@ -357,7 +355,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
 
-AGPL-3.0 means you can use, modify, and self-host XCloak freely. If you offer XCloak as a hosted service, you must release your modifications under the same license. Commercial licensing for proprietary modifications is available — contact [abhishekn1003@gmail.com](mailto:abhishekn1003@gmail.com).
+AGPL-3.0 means you can use, modify, and self-host XCloak freely. If you offer XCloak as a hosted service to others, you must release your modifications under the same license.
 
 ---
 
@@ -369,4 +367,4 @@ Security vulnerabilities → see [SECURITY.md](SECURITY.md). Do not open a publi
 
 ---
 
-*Maintained by [Abhishek N](mailto:abhishekn1003@gmail.com) · [xcloak.tech](https://xcloak.tech)*
+*Maintained by [Abhishek N](https://xcloak.tech) · [xcloak.tech](https://xcloak.tech)*
