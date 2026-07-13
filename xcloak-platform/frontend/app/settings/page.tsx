@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [showInvite, setShowInvite]   = useState(false);
   const [inviteForm, setInviteForm]   = useState({ username: '', email: '', role: 'analyst' });
   const [inviting, setInviting]       = useState(false);
+  const [inviteLink, setInviteLink]   = useState<string | null>(null);
 
   // ── Sessions ──────────────────────────────────────────────────
   const [sessions, setSessions]         = useState<UserSession[]>([]);
@@ -389,10 +390,14 @@ export default function SettingsPage() {
     }
     setInviting(true);
     try {
-      await usersAPI.invite(inviteForm.username, inviteForm.email, inviteForm.role);
-      notify(`Invite sent to ${inviteForm.email}`);
-      setShowInvite(false);
-      setInviteForm({ username: '', email: '', role: 'analyst' });
+      const res = await usersAPI.invite(inviteForm.username, inviteForm.email, inviteForm.role);
+      if (res.data?.invite_link) {
+        setInviteLink(res.data.invite_link);
+      } else {
+        notify(`Invite sent to ${inviteForm.email}`);
+        setShowInvite(false);
+        setInviteForm({ username: '', email: '', role: 'analyst' });
+      }
       loadUsers();
     } catch (e: any) {
       notify(e?.response?.data?.error || 'Failed to send invite');
@@ -1633,40 +1638,65 @@ SMTP_USER=your@email.com   SMTP_PASS=app_password`
       </div>
 
       {showInvite && (
-        <div className="g-modal-backdrop" onClick={() => setShowInvite(false)}>
-          <div className="g-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="g-modal-backdrop" onClick={() => { setShowInvite(false); setInviteLink(null); }}>
+          <div className="g-modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Invite User</h2>
-              <button onClick={() => setShowInvite(false)} style={{ color: 'var(--text-2)' }}><XCircle className="h-4 w-4" /></button>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                {inviteLink ? 'Share Invite Link' : 'Invite User'}
+              </h2>
+              <button onClick={() => { setShowInvite(false); setInviteLink(null); setInviteForm({ username: '', email: '', role: 'analyst' }); }} style={{ color: 'var(--text-2)' }}><XCircle className="h-4 w-4" /></button>
             </div>
-            <div className="p-5 space-y-3">
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Username</label>
-                <input value={inviteForm.username} onChange={e => setInviteForm(f => ({ ...f, username: e.target.value }))}
-                  placeholder="jsmith" className="g-input" />
+            {inviteLink ? (
+              <div className="p-5 space-y-4">
+                <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', color: 'var(--text-2)' }}>
+                  SMTP is not configured. Share this link with <strong>{inviteForm.username}</strong> — it expires in 7 days.
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Set-password link</label>
+                  <div className="flex gap-2">
+                    <input readOnly value={inviteLink} className="g-input flex-1 text-[11px] mono" onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button className="g-btn text-xs shrink-0" onClick={() => { navigator.clipboard.writeText(inviteLink); notify('Link copied'); }}>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <button className="g-btn g-btn-primary w-full justify-center text-xs"
+                  onClick={() => { setShowInvite(false); setInviteLink(null); setInviteForm({ username: '', email: '', role: 'analyst' }); }}>
+                  Done
+                </button>
               </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Email</label>
-                <input value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="jsmith@company.com" className="g-input" />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Role</label>
-                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
-                  className="g-select w-full">
-                  {[...ROLES, ...customRoles.map(cr => cr.name)].map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                They&apos;ll get an email with a link to set their password.
-              </p>
-            </div>
-            <div className="flex gap-3 px-5 pb-5">
-              <button onClick={() => setShowInvite(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
-              <button onClick={inviteUser} disabled={inviting} className="g-btn g-btn-primary flex-1 justify-center">
-                {inviting ? 'Sending…' : 'Send Invite'}
-              </button>
-            </div>
+            ) : (
+              <>
+                <div className="p-5 space-y-3">
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Username</label>
+                    <input value={inviteForm.username} onChange={e => setInviteForm(f => ({ ...f, username: e.target.value }))}
+                      placeholder="jsmith" className="g-input" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Email</label>
+                    <input value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="jsmith@company.com" className="g-input" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Role</label>
+                    <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
+                      className="g-select w-full">
+                      {[...ROLES, ...customRoles.map(cr => cr.name)].map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                    They&apos;ll get an email with a link to set their password.
+                  </p>
+                </div>
+                <div className="flex gap-3 px-5 pb-5">
+                  <button onClick={() => setShowInvite(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+                  <button onClick={inviteUser} disabled={inviting} className="g-btn g-btn-primary flex-1 justify-center">
+                    {inviting ? 'Sending…' : 'Send Invite'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

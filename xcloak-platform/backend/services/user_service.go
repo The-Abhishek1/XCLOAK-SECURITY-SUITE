@@ -208,6 +208,55 @@ func InviteUser(username, email, role string, tenantID int) error {
 	return nil
 }
 
+// InviteUserGetLink creates the user account and returns a set-password link
+// without sending an email — used as a fallback when SMTP is not configured.
+// The caller is responsible for sharing the link with the new user.
+func InviteUserGetLink(username, email, role string, tenantID int) (string, error) {
+	if !IsValidRole(role, tenantID) {
+		return "", errors.New("invalid role — must be admin, analyst, viewer, or an existing custom role")
+	}
+
+	var exists bool
+	database.DB.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM users WHERE username=$1 OR email=$2)`, username, email,
+	).Scan(&exists)
+	if exists {
+		return "", errors.New("a user with that username or email already exists")
+	}
+
+	placeholder := make([]byte, 32)
+	rand.Read(placeholder)
+	hash, err := auth.HashPassword(hex.EncodeToString(placeholder))
+	if err != nil {
+		return "", err
+	}
+
+	var userID int
+	err = database.DB.QueryRow(`
+		INSERT INTO users (username, email, password_hash, role, tenant_id, is_active)
+		VALUES ($1, $2, $3, $4, $5, TRUE)
+		RETURNING id
+	`, username, email, hash, role, tenantID).Scan(&userID)
+	if err != nil {
+		return "", err
+	}
+
+	b := make([]byte, 32)
+	rand.Read(b)
+	token := hex.EncodeToString(b)
+	expiry := time.Now().Add(7 * 24 * time.Hour) // 7 days for manual sharing
+
+	database.DB.Exec(`
+		UPDATE users
+		SET password_reset_token=$1, password_reset_expiry=$2
+		WHERE id=$3
+	`, token, expiry, userID)
+
+	link := appURL() + "/reset-password?token=" + token
+	LogEvent("INVITE_USER", "Invited "+username+" ("+role+") — link generated (no SMTP)", fmt.Sprintf("tenant_id:%d", tenantID))
+	return link, nil
+}
+
 // InviteUserDirectly creates a user account without sending an email — used
 // by OIDC JIT provisioning where the user authenticates via IdP and doesn't
 // need a password-reset link to claim their account.

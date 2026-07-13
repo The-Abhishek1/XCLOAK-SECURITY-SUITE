@@ -111,6 +111,8 @@ export default function PlatformPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedTenant, setExpandedTenant] = useState<number | null>(null);
   const [showNew, setShowNew]     = useState(false);
+  const [newTenantInviteLink, setNewTenantInviteLink] = useState<string | null>(null);
+  const [newTenantAdminName, setNewTenantAdminName] = useState('');
   const [showRelease, setShowRelease] = useState(false);
   const [form, setForm]           = useState({ name: '', slug: '', admin_username: '', admin_email: '' });
   const [relForm, setRelForm]     = useState({ platform: 'linux_amd64', version: '', sha256: '', download_url: '' });
@@ -152,11 +154,17 @@ export default function PlatformPage() {
     }
     setCreating(true);
     try {
-      await platformAPI.createTenant(form.name, form.slug, form.admin_username, form.admin_email);
-      notify(`Tenant created — invite sent to ${form.admin_email}`);
-      setShowNew(false);
-      setForm({ name: '', slug: '', admin_username: '', admin_email: '' });
+      const res = await platformAPI.createTenant(form.name, form.slug, form.admin_username, form.admin_email);
       load();
+      if (res.data?.invite_link) {
+        setNewTenantAdminName(form.admin_username);
+        setNewTenantInviteLink(res.data.invite_link);
+        setForm({ name: '', slug: '', admin_username: '', admin_email: '' });
+      } else {
+        notify(`Tenant created — invite sent to ${form.admin_email}`);
+        setShowNew(false);
+        setForm({ name: '', slug: '', admin_username: '', admin_email: '' });
+      }
     } catch (e: any) {
       notify(e?.response?.data?.error || 'Failed to create tenant');
     } finally { setCreating(false); }
@@ -420,44 +428,69 @@ export default function PlatformPage() {
 
       {/* ── New Tenant modal ───────────────────────────────────── */}
       {showNew && (
-        <div className="g-modal-backdrop" onClick={() => setShowNew(false)}>
+        <div className="g-modal-backdrop" onClick={() => { setShowNew(false); setNewTenantInviteLink(null); }}>
           <div className="g-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>New Tenant</h2>
-              <button onClick={() => setShowNew(false)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                {newTenantInviteLink ? 'Share Invite Link' : 'New Tenant'}
+              </h2>
+              <button onClick={() => { setShowNew(false); setNewTenantInviteLink(null); }} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
             </div>
-            <div className="p-5 space-y-3">
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Organization name</label>
-                <input value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: f.slug || slugify(e.target.value) }))}
-                  placeholder="Acme Corp" className="g-input" />
+            {newTenantInviteLink ? (
+              <div className="p-5 space-y-4">
+                <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', color: 'var(--text-2)' }}>
+                  Tenant created. SMTP is not configured — share this link with <strong>{newTenantAdminName}</strong> so they can set their password. Expires in 7 days.
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Set-password link</label>
+                  <div className="flex gap-2">
+                    <input readOnly value={newTenantInviteLink} className="g-input flex-1 text-[11px] mono" onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button className="g-btn text-xs shrink-0" onClick={() => { navigator.clipboard.writeText(newTenantInviteLink); notify('Link copied'); }}>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <button className="g-btn g-btn-primary w-full justify-center text-xs"
+                  onClick={() => { setShowNew(false); setNewTenantInviteLink(null); }}>
+                  Done
+                </button>
               </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Slug</label>
-                <input value={form.slug} onChange={e => setForm(f => ({ ...f, slug: slugify(e.target.value) }))}
-                  placeholder="acme-corp" className="g-input mono" />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>First admin — username</label>
-                <input value={form.admin_username} onChange={e => setForm(f => ({ ...f, admin_username: e.target.value }))}
-                  placeholder="acme_admin" className="g-input" />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>First admin — email</label>
-                <input value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
-                  placeholder="admin@acme.com" className="g-input" />
-                <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
-                  They&apos;ll get an email with a link to set their password.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 px-5 pb-5">
-              <button onClick={() => setShowNew(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
-              <button onClick={createTenant} disabled={creating} className="g-btn g-btn-primary flex-1 justify-center">
-                {creating ? 'Creating…' : 'Create Tenant'}
-              </button>
-            </div>
+            ) : (
+              <>
+                <div className="p-5 space-y-3">
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Organization name</label>
+                    <input value={form.name}
+                      onChange={e => setForm(f => ({ ...f, name: e.target.value, slug: f.slug || slugify(e.target.value) }))}
+                      placeholder="Acme Corp" className="g-input" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Slug</label>
+                    <input value={form.slug} onChange={e => setForm(f => ({ ...f, slug: slugify(e.target.value) }))}
+                      placeholder="acme-corp" className="g-input mono" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>First admin — username</label>
+                    <input value={form.admin_username} onChange={e => setForm(f => ({ ...f, admin_username: e.target.value }))}
+                      placeholder="acme_admin" className="g-input" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>First admin — email</label>
+                    <input value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))}
+                      placeholder="admin@acme.com" className="g-input" />
+                    <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                      They&apos;ll get an email with a link to set their password.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3 px-5 pb-5">
+                  <button onClick={() => setShowNew(false)} className="g-btn g-btn-ghost flex-1 justify-center">Cancel</button>
+                  <button onClick={createTenant} disabled={creating} className="g-btn g-btn-primary flex-1 justify-center">
+                    {creating ? 'Creating…' : 'Create Tenant'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

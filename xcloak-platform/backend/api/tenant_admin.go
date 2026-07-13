@@ -29,16 +29,22 @@ func CreateTenantHandler(c *gin.Context) {
 		return
 	}
 
-	tenant, err := services.CreateTenant(body.Name, body.Slug, body.AdminUsername, body.AdminEmail)
+	result, err := services.CreateTenant(body.Name, body.Slug, body.AdminUsername, body.AdminEmail)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"message": "tenant created — invite sent to " + body.AdminEmail,
-		"tenant":  tenant,
-	})
+	resp := gin.H{
+		"tenant": result.Tenant,
+	}
+	if result.InviteLink != "" {
+		resp["invite_link"] = result.InviteLink
+		resp["message"] = "Tenant created — SMTP not configured, share this invite link with " + body.AdminUsername
+	} else {
+		resp["message"] = "tenant created — invite sent to " + body.AdminEmail
+	}
+	c.JSON(200, resp)
 }
 
 // GetTenantsHandler — GET /api/platform/tenants (platform admin only)

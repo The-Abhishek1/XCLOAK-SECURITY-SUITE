@@ -18,7 +18,14 @@ import (
 // fails — SMTP down, duplicate username/email — the just-created tenant is
 // deleted rather than left behind with zero users and no way to manage it,
 // mirroring InviteUser's own rollback-on-email-failure rule.
-func CreateTenant(name, slug, adminUsername, adminEmail string) (*models.Tenant, error) {
+// CreateTenantResult holds the new tenant and an optional invite link (set
+// when SMTP is not configured so the caller can share the link manually).
+type CreateTenantResult struct {
+	Tenant     *models.Tenant
+	InviteLink string // non-empty when email could not be sent
+}
+
+func CreateTenant(name, slug, adminUsername, adminEmail string) (*CreateTenantResult, error) {
 
 	tenant, err := repositories.CreateTenant(name, slug)
 	if err != nil {
@@ -26,13 +33,22 @@ func CreateTenant(name, slug, adminUsername, adminEmail string) (*models.Tenant,
 	}
 
 	if err := InviteUser(adminUsername, adminEmail, "admin", tenant.ID); err != nil {
-		repositories.DeleteTenant(tenant.ID)
-		return nil, fmt.Errorf("tenant created but failed to invite first admin: %w", err)
+		if !strings.Contains(err.Error(), "SMTP not configured") {
+			repositories.DeleteTenant(tenant.ID)
+			return nil, fmt.Errorf("tenant created but failed to invite first admin: %w", err)
+		}
+		// SMTP missing — create the admin account and return a link instead.
+		link, linkErr := InviteUserGetLink(adminUsername, adminEmail, "admin", tenant.ID)
+		if linkErr != nil {
+			repositories.DeleteTenant(tenant.ID)
+			return nil, fmt.Errorf("tenant created but could not provision first admin: %w", linkErr)
+		}
+		LogEvent("CREATE_TENANT", fmt.Sprintf("%s (%s), first admin: %s (link generated, no SMTP)", name, slug, adminUsername), "platform_admin")
+		return &CreateTenantResult{Tenant: tenant, InviteLink: link}, nil
 	}
 
 	LogEvent("CREATE_TENANT", fmt.Sprintf("%s (%s), first admin: %s", name, slug, adminUsername), "platform_admin")
-
-	return tenant, nil
+	return &CreateTenantResult{Tenant: tenant}, nil
 }
 
 // SelfServeSignup provisions a brand-new tenant and its first admin user

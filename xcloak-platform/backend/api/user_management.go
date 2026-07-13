@@ -2,6 +2,7 @@ package api
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -41,12 +42,27 @@ func InviteUserHandler(c *gin.Context) {
 		return
 	}
 
-	if err := services.InviteUser(body.Username, body.Email, body.Role, tenantIDFromContext(c)); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+	err := services.InviteUser(body.Username, body.Email, body.Role, tenantIDFromContext(c))
+	if err == nil {
+		c.JSON(200, gin.H{"message": "Invite sent to " + body.Email})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Invite sent"})
+	// SMTP not configured — fall back to returning a copyable link.
+	if strings.Contains(err.Error(), "SMTP not configured") {
+		link, linkErr := services.InviteUserGetLink(body.Username, body.Email, body.Role, tenantIDFromContext(c))
+		if linkErr != nil {
+			c.JSON(400, gin.H{"error": linkErr.Error()})
+			return
+		}
+		c.JSON(200, gin.H{
+			"invite_link": link,
+			"message":     "SMTP not configured — share this link with " + body.Username,
+		})
+		return
+	}
+
+	c.JSON(400, gin.H{"error": err.Error()})
 }
 
 // UpdateUserRole — PUT /api/users/:id/role
