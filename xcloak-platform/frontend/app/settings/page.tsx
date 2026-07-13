@@ -18,16 +18,16 @@ const ALL_TABS = [
   { id: 'users',        label: 'User Management', icon: Users,       adminOnly: true  },
   { id: 'integrations', label: 'Integrations',    icon: Webhook,     adminOnly: true  },
   { id: 'sso',          label: 'SSO',             icon: Building2,   adminOnly: true  },
-  { id: 'apikeys',      label: 'API Keys',        icon: Key,         adminOnly: false },
   { id: 'roles',        label: 'Roles',           icon: Shield,      adminOnly: true  },
+  { id: 'audit',        label: 'Audit Log',       icon: ScrollText,  adminOnly: true  },
+  { id: 'sessions',     label: 'Sessions',        icon: Lock,        adminOnly: true  },
+  { id: 'security',     label: 'Security Policy', icon: Shield,      adminOnly: true  },
+  { id: 'server',       label: 'Server Info',     icon: Server,      adminOnly: true  },
+  { id: 'billing',      label: 'Billing & Plan',  icon: CreditCard,  adminOnly: true  },
+  { id: 'apikeys',      label: 'API Keys',        icon: Key,         adminOnly: false },
   { id: 'profile',      label: 'My Profile',      icon: UserCog,     adminOnly: false },
   { id: 'email',        label: 'Email Alerts',    icon: Mail,        adminOnly: false },
   { id: '2fa',          label: '2FA Security',    icon: Lock,        adminOnly: false },
-  { id: 'server',       label: 'Server Info',     icon: Server,      adminOnly: false },
-  { id: 'audit',        label: 'Audit Log',       icon: ScrollText,  adminOnly: true  },
-  { id: 'sessions',     label: 'Sessions',        icon: Lock,        adminOnly: false },
-  { id: 'security',     label: 'Security Policy', icon: Shield,      adminOnly: true  },
-  { id: 'billing',      label: 'Billing & Plan',  icon: CreditCard,  adminOnly: false },
 ] as const;
 type Tab = typeof ALL_TABS[number]['id'];
 
@@ -309,11 +309,13 @@ export default function SettingsPage() {
 
   const loadSessions = useCallback(async () => {
     try {
-      const [myR, allR] = await Promise.allSettled([sessionsAPI.getMy(), sessionsAPI.getAll()]);
+      const calls: Promise<any>[] = [sessionsAPI.getMy()];
+      if (isAdmin) calls.push(sessionsAPI.getAll());
+      const [myR, allR] = await Promise.allSettled(calls);
       if (myR.status === 'fulfilled') setSessions(myR.value.data.sessions || []);
-      if (allR.status === 'fulfilled') setAllSessions(allR.value.data.sessions || []);
+      if (allR && allR.status === 'fulfilled') setAllSessions(allR.value.data.sessions || []);
     } catch {}
-  }, []);
+  }, [isAdmin]);
 
   const loadSecurityPolicy = useCallback(async () => {
     try {

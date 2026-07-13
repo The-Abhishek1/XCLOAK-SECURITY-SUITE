@@ -492,11 +492,15 @@ func toQP(s string) string {
 }
 
 // transmit connects to SMTP and delivers the raw message bytes.
+// SMTP_TLS=true + port 465 → implicit TLS (tls.Dial)
+// SMTP_TLS=true + port 587 → STARTTLS (plain dial then upgrade)
+// SMTP_TLS=false            → smtp.SendMail (auto-negotiates STARTTLS if offered)
 func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 	addr := cfg.Host + ":" + cfg.Port
+	tlsCfg := &tls.Config{ServerName: cfg.Host}
 
-	if cfg.TLS {
-		tlsCfg := &tls.Config{ServerName: cfg.Host}
+	if cfg.TLS && cfg.Port == "465" {
+		// Implicit TLS — server expects TLS immediately.
 		conn, err := tls.Dial("tcp", addr, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("SMTP TLS dial: %w", err)
@@ -506,6 +510,39 @@ func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 			return fmt.Errorf("SMTP client: %w", err)
 		}
 		defer client.Close()
+		if cfg.Username != "" {
+			if err := client.Auth(smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)); err != nil {
+				return fmt.Errorf("SMTP auth: %w", err)
+			}
+		}
+		if err := client.Mail(from); err != nil {
+			return err
+		}
+		for _, r := range to {
+			if err := client.Rcpt(r); err != nil {
+				return err
+			}
+		}
+		w, err := client.Data()
+		if err != nil {
+			return err
+		}
+		if _, err = w.Write(msg); err != nil {
+			return err
+		}
+		return w.Close()
+	}
+
+	if cfg.TLS {
+		// STARTTLS — plain connect, then upgrade (port 587 / most providers).
+		client, err := smtp.Dial(addr)
+		if err != nil {
+			return fmt.Errorf("SMTP dial: %w", err)
+		}
+		defer client.Close()
+		if err := client.StartTLS(tlsCfg); err != nil {
+			return fmt.Errorf("SMTP STARTTLS: %w", err)
+		}
 		if cfg.Username != "" {
 			if err := client.Auth(smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)); err != nil {
 				return fmt.Errorf("SMTP auth: %w", err)
