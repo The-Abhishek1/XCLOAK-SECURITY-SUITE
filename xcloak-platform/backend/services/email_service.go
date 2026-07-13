@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/smtp"
 	"os"
 	"strings"
@@ -491,6 +492,18 @@ func toQP(s string) string {
 	return b.String()
 }
 
+// envelopeAddr extracts the bare email address from a From string that may
+// include a display name ("XCloak <noreply@x.com>" → "noreply@x.com").
+// The SMTP MAIL FROM command only accepts bare addresses.
+func envelopeAddr(from string) string {
+	if i := strings.Index(from, "<"); i >= 0 {
+		if j := strings.Index(from[i:], ">"); j >= 0 {
+			return strings.TrimSpace(from[i+1 : i+j])
+		}
+	}
+	return strings.TrimSpace(from)
+}
+
 // transmit connects to SMTP and delivers the raw message bytes.
 // SMTP_TLS=true + port 465 → implicit TLS (tls.Dial)
 // SMTP_TLS=true + port 587 → STARTTLS (plain dial then upgrade)
@@ -498,10 +511,11 @@ func toQP(s string) string {
 func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 	addr := cfg.Host + ":" + cfg.Port
 	tlsCfg := &tls.Config{ServerName: cfg.Host}
+	envelopeFrom := envelopeAddr(from)
 
 	if cfg.TLS && cfg.Port == "465" {
 		// Implicit TLS — server expects TLS immediately.
-		conn, err := tls.Dial("tcp", addr, tlsCfg)
+		conn, err := tls.Dial("tcp4", addr, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("SMTP TLS dial: %w", err)
 		}
@@ -515,7 +529,7 @@ func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 				return fmt.Errorf("SMTP auth: %w", err)
 			}
 		}
-		if err := client.Mail(from); err != nil {
+		if err := client.Mail(envelopeFrom); err != nil {
 			return err
 		}
 		for _, r := range to {
@@ -535,9 +549,13 @@ func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 
 	if cfg.TLS {
 		// STARTTLS — plain connect, then upgrade (port 587 / most providers).
-		client, err := smtp.Dial(addr)
+		conn, err := net.Dial("tcp4", addr)
 		if err != nil {
 			return fmt.Errorf("SMTP dial: %w", err)
+		}
+		client, err := smtp.NewClient(conn, cfg.Host)
+		if err != nil {
+			return fmt.Errorf("SMTP client: %w", err)
 		}
 		defer client.Close()
 		if err := client.StartTLS(tlsCfg); err != nil {
@@ -548,7 +566,7 @@ func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 				return fmt.Errorf("SMTP auth: %w", err)
 			}
 		}
-		if err := client.Mail(from); err != nil {
+		if err := client.Mail(envelopeFrom); err != nil {
 			return err
 		}
 		for _, r := range to {
@@ -566,11 +584,42 @@ func transmit(cfg *SMTPConfig, from string, to []string, msg []byte) error {
 		return w.Close()
 	}
 
-	var auth smtp.Auth
-	if cfg.Username != "" {
-		auth = smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)
+	// Force IPv4 — smtp.SendMail resolves to IPv6 on dual-stack hosts.
+	conn, err := net.Dial("tcp4", addr)
+	if err != nil {
+		return fmt.Errorf("SMTP dial: %w", err)
 	}
-	return smtp.SendMail(addr, auth, from, to, msg)
+	client, err := smtp.NewClient(conn, cfg.Host)
+	if err != nil {
+		return fmt.Errorf("SMTP client: %w", err)
+	}
+	defer client.Close()
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host}); err != nil {
+			return fmt.Errorf("SMTP STARTTLS: %w", err)
+		}
+	}
+	if cfg.Username != "" {
+		if err := client.Auth(smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)); err != nil {
+			return fmt.Errorf("SMTP auth: %w", err)
+		}
+	}
+	if err := client.Mail(envelopeFrom); err != nil {
+		return err
+	}
+	for _, r := range to {
+		if err := client.Rcpt(r); err != nil {
+			return err
+		}
+	}
+	w, err := client.Data()
+	if err != nil {
+		return err
+	}
+	if _, err = w.Write(msg); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
 // GetEmailRecipients returns enabled recipients for a given severity, scoped
