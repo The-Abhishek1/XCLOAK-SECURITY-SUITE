@@ -20,6 +20,11 @@ func ReceivePackages(c *gin.Context) {
 		return
 	}
 
+	authAgentID := agentIDFromContext(c)
+	for i := range packages {
+		packages[i].AgentID = authAgentID
+	}
+
 	err := services.SavePackages(packages)
 
 	if err != nil {

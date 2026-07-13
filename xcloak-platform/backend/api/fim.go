@@ -22,6 +22,8 @@ func ReceiveFIMScan(c *gin.Context) {
 		return
 	}
 
+	payload.AgentID = agentIDFromContext(c)
+
 	if err := services.ProcessFIMScan(payload); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

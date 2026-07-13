@@ -26,8 +26,10 @@ func ReceiveRegistry(c *gin.Context) {
 		return
 	}
 
+	authAgentID := agentIDFromContext(c)
 	saved := 0
 	for i := range entries {
+		entries[i].AgentID = authAgentID
 		entries[i].ThreatTag = classifyRegistryEntry(entries[i])
 		_, err := database.DB.Exec(`
 			INSERT INTO registry_entries (agent_id, hive, key_path, name, type, data, threat_tag)

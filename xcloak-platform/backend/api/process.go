@@ -20,6 +20,11 @@ func ReceiveProcesses(c *gin.Context) {
 		return
 	}
 
+	authAgentID := agentIDFromContext(c)
+	for i := range processes {
+		processes[i].AgentID = authAgentID
+	}
+
 	err := services.SaveProcesses(
 		processes,
 	)

@@ -26,6 +26,11 @@ func ReceiveAuditEvents(c *gin.Context) {
 		return
 	}
 
+	authAgentID := agentIDFromContext(c)
+	for i := range events {
+		events[i].AgentID = authAgentID
+	}
+
 	if err := repositories.SaveAuditEvents(events); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

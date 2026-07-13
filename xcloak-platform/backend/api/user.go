@@ -20,6 +20,11 @@ func ReceiveUsers(c *gin.Context) {
 		return
 	}
 
+	authAgentID := agentIDFromContext(c)
+	for i := range users {
+		users[i].AgentID = authAgentID
+	}
+
 	err := services.SaveUsers(users)
 
 	if err != nil {

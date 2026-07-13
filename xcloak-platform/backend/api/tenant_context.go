@@ -58,3 +58,15 @@ func tenantIDFromContext(c *gin.Context) int {
 		return 1
 	}
 }
+
+func agentIDFromContext(c *gin.Context) int {
+	v, _ := c.Get("agent_id")
+	switch t := v.(type) {
+	case int:
+		return t
+	case float64:
+		return int(t)
+	default:
+		return 0
+	}
+}

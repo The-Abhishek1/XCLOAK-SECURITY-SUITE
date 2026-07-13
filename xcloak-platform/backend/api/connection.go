@@ -20,6 +20,11 @@ func ReceiveConnections(c *gin.Context) {
 		return
 	}
 
+	authAgentID := agentIDFromContext(c)
+	for i := range connections {
+		connections[i].AgentID = authAgentID
+	}
+
 	err := services.SaveConnections(
 		connections,
 	)
