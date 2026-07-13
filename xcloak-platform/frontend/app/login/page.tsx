@@ -292,10 +292,7 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true); setError(''); setSuccess('');
     try {
-      // Use /api/auth/signup — provisions a dedicated tenant so each
-      // organization is fully isolated. /api/auth/register (no tenant)
-      // is only for the initial platform bootstrap.
-      const res  = await fetch('/api/auth/signup', {
+      const res  = await fetch('/api/signup', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
