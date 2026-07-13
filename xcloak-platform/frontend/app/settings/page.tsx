@@ -14,22 +14,22 @@ import {
   Mail, Lock, Smartphone, QrCode, Building2, CreditCard, TrendingUp, Zap,
 } from 'lucide-react';
 
-const TABS = [
-  { id: 'users',        label: 'User Management', icon: Users      },
-  { id: 'integrations', label: 'Integrations',    icon: Webhook    },
-  { id: 'sso',          label: 'SSO',              icon: Building2 },
-  { id: 'apikeys',      label: 'API Keys',         icon: Key       },
-  { id: 'roles',        label: 'Roles',            icon: Shield    },
-  { id: 'profile',      label: 'My Profile',       icon: UserCog   },
-  { id: 'email',        label: 'Email Alerts',     icon: Mail      },
-  { id: '2fa',          label: '2FA Security',     icon: Lock      },
-  { id: 'server',       label: 'Server Info',      icon: Server    },
-  { id: 'audit',        label: 'Audit Log',        icon: ScrollText },
-  { id: 'sessions',     label: 'Sessions',         icon: Lock      },
-  { id: 'security',     label: 'Security Policy',  icon: Shield    },
-  { id: 'billing',      label: 'Billing & Plan',   icon: CreditCard },
+const ALL_TABS = [
+  { id: 'users',        label: 'User Management', icon: Users,       adminOnly: true  },
+  { id: 'integrations', label: 'Integrations',    icon: Webhook,     adminOnly: true  },
+  { id: 'sso',          label: 'SSO',             icon: Building2,   adminOnly: true  },
+  { id: 'apikeys',      label: 'API Keys',        icon: Key,         adminOnly: false },
+  { id: 'roles',        label: 'Roles',           icon: Shield,      adminOnly: true  },
+  { id: 'profile',      label: 'My Profile',      icon: UserCog,     adminOnly: false },
+  { id: 'email',        label: 'Email Alerts',    icon: Mail,        adminOnly: false },
+  { id: '2fa',          label: '2FA Security',    icon: Lock,        adminOnly: false },
+  { id: 'server',       label: 'Server Info',     icon: Server,      adminOnly: false },
+  { id: 'audit',        label: 'Audit Log',       icon: ScrollText,  adminOnly: true  },
+  { id: 'sessions',     label: 'Sessions',        icon: Lock,        adminOnly: false },
+  { id: 'security',     label: 'Security Policy', icon: Shield,      adminOnly: true  },
+  { id: 'billing',      label: 'Billing & Plan',  icon: CreditCard,  adminOnly: false },
 ] as const;
-type Tab = typeof TABS[number]['id'];
+type Tab = typeof ALL_TABS[number]['id'];
 
 const ROLES = ['admin', 'analyst', 'viewer'];
 
@@ -46,7 +46,15 @@ interface AuditPage {
 export default function SettingsPage() {
   const { profile: authProfile } = useUser();
   const currentUsername = authProfile?.username || '';
-  const [tab, setTab]     = useState<Tab>('users');
+  const isAdmin = authProfile?.role === 'admin' || authProfile?.is_platform_admin === true;
+  const TABS = ALL_TABS.filter(t => !t.adminOnly || isAdmin);
+  const defaultTab: Tab = isAdmin ? 'users' : 'profile';
+  const [tab, setTab]     = useState<Tab>(defaultTab);
+
+  // Reset to a valid tab once we know the user's role (profile loads async).
+  useEffect(() => {
+    if (authProfile && !isAdmin && tab === 'users') setTab('profile');
+  }, [authProfile, isAdmin, tab]);
   const [toast, setToast] = useState<string | null>(null);
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
@@ -132,6 +140,7 @@ export default function SettingsPage() {
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     try { const r = await usersAPI.getAll(); setUsers(r.data || []); }
+    catch { setUsers([]); }
     finally { setUsersLoading(false); }
   }, []);
 
@@ -150,7 +159,8 @@ export default function SettingsPage() {
       setIntForms(forms);
       setDeliveries(delR.data || []);
       setInstallTokens(tokR.data || []);
-    } finally { setIntLoading(false); }
+    } catch { setIntegrations([]); }
+    finally { setIntLoading(false); }
   }, []);
 
   const loadSSO = useCallback(async () => {
@@ -175,7 +185,8 @@ export default function SettingsPage() {
       } else {
         setSsoConfigured(false);
       }
-    } finally { setSsoLoading(false); }
+    } catch { setSsoConfigured(false); }
+    finally { setSsoLoading(false); }
   }, []);
 
   const saveSSO = async () => {
@@ -202,6 +213,7 @@ export default function SettingsPage() {
   const loadAPIKeys = useCallback(async () => {
     setApiKeysLoading(true);
     try { const r = await apiKeysAPI.getAll(); setApiKeys(r.data || []); }
+    catch { setApiKeys([]); }
     finally { setApiKeysLoading(false); }
   }, []);
 
@@ -237,7 +249,8 @@ export default function SettingsPage() {
       const [r1, r2] = await Promise.all([customRolesAPI.getAll(), customRolesAPI.getPermissions()]);
       setCustomRoles(r1.data || []);
       setAllPermissions(r2.data || []);
-    } finally { setRolesLoading(false); }
+    } catch { setCustomRoles([]); setAllPermissions([]); }
+    finally { setRolesLoading(false); }
   }, []);
 
   const saveCustomRole = async () => {
