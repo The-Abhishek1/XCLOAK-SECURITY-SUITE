@@ -32,8 +32,9 @@ echo -e "${RESET}"
 # ── requirements ──────────────────────────────────────────────────────────────
 info "Checking requirements..."
 
-command -v docker  >/dev/null 2>&1 || die "Docker is not installed. Install it from https://docs.docker.com/get-docker/"
-command -v git     >/dev/null 2>&1 || die "git is not installed."
+command -v docker >/dev/null 2>&1 || die "Docker is not installed. Install it from https://docs.docker.com/get-docker/"
+command -v git    >/dev/null 2>&1 || die "git is not installed."
+command -v curl   >/dev/null 2>&1 || die "curl is not installed. Install it (e.g. apt install curl)."
 
 # Docker Compose v2 (plugin) or v1 (standalone)
 if docker compose version >/dev/null 2>&1; then
@@ -75,28 +76,19 @@ fi
 cd "$DIR"
 
 # ── secrets ───────────────────────────────────────────────────────────────────
-# Generate secure secrets if they haven't been set already. These are baked
-# into the quickstart compose via env vars — change them before exposing the
-# stack to the internet.
-JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -p | tr -d '\n')}"
-METRICS_TOKEN="${METRICS_TOKEN:-$(openssl rand -hex 16 2>/dev/null || head -c 16 /dev/urandom | xxd -p | tr -d '\n')}"
-
-# Patch the quickstart compose with the generated secrets (sed in-place copy)
-PATCHED_COMPOSE=$(mktemp)
-sed \
-  -e "s|quickstart-jwt-secret-replace-in-production|${JWT_SECRET}|g" \
-  -e "s|quickstart-metrics-token|${METRICS_TOKEN}|g" \
-  "$COMPOSE_FILE" > "$PATCHED_COMPOSE"
+# Generate secure secrets and export them so docker compose picks them up via
+# the ${JWT_SECRET} / ${METRICS_TOKEN} substitution in docker-compose.quickstart.yml.
+# No temp files — avoids Docker Compose resolving relative build paths from /tmp.
+export JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')}"
+export METRICS_TOKEN="${METRICS_TOKEN:-$(openssl rand -hex 16 2>/dev/null || head -c 16 /dev/urandom | od -A n -t x1 | tr -d ' \n')}"
 
 # ── pull base images first so progress is visible ─────────────────────────────
 info "Pulling base images..."
-$COMPOSE -f "$PATCHED_COMPOSE" pull --ignore-buildable 2>/dev/null || true
+$COMPOSE -f "$COMPOSE_FILE" pull --ignore-buildable 2>/dev/null || true
 
 # ── build & start ─────────────────────────────────────────────────────────────
 info "Building and starting XCloak (this takes ~3 minutes on first run)..."
-$COMPOSE -f "$PATCHED_COMPOSE" up -d --build
-
-rm -f "$PATCHED_COMPOSE"
+$COMPOSE -f "$COMPOSE_FILE" up -d --build
 
 # ── wait for healthy ─────────────────────────────────────────────────────────
 info "Waiting for backend to be ready..."
@@ -104,7 +96,7 @@ TIMEOUT=120
 ELAPSED=0
 until curl -sf http://localhost:8080/api/health >/dev/null 2>&1; do
   if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-    die "Backend did not start within ${TIMEOUT}s. Check logs: docker compose -f $COMPOSE_FILE logs backend"
+    die "Backend did not start within ${TIMEOUT}s. Check logs: $COMPOSE -f $COMPOSE_FILE logs backend"
   fi
   sleep 3
   ELAPSED=$((ELAPSED + 3))
@@ -125,7 +117,7 @@ echo -e "  ${YELLOW}Enroll an agent:${RESET}"
 echo -e "  curl -fsSL https://raw.githubusercontent.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/main/scripts/enroll-agent.sh | bash"
 echo ""
 echo -e "  ${YELLOW}Stop XCloak:${RESET}"
-echo -e "  docker compose -f $COMPOSE_FILE down"
+echo -e "  $COMPOSE -f $(pwd)/$COMPOSE_FILE down"
 echo ""
 echo -e "  Docs → ${CYAN}https://docs.xcloak.tech${RESET}"
 echo -e "  Repo → ${CYAN}https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE${RESET}"
