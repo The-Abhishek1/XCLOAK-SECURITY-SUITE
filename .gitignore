@@ -1,3 +1,7 @@
+# ── Private notes (never publish) ────────────────────────────────────────────
+notes/
+website-content/
+
 # ── Secrets & local config ────────────────────────────────────────────────────
 .env
 *.env
