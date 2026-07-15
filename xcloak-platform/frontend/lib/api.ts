@@ -146,8 +146,29 @@ export const agentsAPI = {
   getPackages:    (id: number) => api.get(`/agents/${id}/packages`).catch(() => ({ data: [] })),
   getAuthLogs:    (id: number) => api.get(`/agents/${id}/auth-logs`).catch(() => ({ data: [] })),
   getFileHashes:  (id: number) => api.get(`/agents/${id}/filehashes`).catch(() => ({ data: [] })),
-  getHealth:      ()           => api.get('/agents/health').catch(() => ({ data: [] })),
-  getTasks:       (id: number) => api.get(`/agents/${id}/tasks`).catch(() => ({ data: [] })),
+  getHealth:         ()           => api.get('/agents/health').catch(() => ({ data: [] })),
+  getTasks:          (id: number) => api.get(`/agents/${id}/tasks`).catch(() => ({ data: [] })),
+  getStartup:        (id: number) => api.get(`/agents/${id}/startup`).catch(() => ({ data: [] })),
+  getUsbHistory:     (id: number) => api.get(`/agents/${id}/usb-history`).catch(() => ({ data: [] })),
+  getLoginHistory:   (id: number) => api.get(`/agents/${id}/login-history`).catch(() => ({ data: [] })),
+  getScheduledTasks: (id: number) => api.get(`/agents/${id}/scheduled-tasks`).catch(() => ({ data: [] })),
+  getDrivers:          (id: number) => api.get(`/agents/${id}/drivers`).catch(() => ({ data: [] })),
+  getPolicies:         (id: number) => api.get(`/agents/${id}/policies`).catch(() => ({ data: null })),
+  getAgentHealth:      (id: number) => api.get(`/agents/${id}/health`).catch(() => ({ data: null })),
+  getRiskBreakdown:    (id: number) => api.get(`/agents/${id}/risk/breakdown`).catch(() => ({ data: null })),
+  getSecurityStatus:   (id: number) => api.get(`/agents/${id}/security-status`).catch(() => ({ data: null })),
+  getCISFindings:      (id: number) => api.get(`/cis/agents/${id}`).catch(() => ({ data: [] })),
+  getCISScore:         (id: number) => api.get(`/cis/agents/${id}/score`).catch(() => ({ data: null })),
+  triggerCISScan:      (id: number) => api.post(`/cis/agents/${id}/scan`),
+  getNetworkAnomalies: (id: number) => api.get(`/nba/baseline/${id}`).catch(() => ({ data: null })),
+  getAuditHistory:   (id: number) => api.get(`/agents/${id}/audit-history`).catch(() => ({ data: [] })),
+  bulk:              (data: { agent_ids: number[]; action: string; payload?: any }) => api.post('/agents/bulk', data),
+};
+
+export const agentGroupsAPI = {
+  getAll:  ()                                                    => api.get('/agent-groups').catch(() => ({ data: [] })),
+  create:  (data: { name: string; description?: string })        => api.post('/agent-groups', data),
+  remove:  (id: number)                                          => api.delete(`/agent-groups/${id}`),
 };
 
 export const alertsAPI = {
@@ -168,16 +189,26 @@ export const alertsAPI = {
 };
 
 export const incidentsAPI = {
-  getAll:        ()                              => api.get('/incidents'),
-  getCounts:     ()                              => api.get('/incidents/counts'),
-  getPaginated:  (page = 1, perPage = 25, status = '') =>
+  getAll:         ()                              => api.get('/incidents'),
+  getCounts:      ()                              => api.get('/incidents/counts'),
+  getPaginated:   (page = 1, perPage = 25, status = '') =>
     api.get('/incidents/paginated', { params: { page, per_page: perPage, status: status || undefined } }),
-  getById:       (id: number)                   => api.get(`/incidents/${id}`),
-  getEvents:     (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
-  getAlerts:     (id: number)                   => api.get(`/incidents/${id}/alerts`).catch(() => ({ data: [] })),
-  updateStatus:  (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
-  updateSeverity:(id: number, severity: string) => api.patch(`/incidents/${id}/severity`, { severity }),
-  addNote:       (id: number, note: string)     => api.post(`/incidents/${id}/notes`, { note }),
+  getById:        (id: number)                   => api.get(`/incidents/${id}`).catch(() => ({ data: null })),
+  getEvents:      (id: number)                   => api.get(`/incidents/${id}/events`).catch(() => ({ data: [] })),
+  getAlerts:      (id: number)                   => api.get(`/incidents/${id}/alerts`).catch(() => ({ data: [] })),
+  getDeepDive:    (id: number)                   => api.get(`/incidents/${id}/deepdive`).catch(() => ({ data: null })),
+  updateStatus:   (id: number, status: string)   => api.put(`/incidents/${id}/status`, { status }),
+  updateSeverity: (id: number, severity: string) => api.patch(`/incidents/${id}/severity`, { severity }),
+  addNote:        (id: number, note: string)     => api.post(`/incidents/${id}/notes`, { note }),
+  // Enterprise additions
+  getAnalytics:   ()                                    => api.get('/incidents/analytics').catch(() => ({ data: null })),
+  getTasks:       (id: number)                          => api.get(`/incidents/${id}/tasks`).catch(() => ({ data: [] })),
+  createTask:     (id: number, text: string)            => api.post(`/incidents/${id}/tasks`, { text }),
+  toggleTask:     (id: number, tid: number)             => api.patch(`/incidents/${id}/tasks/${tid}`),
+  aiRootCause:    (id: number)                          => api.post(`/incidents/${id}/ai-root-cause`),
+  getSimilar:     (id: number)                          => api.get(`/incidents/${id}/similar`).catch(() => ({ data: [] })),
+  responseAction: (id: number, action: string, params?: Record<string, unknown>) =>
+    api.post(`/incidents/${id}/response-action`, { action, params: params ?? {} }),
 };
 
 export const dashboardAPI = {
@@ -240,13 +271,38 @@ export const sigmaAPI = {
   test:     (data: { message: string }) => api.post('/sigma/rules/test', data),
   import:   (form: FormData)        => api.post('/sigma/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   stats:    ()                      => api.get('/sigma/stats'),
+  // Enterprise endpoints
+  dashboard:     ()                             => api.get('/sigma/dashboard').catch(() => ({ data: null })),
+  mitreCoverage: ()                             => api.get('/sigma/mitre-coverage').catch(() => ({ data: null })),
+  analytics:     ()                             => api.get('/sigma/analytics').catch(() => ({ data: null })),
+  categories:    ()                             => api.get('/sigma/categories').catch(() => ({ data: null })),
+  performance:   ()                             => api.get('/sigma/performance').catch(() => ({ data: null })),
+  relationships: ()                             => api.get('/sigma/relationships').catch(() => ({ data: null })),
+  detail:        (id: number)                   => api.get(`/sigma/rules/${id}/detail`).catch(() => ({ data: null })),
+  ai:            (body: { action: string; rule_id?: number; rule_yaml?: string; prompt?: string; target?: string; context?: string }) =>
+    api.post('/sigma/ai', body),
+  convert:       (body: { rule_id?: number; rule_yaml?: string; target: string }) =>
+    api.post('/sigma/convert', body),
+  bulk:          (action: string, rule_ids: number[], value?: string) =>
+    api.post('/sigma/bulk', { action, rule_ids, value }),
+  export:        (format: string, rule_ids?: number[]) =>
+    api.post('/sigma/export', { format, rule_ids: rule_ids ?? [] }, { responseType: format === 'yaml' ? 'text' : 'json' }),
 };
 
 export const logSourcesAPI = {
-  getAll:  ()                   => api.get('/log-sources'),
-  create:  (data: any)          => api.post('/log-sources', data),
-  update:  (id: number, data: any) => api.put(`/log-sources/${id}`, data),
-  remove:  (id: number)         => api.delete(`/log-sources/${id}`),
+  getAll:        ()                        => api.get('/log-sources'),
+  create:        (data: any)               => api.post('/log-sources', data),
+  update:        (id: number, data: any)   => api.put(`/log-sources/${id}`, data),
+  remove:        (id: number)              => api.delete(`/log-sources/${id}`),
+  getHealth:     (id: number)              => api.get(`/log-sources/${id}/health`).catch(() => ({ data: null })),
+  getStats:      (id: number)              => api.get(`/log-sources/${id}/stats`).catch(() => ({ data: null })),
+  getParser:     (id: number)              => api.get(`/log-sources/${id}/parser`).catch(() => ({ data: null })),
+  getRecentLogs: (id: number)              => api.get(`/log-sources/${id}/recent-logs`).catch(() => ({ data: { logs: [] } })),
+  test:          (id: number)              => api.post(`/log-sources/${id}/test`),
+  getMonitoring: ()                        => api.get('/log-sources/monitoring').catch(() => ({ data: null })),
+  getMarketplace:()                        => api.get('/log-sources/marketplace').catch(() => ({ data: null })),
+  aiInsights:    ()                        => api.post('/log-sources/ai-insights'),
+  bulk:          (action: string, ids: number[]) => api.post('/log-sources/bulk', { action, ids }),
 };
 
 export const threatAPI = {
@@ -260,16 +316,27 @@ export const threatAPI = {
 };
 
 export const logSearchAPI = {
-  search:          (params: Record<string, string | number | undefined>) => api.get('/logs/search', { params }),
-  export:          (params: Record<string, string | number | undefined>, format: 'csv' | 'json') =>
-                     api.get('/logs/export', { params: { ...params, format }, responseType: 'blob' }),
-  stats:           ()                      => api.get('/logs/stats'),
-  getSavedSearches: ()                     => api.get('/logs/searches'),
-  saveSearch:      (data: any)             => api.post('/logs/searches', data),
-  deleteSearch:    (id: number)            => api.delete(`/logs/searches/${id}`),
-  runSaved:        (id: number)            => api.post(`/logs/searches/${id}/run`),
-  getRetention:    ()                      => api.get('/logs/retention'),
-  setRetention:    (days: number)          => api.put('/logs/retention', { retention_days: days }),
+  search:              (params: Record<string, string | number | undefined>) => api.get('/logs/search', { params }),
+  export:              (params: Record<string, string | number | undefined>, format: 'csv' | 'json') =>
+                         api.get('/logs/export', { params: { ...params, format }, responseType: 'blob' }),
+  stats:               ()                      => api.get('/logs/stats'),
+  getSavedSearches:    ()                      => api.get('/logs/searches'),
+  saveSearch:          (data: any)             => api.post('/logs/searches', data),
+  deleteSearch:        (id: number)            => api.delete(`/logs/searches/${id}`),
+  runSaved:            (id: number)            => api.post(`/logs/searches/${id}/run`),
+  getRetention:        ()                      => api.get('/logs/retention'),
+  setRetention:        (days: number)          => api.put('/logs/retention', { retention_days: days }),
+  // enterprise extensions
+  getFields:           ()                      => api.get('/logs/fields').catch(() => ({ data: { fields: [], total_docs: 0 } })),
+  getTemplates:        ()                      => api.get('/logs/templates').catch(() => ({ data: { templates: [] } })),
+  aiQuery:             (question: string, language?: string) => api.post('/logs/ai-query', { question, language: language ?? 'kql' }),
+  aiExplain:           (query: string, hit_count: number, samples: string[]) =>
+                         api.post('/logs/ai-explain', { query, hit_count, samples }),
+  buildDetection:      (type: string, query: string, name: string, samples: string[]) =>
+                         api.post('/logs/build-detection', { type, query, name, samples }),
+  getScheduled:        ()                      => api.get('/logs/scheduled').catch(() => ({ data: { searches: [] } })),
+  createScheduled:     (data: any)             => api.post('/logs/scheduled', data),
+  deleteScheduled:     (id: number)            => api.delete(`/logs/scheduled/${id}`),
 };
 
 export const tasksAPI = {
@@ -295,6 +362,19 @@ export const threatFeedsAPI = {
   sync:    (id: number)          => api.post(`/threat-feeds/${id}/sync`),
 };
 
+export const intelAPI = {
+  getOverview:      (hours = 24)               => api.get('/intel/overview', { params: { hours } }).catch(() => ({ data: null })),
+  getAnalytics:     ()                         => api.get('/intel/analytics').catch(() => ({ data: null })),
+  getCampaigns:     ()                         => api.get('/intel/campaigns').catch(() => ({ data: null })),
+  getMITRE:         ()                         => api.get('/intel/mitre').catch(() => ({ data: null })),
+  getRelationships: ()                         => api.get('/intel/relationships').catch(() => ({ data: null })),
+  getWatchlist:     ()                         => api.get('/intel/watchlist').catch(() => ({ data: null })),
+  getTimeline:      (hours = 168)              => api.get('/intel/timeline', { params: { hours } }).catch(() => ({ data: null })),
+  search:           (query: string, type?: string) => api.post('/intel/search', { query, type: type ?? '' }),
+  ai:               (action: string, indicator?: string, context?: string) =>
+    api.post('/intel/ai', { action, indicator: indicator ?? '', context: context ?? '' }),
+};
+
 export const yaraAPI = {
   getAll:     ()                      => api.get('/yara/rules'),
   create:     (data: any)             => api.post('/yara/rules', data),
@@ -304,6 +384,19 @@ export const yaraAPI = {
   disable:    (id: number)            => api.patch(`/yara/rules/${id}/disable`),
   getMatches: (agentId?: number)      => api.get('/yara/matches', { params: agentId ? { agent_id: agentId } : {} }),
   import:     (form: FormData)        => api.post('/yara/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  // Enterprise
+  dashboard:     ()                   => api.get('/yara/dashboard').catch(() => ({ data: null })),
+  analytics:     ()                   => api.get('/yara/analytics').catch(() => ({ data: null })),
+  categories:    ()                   => api.get('/yara/categories').catch(() => ({ data: null })),
+  performance:   ()                   => api.get('/yara/performance').catch(() => ({ data: null })),
+  relationships: ()                   => api.get('/yara/relationships').catch(() => ({ data: null })),
+  detail:        (id: number)         => api.get(`/yara/rules/${id}/detail`).catch(() => ({ data: null })),
+  ai:            (body: { action: string; rule_id?: number; rule_content?: string; prompt?: string; context?: string }) =>
+    api.post('/yara/ai', body),
+  bulk:          (action: string, rule_ids: number[]) =>
+    api.post('/yara/bulk', { action, rule_ids }),
+  export:        (format: string, rule_ids?: number[], all?: boolean) =>
+    api.post('/yara/export', { format, rule_ids: rule_ids ?? [], all: all ?? false }),
 };
 
 export const firewallAPI = {
@@ -384,12 +477,21 @@ export const mitreAPI = {
 
 
 export const correlationAPI = {
-  getAll:     ()                               => api.get('/correlation/rules'),
-  create:     (rule: any)                      => api.post('/correlation/rules', rule),
-  update:     (id: number, rule: any)          => api.put(`/correlation/rules/${id}`, rule),
-  toggle:     (id: number, enabled: boolean)   => api.patch(`/correlation/rules/${id}/toggle`, { enabled }),
-  delete:     (id: number)                     => api.delete(`/correlation/rules/${id}`),
-  getMatches: (ruleId?: number)                => api.get('/correlation/matches', { params: ruleId ? { rule_id: ruleId } : {} }),
+  getAll:          ()                               => api.get('/correlation/rules'),
+  create:          (rule: any)                      => api.post('/correlation/rules', rule),
+  update:          (id: number, rule: any)          => api.put(`/correlation/rules/${id}`, rule),
+  toggle:          (id: number, enabled: boolean)   => api.patch(`/correlation/rules/${id}/toggle`, { enabled }),
+  delete:          (id: number)                     => api.delete(`/correlation/rules/${id}`),
+  getMatches:      (ruleId?: number)                => api.get('/correlation/matches', { params: ruleId ? { rule_id: ruleId } : {} }),
+  // Enterprise
+  getOverview:     (hours = 24)                     => api.get('/correlation/overview', { params: { hours } }).catch(() => ({ data: null })),
+  getTrends:       (hours = 24)                     => api.get('/correlation/trends', { params: { hours } }).catch(() => ({ data: null })),
+  getAnalytics:    (limit = 50)                     => api.get('/correlation/analytics', { params: { limit } }).catch(() => ({ data: null })),
+  getGraph:        (hours = 24)                     => api.get('/correlation/graph', { params: { hours } }).catch(() => ({ data: null })),
+  getAlertGrouping:(hours = 24)                     => api.get('/correlation/alert-grouping', { params: { hours } }).catch(() => ({ data: null })),
+  getPerformance:  ()                               => api.get('/correlation/performance').catch(() => ({ data: null })),
+  aiAnalysis:      (action: string, context?: string) => api.post('/correlation/ai-analysis', { action, context: context ?? '' }),
+  simulate:        (chain: string[], windowMinutes = 10) => api.post('/correlation/simulate', { chain, window_minutes: windowMinutes }),
 };
 
 export const apiKeysAPI = {
@@ -498,22 +600,62 @@ export const investigateAPI = {
 };
 
 export const uebaAPI = {
-  getUsers:  (params?: Record<string, any>) => api.get('/ueba/users', { params }),
-  getEvents: (params?: Record<string, any>) => api.get('/ueba/events', { params }),
-  analyze:   ()                             => api.post('/ueba/analyze'),
+  getUsers:         (params?: Record<string, any>) => api.get('/ueba/users', { params }),
+  getEvents:        (params?: Record<string, any>) => api.get('/ueba/events', { params }),
+  analyze:          ()                             => api.post('/ueba/analyze'),
+  // Enterprise additions
+  getAnalytics:     ()                             => api.get('/ueba/analytics').catch(() => ({ data: null })),
+  getUserDetail:    (username: string)             => api.get(`/ueba/users/${encodeURIComponent(username)}`).catch(() => ({ data: null })),
+  getUserTimeline:  (username: string)             => api.get(`/ueba/users/${encodeURIComponent(username)}/timeline`).catch(() => ({ data: { events: [] } })),
+  getPeerComparison:(username: string)             => api.get(`/ueba/users/${encodeURIComponent(username)}/peer-comparison`).catch(() => ({ data: null })),
+  getAIInsights:    (username: string)             => api.post(`/ueba/users/${encodeURIComponent(username)}/ai-insights`),
+  responseAction:   (username: string, action: string, params?: Record<string, string>) =>
+    api.post(`/ueba/users/${encodeURIComponent(username)}/response-action`, { action, params: params ?? {} }),
+  getWatchlist:     ()                             => api.get('/ueba/watchlist').catch(() => ({ data: { watchlist: [] } })),
+  addToWatchlist:   (username: string, category: string) => api.post('/ueba/watchlist', { username, category }),
+  removeFromWatchlist: (username: string)          => api.delete(`/ueba/watchlist/${encodeURIComponent(username)}`),
 };
 
 export const insiderThreatAPI = {
-  getScores:  (days: number, minScore: number) =>
+  getScores:      (days: number, minScore: number) =>
     api.get('/insider-threat', { params: { days, min_score: minScore } }),
-  getSummary: () => api.get('/insider-threat/summary'),
+  getSummary:     () => api.get('/insider-threat/summary'),
+  // Enterprise additions
+  getAnalytics:   () => api.get('/insider-threat/analytics').catch(() => ({ data: null })),
+  getUserDetail:  (username: string) => api.get(`/insider-threat/users/${encodeURIComponent(username)}`).catch(() => ({ data: null })),
+  getUserTimeline:(username: string) => api.get(`/insider-threat/users/${encodeURIComponent(username)}/timeline`).catch(() => ({ data: { events: [] } })),
+  aiAnalysis:     (username: string) => api.post(`/insider-threat/users/${encodeURIComponent(username)}/ai-analysis`),
+  responseAction: (username: string, action: string, params?: Record<string, string>) =>
+    api.post(`/insider-threat/users/${encodeURIComponent(username)}/response-action`, { action, params: params ?? {} }),
+  getPolicyViolations: (username?: string) =>
+    api.get('/insider-threat/policy-violations', { params: username ? { username } : undefined }).catch(() => ({ data: { violations: [] } })),
+  getPolicies:    () => api.get('/insider-threat/policies').catch(() => ({ data: { policies: [] } })),
+  createPolicy:   (data: any) => api.post('/insider-threat/policies', data),
+  getWatchlist:   () => api.get('/insider-threat/watchlist').catch(() => ({ data: { watchlist: [] } })),
+  addToWatchlist: (username: string, category: string) => api.post('/insider-threat/watchlist', { username, category }),
+  removeFromWatchlist: (username: string) => api.delete(`/insider-threat/watchlist/${encodeURIComponent(username)}`),
 };
 
 export const nbaAPI = {
-  getAnomalies:  (limit = 200)      => api.get('/nba/anomalies', { params: { limit } }),
-  acknowledge:   (id: number)        => api.post(`/nba/anomalies/${id}/acknowledge`),
-  getBaseline:   (agentId: number)   => api.get(`/nba/baseline/${agentId}`),
-  analyze:       ()                  => api.post('/nba/analyze'),
+  getAnomalies:         (limit = 200)         => api.get('/nba/anomalies', { params: { limit } }),
+  acknowledge:          (id: number)           => api.post(`/nba/anomalies/${id}/acknowledge`),
+  getBaseline:          (agentId: number)      => api.get(`/nba/baseline/${agentId}`),
+  analyze:              ()                     => api.post('/nba/analyze'),
+  getOverview:          (minutes = 60)         => api.get('/nba/overview', { params: { minutes } }).catch(() => ({ data: null })),
+  getFlows:             (params?: { proto?: string; ip?: string; host?: string; minutes?: number; limit?: number }) =>
+                          api.get('/nba/flows', { params }).catch(() => ({ data: null })),
+  getTrafficAnalysis:   (hours = 24)           => api.get('/nba/traffic-analysis', { params: { hours } }).catch(() => ({ data: null })),
+  getDnsAnalytics:      (hours = 24)           => api.get('/nba/dns-analytics', { params: { hours } }).catch(() => ({ data: null })),
+  getTlsAnalytics:      (hours = 24)           => api.get('/nba/tls-analytics', { params: { hours } }).catch(() => ({ data: null })),
+  getBeacons:           ()                     => api.get('/nba/beacons').catch(() => ({ data: null })),
+  getLateralMovement:   ()                     => api.get('/nba/lateral-movement').catch(() => ({ data: null })),
+  getThreatIntel:       (hours = 24)           => api.get('/nba/threat-intel', { params: { hours } }).catch(() => ({ data: null })),
+  aiInsights:           (body: { context?: string; host?: string }) => api.post('/nba/ai-insights', body),
+  responseAction:       (action: string, params?: Record<string, unknown>) => api.post('/nba/response-action', { action, ...params }),
+  getMitreMapping:      ()                     => api.get('/nba/mitre-mapping').catch(() => ({ data: null })),
+  getProtocolBreakdown: (hours = 24)           => api.get('/nba/protocol-breakdown', { params: { hours } }).catch(() => ({ data: null })),
+  getHostTimeline:      (host: string, hours = 24) => api.get('/nba/host-timeline', { params: { host, hours } }).catch(() => ({ data: null })),
+  getAnalytics:         (hours = 24)           => api.get('/nba/analytics', { params: { hours } }).catch(() => ({ data: null })),
 };
 
 export const dpiAPI = {
@@ -525,7 +667,36 @@ export const dpiAPI = {
     limit?: number;
     offset?: number;
   }) => api.get('/dpi/findings', { params }),
-  getSummary: () => api.get('/dpi/summary'),
+  getSummary:           ()                            => api.get('/dpi/summary'),
+  getOverview:          (hours = 24)                  => api.get('/dpi/overview', { params: { hours } }).catch(() => ({ data: null })),
+  getSessions:          (params?: { proto?: string; hours?: number; limit?: number }) =>
+                          api.get('/dpi/sessions', { params }).catch(() => ({ data: null })),
+  getHTTPInspection:    (params?: { q?: string; hours?: number; limit?: number }) =>
+                          api.get('/dpi/http-inspection', { params }).catch(() => ({ data: null })),
+  getDNSInspection:     (hours = 24)                  => api.get('/dpi/dns-inspection', { params: { hours } }).catch(() => ({ data: null })),
+  getTLSInspection:     (hours = 24)                  => api.get('/dpi/tls-inspection', { params: { hours } }).catch(() => ({ data: null })),
+  getFiles:             (hours = 24)                  => api.get('/dpi/files', { params: { hours } }).catch(() => ({ data: null })),
+  getDLP:               (hours = 24)                  => api.get('/dpi/dlp', { params: { hours } }).catch(() => ({ data: null })),
+  getAnalytics:         (hours = 24)                  => api.get('/dpi/analytics', { params: { hours } }).catch(() => ({ data: null })),
+  getPerformance:       ()                            => api.get('/dpi/performance').catch(() => ({ data: null })),
+  getProtocolAnomalies: (hours = 24)                  => api.get('/dpi/protocol-anomalies', { params: { hours } }).catch(() => ({ data: null })),
+  search:               (q: string)                   => api.get('/dpi/search', { params: { q } }).catch(() => ({ data: null })),
+  aiInspect:            (body: { context?: string; finding_id?: number; session_key?: string }) =>
+                          api.post('/dpi/ai-inspect', body),
+  responseAction:       (action: string, params?: Record<string, unknown>) =>
+                          api.post('/dpi/response-action', { action, ...params }),
+};
+
+export const detectionAPI = {
+  getOverview:    (hours = 24)                               => api.get('/detection/overview', { params: { hours } }).catch(() => ({ data: null })),
+  getTrends:      (hours = 24)                               => api.get('/detection/trends', { params: { hours } }).catch(() => ({ data: null })),
+  getCoverage:    ()                                         => api.get('/detection/coverage').catch(() => ({ data: null })),
+  getAnalytics:   (limit = 50)                               => api.get('/detection/analytics', { params: { limit } }).catch(() => ({ data: null })),
+  getPerformance: ()                                         => api.get('/detection/performance').catch(() => ({ data: null })),
+  aiAssistant:    (action: string, content: string, context?: string) =>
+                    api.post('/detection/ai-assistant', { action, content, context: context ?? '' }),
+  simulate:       (ruleType: string, ruleId: number, hours = 24) =>
+                    api.post('/detection/simulate', { rule_type: ruleType, rule_id: ruleId, hours }),
 };
 
 export const sessionsAPI = {
@@ -569,24 +740,72 @@ export const mdmAPI = {
 };
 
 export const clustersAPI = {
-  getAll:    (limit = 200)  => api.get('/clusters', { params: { limit } }).catch(() => ({ data: [] })),
-  getAlerts: (id: number)   => api.get(`/clusters/${id}/alerts`).catch(() => ({ data: [] })),
-  analyze:   ()             => api.post('/clusters/analyze'),
-  suppress:  (id: number)   => api.post(`/clusters/${id}/suppress`),
+  getAll:      (limit = 200)             => api.get('/clusters', { params: { limit } }).catch(() => ({ data: [] })),
+  getAlerts:   (id: number)              => api.get(`/clusters/${id}/alerts`).catch(() => ({ data: [] })),
+  analyze:     ()                        => api.post('/clusters/analyze'),
+  suppress:    (id: number)              => api.post(`/clusters/${id}/suppress`),
+  // enterprise
+  getOverview:  (hours = 24)             => api.get('/clusters/overview', { params: { hours } }).catch(() => ({ data: null })),
+  getList:      (status = '', limit = 100) => api.get('/clusters/list', { params: { status, limit } }).catch(() => ({ data: [] })),
+  getAnalytics: ()                       => api.get('/clusters/analytics').catch(() => ({ data: null })),
+  getCampaigns: ()                       => api.get('/clusters/campaigns').catch(() => ({ data: null })),
+  getDetail:    (id: number)             => api.get(`/clusters/${id}/detail`).catch(() => ({ data: null })),
+  getTimeline:  (id: number)             => api.get(`/clusters/${id}/timeline`).catch(() => ({ data: null })),
+  getGraph:     (id: number)             => api.get(`/clusters/${id}/graph`).catch(() => ({ data: null })),
+  aiAnalysis:   (action: string, clusterId?: number, context?: string) =>
+    api.post('/clusters/ai', { action, cluster_id: clusterId ?? 0, context: context ?? '' }),
+  bulkAction:   (id: number, action: string, note?: string) =>
+    api.post(`/clusters/${id}/bulk-action`, { action, note: note ?? '' }),
+  merge:        (id: number, mergeIntoId: number) =>
+    api.post(`/clusters/${id}/merge`, { merge_into_id: mergeIntoId }),
 };
 
 export const threatActorsAPI = {
   getAll:    ()                       => api.get('/threat-actors').catch(() => ({ data: [] })),
   create:    (data: any)              => api.post('/threat-actors', data),
   remove:    (id: number)             => api.delete(`/threat-actors/${id}`),
+  update:    (id: number, data: any)  => api.patch(`/threat-actors/${id}`, data),
   getAlerts: (id: number, limit = 10) =>
     api.get(`/threat-actors/${id}/alerts`, { params: { limit } }).catch(() => ({ data: [] })),
+  // enterprise
+  getDashboard:         ()                              => api.get('/threat-actors/dashboard').catch(() => ({ data: null })),
+  getAnalytics:         ()                              => api.get('/threat-actors/analytics').catch(() => ({ data: null })),
+  ai:                   (action: string, actorId?: number, actorName?: string, context?: string) =>
+    api.post('/threat-actors/ai', { action, actor_id: actorId ?? 0, actor_name: actorName ?? '', context: context ?? '' }),
+  getProfile:           (id: number)                    => api.get(`/threat-actors/${id}/profile`).catch(() => ({ data: null })),
+  getCampaigns:         (id: number)                    => api.get(`/threat-actors/${id}/campaigns`).catch(() => ({ data: null })),
+  getMalware:           (id: number)                    => api.get(`/threat-actors/${id}/malware`).catch(() => ({ data: null })),
+  getInfrastructure:    (id: number)                    => api.get(`/threat-actors/${id}/infrastructure`).catch(() => ({ data: null })),
+  getExposure:          (id: number)                    => api.get(`/threat-actors/${id}/exposure`).catch(() => ({ data: null })),
+  getDetectionCoverage: (id: number)                    => api.get(`/threat-actors/${id}/detection-coverage`).catch(() => ({ data: null })),
+  getRelationships:     (id: number)                    => api.get(`/threat-actors/${id}/relationships`).catch(() => ({ data: null })),
+  getTimeline:          (id: number)                    => api.get(`/threat-actors/${id}/timeline`).catch(() => ({ data: null })),
+  getIOCs:              (id: number)                    => api.get(`/threat-actors/${id}/iocs`).catch(() => ({ data: null })),
+  getMITRE:             (id: number)                    => api.get(`/threat-actors/${id}/mitre`).catch(() => ({ data: null })),
+  hunt:                 (id: number, huntType: string)  => api.post(`/threat-actors/${id}/hunt`, { hunt_type: huntType }),
+  response:             (id: number, action: string, note?: string) =>
+    api.post(`/threat-actors/${id}/response`, { action, note: note ?? '' }),
 };
 
 export const ja3API = {
-  getAll:  ()           => api.get('/ja3/fingerprints').catch(() => ({ data: [] })),
-  create:  (data: any)  => api.post('/ja3/fingerprints', data),
-  remove:  (id: number) => api.delete(`/ja3/fingerprints/${id}`),
+  getAll:       ()            => api.get('/ja3/fingerprints').catch(() => ({ data: [] })),
+  create:       (data: any)   => api.post('/ja3/fingerprints', data),
+  remove:       (id: number)  => api.delete(`/ja3/fingerprints/${id}`),
+  detail:       (hash: string)=> api.get(`/ja3/fingerprints/${hash}/detail`).catch(() => ({ data: null })),
+  // enterprise
+  dashboard:    ()  => api.get('/ja3/dashboard').catch(() => ({ data: null })),
+  analytics:    ()  => api.get('/ja3/analytics').catch(() => ({ data: null })),
+  tlsStats:     ()  => api.get('/ja3/tls-stats').catch(() => ({ data: null })),
+  behavioral:   ()  => api.get('/ja3/behavioral').catch(() => ({ data: null })),
+  relationships:()  => api.get('/ja3/relationships').catch(() => ({ data: null })),
+  threatIntel:  ()  => api.get('/ja3/threat-intel').catch(() => ({ data: null })),
+  timeline:     ()  => api.get('/ja3/timeline').catch(() => ({ data: null })),
+  watchlist:    ()  => api.get('/ja3/watchlist').catch(() => ({ data: [] })),
+  addWatchlist: (body: { hash?: string; label: string; watch_type?: string }) => api.post('/ja3/watchlist', body),
+  removeWatchlist: (id: number) => api.delete(`/ja3/watchlist/${id}`),
+  ai:           (body: { action: string; hash?: string; threat_name?: string; prompt?: string; context?: string }) => api.post('/ja3/ai', body),
+  export:       (body: { format: string; ids?: number[] }) => api.post('/ja3/export', body),
+  bulk:         (action: string, ids: number[]) => api.post('/ja3/bulk', { action, ids }),
 };
 
 export const huntAPI = {
@@ -606,6 +825,27 @@ export const huntWorkbenchAPI = {
   execute:        (data: any)     => api.post('/hunt/execute', data).catch(() => ({ data: null })),
   updateNotes:    (id: number, notes: string, severity: string) =>
     api.patch(`/hunt/runs/${id}/notes`, { notes, severity }),
+  // enterprise
+  dashboard:      () => api.get('/hunt/dashboard').catch(() => ({ data: null })),
+  analytics:      () => api.get('/hunt/analytics').catch(() => ({ data: null })),
+  mitreCoverage:  () => api.get('/hunt/mitre-coverage').catch(() => ({ data: null })),
+  ai:             (body: { action: string; query?: string; results?: string; context?: string; prompt?: string; run_id?: number }) =>
+    api.post('/hunt/ai', body),
+  iocHunt:        (body: { ioc_type: string; value: string; time_range?: string }) =>
+    api.post('/hunt/ioc', body),
+  ttpHunt:        (body: { ttp: string; time_range?: string }) =>
+    api.post('/hunt/ttp', body),
+  actorHunt:      (body: { actor: string; time_range?: string }) =>
+    api.post('/hunt/actor', body),
+  export:         (body: { run_id: number; format: string }) =>
+    api.post('/hunt/export', body),
+  notebook:       (run_id?: number) =>
+    api.get('/hunt/notebook', run_id ? { params: { run_id } } : undefined).catch(() => ({ data: [] })),
+  addNote:        (body: { run_id?: number; content: string; content_type?: string }) =>
+    api.post('/hunt/notebook', body),
+  deleteNote:     (id: number) => api.delete(`/hunt/notebook/${id}`),
+  response:       (body: { action: string; agent_id?: number; target?: string; run_id?: number; reason?: string }) =>
+    api.post('/hunt/response', body),
 };
 
 export const dfirAPI = {
@@ -661,8 +901,26 @@ export const integrationsAPI = {
   save:            (name: string, data: any) => api.put(`/integrations/${name}`, data),
   test:            (name: string)            => api.post(`/integrations/${name}/test`),
 };
+export const liveLogAPI = {
+  stats: () => api.get('/live-logs/stats').catch(() => ({ data: null })),
+  explainLog: (message: string, source: string, fields: any) =>
+    api.post('/ai/explain-log', { message, source, fields }),
+  summarizeLogs: (messages: string[]) =>
+    api.post('/ai/summarize-logs', { messages }),
+};
+
 export const timelineAPI = {
-  get: (limit = 500) => api.get('/timeline', { params: { limit } }).catch(() => ({ data: [] })),
+  get: (params?: {
+    limit?: number;
+    offset?: number;
+    event_types?: string;
+    severity?: string;
+    agent_id?: number;
+    search?: string;
+    from?: string;
+    to?: string;
+  }) => api.get('/timeline', { params: { limit: 500, ...params } }).catch(() => ({ data: [] })),
+  stats: () => api.get('/timeline/stats').catch(() => ({ data: {} })),
 };
 export const riskPostureAPI = {
   get:     ()  => api.get('/risk-posture').catch(() => ({ data: null })),
@@ -670,9 +928,12 @@ export const riskPostureAPI = {
   refresh: ()  => api.post('/risk-posture/refresh').catch(() => ({ data: null })),
 };
 export const elasticAPI = {
-  health:  ()              => api.get('/elastic/health'),
-  indices: ()              => api.get('/elastic/indices'),
-  query:   (data: any)     => api.post('/elastic/query', data),
+  health:   ()                    => api.get('/elastic/health'),
+  indices:  ()                    => api.get('/elastic/indices'),
+  query:    (data: any)           => api.post('/elastic/query', data),
+  mapping:  (index: string)       => api.get(`/elastic/mappings/${index}`),
+  explain:  (data: any)           => api.post('/elastic/explain', data),
+  aiQuery:  (prompt: string)      => api.post('/ai/es-query', { prompt }),
 };
 export const alertDetailAPI = {
   getPlaybookRecs:   (id: number) => api.get(`/alerts/${id}/playbook-recommendations`),
@@ -680,7 +941,14 @@ export const alertDetailAPI = {
     api.post(`/alerts/${id}/execute-recommendation`, { recommendation_id: recID }),
   updateNote:        (id: number, note: string) => api.patch(`/alerts/${id}/note`, { note }),
   respond:           (id: number, data: any) => api.post(`/alerts/${id}/respond`, data),
-  suppressSigmaRule: (data: any) => api.post('/sigma-rules/suppress', data),
+  suppressSigmaRule: ({ rule_name, agent_id, hours }: { rule_name: string; agent_id: number; hours: number }) =>
+    api.post('/suppression/rules', {
+      name:           `Suppress: ${rule_name}`,
+      rule_name,
+      agent_id,
+      window_minutes: hours * 60,
+      enabled:        true,
+    }),
 };
 
 export default api;

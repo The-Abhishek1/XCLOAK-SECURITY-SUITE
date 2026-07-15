@@ -82,12 +82,14 @@ func SetupRoutes(router *gin.Engine) {
 
 	router.GET("/api/agents", middleware.RequireAuth(), api.GetAgentsByPlatform)
 	router.GET("/api/assets/platform-summary", middleware.RequireAuth(), api.GetPlatformSummary)
+	router.POST("/api/agents/bulk", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.BulkAgentAction)
 
 	// ── Agents — :id wildcard routes ─────────────────────────────
 	router.GET("/api/agents/:id", middleware.RequireAuth(), api.GetAgentByID)
 	router.GET("/api/agents/:id/summary", middleware.RequireAuth(), api.GetAgentSummary)
 	router.GET("/api/agents/:id/risk", middleware.RequireAuth(), api.GetRiskScore)
 	router.GET("/api/timeline", middleware.RequireAuth(), api.GetTenantTimeline)
+	router.GET("/api/timeline/stats", middleware.RequireAuth(), api.GetTimelineStats)
 	router.GET("/api/agents/:id/timeline", middleware.RequireAuth(), api.GetAgentTimeline)
 	router.GET("/api/agents/:id/vulnerabilities", middleware.RequireAuth(), api.GetAgentVulnerabilities)
 	router.POST("/api/agents/:id/vulnerability-scan", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.ScanAgentVulnerabilities)
@@ -138,13 +140,36 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/incidents", middleware.RequireAuth(), api.GetIncidents)
 	router.GET("/api/incidents/counts", middleware.RequireAuth(), api.GetIncidentStatusCounts)
 	router.GET("/api/incidents/paginated", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetIncidentsPaginated)
+	// Static routes BEFORE :id wildcard
+	router.GET("/api/incidents/analytics", middleware.RequireAuth(), api.GetIncidentAnalytics)
+	// :id routes
+	router.GET("/api/incidents/:id", middleware.RequireAuth(), api.GetIncidentByIDHandler)
 	router.GET("/api/incidents/:id/events", middleware.RequireAuth(), api.GetIncidentEvents)
 	router.GET("/api/incidents/:id/alerts", middleware.RequireAuth(), api.GetIncidentAlerts)
 	router.PUT("/api/incidents/:id/status", middleware.RequireAuth(), api.UpdateIncidentStatus)
 	router.PATCH("/api/incidents/:id/severity", middleware.RequireAuth(), api.UpdateIncidentSeverity)
+	router.GET("/api/incidents/:id/tasks", middleware.RequireAuth(), api.GetIncidentTaskList)
+	router.POST("/api/incidents/:id/tasks", middleware.RequireAuth(), api.CreateIncidentTask)
+	router.PATCH("/api/incidents/:id/tasks/:tid", middleware.RequireAuth(), api.ToggleIncidentTask)
+	router.POST("/api/incidents/:id/response-action", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DispatchIncidentResponseAction)
+	router.POST("/api/incidents/:id/ai-root-cause", middleware.RequireAuth(), api.AIIncidentRootCause)
+	router.GET("/api/incidents/:id/similar", middleware.RequireAuth(), api.GetSimilarIncidents)
 
 	// ── Quarantine ───────────────────────────────────────────────
 	router.GET("/api/quarantine", middleware.RequireAuth(), api.GetQuarantinedFiles)
+
+	// ── Sigma enterprise endpoints (static, must precede :id routes) ────
+	router.GET("/api/sigma/dashboard",      middleware.RequireAuth(), api.GetSigmaDashboard)
+	router.GET("/api/sigma/mitre-coverage", middleware.RequireAuth(), api.GetSigmaMITRECoverage)
+	router.GET("/api/sigma/analytics",      middleware.RequireAuth(), api.GetSigmaAnalytics)
+	router.GET("/api/sigma/categories",     middleware.RequireAuth(), api.GetSigmaCategories)
+	router.GET("/api/sigma/performance",    middleware.RequireAuth(), api.GetSigmaPerformance)
+	router.GET("/api/sigma/relationships",  middleware.RequireAuth(), api.GetSigmaRelationships)
+	router.POST("/api/sigma/ai",            middleware.RequireAuth(), api.PostSigmaAI)
+	router.POST("/api/sigma/convert",       middleware.RequireAuth(), api.PostSigmaConvert)
+	router.POST("/api/sigma/bulk",          middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.PostSigmaBulk)
+	router.POST("/api/sigma/export",        middleware.RequireAuth(), api.PostSigmaExport)
+	router.GET("/api/sigma/rules/:id/detail", middleware.RequireAuth(), api.GetSigmaRuleDetail)
 
 	// ── Sigma rules ──────────────────────────────────────────────
 	router.POST("/api/sigma/rules", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateSigmaRule)
@@ -176,6 +201,17 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/threat-feeds/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.UpdateThreatFeed)
 	router.DELETE("/api/threat-feeds/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.DeleteThreatFeed)
 	router.POST("/api/threat-feeds/:id/sync", middleware.RequireAuth(), middleware.RequirePermission("manage_threat_intel"), api.SyncThreatFeed)
+
+	// ── YARA enterprise (static routes before :id) ────────────────
+	router.GET("/api/yara/dashboard",     middleware.RequireAuth(), api.GetYaraDashboard)
+	router.GET("/api/yara/analytics",     middleware.RequireAuth(), api.GetYaraAnalytics)
+	router.GET("/api/yara/categories",    middleware.RequireAuth(), api.GetYaraCategories)
+	router.GET("/api/yara/performance",   middleware.RequireAuth(), api.GetYaraPerformance)
+	router.GET("/api/yara/relationships", middleware.RequireAuth(), api.GetYaraRelationships)
+	router.POST("/api/yara/ai",           middleware.RequireAuth(), api.PostYaraAI)
+	router.POST("/api/yara/bulk",         middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.PostYaraBulk)
+	router.POST("/api/yara/export",       middleware.RequireAuth(), api.PostYaraExport)
+	router.GET("/api/yara/rules/:id/detail", middleware.RequireAuth(), api.GetYaraRuleDetail)
 
 	// ── YARA ──────────────────────────────────────────────────────
 	router.POST("/api/yara/matches", middleware.RequireAgentAuth(), api.ReceiveYaraMatches)
@@ -294,6 +330,11 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/integrations/install-tokens", middleware.RequireAuth(), middleware.RequirePermission("manage_integrations"), api.GetInstallTokens)
 	router.POST("/api/integrations/install-tokens", middleware.RequireAuth(), middleware.RequirePermission("manage_integrations"), api.GenerateInstallToken)
 
+	// ── Live log statistics + AI log explain ─────────────────────────────────
+	router.GET("/api/live-logs/stats", middleware.RequireAuth(), api.GetLiveLogStats)
+	router.POST("/api/ai/explain-log", middleware.RequireAuth(), api.ExplainLogEntry)
+	router.POST("/api/ai/summarize-logs", middleware.RequireAuth(), api.SummarizeLogs)
+
 	// ── AI ────────────────────────────────────────────────────────
 	router.POST("/api/ai/triage/:id", middleware.RequireAuth(), api.TriageAlertHandler)
 	router.POST("/api/ai/incidents/:id/summarize", middleware.RequireAuth(), api.SummarizeIncidentHandler)
@@ -320,12 +361,23 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/logs/searches/:id/run", middleware.RequireAuth(), api.RunSavedLogSearch)
 	router.GET("/api/logs/retention", middleware.RequireAuth(), api.GetRetentionPolicy)
 	router.PUT("/api/logs/retention", middleware.RequireAuth(), middleware.RequireRole("admin"), api.SetRetentionPolicy)
+	// enterprise log search extensions
+	router.GET("/api/logs/fields", middleware.RequireAuth(), api.GetLogFields)
+	router.GET("/api/logs/templates", middleware.RequireAuth(), api.GetSearchTemplates)
+	router.POST("/api/logs/ai-query", middleware.RequireAuth(), api.AIQuery)
+	router.POST("/api/logs/ai-explain", middleware.RequireAuth(), api.AIExplainResults)
+	router.POST("/api/logs/build-detection", middleware.RequireAuth(), api.BuildDetection)
+	router.GET("/api/logs/scheduled", middleware.RequireAuth(), api.GetScheduledSearches)
+	router.POST("/api/logs/scheduled", middleware.RequireAuth(), api.CreateScheduledSearch)
+	router.DELETE("/api/logs/scheduled/:id", middleware.RequireAuth(), api.DeleteScheduledSearch)
 
 	// ── Elasticsearch raw query interface ─────────────────────────
 	router.POST("/api/elastic/query", middleware.RequireAuth(), middleware.RateLimitAPI(), api.ElasticQueryHandler)
+	router.POST("/api/elastic/explain", middleware.RequireAuth(), api.ElasticExplainHandler)
 	router.GET("/api/elastic/indices", middleware.RequireAuth(), api.ElasticIndicesHandler)
 	router.GET("/api/elastic/mappings/:index", middleware.RequireAuth(), api.ElasticMappingsHandler)
 	router.GET("/api/elastic/health", middleware.RequireAuth(), api.ElasticHealthHandler)
+	router.POST("/api/ai/es-query", middleware.RequireAuth(), api.ElasticAIQueryHandler)
 
 	// ── WebSocket notification stream (registered in main.go) ────
 	// router.GET("/api/notifications/stream", ...) — kept in main.go
@@ -340,6 +392,16 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/scheduler/tasks/:id/run", middleware.RequireAuth(), middleware.RequirePermission("manage_scheduler"), api.RunScheduledTaskNow)
 	router.DELETE("/api/scheduler/tasks/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_scheduler"), api.DeleteScheduledTask)
 	router.GET("/api/dashboard/metrics", middleware.RequireAuth(), middleware.RateLimitAPI(), api.GetDashboardMetrics)
+	// Enterprise correlation — static routes BEFORE :id wildcards
+	router.GET("/api/correlation/overview",      middleware.RequireAuth(), api.GetCorrelationOverview)
+	router.GET("/api/correlation/trends",         middleware.RequireAuth(), api.GetCorrelationTrends)
+	router.GET("/api/correlation/analytics",      middleware.RequireAuth(), api.GetCorrelationAnalytics)
+	router.GET("/api/correlation/graph",          middleware.RequireAuth(), api.GetCorrelationGraph)
+	router.GET("/api/correlation/alert-grouping", middleware.RequireAuth(), api.GetCorrelationAlertGrouping)
+	router.GET("/api/correlation/performance",    middleware.RequireAuth(), api.GetCorrelationPerformance)
+	router.POST("/api/correlation/ai-analysis",   middleware.RequireAuth(), api.PostCorrelationAI)
+	router.POST("/api/correlation/simulate",      middleware.RequireAuth(), api.PostCorrelationSimulate)
+	// Core rule CRUD
 	router.GET("/api/correlation/rules", middleware.RequireAuth(), api.GetCorrelationRules)
 	router.POST("/api/correlation/rules", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.CreateCorrelationRule)
 	router.PUT("/api/correlation/rules/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_correlation_rules"), api.UpdateCorrelationRule)
@@ -386,6 +448,20 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/scripts/history", middleware.RequireAuth(), api.GetScriptHistory)
 	router.GET("/api/kafka/status", middleware.RequireAuth(), api.GetKafkaStatus)
 	router.POST("/api/auth/logout", middleware.RequireAuth(), api.Logout)
+	// ── Agent inventory (lazy-loaded detail tabs) ─────────────────
+	router.GET("/api/agents/:id/startup", middleware.RequireAuth(), api.GetAgentStartupItems)
+	router.GET("/api/agents/:id/usb-history", middleware.RequireAuth(), api.GetAgentUsbHistory)
+	router.GET("/api/agents/:id/login-history", middleware.RequireAuth(), api.GetAgentLoginHistory)
+	router.GET("/api/agents/:id/scheduled-tasks", middleware.RequireAuth(), api.GetAgentScheduledTasksList)
+	router.GET("/api/agents/:id/drivers", middleware.RequireAuth(), api.GetAgentDriversList)
+	router.GET("/api/agents/:id/policies", middleware.RequireAuth(), api.GetAgentPolicies)
+	router.GET("/api/agents/:id/audit-history", middleware.RequireAuth(), api.GetAgentAuditHistory)
+
+	// ── Agent Groups ──────────────────────────────────────────────
+	router.GET("/api/agent-groups", middleware.RequireAuth(), api.ListAgentGroups)
+	router.POST("/api/agent-groups", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateAgentGroup)
+	router.DELETE("/api/agent-groups/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeleteAgentGroup)
+
 	router.GET("/api/agents/me", middleware.RequireAgentAuth(), api.GetCurrentAgent)
 	router.GET("/api/agents/self/summary",  middleware.RequireAgentAuth(), api.GetSelfSummary)
 	router.GET("/api/agents/self/alerts",   middleware.RequireAgentAuth(), api.GetSelfAlerts)
@@ -394,6 +470,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/agents/:id/geo-stats", middleware.RequireAuth(), api.GetAgentGeoStats)
 	router.POST("/api/agents/:id/enrich-connections", middleware.RequireAuth(), api.EnrichAgentConnections)
 	router.GET("/api/agents/:id/health", middleware.RequireAuth(), api.GetAgentHealth)
+	router.GET("/api/agents/:id/security-status", middleware.RequireAuth(), api.GetAgentSecurityStatus)
 	router.GET("/api/geoip/:ip", middleware.RequireAuth(), api.GetGeoIP)
 	router.GET("/api/ioc-blocks", middleware.RequireAuth(), api.GetIOCBlocks)
 	router.GET("/api/quarantine/stats", middleware.RequireAuth(), api.GetQuarantineStats)
@@ -445,9 +522,21 @@ func SetupRoutes(router *gin.Engine) {
 	router.DELETE("/api/scheduled-reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_notifications"), api.DeleteScheduledReport)
 
 	// ── UEBA (User/Entity Behavior Analytics) ────────────────────────────
+	// Static routes BEFORE parameterized :username routes
+	router.GET("/api/ueba/analytics", middleware.RequireAuth(), api.GetUEBAAnalytics)
+	router.GET("/api/ueba/watchlist", middleware.RequireAuth(), api.GetUEBAWatchlist)
+	router.POST("/api/ueba/watchlist", middleware.RequireAuth(), api.AddToUEBAWatchlist)
+	router.DELETE("/api/ueba/watchlist/:username", middleware.RequireAuth(), api.RemoveFromUEBAWatchlist)
+	// List + analyze
 	router.GET("/api/ueba/users", middleware.RequireAuth(), api.GetUEBAUsers)
 	router.GET("/api/ueba/events", middleware.RequireAuth(), api.GetUEBAEvents)
 	router.POST("/api/ueba/analyze", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.TriggerUEBAAnalysis)
+	// Per-user detail routes
+	router.GET("/api/ueba/users/:username", middleware.RequireAuth(), api.GetUEBAUserDetail)
+	router.GET("/api/ueba/users/:username/timeline", middleware.RequireAuth(), api.GetUEBAUserTimeline)
+	router.GET("/api/ueba/users/:username/peer-comparison", middleware.RequireAuth(), api.GetUEBAPeerComparison)
+	router.POST("/api/ueba/users/:username/ai-insights", middleware.RequireAuth(), api.GetUEBAUserAIInsights)
+	router.POST("/api/ueba/users/:username/response-action", middleware.RequireAuth(), middleware.RequirePermission("manage_users"), api.UEBAResponseAction)
 
 	// ── Session Management ────────────────────────────────────────────────
 	router.GET("/api/auth/sessions", middleware.RequireAuth(), api.GetMySessions)
@@ -492,6 +581,20 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/risk-posture/history", middleware.RequireAuth(), api.GetRiskPostureHistoryHandler)
 	router.POST("/api/risk-posture/refresh", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.RefreshRiskPosture)
 
+	// ── Hunt Workbench Enterprise ────────────────────────────────────────
+	router.GET("/api/hunt/dashboard",        middleware.RequireAuth(), api.GetHuntDashboard)
+	router.GET("/api/hunt/analytics",        middleware.RequireAuth(), api.GetHuntAnalytics)
+	router.GET("/api/hunt/mitre-coverage",   middleware.RequireAuth(), api.GetHuntMITRECoverage)
+	router.POST("/api/hunt/ai",              middleware.RequireAuth(), api.PostHuntAI)
+	router.POST("/api/hunt/ioc",             middleware.RequireAuth(), api.PostHuntIOC)
+	router.POST("/api/hunt/ttp",             middleware.RequireAuth(), api.PostHuntTTP)
+	router.POST("/api/hunt/actor",           middleware.RequireAuth(), api.PostHuntActor)
+	router.POST("/api/hunt/export",          middleware.RequireAuth(), api.PostHuntExport)
+	router.GET("/api/hunt/notebook",         middleware.RequireAuth(), api.GetHuntNotebook)
+	router.POST("/api/hunt/notebook",        middleware.RequireAuth(), api.PostHuntNotebook)
+	router.DELETE("/api/hunt/notebook/:nid", middleware.RequireAuth(), api.DeleteHuntNotebook)
+	router.POST("/api/hunt/response",        middleware.RequireAuth(), api.PostHuntResponse)
+
 	// ── Hunt Workbench ────────────────────────────────────────────────────
 	router.GET("/api/hunt/templates", middleware.RequireAuth(), api.ListHuntTemplates)
 	router.POST("/api/hunt/templates", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateHuntTemplate)
@@ -501,18 +604,59 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/hunt/execute", middleware.RequireAuth(), api.ExecuteHunt)
 	router.PATCH("/api/hunt/runs/:id/notes", middleware.RequireAuth(), api.UpdateHuntRunNotes)
 
-	// ── Threat Actor Intelligence ─────────────────────────────────────────────
-	router.GET("/api/threat-actors", middleware.RequireAuth(), api.ListThreatActors)
-	router.POST("/api/threat-actors", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateThreatActor)
-	router.DELETE("/api/threat-actors/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteThreatActor)
-	router.GET("/api/threat-actors/:id/alerts", middleware.RequireAuth(), api.GetActorAlerts)
-	router.GET("/api/alerts/:id/actor-tags", middleware.RequireAuth(), api.GetAlertActorTags)
+	// ── Threat Intelligence Enterprise ───────────────────────────────────────
+	router.GET("/api/intel/overview",      middleware.RequireAuth(), api.GetIntelOverview)
+	router.GET("/api/intel/analytics",     middleware.RequireAuth(), api.GetIntelAnalytics)
+	router.GET("/api/intel/campaigns",     middleware.RequireAuth(), api.GetIntelCampaigns)
+	router.GET("/api/intel/mitre",         middleware.RequireAuth(), api.GetIntelMITRECoverage)
+	router.GET("/api/intel/relationships", middleware.RequireAuth(), api.GetIntelRelationships)
+	router.GET("/api/intel/watchlist",     middleware.RequireAuth(), api.GetIntelWatchlist)
+	router.GET("/api/intel/timeline",      middleware.RequireAuth(), api.GetIntelIOCTimeline)
+	router.POST("/api/intel/search",       middleware.RequireAuth(), api.PostIntelSearch)
+	router.POST("/api/intel/ai",           middleware.RequireAuth(), api.PostIntelAI)
+
+	// ── Threat Actor Intelligence — static routes BEFORE :id wildcards ──────
+	router.GET("/api/threat-actors/dashboard",  middleware.RequireAuth(), api.GetActorDashboard)
+	router.GET("/api/threat-actors/analytics",  middleware.RequireAuth(), api.GetActorAnalytics)
+	router.POST("/api/threat-actors/ai",        middleware.RequireAuth(), api.PostActorAI)
+	router.GET("/api/threat-actors",            middleware.RequireAuth(), api.ListThreatActors)
+	router.POST("/api/threat-actors",           middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateThreatActor)
+	router.DELETE("/api/threat-actors/:id",     middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.DeleteThreatActor)
+	router.PATCH("/api/threat-actors/:id",      middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.UpdateThreatActor)
+	router.GET("/api/threat-actors/:id/alerts",             middleware.RequireAuth(), api.GetActorAlerts)
+	router.GET("/api/threat-actors/:id/profile",            middleware.RequireAuth(), api.GetActorDetail)
+	router.GET("/api/threat-actors/:id/campaigns",          middleware.RequireAuth(), api.GetActorCampaigns)
+	router.GET("/api/threat-actors/:id/malware",            middleware.RequireAuth(), api.GetActorMalware)
+	router.GET("/api/threat-actors/:id/infrastructure",     middleware.RequireAuth(), api.GetActorInfrastructure)
+	router.GET("/api/threat-actors/:id/exposure",           middleware.RequireAuth(), api.GetActorExposure)
+	router.GET("/api/threat-actors/:id/detection-coverage", middleware.RequireAuth(), api.GetActorDetectionCoverage)
+	router.GET("/api/threat-actors/:id/relationships",      middleware.RequireAuth(), api.GetActorRelationships)
+	router.GET("/api/threat-actors/:id/timeline",           middleware.RequireAuth(), api.GetActorTimeline)
+	router.GET("/api/threat-actors/:id/iocs",               middleware.RequireAuth(), api.GetActorIOCs)
+	router.GET("/api/threat-actors/:id/mitre",              middleware.RequireAuth(), api.GetActorMITRE)
+	router.POST("/api/threat-actors/:id/hunt",              middleware.RequireAuth(), api.PostActorHunt)
+	router.POST("/api/threat-actors/:id/response",          middleware.RequireAuth(), api.PostActorResponse)
+	router.GET("/api/alerts/:id/actor-tags",                middleware.RequireAuth(), api.GetAlertActorTags)
 
 	// ── Playbook Recommender ──────────────────────────────────────────────────
 	router.GET("/api/alerts/:id/playbook-recommendations", middleware.RequireAuth(), api.GetPlaybookRecommendations)
 	router.POST("/api/alerts/:id/execute-recommendation", middleware.RequireAuth(), api.ExecuteRecommendedPlaybook)
 
 	// ── Network Behavior Analytics ────────────────────────────────────────────
+	router.GET("/api/nba/overview", middleware.RequireAuth(), api.GetNBAOverview)
+	router.GET("/api/nba/flows", middleware.RequireAuth(), api.GetNBAFlows)
+	router.GET("/api/nba/traffic-analysis", middleware.RequireAuth(), api.GetNBATrafficAnalysis)
+	router.GET("/api/nba/dns-analytics", middleware.RequireAuth(), api.GetNBADNSAnalytics)
+	router.GET("/api/nba/tls-analytics", middleware.RequireAuth(), api.GetNBATLSAnalytics)
+	router.GET("/api/nba/beacons", middleware.RequireAuth(), api.GetNBABeacons)
+	router.GET("/api/nba/lateral-movement", middleware.RequireAuth(), api.GetNBALateralMovement)
+	router.GET("/api/nba/threat-intel", middleware.RequireAuth(), api.GetNBAThreatIntel)
+	router.POST("/api/nba/ai-insights", middleware.RequireAuth(), api.PostNBAAIInsights)
+	router.POST("/api/nba/response-action", middleware.RequireAuth(), api.PostNBAResponseAction)
+	router.GET("/api/nba/mitre-mapping", middleware.RequireAuth(), api.GetNBAMitreMapping)
+	router.GET("/api/nba/protocol-breakdown", middleware.RequireAuth(), api.GetNBAProtocolBreakdown)
+	router.GET("/api/nba/host-timeline", middleware.RequireAuth(), api.GetNBAHostTimeline)
+	router.GET("/api/nba/analytics", middleware.RequireAuth(), api.GetNBAAnalytics)
 	router.GET("/api/nba/anomalies", middleware.RequireAuth(), api.GetNetworkAnomalies)
 	router.POST("/api/nba/anomalies/:id/acknowledge", middleware.RequireAuth(), api.AcknowledgeNetworkAnomaly)
 	router.GET("/api/nba/baseline/:agent_id", middleware.RequireAuth(), api.GetNetworkBaselineStats)
@@ -540,11 +684,22 @@ func SetupRoutes(router *gin.Engine) {
 	router.PATCH("/api/itdr/findings/:id/status", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.UpdateITDRFindingStatus)
 	router.GET("/api/itdr/summary", middleware.RequireAuth(), api.GetITDRSummary)
 
-	// ── Alert Clustering ──────────────────────────────────────────────────────
-	router.GET("/api/clusters", middleware.RequireAuth(), api.ListAlertClusters)
-	router.GET("/api/clusters/:id/alerts", middleware.RequireAuth(), api.GetClusterAlerts)
-	router.POST("/api/clusters/:id/suppress", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.SuppressCluster)
-	router.POST("/api/clusters/analyze", middleware.RequireAuth(), api.TriggerClustering)
+	// ── Alert Clustering — enterprise static routes BEFORE :id wildcards ──────
+	router.GET("/api/clusters/overview",   middleware.RequireAuth(), api.GetClusterOverview)
+	router.GET("/api/clusters/list",       middleware.RequireAuth(), api.GetClusterList)
+	router.GET("/api/clusters/analytics",  middleware.RequireAuth(), api.GetClusterAnalytics)
+	router.GET("/api/clusters/campaigns",  middleware.RequireAuth(), api.GetClusterCampaigns)
+	router.POST("/api/clusters/ai",        middleware.RequireAuth(), api.PostClusterAI)
+	router.POST("/api/clusters/analyze",   middleware.RequireAuth(), api.TriggerClustering)
+	// Core cluster endpoints
+	router.GET("/api/clusters",                 middleware.RequireAuth(), api.ListAlertClusters)
+	router.GET("/api/clusters/:id/alerts",      middleware.RequireAuth(), api.GetClusterAlerts)
+	router.GET("/api/clusters/:id/detail",      middleware.RequireAuth(), api.GetClusterDetail)
+	router.GET("/api/clusters/:id/timeline",    middleware.RequireAuth(), api.GetClusterTimeline)
+	router.GET("/api/clusters/:id/graph",       middleware.RequireAuth(), api.GetClusterGraph)
+	router.POST("/api/clusters/:id/suppress",   middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.SuppressCluster)
+	router.POST("/api/clusters/:id/bulk-action", middleware.RequireAuth(), api.PostClusterBulkAction)
+	router.POST("/api/clusters/:id/merge",      middleware.RequireAuth(), api.PostClusterMerge)
 
 	// ── Framework Compliance ──────────────────────────────────────────────────
 	router.GET("/api/framework-compliance", middleware.RequireAuth(), api.GetAllFrameworkAssessments)
@@ -555,6 +710,22 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/cis/agents/:id", middleware.RequireAuth(), api.GetAgentCISFindings)
 	router.GET("/api/cis/agents/:id/score", middleware.RequireAuth(), api.GetAgentCISScore)
 	router.POST("/api/cis/agents/:id/scan", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.TriggerCISScan)
+
+	// ── JA3 Enterprise ────────────────────────────────────────────────────────
+	router.GET("/api/ja3/dashboard",                   middleware.RequireAuth(), api.GetJA3Dashboard)
+	router.GET("/api/ja3/analytics",                   middleware.RequireAuth(), api.GetJA3Analytics)
+	router.GET("/api/ja3/tls-stats",                   middleware.RequireAuth(), api.GetJA3TLSStats)
+	router.GET("/api/ja3/behavioral",                  middleware.RequireAuth(), api.GetJA3Behavioral)
+	router.GET("/api/ja3/relationships",               middleware.RequireAuth(), api.GetJA3Relationships)
+	router.GET("/api/ja3/threat-intel",                middleware.RequireAuth(), api.GetJA3ThreatIntel)
+	router.GET("/api/ja3/timeline",                    middleware.RequireAuth(), api.GetJA3Timeline)
+	router.GET("/api/ja3/watchlist",                   middleware.RequireAuth(), api.GetJA3Watchlist)
+	router.POST("/api/ja3/watchlist",                  middleware.RequireAuth(), api.PostJA3Watchlist)
+	router.DELETE("/api/ja3/watchlist/:id",            middleware.RequireAuth(), api.DeleteJA3WatchlistItem)
+	router.POST("/api/ja3/ai",                         middleware.RequireAuth(), api.PostJA3AI)
+	router.POST("/api/ja3/export",                     middleware.RequireAuth(), api.PostJA3Export)
+	router.POST("/api/ja3/bulk",                       middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.PostJA3Bulk)
+	router.GET("/api/ja3/fingerprints/:hash/detail",   middleware.RequireAuth(), api.GetJA3FingerprintDetail)
 
 	// ── JA3/TLS Fingerprint Blocklist ────────────────────────────────────────
 	router.GET("/api/ja3/fingerprints", middleware.RequireAuth(), api.GetJA3Fingerprints)
@@ -567,6 +738,19 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Insider Threat Scores ─────────────────────────────────────────────────
 	router.GET("/api/insider-threat", middleware.RequireAuth(), api.GetInsiderThreatScores)
 	router.GET("/api/insider-threat/summary", middleware.RequireAuth(), api.GetInsiderThreatSummary)
+	// Enterprise — static routes BEFORE :username wildcard
+	router.GET("/api/insider-threat/analytics", middleware.RequireAuth(), api.GetInsiderThreatAnalytics)
+	router.GET("/api/insider-threat/policy-violations", middleware.RequireAuth(), api.GetInsiderPolicyViolations)
+	router.GET("/api/insider-threat/policies", middleware.RequireAuth(), api.GetInsiderPolicies)
+	router.POST("/api/insider-threat/policies", middleware.RequireAuth(), middleware.RequirePermission("manage_incidents"), api.CreateInsiderPolicy)
+	router.GET("/api/insider-threat/watchlist", middleware.RequireAuth(), api.GetInsiderWatchlist)
+	router.POST("/api/insider-threat/watchlist", middleware.RequireAuth(), api.AddToInsiderWatchlist)
+	router.DELETE("/api/insider-threat/watchlist/:username", middleware.RequireAuth(), api.RemoveFromInsiderWatchlist)
+	// Per-user routes
+	router.GET("/api/insider-threat/users/:username", middleware.RequireAuth(), api.GetInsiderThreatUserDetail)
+	router.GET("/api/insider-threat/users/:username/timeline", middleware.RequireAuth(), api.GetInsiderThreatUserTimeline)
+	router.POST("/api/insider-threat/users/:username/ai-analysis", middleware.RequireAuth(), api.GetInsiderThreatAIAnalysis)
+	router.POST("/api/insider-threat/users/:username/response-action", middleware.RequireAuth(), middleware.RequirePermission("manage_users"), api.InsiderThreatResponseAction)
 
 	// ── Universal Log Ingest (syslog/CEF/LEEF/JSON via HTTP) ─────────────────
 	// X-Api-Key authenticated — no user JWT needed. Accepts logs from any device
@@ -578,6 +762,17 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/log-sources", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.CreateLogSource)
 	router.PUT("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.UpdateLogSource)
 	router.DELETE("/api/log-sources/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.DeleteLogSource)
+	// Static sub-routes must be registered before :id routes
+	router.GET("/api/log-sources/monitoring", middleware.RequireAuth(), api.GetLogSourceMonitoring)
+	router.GET("/api/log-sources/marketplace", middleware.RequireAuth(), api.GetLogSourceMarketplace)
+	router.POST("/api/log-sources/ai-insights", middleware.RequireAuth(), api.AILogSourceInsights)
+	router.POST("/api/log-sources/bulk", middleware.RequireAuth(), middleware.RequirePermission("manage_agents"), api.BulkUpdateLogSources)
+	// Per-source detail routes
+	router.GET("/api/log-sources/:id/health", middleware.RequireAuth(), api.GetLogSourceHealth)
+	router.GET("/api/log-sources/:id/stats", middleware.RequireAuth(), api.GetLogSourceStats)
+	router.GET("/api/log-sources/:id/parser", middleware.RequireAuth(), api.GetLogSourceParser)
+	router.GET("/api/log-sources/:id/recent-logs", middleware.RequireAuth(), api.GetLogSourceRecentLogs)
+	router.POST("/api/log-sources/:id/test", middleware.RequireAuth(), api.TestLogSourceConnection)
 
 	// ── MDM — Mobile Device Management ───────────────────────────────────────
 	// Devices (admin/dashboard)
@@ -615,8 +810,30 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/mdm/devices/:id/commands/pending", middleware.RequireAgentAuth(), api.GetPendingMobileCommands)
 	router.POST("/api/mdm/devices/:id/apps", middleware.RequireAgentAuth(), api.SubmitAppInventory)
 
+	// ── Detection Engineering Dashboard ─────────────────────────────────────
+	router.GET("/api/detection/overview",      middleware.RequireAuth(), api.GetDetectionOverview)
+	router.GET("/api/detection/trends",        middleware.RequireAuth(), api.GetDetectionTrends)
+	router.GET("/api/detection/coverage",      middleware.RequireAuth(), api.GetDetectionCoverage)
+	router.GET("/api/detection/analytics",     middleware.RequireAuth(), api.GetDetectionAnalytics)
+	router.GET("/api/detection/performance",   middleware.RequireAuth(), api.GetDetectionPerformance)
+	router.POST("/api/detection/ai-assistant", middleware.RequireAuth(), api.PostDetectionAIAssistant)
+	router.POST("/api/detection/simulate",     middleware.RequireAuth(), api.PostDetectionSimulate)
+
 	// ── Deep Packet Inspection / Advanced Detection ─────────────────
-	router.GET("/api/dpi/findings", middleware.RequireAuth(), api.GetDPIFindings)
-	router.GET("/api/dpi/summary", middleware.RequireAuth(), api.GetDPIFindingsSummary)
+	router.GET("/api/dpi/overview",          middleware.RequireAuth(), api.GetDPIOverview)
+	router.GET("/api/dpi/sessions",          middleware.RequireAuth(), api.GetDPISessions)
+	router.GET("/api/dpi/http-inspection",   middleware.RequireAuth(), api.GetDPIHTTPInspection)
+	router.GET("/api/dpi/dns-inspection",    middleware.RequireAuth(), api.GetDPIDNSInspection)
+	router.GET("/api/dpi/tls-inspection",    middleware.RequireAuth(), api.GetDPITLSInspection)
+	router.GET("/api/dpi/files",             middleware.RequireAuth(), api.GetDPIFiles)
+	router.GET("/api/dpi/dlp",               middleware.RequireAuth(), api.GetDPIDLP)
+	router.GET("/api/dpi/analytics",         middleware.RequireAuth(), api.GetDPIAnalytics)
+	router.GET("/api/dpi/performance",       middleware.RequireAuth(), api.GetDPIPerformance)
+	router.GET("/api/dpi/protocol-anomalies",middleware.RequireAuth(), api.GetDPIProtocolAnomalies)
+	router.GET("/api/dpi/search",            middleware.RequireAuth(), api.GetDPISearch)
+	router.POST("/api/dpi/ai-inspect",       middleware.RequireAuth(), api.PostDPIAIInspect)
+	router.POST("/api/dpi/response-action",  middleware.RequireAuth(), api.PostDPIResponseAction)
+	router.GET("/api/dpi/findings",          middleware.RequireAuth(), api.GetDPIFindings)
+	router.GET("/api/dpi/summary",           middleware.RequireAuth(), api.GetDPIFindingsSummary)
 
 }
