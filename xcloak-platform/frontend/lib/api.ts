@@ -981,6 +981,31 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const supplyChainAPI = {
+  getDashboard:      ()              => api.get('/supply-chain/dashboard').catch(() => ({ data: null })),
+  getRepositories:   ()              => api.get('/supply-chain/repositories').catch(() => ({ data: [] })),
+  getDependencies:   (params?: any) => api.get('/supply-chain/dependencies', { params }).catch(() => ({ data: [] })),
+  getVulnerabilities:(params?: any) => api.get('/supply-chain/vulnerabilities', { params }).catch(() => ({ data: null })),
+  getSBOMs:          ()              => api.get('/supply-chain/sboms').catch(() => ({ data: [] })),
+  getPipelines:      ()              => api.get('/supply-chain/pipelines').catch(() => ({ data: [] })),
+  getSecrets:        ()              => api.get('/supply-chain/secrets').catch(() => ({ data: null })),
+  getCodeIntegrity:  ()              => api.get('/supply-chain/code-integrity').catch(() => ({ data: null })),
+  getArtifacts:      ()              => api.get('/supply-chain/artifacts').catch(() => ({ data: [] })),
+  getThirdParty:     ()              => api.get('/supply-chain/third-party').catch(() => ({ data: null })),
+  getProvenance:     ()              => api.get('/supply-chain/provenance').catch(() => ({ data: null })),
+  getThreatIntel:    ()              => api.get('/supply-chain/threat-intel').catch(() => ({ data: null })),
+  getTimeline:       (params?: any) => api.get('/supply-chain/timeline', { params }).catch(() => ({ data: [] })),
+  getAnalytics:      ()              => api.get('/supply-chain/analytics').catch(() => ({ data: null })),
+  getCompliance:     ()              => api.get('/supply-chain/compliance').catch(() => ({ data: null })),
+  getPolicies:       ()              => api.get('/supply-chain/policies').catch(() => ({ data: [] })),
+  createPolicy:      (data: any)    => api.post('/supply-chain/policies', data),
+  updatePolicy:      (id: number, data: any) => api.patch(`/supply-chain/policies/${id}`, data),
+  deletePolicy:      (id: number)   => api.delete(`/supply-chain/policies/${id}`),
+  analyzeAI:         (data: any)    => api.post('/supply-chain/ai', data),
+  respond:           (data: any)    => api.post('/supply-chain/response', data),
+  generateReport:    (data: any)    => api.post('/supply-chain/report', data),
+};
+
 export const adSecurityAPI = {
   getDashboard:    ()              => api.get('/ad/dashboard').catch(() => ({ data: null })),
   getInventory:    ()              => api.get('/ad/inventory').catch(() => ({ data: null })),

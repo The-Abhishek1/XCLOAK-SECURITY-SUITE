@@ -893,6 +893,30 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Supply Chain Security Enterprise ────────────────────────────────────
+	router.GET("/api/supply-chain/dashboard",      middleware.RequireAuth(), api.GetSCDashboard)
+	router.GET("/api/supply-chain/repositories",   middleware.RequireAuth(), api.GetSCRepositories)
+	router.GET("/api/supply-chain/dependencies",   middleware.RequireAuth(), api.GetSCDependencies)
+	router.GET("/api/supply-chain/vulnerabilities",middleware.RequireAuth(), api.GetSCVulnerabilities)
+	router.GET("/api/supply-chain/sboms",          middleware.RequireAuth(), api.GetSCSBOMs)
+	router.GET("/api/supply-chain/pipelines",      middleware.RequireAuth(), api.GetSCBuildPipelines)
+	router.GET("/api/supply-chain/secrets",        middleware.RequireAuth(), api.GetSCSecretFindings)
+	router.GET("/api/supply-chain/code-integrity", middleware.RequireAuth(), api.GetSCCodeIntegrity)
+	router.GET("/api/supply-chain/artifacts",      middleware.RequireAuth(), api.GetSCArtifacts)
+	router.GET("/api/supply-chain/third-party",    middleware.RequireAuth(), api.GetSCThirdPartyRisk)
+	router.GET("/api/supply-chain/provenance",     middleware.RequireAuth(), api.GetSCBuildProvenance)
+	router.GET("/api/supply-chain/threat-intel",   middleware.RequireAuth(), api.GetSCThreatIntel)
+	router.GET("/api/supply-chain/timeline",       middleware.RequireAuth(), api.GetSCTimeline)
+	router.GET("/api/supply-chain/analytics",      middleware.RequireAuth(), api.GetSCAnalytics)
+	router.GET("/api/supply-chain/compliance",     middleware.RequireAuth(), api.GetSCCompliance)
+	router.GET("/api/supply-chain/policies",       middleware.RequireAuth(), api.GetSCPolicies)
+	router.POST("/api/supply-chain/policies",      middleware.RequireAuth(), api.PostSCPolicy)
+	router.POST("/api/supply-chain/ai",            middleware.RequireAuth(), api.PostSCAI)
+	router.POST("/api/supply-chain/response",      middleware.RequireAuth(), api.PostSCResponse)
+	router.POST("/api/supply-chain/report",        middleware.RequireAuth(), api.PostSCReport)
+	router.PATCH("/api/supply-chain/policies/:id", middleware.RequireAuth(), api.PatchSCPolicy)
+	router.DELETE("/api/supply-chain/policies/:id",middleware.RequireAuth(), api.DeleteSCPolicy)
+
 	// ── Active Directory Security Enterprise ─────────────────────────────────
 	router.GET("/api/ad/dashboard",         middleware.RequireAuth(), api.GetADDashboard)
 	router.GET("/api/ad/inventory",         middleware.RequireAuth(), api.GetADInventory)
