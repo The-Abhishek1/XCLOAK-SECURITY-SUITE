@@ -893,6 +893,24 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Process Injection Enterprise ─────────────────────────────────────────
+	router.GET("/api/pi/dashboard",    middleware.RequireAuth(), api.GetPIDashboard)
+	router.GET("/api/pi/processes",    middleware.RequireAuth(), api.GetPIProcesses)
+	router.GET("/api/pi/process-tree", middleware.RequireAuth(), api.GetPIProcessTree)
+	router.GET("/api/pi/injections",   middleware.RequireAuth(), api.GetPIInjections)
+	router.GET("/api/pi/memory",       middleware.RequireAuth(), api.GetPIMemory)
+	router.GET("/api/pi/modules",      middleware.RequireAuth(), api.GetPIModules)
+	router.GET("/api/pi/handles",      middleware.RequireAuth(), api.GetPIHandles)
+	router.GET("/api/pi/api-calls",    middleware.RequireAuth(), api.GetPIAPICalls)
+	router.GET("/api/pi/behavioral",   middleware.RequireAuth(), api.GetPIBehavioral)
+	router.GET("/api/pi/threat-intel", middleware.RequireAuth(), api.GetPIThreatIntel)
+	router.GET("/api/pi/timeline",     middleware.RequireAuth(), api.GetPITimeline)
+	router.GET("/api/pi/mitre",        middleware.RequireAuth(), api.GetPIMITREMap)
+	router.GET("/api/pi/analytics",    middleware.RequireAuth(), api.GetPIAnalytics)
+	router.POST("/api/pi/ai",          middleware.RequireAuth(), api.PostPIAI)
+	router.POST("/api/pi/response",    middleware.RequireAuth(), api.PostPIResponse)
+	router.POST("/api/pi/report",      middleware.RequireAuth(), api.PostPIReport)
+
 	// ── OT/ICS Security Enterprise ───────────────────────────────────────────
 	router.GET("/api/ot/dashboard",     middleware.RequireAuth(), api.GetOTDashboard)
 	router.GET("/api/ot/assets",        middleware.RequireAuth(), api.GetOTAssets)

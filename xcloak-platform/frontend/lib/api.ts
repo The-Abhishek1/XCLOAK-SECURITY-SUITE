@@ -981,6 +981,25 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const processInjectionAPI = {
+  getDashboard:    ()             => api.get('/pi/dashboard').catch(() => ({ data: null })),
+  getProcesses:    (params?: any) => api.get('/pi/processes', { params }).catch(() => ({ data: [] })),
+  getProcessTree:  (params?: any) => api.get('/pi/process-tree', { params }).catch(() => ({ data: [] })),
+  getInjections:   (params?: any) => api.get('/pi/injections', { params }).catch(() => ({ data: { injections: [], total: 0, critical: 0 } })),
+  getMemory:       (params?: any) => api.get('/pi/memory', { params }).catch(() => ({ data: { regions: [], rwx_pages: 0, shellcode: 0, unbacked: 0 } })),
+  getModules:      (params?: any) => api.get('/pi/modules', { params }).catch(() => ({ data: { modules: [] } })),
+  getHandles:      (params?: any) => api.get('/pi/handles', { params }).catch(() => ({ data: { handles: [] } })),
+  getAPICalls:     (params?: any) => api.get('/pi/api-calls', { params }).catch(() => ({ data: { api_calls: [], monitored_apis: [] } })),
+  getBehavioral:   ()             => api.get('/pi/behavioral').catch(() => ({ data: { detections: [] } })),
+  getThreatIntel:  ()             => api.get('/pi/threat-intel').catch(() => ({ data: null })),
+  getTimeline:     (params?: any) => api.get('/pi/timeline', { params }).catch(() => ({ data: [] })),
+  getMITREMap:     ()             => api.get('/pi/mitre').catch(() => ({ data: null })),
+  getAnalytics:    ()             => api.get('/pi/analytics').catch(() => ({ data: null })),
+  analyzeAI:       (data: any)   => api.post('/pi/ai', data).catch(() => ({ data: null })),
+  respond:         (data: any)   => api.post('/pi/response', data).catch(() => ({ data: null })),
+  generateReport:  (data: any)   => api.post('/pi/report', data).catch(() => ({ data: null })),
+};
+
 export const otICSAPI = {
   getDashboard:      ()              => api.get('/ot/dashboard').catch(() => ({ data: null })),
   getAssets:         (params?: any) => api.get('/ot/assets', { params }).catch(() => ({ data: [] })),
