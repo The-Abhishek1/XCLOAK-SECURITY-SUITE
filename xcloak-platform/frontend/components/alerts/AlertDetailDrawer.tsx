@@ -669,7 +669,7 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
                     ['process', 'Process',  Cpu],
                     ['network', 'Network',  Network],
                     ['file',    'File',     HardDrive],
-                  ] as [string, string, any][]).map(([id, label, Icon]) => (
+                  ] as [EntityTab, string, any][]).map(([id, label, Icon]) => (
                     <button key={id} onClick={() => setEntityTab(id)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors"
                       style={{ background:entityTab===id?'var(--accent-glow)':'var(--glass-bg)', color:entityTab===id?'var(--accent)':'var(--text-2)', border:`1px solid ${entityTab===id?'var(--accent-border)':'var(--border)'}` }}>
