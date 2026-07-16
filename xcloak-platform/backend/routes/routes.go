@@ -495,14 +495,8 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/auth/profile", middleware.RequireAuth(), api.GetProfile)
 	router.PATCH("/api/auth/profile", middleware.RequireAuth(), api.UpdateProfile)
 
-	// ── Case Management / IR Lifecycle ────────────────────────────────────
-	router.POST("/api/cases", middleware.RequireAuth(), api.CreateCase)
-	router.GET("/api/cases", middleware.RequireAuth(), api.GetCases)
-	router.GET("/api/cases/:id", middleware.RequireAuth(), api.GetCaseByID)
+	// ── Case Management / IR Lifecycle (legacy helpers) ──────────────────
 	router.PUT("/api/cases/:id", middleware.RequireAuth(), api.UpdateCase)
-	router.DELETE("/api/cases/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_incidents"), api.DeleteCase)
-	router.POST("/api/cases/:id/comments", middleware.RequireAuth(), api.AddCaseComment)
-	router.POST("/api/cases/:id/evidence", middleware.RequireAuth(), api.AddCaseEvidence)
 	router.POST("/api/cases/:id/alerts", middleware.RequireAuth(), api.LinkAlertToCase)
 	router.DELETE("/api/cases/:id/alerts/:alert_id", middleware.RequireAuth(), api.UnlinkAlertFromCase)
 
@@ -892,6 +886,28 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/dfir/evidence/:eid/custody",          middleware.RequireAuth(), api.PostDFIRCustody)
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
+
+	// ── Cases Enterprise ─────────────────────────────────────────────────────
+	router.GET("/api/cases/dashboard",               middleware.RequireAuth(), api.GetCasesDashboard)
+	router.GET("/api/cases/analytics",               middleware.RequireAuth(), api.GetCasesAnalytics)
+	router.GET("/api/cases/templates",               middleware.RequireAuth(), api.GetCasesTemplates)
+	router.GET("/api/cases",                         middleware.RequireAuth(), api.GetCasesEnt)
+	router.POST("/api/cases",                        middleware.RequireAuth(), api.PostCase)
+	router.POST("/api/cases/ai",                     middleware.RequireAuth(), api.PostCasesAI)
+	router.POST("/api/cases/report",                 middleware.RequireAuth(), api.PostCasesReport)
+	router.GET("/api/cases/:id",                     middleware.RequireAuth(), api.GetCaseByIDEnt)
+	router.PATCH("/api/cases/:id",                   middleware.RequireAuth(), api.PatchCase)
+	router.DELETE("/api/cases/:id",                  middleware.RequireAuth(), api.DeleteCaseEnt)
+	router.GET("/api/cases/:id/tasks",               middleware.RequireAuth(), api.GetCaseTasks)
+	router.POST("/api/cases/:id/tasks",              middleware.RequireAuth(), api.PostCaseTask)
+	router.PATCH("/api/cases/:id/tasks/:tid",        middleware.RequireAuth(), api.PatchCaseTask)
+	router.GET("/api/cases/:id/evidence",            middleware.RequireAuth(), api.GetCaseEvidence)
+	router.POST("/api/cases/:id/evidence",           middleware.RequireAuth(), api.PostCaseEvidence)
+	router.GET("/api/cases/:id/notes",               middleware.RequireAuth(), api.GetCaseNotes)
+	router.POST("/api/cases/:id/notes",              middleware.RequireAuth(), api.PostCaseNote)
+	router.GET("/api/cases/:id/timeline",            middleware.RequireAuth(), api.GetCaseTimeline)
+	router.GET("/api/cases/:id/comments",            middleware.RequireAuth(), api.GetCaseComments)
+	router.POST("/api/cases/:id/comments",           middleware.RequireAuth(), api.PostCaseComment)
 
 	// ── Defense Evasion Enterprise ───────────────────────────────────────────
 	router.GET("/api/de/dashboard",        middleware.RequireAuth(), api.GetDEDashboard)

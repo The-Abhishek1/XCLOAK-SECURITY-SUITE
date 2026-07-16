@@ -553,17 +553,6 @@ export const ssoAPI = {
   discover: (email: string) => api.get(`/auth/sso-discover?email=${encodeURIComponent(email)}`),
 };
 
-export const casesAPI = {
-  getAll:       (params?: Record<string, any>)  => api.get('/cases', { params }),
-  getByID:      (id: number)                    => api.get(`/cases/${id}`),
-  create:       (data: any)                     => api.post('/cases', data),
-  update:       (id: number, data: any)         => api.put(`/cases/${id}`, data),
-  delete:       (id: number)                    => api.delete(`/cases/${id}`),
-  addComment:   (id: number, body: string)      => api.post(`/cases/${id}/comments`, { body }),
-  addEvidence:  (id: number, data: any)         => api.post(`/cases/${id}/evidence`, data),
-  linkAlert:    (id: number, alertID: number)   => api.post(`/cases/${id}/alerts`, { alert_id: alertID }),
-  unlinkAlert:  (id: number, alertID: number)   => api.delete(`/cases/${id}/alerts/${alertID}`),
-};
 
 export const assetsAPI = {
   getAll:   ()                          => api.get('/assets'),
@@ -979,6 +968,35 @@ export const cloudSecurityAPI = {
   getAnalytics:      ()                   => api.get('/cloud/analytics').catch(() => ({ data: null })),
   respond:           (data: any)          => api.post('/cloud/response', data),
   generateReport:    (data: any)          => api.post('/cloud/report', data),
+};
+
+export const casesAPI = {
+  getDashboard:   ()             => api.get('/cases/dashboard').catch(() => ({ data: null })),
+  getAnalytics:   ()             => api.get('/cases/analytics').catch(() => ({ data: null })),
+  getTemplates:   ()             => api.get('/cases/templates').catch(() => ({ data: [] })),
+  getCases:       (params?: any) => api.get('/cases', { params }).catch(() => ({ data: [] })),
+  createCase:     (data: any)    => api.post('/cases', data).catch(() => ({ data: null })),
+  analyzeAI:      (data: any)    => api.post('/cases/ai', data).catch(() => ({ data: null })),
+  generateReport: (data: any)    => api.post('/cases/report', data).catch(() => ({ data: null })),
+  getCase:        (id: number)   => api.get(`/cases/${id}`).catch(() => ({ data: null })),
+  updateCase:     (id: number, data: any) => api.patch(`/cases/${id}`, data).catch(() => ({ data: null })),
+  deleteCase:     (id: number)   => api.delete(`/cases/${id}`).catch(() => ({ data: null })),
+  getTasks:       (id: number)   => api.get(`/cases/${id}/tasks`).catch(() => ({ data: [] })),
+  createTask:     (id: number, data: any) => api.post(`/cases/${id}/tasks`, data).catch(() => ({ data: null })),
+  updateTask:     (id: number, tid: number, data: any) => api.patch(`/cases/${id}/tasks/${tid}`, data).catch(() => ({ data: null })),
+  getEvidence:    (id: number)   => api.get(`/cases/${id}/evidence`).catch(() => ({ data: [] })),
+  addEvidence:    (id: number, data: any) => api.post(`/cases/${id}/evidence`, data).catch(() => ({ data: null })),
+  getNotes:       (id: number)   => api.get(`/cases/${id}/notes`).catch(() => ({ data: [] })),
+  addNote:        (id: number, data: any) => api.post(`/cases/${id}/notes`, data).catch(() => ({ data: null })),
+  getTimeline:    (id: number)   => api.get(`/cases/${id}/timeline`).catch(() => ({ data: [] })),
+  getComments:    (id: number)   => api.get(`/cases/${id}/comments`).catch(() => ({ data: [] })),
+  addComment:     (id: number, data: any) => api.post(`/cases/${id}/comments`, data).catch(() => ({ data: null })),
+  // compat aliases for legacy callers
+  getAll:         (params?: any)          => api.get('/cases', { params }).catch(() => ({ data: [] })),
+  getByID:        (id: number)            => api.get(`/cases/${id}`).catch(() => ({ data: null })),
+  create:         (data: any)             => api.post('/cases', data).catch(() => ({ data: null })),
+  linkAlert:      (id: number, alertID: number) => api.post(`/cases/${id}/alerts`, { alert_id: alertID }).catch(() => ({ data: null })),
+  unlinkAlert:    (id: number, alertID: number) => api.delete(`/cases/${id}/alerts/${alertID}`).catch(() => ({ data: null })),
 };
 
 export const defenseEvasionAPI = {
