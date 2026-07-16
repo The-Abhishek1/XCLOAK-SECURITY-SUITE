@@ -39,9 +39,53 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 
 ## Screenshots
 
-| Dashboard Overview | Alert Detail | Posture (Mobile) |
-|-------------------|--------------|-----------------|
-| ![dashboard](docs/dashboard.png) | ![alerts](docs/alerts.png) | ![mobile](docs/mobile.png) |
+> All screenshots are from a live local instance running on PostgreSQL + Redis + Kafka with real agent telemetry.
+
+### Dashboard & Alerts
+
+| Dashboard | Alerts |
+|-----------|--------|
+| ![dashboard](docs/dashboard.png) | ![alerts](docs/alerts.png) |
+
+### Threat Detection & Hunting
+
+| Threat Intelligence | Threat Hunt |
+|--------------------|-------------|
+| ![threat-intel](docs/threat-intel.png) | ![hunt](docs/hunt.png) |
+
+| Sigma Rules | Correlation |
+|-------------|-------------|
+| ![sigma-rules](docs/sigma-rules.png) | ![correlation](docs/correlation.png) |
+
+### Investigation & Response
+
+| DFIR | Timeline |
+|------|---------|
+| ![dfir](docs/dfir.png) | ![timeline](docs/timeline.png) |
+
+| Incidents | Attack Path |
+|-----------|------------|
+| ![incidents](docs/incidents.png) | ![attack-path](docs/attack-path.png) |
+
+### Visibility & Analytics
+
+| Live Logs | Log Search |
+|-----------|-----------|
+| ![live-logs](docs/live-logs.png) | ![log-search](docs/log-search.png) |
+
+| Network Map | Risk Posture |
+|------------|-------------|
+| ![network-map](docs/network-map.png) | ![risk-posture](docs/risk-posture.png) |
+
+| UEBA | Behavioral Analytics (NBA) |
+|------|---------------------------|
+| ![ueba](docs/ueba.png) | ![nba](docs/nba.png) |
+
+### Agents & Vulnerabilities
+
+| Agents | Vulnerabilities |
+|--------|----------------|
+| ![agents](docs/agents.png) | ![vulnerabilities](docs/vulnerabilities.png) |
 
 ---
 
