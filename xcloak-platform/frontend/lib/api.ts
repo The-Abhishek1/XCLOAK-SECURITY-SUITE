@@ -981,6 +981,24 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const defenseEvasionAPI = {
+  getDashboard:       ()             => api.get('/de/dashboard').catch(() => ({ data: null })),
+  getControls:        (params?: any) => api.get('/de/controls', { params }).catch(() => ({ data: { controls: [], active: 0, degraded: 0, disabled: 0 } })),
+  getTamper:          (params?: any) => api.get('/de/tamper', { params }).catch(() => ({ data: { events: [], total: 0 } })),
+  getLogEvasion:      (params?: any) => api.get('/de/log-evasion', { params }).catch(() => ({ data: [] })),
+  getEvasionEvents:   (params?: any) => api.get('/de/evasion-events', { params }).catch(() => ({ data: [] })),
+  getBehavioral:      ()             => api.get('/de/behavioral').catch(() => ({ data: { detections: [] } })),
+  getCorrelation:     ()             => api.get('/de/correlation').catch(() => ({ data: [] })),
+  getMITRE:           ()             => api.get('/de/mitre').catch(() => ({ data: null })),
+  getThreatIntel:     ()             => api.get('/de/threat-intel').catch(() => ({ data: null })),
+  getTimeline:        (params?: any) => api.get('/de/timeline', { params }).catch(() => ({ data: [] })),
+  getAnalytics:       ()             => api.get('/de/analytics').catch(() => ({ data: null })),
+  getValidation:      ()             => api.get('/de/validation').catch(() => ({ data: null })),
+  analyzeAI:          (data: any)   => api.post('/de/ai', data).catch(() => ({ data: null })),
+  respond:            (data: any)   => api.post('/de/response', data).catch(() => ({ data: null })),
+  generateReport:     (data: any)   => api.post('/de/report', data).catch(() => ({ data: null })),
+};
+
 export const processInjectionAPI = {
   getDashboard:    ()             => api.get('/pi/dashboard').catch(() => ({ data: null })),
   getProcesses:    (params?: any) => api.get('/pi/processes', { params }).catch(() => ({ data: [] })),

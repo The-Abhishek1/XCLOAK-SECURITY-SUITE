@@ -893,6 +893,23 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Defense Evasion Enterprise ───────────────────────────────────────────
+	router.GET("/api/de/dashboard",        middleware.RequireAuth(), api.GetDEDashboard)
+	router.GET("/api/de/controls",         middleware.RequireAuth(), api.GetDEControls)
+	router.GET("/api/de/tamper",           middleware.RequireAuth(), api.GetDETamper)
+	router.GET("/api/de/log-evasion",      middleware.RequireAuth(), api.GetDELogEvasion)
+	router.GET("/api/de/evasion-events",   middleware.RequireAuth(), api.GetDEEvasionEvents)
+	router.GET("/api/de/behavioral",       middleware.RequireAuth(), api.GetDEBehavioral)
+	router.GET("/api/de/correlation",      middleware.RequireAuth(), api.GetDECorrelation)
+	router.GET("/api/de/mitre",            middleware.RequireAuth(), api.GetDEMITRE)
+	router.GET("/api/de/threat-intel",     middleware.RequireAuth(), api.GetDEThreatIntel)
+	router.GET("/api/de/timeline",         middleware.RequireAuth(), api.GetDETimeline)
+	router.GET("/api/de/analytics",        middleware.RequireAuth(), api.GetDEAnalytics)
+	router.GET("/api/de/validation",       middleware.RequireAuth(), api.GetDEValidation)
+	router.POST("/api/de/ai",              middleware.RequireAuth(), api.PostDEAI)
+	router.POST("/api/de/response",        middleware.RequireAuth(), api.PostDEResponse)
+	router.POST("/api/de/report",          middleware.RequireAuth(), api.PostDEReport)
+
 	// ── Process Injection Enterprise ─────────────────────────────────────────
 	router.GET("/api/pi/dashboard",    middleware.RequireAuth(), api.GetPIDashboard)
 	router.GET("/api/pi/processes",    middleware.RequireAuth(), api.GetPIProcesses)
