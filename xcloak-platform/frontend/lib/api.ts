@@ -981,6 +981,31 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const emailSecurityAPI = {
+  getDashboard:    ()             => api.get('/email/dashboard').catch(() => ({ data: null })),
+  getMailFlow:     ()             => api.get('/email/mail-flow').catch(() => ({ data: null })),
+  getMessages:     (params?: any) => api.get('/email/messages', { params }).catch(() => ({ data: [] })),
+  getThreats:      (params?: any) => api.get('/email/threats', { params }).catch(() => ({ data: [] })),
+  getAttachments:  (params?: any) => api.get('/email/attachments', { params }).catch(() => ({ data: [] })),
+  getURLs:         (params?: any) => api.get('/email/urls', { params }).catch(() => ({ data: [] })),
+  getAuthResults:  (params?: any) => api.get('/email/auth-results', { params }).catch(() => ({ data: null })),
+  getSenderIntel:  (params?: any) => api.get('/email/sender-intel', { params }).catch(() => ({ data: null })),
+  getThreatIntel:  ()             => api.get('/email/threat-intel').catch(() => ({ data: null })),
+  getCampaigns:    ()             => api.get('/email/campaigns').catch(() => ({ data: [] })),
+  getTimeline:     (params?: any) => api.get('/email/timeline', { params }).catch(() => ({ data: [] })),
+  getUserRisk:     ()             => api.get('/email/user-risk').catch(() => ({ data: [] })),
+  getAnalytics:    ()             => api.get('/email/analytics').catch(() => ({ data: null })),
+  getPolicies:     ()             => api.get('/email/policies').catch(() => ({ data: [] })),
+  createPolicy:    (data: any)    => api.post('/email/policies', data),
+  patchPolicy:     (id: number, data: any) => api.patch(`/email/policies/${id}`, data),
+  deletePolicy:    (id: number)   => api.delete(`/email/policies/${id}`),
+  getReported:     ()             => api.get('/email/reported').catch(() => ({ data: [] })),
+  patchReported:   (id: number, data: any) => api.patch(`/email/reported/${id}`, data),
+  analyzeAI:       (data: any)    => api.post('/email/ai', data),
+  respond:         (data: any)    => api.post('/email/response', data),
+  generateReport:  (data: any)    => api.post('/email/report', data),
+};
+
 export const suppressionAPI = {
   getAll:  ()                              => api.get('/suppression/rules').catch(() => ({ data: [] })),
   create:  (data: any)                     => api.post('/suppression/rules', data),

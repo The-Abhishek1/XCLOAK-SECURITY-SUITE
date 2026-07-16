@@ -893,6 +893,32 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Email Security Enterprise ─────────────────────────────────────────────
+	// Static routes before /:id
+	router.GET("/api/email/dashboard",          middleware.RequireAuth(), api.GetEmailDashboard)
+	router.GET("/api/email/mail-flow",          middleware.RequireAuth(), api.GetEmailMailFlow)
+	router.GET("/api/email/messages",           middleware.RequireAuth(), api.GetEmailMessages)
+	router.GET("/api/email/threats",            middleware.RequireAuth(), api.GetEmailThreats)
+	router.GET("/api/email/attachments",        middleware.RequireAuth(), api.GetEmailAttachments)
+	router.GET("/api/email/urls",               middleware.RequireAuth(), api.GetEmailURLs)
+	router.GET("/api/email/auth-results",       middleware.RequireAuth(), api.GetEmailAuthResults)
+	router.GET("/api/email/sender-intel",       middleware.RequireAuth(), api.GetSenderIntelligence)
+	router.GET("/api/email/threat-intel",       middleware.RequireAuth(), api.GetEmailThreatIntel)
+	router.GET("/api/email/campaigns",          middleware.RequireAuth(), api.GetEmailCampaigns)
+	router.GET("/api/email/timeline",           middleware.RequireAuth(), api.GetEmailTimeline)
+	router.GET("/api/email/user-risk",          middleware.RequireAuth(), api.GetEmailUserRisk)
+	router.GET("/api/email/analytics",          middleware.RequireAuth(), api.GetEmailAnalytics)
+	router.GET("/api/email/policies",           middleware.RequireAuth(), api.GetEmailPolicies)
+	router.POST("/api/email/policies",          middleware.RequireAuth(), api.PostEmailPolicy)
+	router.GET("/api/email/reported",           middleware.RequireAuth(), api.GetUserReported)
+	router.POST("/api/email/ai",                middleware.RequireAuth(), api.PostEmailAI)
+	router.POST("/api/email/response",          middleware.RequireAuth(), api.PostEmailResponse)
+	router.POST("/api/email/report",            middleware.RequireAuth(), api.PostEmailReport)
+	// Parameterized
+	router.PATCH("/api/email/policies/:id",     middleware.RequireAuth(), api.PatchEmailPolicy)
+	router.DELETE("/api/email/policies/:id",    middleware.RequireAuth(), api.DeleteEmailPolicy)
+	router.PATCH("/api/email/reported/:id",     middleware.RequireAuth(), api.PatchUserReported)
+
 	// ── Cloud Security Enterprise ─────────────────────────────────────────────
 	// Static routes before /:id
 	router.GET("/api/cloud/dashboard",          middleware.RequireAuth(), api.GetCloudDashboard)
