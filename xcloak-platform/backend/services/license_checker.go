@@ -83,14 +83,16 @@ func LicenseStatus() (enforcement bool, valid bool, claim *LicenseClaim) {
 func InGracePeriod() bool {
 	licenseCheckState.mu.RLock()
 	defer licenseCheckState.mu.RUnlock()
-	s := licenseCheckState
-	if !s.enforcement || s.valid {
+	enforcement := licenseCheckState.enforcement
+	valid := licenseCheckState.valid
+	firstFailed := licenseCheckState.firstFailed
+	if !enforcement || valid {
 		return false
 	}
-	if s.firstFailed.IsZero() {
+	if firstFailed.IsZero() {
 		return true
 	}
-	return time.Since(s.firstFailed) < time.Duration(defaultGraceDays)*24*time.Hour
+	return time.Since(firstFailed) < time.Duration(defaultGraceDays)*24*time.Hour
 }
 
 func runCheck(serverURL string) {

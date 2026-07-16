@@ -491,7 +491,7 @@ func PostDFIRCollect(c *gin.Context) {
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'collected') RETURNING id`,
 			tid, invID, fmt.Sprintf("%s-%s", eid, artifact), evType, label, description,
 			body.TargetHost, collector, int64(rowCount)*512,
-			fmt.Sprintf("xcloak://evidence/%d/%s/%s", tid, invID, artifact)).Scan(&evID)
+			fmt.Sprintf("xcloak://evidence/%d/%d/%s", tid, invID, artifact)).Scan(&evID)
 
 		if evID > 0 {
 			evidenceIDs = append(evidenceIDs, evID)

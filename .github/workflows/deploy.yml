@@ -53,13 +53,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
 
-    if: |
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success'
-      ) || (
-        github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.environment == 'staging'
+    if: >-
+      secrets.DEMO_SSH_HOST != '' && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
       )
 
     steps:
