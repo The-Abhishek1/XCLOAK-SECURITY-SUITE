@@ -642,7 +642,7 @@ function ResponseActionsPanel({ username, onAction }: { username: string; onActi
 
 function AnalyticsDashboard({ analytics }: { analytics: Analytics | null }) {
   if (!analytics) return <div className="p-4"><Spinner /></div>;
-  const maxCount = Math.max(...analytics.trend.map(t => t.count), 1);
+  const maxCount = Math.max(...(analytics.trend ?? []).map(t => t.count), 1);
   return (
     <div className="p-4 space-y-4">
       <div className="grid grid-cols-3 gap-2">
