@@ -172,7 +172,6 @@ function DeltaBadge({ delta, pct }: { delta: number; pct: number }) {
 
 function StatCard({ label, value, sub, icon: Icon, accent, pulse, delta, deltaPct, link }: {
   label: string; value: string | number; sub?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon: any; accent?: string; pulse?: boolean;
   delta?: number; deltaPct?: number; link?: string;
 }) {

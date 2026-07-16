@@ -664,16 +664,16 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
                 {/* Sub-tab nav */}
                 <div className="flex gap-1 flex-wrap">
                   {([
-                    ['endpoint','Endpoint',<Monitor className="h-3.5 w-3.5" />],
-                    ['user',    'User',    <User    className="h-3.5 w-3.5" />],
-                    ['process', 'Process', <Cpu     className="h-3.5 w-3.5" />],
-                    ['network', 'Network', <Network className="h-3.5 w-3.5" />],
-                    ['file',    'File',    <HardDrive className="h-3.5 w-3.5" />],
-                  ] as const).map(([id,label,icon]) => (
+                    ['endpoint','Endpoint', Monitor],
+                    ['user',    'User',     User],
+                    ['process', 'Process',  Cpu],
+                    ['network', 'Network',  Network],
+                    ['file',    'File',     HardDrive],
+                  ] as [string, string, any][]).map(([id, label, Icon]) => (
                     <button key={id} onClick={() => setEntityTab(id)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors"
                       style={{ background:entityTab===id?'var(--accent-glow)':'var(--glass-bg)', color:entityTab===id?'var(--accent)':'var(--text-2)', border:`1px solid ${entityTab===id?'var(--accent-border)':'var(--border)'}` }}>
-                      {icon} {label}
+                      <Icon className="h-3.5 w-3.5" /> {label}
                     </button>
                   ))}
                 </div>
