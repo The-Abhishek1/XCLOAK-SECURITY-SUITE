@@ -11,6 +11,39 @@ import (
 	"xcloak-platform/repositories"
 )
 
+// TechniqueRef is a minimal MITRE ATT&CK reference attached to an edge or path.
+type TechniqueRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// portTechniques maps well-known lateral-movement ports to the most specific
+// MITRE ATT&CK (sub-)technique for that channel.
+var portTechniques = map[string]TechniqueRef{
+	"3389": {ID: "T1021.001", Name: "Remote Desktop Protocol"},
+	"445":  {ID: "T1021.002", Name: "SMB / Windows Admin Shares"},
+	"139":  {ID: "T1021.002", Name: "SMB / Windows Admin Shares"},
+	"22":   {ID: "T1021.004", Name: "SSH"},
+	"23":   {ID: "T1021.003", Name: "Telnet"},
+	"5985": {ID: "T1021.006", Name: "Windows Remote Management"},
+	"5986": {ID: "T1021.006", Name: "Windows Remote Management"},
+	"135":  {ID: "T1047", Name: "Windows Management Instrumentation"},
+	"5900": {ID: "T1021.005", Name: "VNC"},
+	"4444": {ID: "T1059", Name: "Command and Scripting Interpreter"},
+	"4445": {ID: "T1059", Name: "Command and Scripting Interpreter"},
+	"8080": {ID: "T1190", Name: "Exploit Public-Facing Application"},
+	"8443": {ID: "T1190", Name: "Exploit Public-Facing Application"},
+}
+
+// kindTechniques is the fallback when no port-level match is found.
+var kindTechniques = map[string]TechniqueRef{
+	"internet_exposure": {ID: "T1190", Name: "Exploit Public-Facing Application"},
+	"lateral":           {ID: "T1021", Name: "Remote Services"},
+	"priv_esc":          {ID: "T1068", Name: "Exploitation for Privilege Escalation"},
+	"cloud_jump":        {ID: "T1078.004", Name: "Valid Accounts: Cloud Accounts"},
+	"container_escape":  {ID: "T1611", Name: "Escape to Host"},
+}
+
 // AttackPathNode is one host in the attack-path graph — either the
 // synthetic "internet" entry point or a real agent annotated with the
 // exploitability signal (EPSS/KEV/risk score) that determines how easy it
@@ -25,29 +58,40 @@ type AttackPathNode struct {
 	MaxEPSS        float64 `json:"max_epss"`
 	HasKEV         bool    `json:"has_kev"`
 	KEVCount       int     `json:"kev_count"`
-	Exposed        bool    `json:"exposed"` // has at least one observed ESTABLISHED connection to a public IP
+	Exposed        bool    `json:"exposed"`
 	CompromiseCost float64 `json:"compromise_cost"`
-	OpenAlertCount int     `json:"open_alert_count"` // open, non-snoozed alerts right now
+	OpenAlertCount int     `json:"open_alert_count"`
+	// Enriched fields computed after graph construction.
+	BlastRadius    int    `json:"blast_radius,omitempty"`
+	IsChokepoint   bool   `json:"is_chokepoint,omitempty"`
+	PrivLevel      string `json:"priv_level,omitempty"`
+	KillChainPhase string `json:"kill_chain_phase,omitempty"`
 }
 
 // AttackPathEdge is reachability, not necessarily live traffic direction —
 // built from observed connections (agent-to-agent = lateral movement
 // opportunity; internet-to-agent = an externally-reachable entry point).
 type AttackPathEdge struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Kind   string `json:"kind"` // "internet_exposure" | "lateral"
+	Source        string `json:"source"`
+	Target        string `json:"target"`
+	Kind          string `json:"kind"` // "internet_exposure" | "lateral" | "priv_esc"
+	TechniqueID   string `json:"technique_id,omitempty"`
+	TechniqueName string `json:"technique_name,omitempty"`
+	Description   string `json:"description,omitempty"`
 }
 
 // RankedAttackPath is one candidate route an attacker could take from the
 // internet to a real asset, ranked by how cheap the path is to traverse
 // relative to how valuable (risky/KEV-exposed) the target is.
 type RankedAttackPath struct {
-	Hops            []string `json:"hops"` // node IDs, internet -> ... -> target
-	TotalCost       float64  `json:"total_cost"`
-	TargetHostname  string   `json:"target_hostname"`
-	TargetRiskLevel string   `json:"target_risk_level"`
-	Score           float64  `json:"score"`
+	Hops            []string       `json:"hops"` // node IDs, internet -> ... -> target
+	TotalCost       float64        `json:"total_cost"`
+	TargetHostname  string         `json:"target_hostname"`
+	TargetRiskLevel string         `json:"target_risk_level"`
+	Score           float64        `json:"score"`
+	PathType        string         `json:"path_type,omitempty"`   // "lateral" | "priv_esc"
+	KillChainPhases []string       `json:"kill_chain_phases,omitempty"`
+	Techniques      []TechniqueRef `json:"techniques,omitempty"`
 }
 
 type AttackPathGraph struct {
@@ -63,7 +107,6 @@ const internetNodeID = "internet"
 // address using net.SplitHostPort. Also strips the interface-scope suffix
 // that ss/ip occasionally produces (e.g. "192.168.1.1%eth0:68").
 func hostFromAddress(addr string) string {
-	// Strip scope ID before SplitHostPort ("1.2.3.4%eth0:68" → "1.2.3.4:68").
 	if pct := strings.Index(addr, "%"); pct >= 0 {
 		if colon := strings.LastIndex(addr, ":"); colon > pct {
 			addr = addr[:pct] + addr[colon:]
@@ -79,6 +122,21 @@ func hostFromAddress(addr string) string {
 	return host
 }
 
+// portFromAddress extracts the port string from an "ip:port" address.
+// Returns empty string if no port is present or parsing fails.
+func portFromAddress(addr string) string {
+	if pct := strings.Index(addr, "%"); pct >= 0 {
+		if colon := strings.LastIndex(addr, ":"); colon > pct {
+			addr = addr[:pct] + addr[colon:]
+		}
+	}
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	return port
+}
+
 func isListenPlaceholder(ip string) bool {
 	if ip == "" || ip == "0.0.0.0" || ip == "::" {
 		return true
@@ -90,11 +148,89 @@ func isListenPlaceholder(ip string) bool {
 	return parsed.IsLoopback()
 }
 
+// edgeTechnique returns the best technique for an edge — port-specific if
+// available, otherwise the kind-level fallback.
+func edgeTechnique(kind, port string) TechniqueRef {
+	if (kind == "lateral" || kind == "priv_esc") && port != "" {
+		if t, ok := portTechniques[port]; ok {
+			return t
+		}
+	}
+	if t, ok := kindTechniques[kind]; ok {
+		return t
+	}
+	return TechniqueRef{}
+}
+
+// inferPrivLevel returns a coarse privilege classification derived from the
+// node's exploitability signal. Not a substitute for real AD/identity data,
+// but gives the SOC a useful first signal without any new DB queries.
+func inferPrivLevel(n *AttackPathNode) string {
+	if n.HasKEV && n.RiskScore >= 60 {
+		return "admin"
+	}
+	if n.RiskScore >= 70 {
+		return "elevated"
+	}
+	if n.RiskScore >= 45 {
+		return "standard"
+	}
+	return "user"
+}
+
+// inferKillChainPhase maps a node's structural role in the graph to the
+// most likely ATT&CK kill-chain phase. Applied after blast_radius and
+// is_chokepoint are computed so those fields can inform the assignment.
+func inferKillChainPhase(n *AttackPathNode, totalAgents int) string {
+	if n.Type == "internet" {
+		return "reconnaissance"
+	}
+	if n.Exposed {
+		return "initial_access"
+	}
+	if n.HasKEV {
+		return "exploitation"
+	}
+	if n.IsChokepoint {
+		return "lateral_movement"
+	}
+	if n.RiskScore >= 70 {
+		return "persistence"
+	}
+	if totalAgents > 0 && n.BlastRadius >= totalAgents/3 {
+		return "collection"
+	}
+	return "execution"
+}
+
+// bfsReachable returns the count of nodes reachable from startID in the
+// undirected adjacency graph, excluding startID and the internet node itself.
+func bfsReachable(startID string, adj map[string][]string) int {
+	visited := map[string]bool{startID: true}
+	q := []string{startID}
+	for len(q) > 0 {
+		cur := q[0]
+		q = q[1:]
+		for _, next := range adj[cur] {
+			if !visited[next] {
+				visited[next] = true
+				q = append(q, next)
+			}
+		}
+	}
+	count := 0
+	for id := range visited {
+		if id != startID && id != internetNodeID {
+			count++
+		}
+	}
+	return count
+}
+
 // BuildAttackPathGraph composes observed network connections, EPSS/KEV
 // exploitability, and risk scores into a graph of how an attacker could
 // pivot from the public internet to the tenant's assets — and ranks the
-// cheapest paths to the most valuable targets. Grounded entirely in data
-// this codebase already collects; no synthetic/sample paths are invented.
+// cheapest paths to the most valuable targets.
 func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 
 	agents, err := repositories.GetAgents(tenantID)
@@ -155,14 +291,14 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 		}
 	}
 
-	nodeID := func(agentID int) string { return fmt.Sprintf("agent-%d", agentID) }
+	makeNodeID := func(agentID int) string { return fmt.Sprintf("agent-%d", agentID) }
 
 	nodes := make(map[string]*AttackPathNode, len(agents)+1)
 	nodes[internetNodeID] = &AttackPathNode{ID: internetNodeID, Type: "internet"}
 
 	for _, a := range agents {
 		n := &AttackPathNode{
-			ID:        nodeID(a.ID),
+			ID:        makeNodeID(a.ID),
 			Type:      "agent",
 			AgentID:   a.ID,
 			Hostname:  a.Hostname,
@@ -179,9 +315,6 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 		}
 		n.OpenAlertCount = openAlerts[a.ID]
 
-		// Cheaper to traverse into a node that's already known-risky,
-		// has a confirmed-actively-exploited (KEV) vuln, or a high EPSS
-		// score — those are the realistic weak links, not a guess.
 		cost := 100.0
 		if n.HasKEV {
 			cost -= 50
@@ -192,32 +325,44 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 			cost = 1
 		}
 		n.CompromiseCost = cost
-
 		nodes[n.ID] = n
 	}
 
-	edgeSeen := map[string]bool{}
-	edges := []AttackPathEdge{}
-	adjacency := map[string][]string{} // undirected agent-agent + outgoing internet->agent
+	// ── Edge construction ────────────────────────────────────────────────────
+	// Dedup by ordered pair (source|target) regardless of kind so each pair
+	// of nodes has exactly one edge. priv_esc connections are processed in a
+	// second pass, so the first-seen connection wins for port-technique lookup.
 
-	addEdge := func(source, target, kind string) {
-		key := kind + "|" + source + "|" + target
-		revKey := kind + "|" + target + "|" + source
-		if edgeSeen[key] || edgeSeen[revKey] {
+	pairSeen := map[string]bool{} // "source|target" or "target|source"
+	var edges []AttackPathEdge
+	adjacency := map[string][]string{} // undirected; used for Dijkstra + blast_radius
+
+	addEdge := func(source, target, kind, port string) {
+		fwd := source + "|" + target
+		rev := target + "|" + source
+		if pairSeen[fwd] || pairSeen[rev] {
 			return
 		}
-		edgeSeen[key] = true
-		edges = append(edges, AttackPathEdge{Source: source, Target: target, Kind: kind})
+		pairSeen[fwd] = true
+
+		tech := edgeTechnique(kind, port)
+		e := AttackPathEdge{
+			Source:        source,
+			Target:        target,
+			Kind:          kind,
+			TechniqueID:   tech.ID,
+			TechniqueName: tech.Name,
+		}
+		edges = append(edges, e)
+
 		adjacency[source] = append(adjacency[source], target)
-		if kind == "lateral" {
+		// lateral and priv_esc are bidirectional reachability for Dijkstra.
+		if kind == "lateral" || kind == "priv_esc" {
 			adjacency[target] = append(adjacency[target], source)
 		}
 	}
 
 	for _, c := range conns {
-		// Only ESTABLISHED connections represent real reachability. LISTEN,
-		// CLOSE_WAIT, and TIME_WAIT rows with real remote IPs would add
-		// phantom lateral-movement edges that never actually existed.
 		if c.State != "ESTABLISHED" {
 			continue
 		}
@@ -225,31 +370,143 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 		if isListenPlaceholder(host) {
 			continue
 		}
-		srcID := nodeID(c.AgentID)
+		srcID := makeNodeID(c.AgentID)
 		if _, ok := nodes[srcID]; !ok {
 			continue
 		}
+
+		port := portFromAddress(c.RemoteAddress)
 
 		if remoteAgent, ok := agentByIP[host]; ok {
 			if remoteAgent.ID == c.AgentID {
 				continue
 			}
-			addEdge(srcID, nodeID(remoteAgent.ID), "lateral")
+			addEdge(srcID, makeNodeID(remoteAgent.ID), "lateral", port)
 			continue
 		}
 
 		if !isPrivateIP(host) {
 			nodes[srcID].Exposed = true
-			addEdge(internetNodeID, srcID, "internet_exposure")
+			addEdge(internetNodeID, srcID, "internet_exposure", port)
 		}
 	}
 
+	// ── Privilege escalation upgrade pass ───────────────────────────────────
+	// Re-classify lateral edges where the target is significantly more
+	// exploitable than the source and has an actively-exploited (KEV) vuln.
+	// This is the best heuristic available without actual AD/privilege data.
+	for i, e := range edges {
+		if e.Kind != "lateral" {
+			continue
+		}
+		src, sok := nodes[e.Source]
+		tgt, tok := nodes[e.Target]
+		if !sok || !tok {
+			continue
+		}
+		if tgt.HasKEV && tgt.RiskScore >= 60 && tgt.RiskScore > src.RiskScore+15 {
+			edges[i].Kind = "priv_esc"
+			t := edgeTechnique("priv_esc", "")
+			edges[i].TechniqueID = t.ID
+			edges[i].TechniqueName = t.Name
+			edges[i].Description = "Target has known-exploited CVE and significantly higher risk score — privilege escalation likely."
+		}
+	}
+
+	// ── Blast radius ─────────────────────────────────────────────────────────
+	// BFS from each agent node through the undirected adjacency map.
+	// Tells the SOC: "if this host is compromised, how many others are exposed?"
+	for id, n := range nodes {
+		if n.Type == "internet" {
+			continue
+		}
+		n.BlastRadius = bfsReachable(id, adjacency)
+	}
+
+	// ── Dijkstra + path ranking ──────────────────────────────────────────────
 	hasEntryPoint := len(adjacency[internetNodeID]) > 0
-
 	dist, prev := dijkstraFromInternet(nodes, adjacency)
-
 	topPaths := rankAttackPaths(nodes, dist, prev)
 
+	// ── Chokepoint detection ─────────────────────────────────────────────────
+	// A node is a chokepoint if it appears in ≥2 of the top paths, or if it
+	// is the only path to one or more targets (appears in all ranked paths).
+	hopCount := map[string]int{}
+	for _, p := range topPaths {
+		for _, h := range p.Hops {
+			if h != internetNodeID {
+				hopCount[h]++
+			}
+		}
+	}
+	chokepointThreshold := 2
+	if len(topPaths) == 1 {
+		chokepointThreshold = 1
+	}
+	for id, cnt := range hopCount {
+		if cnt >= chokepointThreshold {
+			if n, ok := nodes[id]; ok {
+				n.IsChokepoint = true
+			}
+		}
+	}
+
+	// ── Per-node enrichment ──────────────────────────────────────────────────
+	totalAgents := len(agents)
+	for _, n := range nodes {
+		if n.Type == "internet" {
+			n.KillChainPhase = "reconnaissance"
+			continue
+		}
+		n.PrivLevel = inferPrivLevel(n)
+		n.KillChainPhase = inferKillChainPhase(n, totalAgents)
+	}
+
+	// ── Path-level enrichment ────────────────────────────────────────────────
+	// Build a lookup so we can walk path hops → edges → techniques.
+	edgeByPair := map[string]AttackPathEdge{}
+	for _, e := range edges {
+		edgeByPair[e.Source+"|"+e.Target] = e
+		edgeByPair[e.Target+"|"+e.Source] = e // bidirectional lookup
+	}
+
+	for i, p := range topPaths {
+		techSeen := map[string]bool{}
+		phaseSeen := map[string]bool{}
+		var techs []TechniqueRef
+		var phases []string
+		hasPrivEsc := false
+
+		for j := 0; j < len(p.Hops)-1; j++ {
+			fwd := p.Hops[j] + "|" + p.Hops[j+1]
+			if e, ok := edgeByPair[fwd]; ok {
+				if e.TechniqueID != "" && !techSeen[e.TechniqueID] {
+					techSeen[e.TechniqueID] = true
+					techs = append(techs, TechniqueRef{ID: e.TechniqueID, Name: e.TechniqueName})
+				}
+				if e.Kind == "priv_esc" {
+					hasPrivEsc = true
+				}
+			}
+			// Collect kill-chain phases from the destination node of each hop.
+			if n, ok := nodes[p.Hops[j+1]]; ok && n.KillChainPhase != "" {
+				if !phaseSeen[n.KillChainPhase] {
+					phaseSeen[n.KillChainPhase] = true
+					phases = append(phases, n.KillChainPhase)
+				}
+			}
+		}
+
+		topPaths[i].Techniques = techs
+		topPaths[i].KillChainPhases = phases
+		if hasPrivEsc {
+			topPaths[i].PathType = "priv_esc"
+		} else {
+			topPaths[i].PathType = "lateral"
+		}
+	}
+
+	// ── Serialise nodes ──────────────────────────────────────────────────────
 	outNodes := make([]AttackPathNode, 0, len(nodes))
 	for _, n := range nodes {
 		outNodes = append(outNodes, *n)
@@ -266,8 +523,7 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 
 // dijkstraFromInternet computes the cheapest (easiest-to-traverse) path
 // from the synthetic internet node to every agent node, where the cost of
-// entering a node is that node's CompromiseCost. Graphs here are small
-// (tenant's own fleet), so a plain O(V^2) Dijkstra without a heap is fine.
+// entering a node is that node's CompromiseCost.
 func dijkstraFromInternet(nodes map[string]*AttackPathNode, adjacency map[string][]string) (map[string]float64, map[string]string) {
 
 	const inf = 1e18
@@ -282,7 +538,6 @@ func dijkstraFromInternet(nodes map[string]*AttackPathNode, adjacency map[string
 	dist[internetNodeID] = 0
 
 	for {
-		// Pick the closest unvisited node.
 		var u string
 		best := inf + 1
 		for id, d := range dist {
@@ -317,8 +572,7 @@ func dijkstraFromInternet(nodes map[string]*AttackPathNode, adjacency map[string
 
 // rankAttackPaths scores every internet-reachable agent by how valuable a
 // target it is relative to how cheap the path to it was, and returns the
-// top 5 with their full hop sequence reconstructed from Dijkstra's
-// predecessor map.
+// top 5 with their full hop sequence reconstructed from the predecessor map.
 func rankAttackPaths(nodes map[string]*AttackPathNode, dist map[string]float64, prev map[string]string) []RankedAttackPath {
 
 	const inf = 1e18
@@ -338,11 +592,11 @@ func rankAttackPaths(nodes map[string]*AttackPathNode, dist map[string]float64, 
 			value += 50
 		}
 		if value <= 0 {
-			continue // no signal this target is worth reaching
+			continue
 		}
 		pathCost := dist[id]
 		if pathCost <= 0 {
-			pathCost = 0.001 // prevent division by zero for zero-cost paths
+			pathCost = 0.001
 		}
 		candidates = append(candidates, candidate{id: id, score: value / pathCost})
 	}

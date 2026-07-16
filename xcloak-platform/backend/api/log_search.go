@@ -222,12 +222,26 @@ func expandTimeRange(r string, tenantID int) services.LogSearchParams {
 	p := services.LogSearchParams{TenantID: tenantID}
 	now := time.Now()
 	switch r {
+	case "5m":
+		p.From = now.Add(-5 * time.Minute)
+	case "15m":
+		p.From = now.Add(-15 * time.Minute)
 	case "1h":
 		p.From = now.Add(-time.Hour)
 	case "6h":
 		p.From = now.Add(-6 * time.Hour)
-	case "24h":
-		p.From = now.Add(-24 * time.Hour)
+	case "24h", "today":
+		if r == "today" {
+			y, m, d := now.Date()
+			p.From = time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+		} else {
+			p.From = now.Add(-24 * time.Hour)
+		}
+	case "yesterday":
+		y, m, d := now.AddDate(0, 0, -1).Date()
+		p.From = time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+		p.To = time.Date(y, m, d, 23, 59, 59, 0, now.Location())
+		return p
 	case "7d":
 		p.From = now.Add(-7 * 24 * time.Hour)
 	case "30d":

@@ -7,18 +7,19 @@ const BACKEND   = process.env.BACKEND_INTERNAL_URL || 'http://localhost:8080';
 const DEMO_ONLY = process.env.NEXT_PUBLIC_DEMO_ONLY === 'true';
 
 async function proxy(request: NextRequest): Promise<NextResponse> {
+  const hasBody = !['GET', 'HEAD'].includes(request.method);
+
   if (DEMO_ONLY) {
     const path = request.nextUrl.pathname;
     const sp   = request.nextUrl.searchParams;
-    const { data, status } = demoRoute(path, request.method, sp);
+    const body = hasBody ? await request.text() : undefined;
+    const { data, status } = demoRoute(path, request.method, sp, body);
     return NextResponse.json(data, { status });
   }
 
   const url     = `${BACKEND}${request.nextUrl.pathname}${request.nextUrl.search}`;
   const headers = new Headers(request.headers);
   headers.delete('host');
-
-  const hasBody = !['GET', 'HEAD'].includes(request.method);
 
   let upstream: Response;
   try {

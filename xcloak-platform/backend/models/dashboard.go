@@ -19,3 +19,4 @@ type DashboardOverview struct {
 	Incidents         int `json:"incidents"`
 	CriticalIncidents int `json:"critical_incidents"`
 }
+
