@@ -893,4 +893,34 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Deception Enterprise ──────────────────────────────────────────────────
+	// Static routes before /:id
+	router.GET("/api/deception/dashboard",          middleware.RequireAuth(), api.GetDeceptionDashboard)
+	router.GET("/api/deception/decoys",             middleware.RequireAuth(), api.GetDeceptionDecoys)
+	router.POST("/api/deception/decoys",            middleware.RequireAuth(), api.PostDeceptionDecoy)
+	router.POST("/api/deception/deploy",            middleware.RequireAuth(), api.PostDeceptionDeploy)
+	router.GET("/api/deception/honeytokens",        middleware.RequireAuth(), api.GetDeceptionHoneytokens)
+	router.POST("/api/deception/honeytokens",       middleware.RequireAuth(), api.PostDeceptionHoneytoken)
+	router.GET("/api/deception/triggers",           middleware.RequireAuth(), api.GetDeceptionTriggers)
+	router.GET("/api/deception/campaigns",          middleware.RequireAuth(), api.GetDeceptionCampaigns)
+	router.GET("/api/deception/timeline",           middleware.RequireAuth(), api.GetDeceptionTimeline)
+	router.GET("/api/deception/graph",              middleware.RequireAuth(), api.GetDeceptionGraph)
+	router.GET("/api/deception/threat-intel",       middleware.RequireAuth(), api.GetDeceptionThreatIntel)
+	router.POST("/api/deception/ai",                middleware.RequireAuth(), api.PostDeceptionAI)
+	router.GET("/api/deception/health",             middleware.RequireAuth(), api.GetDeceptionHealth)
+	router.POST("/api/deception/response",          middleware.RequireAuth(), api.PostDeceptionResponse)
+	router.GET("/api/deception/analytics",          middleware.RequireAuth(), api.GetDeceptionAnalytics)
+	router.GET("/api/deception/watchlists",         middleware.RequireAuth(), api.GetDeceptionWatchlists)
+	router.POST("/api/deception/watchlists",        middleware.RequireAuth(), api.PostDeceptionWatchlist)
+	router.GET("/api/deception/policies",           middleware.RequireAuth(), api.GetDeceptionPolicies)
+	router.POST("/api/deception/policies",          middleware.RequireAuth(), api.PostDeceptionPolicy)
+	router.POST("/api/deception/report",            middleware.RequireAuth(), api.PostDeceptionReport)
+	router.GET("/api/deception/templates",          middleware.RequireAuth(), api.GetDeceptionTemplates)
+	// Parameterized routes
+	router.PATCH("/api/deception/decoys/:id",       middleware.RequireAuth(), api.PatchDeceptionDecoy)
+	router.DELETE("/api/deception/decoys/:id",      middleware.RequireAuth(), api.DeleteDeceptionDecoy)
+	router.DELETE("/api/deception/honeytokens/:id", middleware.RequireAuth(), api.DeleteDeceptionHoneytoken)
+	router.DELETE("/api/deception/watchlists/:id",  middleware.RequireAuth(), api.DeleteDeceptionWatchlist)
+	router.DELETE("/api/deception/policies/:id",    middleware.RequireAuth(), api.DeleteDeceptionPolicy)
+
 }
