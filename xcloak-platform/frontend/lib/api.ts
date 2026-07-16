@@ -955,6 +955,32 @@ export const deceptionAPI = {
   getTemplates:       ()                   => api.get('/deception/templates').catch(() => ({ data: [] })),
 };
 
+export const cloudSecurityAPI = {
+  getDashboard:      ()                   => api.get('/cloud/dashboard').catch(() => ({ data: null })),
+  getAccounts:       ()                   => api.get('/cloud/accounts').catch(() => ({ data: [] })),
+  createAccount:     (data: any)          => api.post('/cloud/accounts', data),
+  deleteAccount:     (id: number)         => api.delete(`/cloud/accounts/${id}`),
+  getInventory:      (params?: any)       => api.get('/cloud/inventory', { params }).catch(() => ({ data: [] })),
+  getCSPMFindings:   (params?: any)       => api.get('/cloud/cspm/findings', { params }).catch(() => ({ data: [] })),
+  getCSPMSummary:    ()                   => api.get('/cloud/cspm/summary').catch(() => ({ data: [] })),
+  patchFinding:      (id: number, data: any) => api.patch(`/cloud/cspm/findings/${id}`, data),
+  getCIEMIdentities: (params?: any)       => api.get('/cloud/ciem/identities', { params }).catch(() => ({ data: [] })),
+  getCIEMRisks:      ()                   => api.get('/cloud/ciem/risks').catch(() => ({ data: null })),
+  getThreats:        (params?: any)       => api.get('/cloud/threats', { params }).catch(() => ({ data: [] })),
+  getExposure:       ()                   => api.get('/cloud/exposure').catch(() => ({ data: null })),
+  getCompliance:     (params?: any)       => api.get('/cloud/compliance', { params }).catch(() => ({ data: [] })),
+  getTimeline:       (params?: any)       => api.get('/cloud/timeline', { params }).catch(() => ({ data: [] })),
+  getAttackPaths:    ()                   => api.get('/cloud/attack-paths').catch(() => ({ data: { nodes: [], edges: [] } })),
+  getDrift:          (params?: any)       => api.get('/cloud/drift', { params }).catch(() => ({ data: [] })),
+  patchDrift:        (id: number)         => api.patch(`/cloud/drift/${id}`, {}),
+  getVulnerabilities:(params?: any)       => api.get('/cloud/vulnerabilities', { params }).catch(() => ({ data: [] })),
+  getThreatIntel:    ()                   => api.get('/cloud/threat-intel').catch(() => ({ data: null })),
+  analyzeAI:         (data: any)          => api.post('/cloud/ai', data),
+  getAnalytics:      ()                   => api.get('/cloud/analytics').catch(() => ({ data: null })),
+  respond:           (data: any)          => api.post('/cloud/response', data),
+  generateReport:    (data: any)          => api.post('/cloud/report', data),
+};
+
 export const suppressionAPI = {
   getAll:  ()                              => api.get('/suppression/rules').catch(() => ({ data: [] })),
   create:  (data: any)                     => api.post('/suppression/rules', data),

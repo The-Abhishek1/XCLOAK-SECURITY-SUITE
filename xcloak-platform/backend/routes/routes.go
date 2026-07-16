@@ -893,6 +893,33 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Cloud Security Enterprise ─────────────────────────────────────────────
+	// Static routes before /:id
+	router.GET("/api/cloud/dashboard",          middleware.RequireAuth(), api.GetCloudDashboard)
+	router.GET("/api/cloud/accounts",           middleware.RequireAuth(), api.GetCloudAccounts)
+	router.POST("/api/cloud/accounts",          middleware.RequireAuth(), api.PostCloudAccount)
+	router.GET("/api/cloud/inventory",          middleware.RequireAuth(), api.GetCloudInventory)
+	router.GET("/api/cloud/cspm/findings",      middleware.RequireAuth(), api.GetCSPMFindings)
+	router.GET("/api/cloud/cspm/summary",       middleware.RequireAuth(), api.GetCSPMSummary)
+	router.GET("/api/cloud/ciem/identities",    middleware.RequireAuth(), api.GetCIEMIdentities)
+	router.GET("/api/cloud/ciem/risks",         middleware.RequireAuth(), api.GetCIEMRisks)
+	router.GET("/api/cloud/threats",            middleware.RequireAuth(), api.GetCloudThreats)
+	router.GET("/api/cloud/exposure",           middleware.RequireAuth(), api.GetCloudExposure)
+	router.GET("/api/cloud/compliance",         middleware.RequireAuth(), api.GetCloudCompliance)
+	router.GET("/api/cloud/timeline",           middleware.RequireAuth(), api.GetCloudTimeline)
+	router.GET("/api/cloud/attack-paths",       middleware.RequireAuth(), api.GetCloudAttackPaths)
+	router.GET("/api/cloud/drift",              middleware.RequireAuth(), api.GetCloudDrift)
+	router.GET("/api/cloud/vulnerabilities",    middleware.RequireAuth(), api.GetCloudVulnerabilities)
+	router.GET("/api/cloud/threat-intel",       middleware.RequireAuth(), api.GetCloudThreatIntel)
+	router.POST("/api/cloud/ai",                middleware.RequireAuth(), api.PostCloudAI)
+	router.GET("/api/cloud/analytics",          middleware.RequireAuth(), api.GetCloudAnalytics)
+	router.POST("/api/cloud/response",          middleware.RequireAuth(), api.PostCloudResponse)
+	router.POST("/api/cloud/report",            middleware.RequireAuth(), api.PostCloudReport)
+	// Parameterized
+	router.DELETE("/api/cloud/accounts/:id",    middleware.RequireAuth(), api.DeleteCloudAccount)
+	router.PATCH("/api/cloud/cspm/findings/:id",middleware.RequireAuth(), api.PatchCloudFinding)
+	router.PATCH("/api/cloud/drift/:id",        middleware.RequireAuth(), api.PatchCloudDrift)
+
 	// ── Deception Enterprise ──────────────────────────────────────────────────
 	// Static routes before /:id
 	router.GET("/api/deception/dashboard",          middleware.RequireAuth(), api.GetDeceptionDashboard)
