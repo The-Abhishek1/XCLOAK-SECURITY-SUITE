@@ -893,6 +893,29 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Container Security / Kubernetes Enterprise ───────────────────────────
+	router.GET("/api/containers/dashboard",         middleware.RequireAuth(), api.GetContainerDashboard)
+	router.GET("/api/containers/clusters",          middleware.RequireAuth(), api.GetK8sClusters)
+	router.GET("/api/containers/nodes",             middleware.RequireAuth(), api.GetK8sNodes)
+	router.GET("/api/containers/namespaces",        middleware.RequireAuth(), api.GetK8sNamespaces)
+	router.GET("/api/containers/pods",              middleware.RequireAuth(), api.GetK8sPods)
+	router.GET("/api/containers/images",            middleware.RequireAuth(), api.GetK8sImages)
+	router.GET("/api/containers/supply-chain",      middleware.RequireAuth(), api.GetSupplyChain)
+	router.GET("/api/containers/runtime-alerts",    middleware.RequireAuth(), api.GetRuntimeAlerts)
+	router.GET("/api/containers/rbac",              middleware.RequireAuth(), api.GetK8sRBAC)
+	router.GET("/api/containers/secrets",           middleware.RequireAuth(), api.GetK8sSecrets)
+	router.GET("/api/containers/network-policies",  middleware.RequireAuth(), api.GetNetworkPolicies)
+	router.GET("/api/containers/admission",         middleware.RequireAuth(), api.GetAdmissionControl)
+	router.GET("/api/containers/compliance",        middleware.RequireAuth(), api.GetContainerCompliance)
+	router.GET("/api/containers/threat-intel",      middleware.RequireAuth(), api.GetContainerThreatIntel)
+	router.GET("/api/containers/timeline",          middleware.RequireAuth(), api.GetContainerTimeline)
+	router.GET("/api/containers/vulnerabilities",   middleware.RequireAuth(), api.GetContainerVulns)
+	router.GET("/api/containers/attack-paths",      middleware.RequireAuth(), api.GetContainerAttackPaths)
+	router.GET("/api/containers/analytics",         middleware.RequireAuth(), api.GetContainerAnalytics)
+	router.POST("/api/containers/response",         middleware.RequireAuth(), api.PostContainerResponse)
+	router.POST("/api/containers/ai",               middleware.RequireAuth(), api.PostContainerAI)
+	router.POST("/api/containers/report",           middleware.RequireAuth(), api.PostContainerReport)
+
 	// ── Email Security Enterprise ─────────────────────────────────────────────
 	// Static routes before /:id
 	router.GET("/api/email/dashboard",          middleware.RequireAuth(), api.GetEmailDashboard)

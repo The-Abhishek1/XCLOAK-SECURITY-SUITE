@@ -981,6 +981,30 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const containerSecurityAPI = {
+  getDashboard:       ()              => api.get('/containers/dashboard').catch(() => ({ data: null })),
+  getClusters:        ()              => api.get('/containers/clusters').catch(() => ({ data: [] })),
+  getNodes:           (params?: any)  => api.get('/containers/nodes', { params }).catch(() => ({ data: [] })),
+  getNamespaces:      ()              => api.get('/containers/namespaces').catch(() => ({ data: [] })),
+  getPods:            (params?: any)  => api.get('/containers/pods', { params }).catch(() => ({ data: [] })),
+  getImages:          (params?: any)  => api.get('/containers/images', { params }).catch(() => ({ data: [] })),
+  getSupplyChain:     ()              => api.get('/containers/supply-chain').catch(() => ({ data: null })),
+  getRuntimeAlerts:   (params?: any)  => api.get('/containers/runtime-alerts', { params }).catch(() => ({ data: [] })),
+  getRBAC:            ()              => api.get('/containers/rbac').catch(() => ({ data: null })),
+  getSecrets:         ()              => api.get('/containers/secrets').catch(() => ({ data: null })),
+  getNetworkPolicies: ()              => api.get('/containers/network-policies').catch(() => ({ data: [] })),
+  getAdmission:       ()              => api.get('/containers/admission').catch(() => ({ data: [] })),
+  getCompliance:      ()              => api.get('/containers/compliance').catch(() => ({ data: null })),
+  getThreatIntel:     ()              => api.get('/containers/threat-intel').catch(() => ({ data: null })),
+  getTimeline:        (params?: any)  => api.get('/containers/timeline', { params }).catch(() => ({ data: [] })),
+  getVulnerabilities: (params?: any)  => api.get('/containers/vulnerabilities', { params }).catch(() => ({ data: [] })),
+  getAttackPaths:     ()              => api.get('/containers/attack-paths').catch(() => ({ data: null })),
+  getAnalytics:       ()              => api.get('/containers/analytics').catch(() => ({ data: null })),
+  respond:            (data: any)     => api.post('/containers/response', data),
+  analyzeAI:          (data: any)     => api.post('/containers/ai', data),
+  generateReport:     (data: any)     => api.post('/containers/report', data),
+};
+
 export const emailSecurityAPI = {
   getDashboard:    ()             => api.get('/email/dashboard').catch(() => ({ data: null })),
   getMailFlow:     ()             => api.get('/email/mail-flow').catch(() => ({ data: null })),
