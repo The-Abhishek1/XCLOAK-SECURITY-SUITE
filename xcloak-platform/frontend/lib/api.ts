@@ -981,6 +981,30 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const otICSAPI = {
+  getDashboard:      ()              => api.get('/ot/dashboard').catch(() => ({ data: null })),
+  getAssets:         (params?: any) => api.get('/ot/assets', { params }).catch(() => ({ data: [] })),
+  getTopology:       ()              => api.get('/ot/topology').catch(() => ({ data: null })),
+  getProtocols:      ()              => api.get('/ot/protocols').catch(() => ({ data: null })),
+  getTraffic:        (params?: any) => api.get('/ot/traffic', { params }).catch(() => ({ data: [] })),
+  getAlerts:         (params?: any) => api.get('/ot/alerts', { params }).catch(() => ({ data: null })),
+  getDevices:        ()              => api.get('/ot/devices').catch(() => ({ data: null })),
+  getThreats:        ()              => api.get('/ot/threats').catch(() => ({ data: null })),
+  getDPI:            ()              => api.get('/ot/dpi').catch(() => ({ data: null })),
+  getRisk:           ()              => api.get('/ot/risk').catch(() => ({ data: null })),
+  getVulnerabilities:()              => api.get('/ot/vulnerabilities').catch(() => ({ data: null })),
+  getZones:          ()              => api.get('/ot/zones').catch(() => ({ data: null })),
+  getBaseline:       ()              => api.get('/ot/baseline').catch(() => ({ data: null })),
+  getThreatIntel:    ()              => api.get('/ot/threat-intel').catch(() => ({ data: null })),
+  getTimeline:       ()              => api.get('/ot/timeline').catch(() => ({ data: [] })),
+  getCompliance:     ()              => api.get('/ot/compliance').catch(() => ({ data: null })),
+  getAttackPaths:    ()              => api.get('/ot/attack-paths').catch(() => ({ data: null })),
+  getAnalytics:      ()              => api.get('/ot/analytics').catch(() => ({ data: null })),
+  analyzeAI:         (data: any)    => api.post('/ot/ai', data),
+  respond:           (data: any)    => api.post('/ot/response', data),
+  generateReport:    (data: any)    => api.post('/ot/report', data),
+};
+
 export const supplyChainAPI = {
   getDashboard:      ()              => api.get('/supply-chain/dashboard').catch(() => ({ data: null })),
   getRepositories:   ()              => api.get('/supply-chain/repositories').catch(() => ({ data: [] })),

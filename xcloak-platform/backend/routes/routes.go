@@ -893,6 +893,29 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── OT/ICS Security Enterprise ───────────────────────────────────────────
+	router.GET("/api/ot/dashboard",     middleware.RequireAuth(), api.GetOTDashboard)
+	router.GET("/api/ot/assets",        middleware.RequireAuth(), api.GetOTAssets)
+	router.GET("/api/ot/topology",      middleware.RequireAuth(), api.GetOTTopology)
+	router.GET("/api/ot/protocols",     middleware.RequireAuth(), api.GetOTProtocols)
+	router.GET("/api/ot/traffic",       middleware.RequireAuth(), api.GetOTTraffic)
+	router.GET("/api/ot/alerts",        middleware.RequireAuth(), api.GetOTAlerts)
+	router.GET("/api/ot/devices",       middleware.RequireAuth(), api.GetOTDeviceStatus)
+	router.GET("/api/ot/threats",       middleware.RequireAuth(), api.GetOTThreatDetection)
+	router.GET("/api/ot/dpi",           middleware.RequireAuth(), api.GetOTDPI)
+	router.GET("/api/ot/risk",          middleware.RequireAuth(), api.GetOTRiskAssessment)
+	router.GET("/api/ot/vulnerabilities",middleware.RequireAuth(), api.GetOTVulnerabilities)
+	router.GET("/api/ot/zones",         middleware.RequireAuth(), api.GetOTZones)
+	router.GET("/api/ot/baseline",      middleware.RequireAuth(), api.GetOTBaseline)
+	router.GET("/api/ot/threat-intel",  middleware.RequireAuth(), api.GetOTThreatIntel)
+	router.GET("/api/ot/timeline",      middleware.RequireAuth(), api.GetOTTimeline)
+	router.GET("/api/ot/compliance",    middleware.RequireAuth(), api.GetOTCompliance)
+	router.GET("/api/ot/attack-paths",  middleware.RequireAuth(), api.GetOTAttackPaths)
+	router.GET("/api/ot/analytics",     middleware.RequireAuth(), api.GetOTAnalytics)
+	router.POST("/api/ot/ai",           middleware.RequireAuth(), api.PostOTAI)
+	router.POST("/api/ot/response",     middleware.RequireAuth(), api.PostOTResponse)
+	router.POST("/api/ot/report",       middleware.RequireAuth(), api.PostOTReport)
+
 	// ── Supply Chain Security Enterprise ────────────────────────────────────
 	router.GET("/api/supply-chain/dashboard",      middleware.RequireAuth(), api.GetSCDashboard)
 	router.GET("/api/supply-chain/repositories",   middleware.RequireAuth(), api.GetSCRepositories)
