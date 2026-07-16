@@ -981,6 +981,27 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const adSecurityAPI = {
+  getDashboard:    ()              => api.get('/ad/dashboard').catch(() => ({ data: null })),
+  getInventory:    ()              => api.get('/ad/inventory').catch(() => ({ data: null })),
+  getIdentityRisk: (params?: any) => api.get('/ad/identity-risk', { params }).catch(() => ({ data: null })),
+  getAuthMonitor:  (params?: any) => api.get('/ad/auth-monitor', { params }).catch(() => ({ data: null })),
+  getAttacks:      (params?: any) => api.get('/ad/attacks', { params }).catch(() => ({ data: null })),
+  getGPOChanges:   ()              => api.get('/ad/gpo-changes').catch(() => ({ data: [] })),
+  getChanges:      ()              => api.get('/ad/changes').catch(() => ({ data: [] })),
+  getAttackPaths:  ()              => api.get('/ad/attack-paths').catch(() => ({ data: null })),
+  getTiering:      ()              => api.get('/ad/tiering').catch(() => ({ data: null })),
+  getExposure:     ()              => api.get('/ad/exposure').catch(() => ({ data: null })),
+  getThreatIntel:  ()              => api.get('/ad/threat-intel').catch(() => ({ data: null })),
+  getTimeline:     (params?: any) => api.get('/ad/timeline', { params }).catch(() => ({ data: [] })),
+  getGraph:        ()              => api.get('/ad/graph').catch(() => ({ data: null })),
+  getAnalytics:    ()              => api.get('/ad/analytics').catch(() => ({ data: null })),
+  getAssessment:   ()              => api.get('/ad/assessment').catch(() => ({ data: null })),
+  analyzeAI:       (data: any)    => api.post('/ad/ai', data),
+  respond:         (data: any)    => api.post('/ad/response', data),
+  generateReport:  (data: any)    => api.post('/ad/report', data),
+};
+
 export const containerSecurityAPI = {
   getDashboard:       ()              => api.get('/containers/dashboard').catch(() => ({ data: null })),
   getClusters:        ()              => api.get('/containers/clusters').catch(() => ({ data: [] })),

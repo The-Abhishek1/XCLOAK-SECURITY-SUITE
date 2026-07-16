@@ -893,6 +893,26 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Active Directory Security Enterprise ─────────────────────────────────
+	router.GET("/api/ad/dashboard",         middleware.RequireAuth(), api.GetADDashboard)
+	router.GET("/api/ad/inventory",         middleware.RequireAuth(), api.GetADInventory)
+	router.GET("/api/ad/identity-risk",     middleware.RequireAuth(), api.GetADIdentityRisk)
+	router.GET("/api/ad/auth-monitor",      middleware.RequireAuth(), api.GetADAuthMonitor)
+	router.GET("/api/ad/attacks",           middleware.RequireAuth(), api.GetADAttacks)
+	router.GET("/api/ad/gpo-changes",       middleware.RequireAuth(), api.GetADGPOChanges)
+	router.GET("/api/ad/changes",           middleware.RequireAuth(), api.GetADChanges)
+	router.GET("/api/ad/attack-paths",      middleware.RequireAuth(), api.GetADAttackPaths)
+	router.GET("/api/ad/tiering",           middleware.RequireAuth(), api.GetADTiering)
+	router.GET("/api/ad/exposure",          middleware.RequireAuth(), api.GetADExposure)
+	router.GET("/api/ad/threat-intel",      middleware.RequireAuth(), api.GetADThreatIntel)
+	router.GET("/api/ad/timeline",          middleware.RequireAuth(), api.GetADTimeline)
+	router.GET("/api/ad/graph",             middleware.RequireAuth(), api.GetADRelationshipGraph)
+	router.GET("/api/ad/analytics",         middleware.RequireAuth(), api.GetADAnalytics)
+	router.GET("/api/ad/assessment",        middleware.RequireAuth(), api.GetADAssessment)
+	router.POST("/api/ad/ai",               middleware.RequireAuth(), api.PostADAI)
+	router.POST("/api/ad/response",         middleware.RequireAuth(), api.PostADResponse)
+	router.POST("/api/ad/report",           middleware.RequireAuth(), api.PostADReport)
+
 	// ── Container Security / Kubernetes Enterprise ───────────────────────────
 	router.GET("/api/containers/dashboard",         middleware.RequireAuth(), api.GetContainerDashboard)
 	router.GET("/api/containers/clusters",          middleware.RequireAuth(), api.GetK8sClusters)
