@@ -581,6 +581,26 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/risk-posture/history", middleware.RequireAuth(), api.GetRiskPostureHistoryHandler)
 	router.POST("/api/risk-posture/refresh", middleware.RequireAuth(), middleware.RequirePermission("run_ai_analysis"), api.RefreshRiskPosture)
 
+	// ── Threat Hunt Enterprise ───────────────────────────────────────────
+	// Static routes registered first to prevent Gin radix conflict with /:id
+	router.GET("/api/threat-hunt/dashboard",          middleware.RequireAuth(), api.GetThreatHuntDashboard)
+	router.GET("/api/threat-hunt/library",            middleware.RequireAuth(), api.GetThreatHuntLibrary)
+	router.GET("/api/threat-hunt/categories",         middleware.RequireAuth(), api.GetThreatHuntCategories)
+	router.GET("/api/threat-hunt/findings",           middleware.RequireAuth(), api.GetThreatHuntFindings)
+	router.GET("/api/threat-hunt/metrics",            middleware.RequireAuth(), api.GetThreatHuntMetrics)
+	router.POST("/api/threat-hunt",                   middleware.RequireAuth(), api.PostThreatHunt)
+	router.POST("/api/threat-hunt/ai",                middleware.RequireAuth(), api.PostThreatHuntAI)
+	router.POST("/api/threat-hunt/export",            middleware.RequireAuth(), api.PostThreatHuntExport)
+	router.POST("/api/threat-hunt/response",          middleware.RequireAuth(), api.PostThreatHuntResponse)
+	router.POST("/api/threat-hunt/findings/:fid/ack", middleware.RequireAuth(), api.PostThreatHuntFindingAck)
+	router.GET("/api/threat-hunt/:id",                middleware.RequireAuth(), api.GetThreatHunt)
+	router.PATCH("/api/threat-hunt/:id",              middleware.RequireAuth(), api.PatchThreatHunt)
+	router.DELETE("/api/threat-hunt/:id",             middleware.RequireAuth(), api.DeleteThreatHunt)
+	router.POST("/api/threat-hunt/:id/execute",       middleware.RequireAuth(), api.PostThreatHuntExecute)
+	router.POST("/api/threat-hunt/:id/schedule",      middleware.RequireAuth(), api.PostThreatHuntSchedule)
+	router.POST("/api/threat-hunt/:id/comment",       middleware.RequireAuth(), api.PostThreatHuntComment)
+	router.GET("/api/threat-hunt/:id/comments",       middleware.RequireAuth(), api.GetThreatHuntComments)
+
 	// ── Hunt Workbench Enterprise ────────────────────────────────────────
 	router.GET("/api/hunt/dashboard",        middleware.RequireAuth(), api.GetHuntDashboard)
 	router.GET("/api/hunt/analytics",        middleware.RequireAuth(), api.GetHuntAnalytics)
@@ -835,5 +855,42 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/dpi/response-action",  middleware.RequireAuth(), api.PostDPIResponseAction)
 	router.GET("/api/dpi/findings",          middleware.RequireAuth(), api.GetDPIFindings)
 	router.GET("/api/dpi/summary",           middleware.RequireAuth(), api.GetDPIFindingsSummary)
+
+	// ── DFIR Enterprise ───────────────────────────────────────────────────────
+	// Static routes registered before /:id to prevent Gin radix conflict
+	router.GET("/api/dfir/dashboard",                   middleware.RequireAuth(), api.GetDFIRDashboard)
+	router.GET("/api/dfir/investigations",              middleware.RequireAuth(), api.GetDFIRInvestigations)
+	router.POST("/api/dfir/investigations",             middleware.RequireAuth(), api.PostDFIRInvestigation)
+	router.GET("/api/dfir/evidence",                    middleware.RequireAuth(), api.GetDFIREvidence)
+	router.POST("/api/dfir/file-analysis",              middleware.RequireAuth(), api.PostDFIRFileAnalysis)
+	router.POST("/api/dfir/malware-analysis",           middleware.RequireAuth(), api.PostDFIRMalwareAnalysis)
+	router.GET("/api/dfir/search",                      middleware.RequireAuth(), api.GetDFIRSearch)
+	router.GET("/api/dfir/analytics",                   middleware.RequireAuth(), api.GetDFIRAnalytics)
+	// Investigation-scoped
+	router.GET("/api/dfir/investigations/:id",              middleware.RequireAuth(), api.GetDFIRInvestigation)
+	router.PATCH("/api/dfir/investigations/:id",            middleware.RequireAuth(), api.PatchDFIRInvestigation)
+	router.DELETE("/api/dfir/investigations/:id",           middleware.RequireAuth(), api.DeleteDFIRInvestigation)
+	router.POST("/api/dfir/investigations/:id/collect",     middleware.RequireAuth(), api.PostDFIRCollect)
+	router.GET("/api/dfir/investigations/:id/tasks",        middleware.RequireAuth(), api.GetDFIRCollectionTasks)
+	router.POST("/api/dfir/investigations/:id/ai",          middleware.RequireAuth(), api.PostDFIRAI)
+	router.POST("/api/dfir/investigations/:id/report",      middleware.RequireAuth(), api.PostDFIRReport)
+	router.POST("/api/dfir/investigations/:id/response",    middleware.RequireAuth(), api.PostDFIRResponse)
+	router.GET("/api/dfir/investigations/:id/timeline",     middleware.RequireAuth(), api.GetDFIRTimeline)
+	router.POST("/api/dfir/investigations/:id/timeline",    middleware.RequireAuth(), api.PostDFIRTimelineEvent)
+	router.GET("/api/dfir/investigations/:id/process-tree", middleware.RequireAuth(), api.GetDFIRProcessTree)
+	router.POST("/api/dfir/investigations/:id/memory",      middleware.RequireAuth(), api.PostDFIRMemoryAnalyze)
+	router.GET("/api/dfir/investigations/:id/network",      middleware.RequireAuth(), api.GetDFIRNetworkForensics)
+	router.GET("/api/dfir/investigations/:id/artifacts",    middleware.RequireAuth(), api.GetDFIRArtifacts)
+	router.GET("/api/dfir/investigations/:id/evidence",     middleware.RequireAuth(), api.GetDFIREvidence)
+	router.GET("/api/dfir/investigations/:id/notebook",     middleware.RequireAuth(), api.GetDFIRNotebook)
+	router.POST("/api/dfir/investigations/:id/notebook",    middleware.RequireAuth(), api.PostDFIRNotebook)
+	router.GET("/api/dfir/investigations/:id/graph",        middleware.RequireAuth(), api.GetDFIRRelationshipGraph)
+	router.GET("/api/dfir/investigations/:id/threat-intel", middleware.RequireAuth(), api.GetDFIRThreatIntel)
+	// Evidence-scoped
+	router.GET("/api/dfir/evidence/:eid",                   middleware.RequireAuth(), api.GetDFIREvidenceItem)
+	router.GET("/api/dfir/evidence/:eid/custody",           middleware.RequireAuth(), api.GetDFIRCustody)
+	router.POST("/api/dfir/evidence/:eid/custody",          middleware.RequireAuth(), api.PostDFIRCustody)
+	// Notebook entry deletion
+	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
 }

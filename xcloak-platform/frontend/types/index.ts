@@ -29,8 +29,13 @@ export interface Agent {
   storage_total_gb?: number;
   vpn_active?: boolean;
   security_patch?: string;
+  platform_category?: string;
   // Server-computed; populated in list endpoint
   open_alert_count?: number;
+  // Isolation + protection
+  is_isolated?:       boolean;
+  tamper_protection?: boolean;
+  policy_count?:      number;
 }
 
 export interface AgentSummary {
@@ -109,6 +114,23 @@ export interface SigmaRuleStat {
   title: string;
   hit_count: number;
   last_matched_at: string | null;
+}
+
+export interface AgentGroup {
+  id: number;
+  name: string;
+  description: string;
+  agent_count: number;
+  created_at: string;
+}
+
+export interface AgentAuditEntry {
+  action: string;
+  actor: string;
+  status: string;
+  timestamp: string;
+  completed_at?: string;
+  detail?: string;
 }
 
 export interface AnomalyFinding {
@@ -317,7 +339,7 @@ export interface Vulnerability {
 
 export interface AttackPathNode {
   id: string;
-  type: 'internet' | 'agent';
+  type: 'internet' | 'agent' | 'cloud' | 'container' | 'domain_controller';
   agent_id?: number;
   hostname?: string;
   risk_score: number;
@@ -328,12 +350,19 @@ export interface AttackPathNode {
   exposed: boolean;
   compromise_cost: number;
   open_alert_count: number;
+  kill_chain_phase?: string;
+  priv_level?: string;
+  blast_radius?: number;
+  is_chokepoint?: boolean;
 }
 
 export interface AttackPathEdge {
   source: string;
   target: string;
-  kind: 'internet_exposure' | 'lateral';
+  kind: 'internet_exposure' | 'lateral' | 'priv_esc' | 'cloud_jump' | 'container_escape';
+  technique_id?: string;
+  technique_name?: string;
+  description?: string;
 }
 
 export interface RankedAttackPath {
@@ -342,6 +371,10 @@ export interface RankedAttackPath {
   target_hostname: string;
   target_risk_level: string;
   score: number;
+  path_type?: 'lateral' | 'priv_esc' | 'cloud' | 'container';
+  kill_chain_phases?: string[];
+  techniques?: Array<{ id: string; name: string }>;
+  remediation?: string[];
 }
 
 export interface CorrelationMatch {
@@ -366,7 +399,7 @@ export interface AttackPathGraph {
 
 export interface NetworkMapNode {
   id: string;
-  type: 'agent' | 'external_ip';
+  type: 'agent' | 'external_ip' | 'firewall' | 'router' | 'switch' | 'vpn' | 'wireless' | 'cloud' | 'wan';
   agent_id?: number;
   hostname?: string;
   ip?: string;
@@ -378,6 +411,8 @@ export interface NetworkMapNode {
   alert_count: number;
   is_ioc: boolean;
   ioc_severity?: string;
+  role?: string;
+  vlan?: string;
 }
 
 export interface NetworkMapEdge {
@@ -438,10 +473,17 @@ export interface NetworkMapGraph {
 export interface TimelineEvent {
   id?: number;
   agent_id?: number;
+  hostname?: string;
+  username?: string;
+  process_name?: string;
   event_type: string;
   message: string;
-  severity?: 'critical' | 'high' | 'medium' | 'low' | string;
+  severity?: 'critical' | 'high' | 'medium' | 'low' | 'info' | string;
   created_at: string;
+  details?: Record<string, any>;
+  mitre_technique?: string;
+  mitre_name?: string;
+  source?: string;
 }
 
 export interface DashboardOverview {

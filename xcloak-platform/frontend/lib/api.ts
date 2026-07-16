@@ -816,6 +816,32 @@ export const huntAPI = {
   promote:     (data: any)     => api.post('/sigma/rules/from-hunt', data),
 };
 
+export const threatHuntAPI = {
+  // Read
+  dashboard:   ()            => api.get('/threat-hunt/dashboard').catch(() => ({ data: null })),
+  library:     (params?: { category?: string; status?: string }) =>
+    api.get('/threat-hunt/library', { params }).catch(() => ({ data: [] })),
+  categories:  ()            => api.get('/threat-hunt/categories').catch(() => ({ data: null })),
+  findings:    (params?: { hunt_id?: number; severity?: string; status?: string }) =>
+    api.get('/threat-hunt/findings', { params }).catch(() => ({ data: [] })),
+  metrics:     ()            => api.get('/threat-hunt/metrics').catch(() => ({ data: null })),
+  get:         (id: number)  => api.get(`/threat-hunt/${id}`).catch(() => ({ data: null })),
+  comments:    (id: number)  => api.get(`/threat-hunt/${id}/comments`).catch(() => ({ data: [] })),
+  // Mutate
+  create:      (body: any)   => api.post('/threat-hunt', body),
+  update:      (id: number, body: any) => api.patch(`/threat-hunt/${id}`, body),
+  remove:      (id: number)  => api.delete(`/threat-hunt/${id}`),
+  execute:     (id: number)  => api.post(`/threat-hunt/${id}/execute`, {}),
+  schedule:    (id: number, body: any) => api.post(`/threat-hunt/${id}/schedule`, body),
+  comment:     (id: number, content: string) => api.post(`/threat-hunt/${id}/comment`, { content }),
+  ackFinding:  (fid: number, status: string) => api.post(`/threat-hunt/findings/${fid}/ack`, { status }),
+  ai:          (body: { action: string; hunt_id?: number; hunt_name?: string; hypothesis?: string; category?: string; prompt?: string; context?: string }) =>
+    api.post('/threat-hunt/ai', body),
+  export:      (body: { hunt_id: number; format: string }) => api.post('/threat-hunt/export', body),
+  response:    (body: { action: string; hunt_id?: number; finding_id?: number; target?: string; reason?: string }) =>
+    api.post('/threat-hunt/response', body),
+};
+
 export const huntWorkbenchAPI = {
   getTemplates:   ()              => api.get('/hunt/templates').catch(() => ({ data: [] })),
   createTemplate: (data: any)     => api.post('/hunt/templates', data),
@@ -849,10 +875,55 @@ export const huntWorkbenchAPI = {
 };
 
 export const dfirAPI = {
-  getCollections:    (limit = 50)          => api.get('/dfir/collections', { params: { limit } }).catch(() => ({ data: [] })),
-  triggerCollection: (data: any)           => api.post('/dfir/collections', data),
-  getArtifacts:      (id: number)          => api.get(`/dfir/collections/${id}/artifacts`).catch(() => ({ data: [] })),
-  getTimeline:       (incidentId: number)  => api.get(`/dfir/incidents/${incidentId}/timeline`).catch(() => ({ data: [] })),
+  // Dashboard & analytics
+  dashboard:      ()                      => api.get('/dfir/dashboard').catch(() => ({ data: null })),
+  analytics:      ()                      => api.get('/dfir/analytics').catch(() => ({ data: null })),
+  search:         (q: string)             => api.get('/dfir/search', { params: { q } }).catch(() => ({ data: null })),
+  // Investigations CRUD
+  investigations: (params?: { status?: string; priority?: string }) =>
+    api.get('/dfir/investigations', { params }).catch(() => ({ data: [] })),
+  getInvestigation: (id: number)          => api.get(`/dfir/investigations/${id}`).catch(() => ({ data: null })),
+  create:         (body: any)             => api.post('/dfir/investigations', body),
+  update:         (id: number, body: any) => api.patch(`/dfir/investigations/${id}`, body),
+  close:          (id: number)            => api.delete(`/dfir/investigations/${id}`),
+  // Evidence
+  evidence:       (params?: { investigation_id?: number; type?: string }) =>
+    api.get('/dfir/evidence', { params }).catch(() => ({ data: [] })),
+  evidenceItem:   (eid: number)           => api.get(`/dfir/evidence/${eid}`).catch(() => ({ data: null })),
+  custody:        (eid: number)           => api.get(`/dfir/evidence/${eid}/custody`).catch(() => ({ data: [] })),
+  addCustody:     (eid: number, body: any) => api.post(`/dfir/evidence/${eid}/custody`, body),
+  // Collection
+  collect:        (id: number, body: any) => api.post(`/dfir/investigations/${id}/collect`, body),
+  tasks:          (id: number)            => api.get(`/dfir/investigations/${id}/tasks`).catch(() => ({ data: [] })),
+  // Timeline
+  timeline:       (id: number, params?: { type?: string; limit?: number }) =>
+    api.get(`/dfir/investigations/${id}/timeline`, { params }).catch(() => ({ data: [] })),
+  addTimelineEvent: (id: number, body: any) => api.post(`/dfir/investigations/${id}/timeline`, body),
+  // Forensic analysis
+  processTree:    (id: number)            => api.get(`/dfir/investigations/${id}/process-tree`).catch(() => ({ data: null })),
+  memoryAnalyze:  (id: number)            => api.post(`/dfir/investigations/${id}/memory`, {}),
+  network:        (id: number, params?: { protocol?: string }) =>
+    api.get(`/dfir/investigations/${id}/network`, { params }).catch(() => ({ data: [] })),
+  artifacts:      (id: number, params?: { platform?: string; artifact?: string }) =>
+    api.get(`/dfir/investigations/${id}/artifacts`, { params }).catch(() => ({ data: null })),
+  fileAnalysis:   (body: { sha256?: string; file_path?: string; file_name?: string }) =>
+    api.post('/dfir/file-analysis', body),
+  malwareAnalysis: (body: { evidence_id?: number; sha256?: string; file_name?: string; context?: string }) =>
+    api.post('/dfir/malware-analysis', body),
+  // AI assistant
+  ai:             (id: number, body: { action: string; context?: string; prompt?: string }) =>
+    api.post(`/dfir/investigations/${id}/ai`, body),
+  // Notebook
+  notebook:       (id: number)            => api.get(`/dfir/investigations/${id}/notebook`).catch(() => ({ data: [] })),
+  addNote:        (id: number, body: any) => api.post(`/dfir/investigations/${id}/notebook`, body),
+  deleteNote:     (nid: number)           => api.delete(`/dfir/notebook/${nid}`),
+  // Graph & Intel
+  graph:          (id: number)            => api.get(`/dfir/investigations/${id}/graph`).catch(() => ({ data: null })),
+  threatIntel:    (id: number)            => api.get(`/dfir/investigations/${id}/threat-intel`).catch(() => ({ data: null })),
+  // Response & Reports
+  response:       (id: number, body: any) => api.post(`/dfir/investigations/${id}/response`, body),
+  report:         (id: number, body: { report_type: string; format?: string }) =>
+    api.post(`/dfir/investigations/${id}/report`, body),
 };
 
 export const deceptionAPI = {

