@@ -887,6 +887,29 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Approval Queue Enterprise ────────────────────────────────────────────
+	router.GET("/api/aq/dashboard",                    middleware.RequireAuth(), api.GetAQDashboard)
+	router.GET("/api/aq/queue",                        middleware.RequireAuth(), api.GetAQQueue)
+	router.POST("/api/aq/queue",                       middleware.RequireAuth(), api.PostAQRequest)
+	router.GET("/api/aq/policies",                     middleware.RequireAuth(), api.GetAQPolicies)
+	router.POST("/api/aq/policies",                    middleware.RequireAuth(), api.PostAQPolicy)
+	router.POST("/api/aq/ai",                          middleware.RequireAuth(), api.PostAQAI)
+	router.POST("/api/aq/report",                      middleware.RequireAuth(), api.PostAQReport)
+	router.GET("/api/aq/matrix",                       middleware.RequireAuth(), api.GetAQMatrix)
+	router.GET("/api/aq/analytics",                    middleware.RequireAuth(), api.GetAQAnalytics)
+	router.GET("/api/aq/audit",                        middleware.RequireAuth(), api.GetAQAudit)
+	router.GET("/api/aq/approvers",                    middleware.RequireAuth(), api.GetAQApprovers)
+	router.GET("/api/aq/queue/:id",                    middleware.RequireAuth(), api.GetAQRequestByID)
+	router.POST("/api/aq/queue/:id/decision",          middleware.RequireAuth(), api.PostAQDecision)
+	router.POST("/api/aq/queue/:id/delegate",          middleware.RequireAuth(), api.PostAQDelegate)
+	router.POST("/api/aq/queue/:id/emergency",         middleware.RequireAuth(), api.PostAQEmergency)
+	router.GET("/api/aq/queue/:id/comments",           middleware.RequireAuth(), api.GetAQComments)
+	router.POST("/api/aq/queue/:id/comments",          middleware.RequireAuth(), api.PostAQComment)
+	router.GET("/api/aq/queue/:id/timeline",           middleware.RequireAuth(), api.GetAQTimeline)
+	router.GET("/api/aq/queue/:id/evidence",           middleware.RequireAuth(), api.GetAQEvidence)
+	router.PATCH("/api/aq/policies/:pid",              middleware.RequireAuth(), api.PatchAQPolicy)
+	router.DELETE("/api/aq/policies/:pid",             middleware.RequireAuth(), api.DeleteAQPolicy)
+
 	// ── Playbooks Enterprise ─────────────────────────────────────────────────
 	router.GET("/api/pb/dashboard",                    middleware.RequireAuth(), api.GetPBDashboard)
 	router.GET("/api/pb/library",                      middleware.RequireAuth(), api.GetPBLibrary)

@@ -970,6 +970,30 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const aqAPI = {
+  getDashboard:    ()              => api.get('/aq/dashboard').catch(() => ({ data: null })),
+  getQueue:        (params?: any)  => api.get('/aq/queue', { params }).catch(() => ({ data: [] })),
+  createRequest:   (data: any)     => api.post('/aq/queue', data).catch(() => ({ data: null })),
+  getRequest:      (id: number)    => api.get(`/aq/queue/${id}`).catch(() => ({ data: null })),
+  decide:          (id: number, data: any) => api.post(`/aq/queue/${id}/decision`, data),
+  delegate:        (id: number, data: any) => api.post(`/aq/queue/${id}/delegate`, data),
+  emergency:       (id: number, data: any) => api.post(`/aq/queue/${id}/emergency`, data),
+  getComments:     (id: number)    => api.get(`/aq/queue/${id}/comments`).catch(() => ({ data: [] })),
+  addComment:      (id: number, data: any) => api.post(`/aq/queue/${id}/comments`, data),
+  getTimeline:     (id: number)    => api.get(`/aq/queue/${id}/timeline`).catch(() => ({ data: [] })),
+  getEvidence:     (id: number)    => api.get(`/aq/queue/${id}/evidence`).catch(() => ({ data: null })),
+  getPolicies:     ()              => api.get('/aq/policies').catch(() => ({ data: [] })),
+  createPolicy:    (data: any)     => api.post('/aq/policies', data).catch(() => ({ data: null })),
+  updatePolicy:    (pid: number, data: any) => api.patch(`/aq/policies/${pid}`, data),
+  deletePolicy:    (pid: number)   => api.delete(`/aq/policies/${pid}`),
+  getMatrix:       ()              => api.get('/aq/matrix').catch(() => ({ data: [] })),
+  getAnalytics:    ()              => api.get('/aq/analytics').catch(() => ({ data: null })),
+  getAudit:        ()              => api.get('/aq/audit').catch(() => ({ data: [] })),
+  getApprovers:    ()              => api.get('/aq/approvers').catch(() => ({ data: [] })),
+  askAI:           (data: any)     => api.post('/aq/ai', data).catch(() => ({ data: null })),
+  generateReport:  (data: any)     => api.post('/aq/report', data).catch(() => ({ data: null })),
+};
+
 export const pbAPI = {
   getDashboard:     ()              => api.get('/pb/dashboard').catch(() => ({ data: null })),
   getLibrary:       (params?: any)  => api.get('/pb/library', { params }).catch(() => ({ data: [] })),
