@@ -970,6 +970,21 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const qeAPI = {
+  getDashboard:    ()              => api.get('/qe/dashboard').catch(() => ({ data: null })),
+  getQueue:        (params?: any)  => api.get('/qe/queue', { params }).catch(() => ({ data: [] })),
+  getItem:         (id: number)    => api.get(`/qe/items/${id}`).catch(() => ({ data: null })),
+  createItem:      (data: any)     => api.post('/qe/items', data),
+  action:          (id: number, data: any) => api.post(`/qe/items/${id}/action`, data),
+  approve:         (id: number, data: any) => api.post(`/qe/items/${id}/approve`, data),
+  collectEvidence: (id: number)    => api.post(`/qe/items/${id}/evidence`, {}),
+  getEvidence:     (id: number)    => api.get(`/qe/items/${id}/evidence`).catch(() => ({ data: [] })),
+  askAI:           (data: any)     => api.post('/qe/ai', data).catch(() => ({ data: null })),
+  getAudit:        (params?: any)  => api.get('/qe/audit', { params }).catch(() => ({ data: [] })),
+  getAnalytics:    ()              => api.get('/qe/analytics').catch(() => ({ data: null })),
+  generateReport:  (data: any)     => api.post('/qe/report', data).catch(() => ({ data: null })),
+};
+
 export const supAPI = {
   getDashboard:   ()             => api.get('/sup/dashboard').catch(() => ({ data: null })),
   getRules:       (params?: any) => api.get('/sup/rules', { params }).catch(() => ({ data: [] })),

@@ -155,6 +155,20 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/incidents/:id/ai-root-cause", middleware.RequireAuth(), api.AIIncidentRootCause)
 	router.GET("/api/incidents/:id/similar", middleware.RequireAuth(), api.GetSimilarIncidents)
 
+	// ── Quarantine Enterprise ────────────────────────────────────────────────
+	router.GET("/api/qe/dashboard",           middleware.RequireAuth(), api.GetQEDashboard)
+	router.GET("/api/qe/queue",               middleware.RequireAuth(), api.GetQEQueue)
+	router.GET("/api/qe/audit",               middleware.RequireAuth(), api.GetQEAudit)
+	router.GET("/api/qe/analytics",           middleware.RequireAuth(), api.GetQEAnalytics)
+	router.GET("/api/qe/items/:id",           middleware.RequireAuth(), api.GetQEItem)
+	router.GET("/api/qe/items/:id/evidence",  middleware.RequireAuth(), api.GetQEEvidence)
+	router.POST("/api/qe/items",              middleware.RequireAuth(), api.PostQEItem)
+	router.POST("/api/qe/items/:id/action",   middleware.RequireAuth(), api.PostQEAction)
+	router.POST("/api/qe/items/:id/approve",  middleware.RequireAuth(), api.PostQEApprove)
+	router.POST("/api/qe/items/:id/evidence", middleware.RequireAuth(), api.PostQECollectEvidence)
+	router.POST("/api/qe/ai",                 middleware.RequireAuth(), api.PostQEAI)
+	router.POST("/api/qe/report",             middleware.RequireAuth(), api.PostQEReport)
+
 	// ── Quarantine ───────────────────────────────────────────────
 	router.GET("/api/quarantine", middleware.RequireAuth(), api.GetQuarantinedFiles)
 
