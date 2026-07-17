@@ -970,6 +970,20 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const supAPI = {
+  getDashboard:   ()             => api.get('/sup/dashboard').catch(() => ({ data: null })),
+  getRules:       (params?: any) => api.get('/sup/rules', { params }).catch(() => ({ data: [] })),
+  createRule:     (data: any)    => api.post('/sup/rules', data),
+  updateRule:     (id: number, data: any) => api.patch(`/sup/rules/${id}`, data),
+  deleteRule:     (id: number)   => api.delete(`/sup/rules/${id}`),
+  approveRule:    (id: number, data: any) => api.post(`/sup/rules/${id}/approve`, data),
+  preview:        (data: any)    => api.post('/sup/preview', data).catch(() => ({ data: null })),
+  askAI:          (data: any)    => api.post('/sup/ai', data).catch(() => ({ data: null })),
+  getAudit:       (params?: any) => api.get('/sup/audit', { params }).catch(() => ({ data: [] })),
+  getAnalytics:   ()             => api.get('/sup/analytics').catch(() => ({ data: null })),
+  generateReport: (data: any)    => api.post('/sup/report', data).catch(() => ({ data: null })),
+};
+
 export const vqAPI = {
   getDashboard:   ()              => api.get('/vq/dashboard').catch(() => ({ data: null })),
   getQueue:       (params?: any)  => api.get('/vq/queue', { params }).catch(() => ({ data: [] })),

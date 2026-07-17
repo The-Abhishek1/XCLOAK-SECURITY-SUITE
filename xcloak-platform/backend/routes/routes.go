@@ -887,6 +887,19 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Suppression Enterprise ───────────────────────────────────────────────
+	router.GET("/api/sup/dashboard",                   middleware.RequireAuth(), api.GetSupDashboard)
+	router.GET("/api/sup/rules",                       middleware.RequireAuth(), api.GetSupRules)
+	router.GET("/api/sup/audit",                       middleware.RequireAuth(), api.GetSupAudit)
+	router.GET("/api/sup/analytics",                   middleware.RequireAuth(), api.GetSupAnalytics)
+	router.POST("/api/sup/rules",                      middleware.RequireAuth(), api.PostSupRule)
+	router.POST("/api/sup/preview",                    middleware.RequireAuth(), api.PostSupPreview)
+	router.POST("/api/sup/ai",                         middleware.RequireAuth(), api.PostSupAI)
+	router.POST("/api/sup/report",                     middleware.RequireAuth(), api.PostSupReport)
+	router.PATCH("/api/sup/rules/:id",                 middleware.RequireAuth(), api.PatchSupRule)
+	router.DELETE("/api/sup/rules/:id",                middleware.RequireAuth(), api.DeleteSupRule)
+	router.POST("/api/sup/rules/:id/approve",          middleware.RequireAuth(), api.PostSupApprove)
+
 	// ── Vuln Queue Enterprise ─────────────────────────────────────────────────
 	router.GET("/api/vq/dashboard",                    middleware.RequireAuth(), api.GetVQDashboard)
 	router.GET("/api/vq/queue",                        middleware.RequireAuth(), api.GetVQQueue)
