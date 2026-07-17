@@ -155,6 +155,27 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/api/incidents/:id/ai-root-cause", middleware.RequireAuth(), api.AIIncidentRootCause)
 	router.GET("/api/incidents/:id/similar", middleware.RequireAuth(), api.GetSimilarIncidents)
 
+	// ── Script Runner Enterprise ─────────────────────────────────────────────
+	router.GET("/api/sr/dashboard",               middleware.RequireAuth(), api.GetSRDashboard)
+	router.GET("/api/sr/scripts",                 middleware.RequireAuth(), api.GetSRScripts)
+	router.GET("/api/sr/executions",              middleware.RequireAuth(), api.GetSRExecutions)
+	router.GET("/api/sr/schedules",               middleware.RequireAuth(), api.GetSRSchedules)
+	router.GET("/api/sr/approvals",               middleware.RequireAuth(), api.GetSRApprovals)
+	router.GET("/api/sr/audit",                   middleware.RequireAuth(), api.GetSRAudit)
+	router.GET("/api/sr/analytics",               middleware.RequireAuth(), api.GetSRAnalytics)
+	router.GET("/api/sr/scripts/:id",             middleware.RequireAuth(), api.GetSRScript)
+	router.GET("/api/sr/executions/:id",          middleware.RequireAuth(), api.GetSRExecution)
+	router.POST("/api/sr/scripts",                middleware.RequireAuth(), api.PostSRScript)
+	router.POST("/api/sr/execute",                middleware.RequireAuth(), api.PostSRExecute)
+	router.POST("/api/sr/ai",                     middleware.RequireAuth(), api.PostSRAI)
+	router.POST("/api/sr/schedules",              middleware.RequireAuth(), api.PostSRSchedule)
+	router.POST("/api/sr/approvals/:id/decide",   middleware.RequireAuth(), api.PostSRApprove)
+	router.POST("/api/sr/report",                 middleware.RequireAuth(), api.PostSRReport)
+	router.PATCH("/api/sr/scripts/:id",           middleware.RequireAuth(), api.PatchSRScript)
+	router.PATCH("/api/sr/schedules/:id",         middleware.RequireAuth(), api.PatchSRSchedule)
+	router.DELETE("/api/sr/scripts/:id",          middleware.RequireAuth(), api.DeleteSRScript)
+	router.DELETE("/api/sr/schedules/:id",        middleware.RequireAuth(), api.DeleteSRSchedule)
+
 	// ── Quarantine Enterprise ────────────────────────────────────────────────
 	router.GET("/api/qe/dashboard",           middleware.RequireAuth(), api.GetQEDashboard)
 	router.GET("/api/qe/queue",               middleware.RequireAuth(), api.GetQEQueue)

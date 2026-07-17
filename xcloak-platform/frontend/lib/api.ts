@@ -970,6 +970,28 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const srAPI = {
+  getDashboard:    ()                    => api.get('/sr/dashboard').catch(() => ({ data: null })),
+  getScripts:      (params?: any)        => api.get('/sr/scripts', { params }).catch(() => ({ data: [] })),
+  getScript:       (id: number)          => api.get(`/sr/scripts/${id}`).catch(() => ({ data: null })),
+  createScript:    (data: any)           => api.post('/sr/scripts', data),
+  updateScript:    (id: number, data: any) => api.patch(`/sr/scripts/${id}`, data),
+  deleteScript:    (id: number)          => api.delete(`/sr/scripts/${id}`),
+  execute:         (data: any)           => api.post('/sr/execute', data),
+  getExecutions:   (params?: any)        => api.get('/sr/executions', { params }).catch(() => ({ data: [] })),
+  getExecution:    (id: number)          => api.get(`/sr/executions/${id}`).catch(() => ({ data: null })),
+  askAI:           (data: any)           => api.post('/sr/ai', data).catch(() => ({ data: null })),
+  getSchedules:    ()                    => api.get('/sr/schedules').catch(() => ({ data: [] })),
+  createSchedule:  (data: any)           => api.post('/sr/schedules', data),
+  toggleSchedule:  (id: number, enabled: boolean) => api.patch(`/sr/schedules/${id}`, { enabled }),
+  deleteSchedule:  (id: number)          => api.delete(`/sr/schedules/${id}`),
+  getApprovals:    (params?: any)        => api.get('/sr/approvals', { params }).catch(() => ({ data: [] })),
+  decide:          (id: number, data: any) => api.post(`/sr/approvals/${id}/decide`, data),
+  getAnalytics:    ()                    => api.get('/sr/analytics').catch(() => ({ data: null })),
+  getAudit:        (params?: any)        => api.get('/sr/audit', { params }).catch(() => ({ data: [] })),
+  generateReport:  (data: any)           => api.post('/sr/report', data).catch(() => ({ data: null })),
+};
+
 export const qeAPI = {
   getDashboard:    ()              => api.get('/qe/dashboard').catch(() => ({ data: null })),
   getQueue:        (params?: any)  => api.get('/qe/queue', { params }).catch(() => ({ data: [] })),
