@@ -970,6 +970,26 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const vqAPI = {
+  getDashboard:   ()              => api.get('/vq/dashboard').catch(() => ({ data: null })),
+  getQueue:       (params?: any)  => api.get('/vq/queue', { params }).catch(() => ({ data: [] })),
+  getItem:        (id: number)    => api.get(`/vq/items/${id}`).catch(() => ({ data: null })),
+  assign:         (id: number, data: any) => api.post(`/vq/items/${id}/assign`, data),
+  action:         (id: number, data: any) => api.post(`/vq/items/${id}/action`, data),
+  verify:         (id: number, data: any) => api.post(`/vq/items/${id}/verify`, data),
+  getDependencies:(id: number)    => api.get(`/vq/items/${id}/dependencies`).catch(() => ({ data: [] })),
+  addDependency:  (id: number, data: any) => api.post(`/vq/items/${id}/dependencies`, data),
+  getExceptions:  ()              => api.get('/vq/exceptions').catch(() => ({ data: [] })),
+  createException:(data: any)     => api.post('/vq/exceptions', data),
+  updateException:(eid: number, data: any) => api.patch(`/vq/exceptions/${eid}`, data),
+  deleteException:(eid: number)   => api.delete(`/vq/exceptions/${eid}`),
+  bulk:           (data: any)     => api.post('/vq/bulk', data),
+  askAI:          (data: any)     => api.post('/vq/ai', data).catch(() => ({ data: null })),
+  getAnalytics:   ()              => api.get('/vq/analytics').catch(() => ({ data: null })),
+  getSLA:         ()              => api.get('/vq/sla').catch(() => ({ data: null })),
+  generateReport: (data: any)     => api.post('/vq/report', data).catch(() => ({ data: null })),
+};
+
 export const vmAPI = {
   getDashboard:     ()              => api.get('/vm/dashboard').catch(() => ({ data: null })),
   getInventory:     (params?: any)  => api.get('/vm/inventory', { params }).catch(() => ({ data: [] })),

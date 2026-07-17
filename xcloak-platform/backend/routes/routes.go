@@ -887,6 +887,25 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Vuln Queue Enterprise ─────────────────────────────────────────────────
+	router.GET("/api/vq/dashboard",                    middleware.RequireAuth(), api.GetVQDashboard)
+	router.GET("/api/vq/queue",                        middleware.RequireAuth(), api.GetVQQueue)
+	router.GET("/api/vq/exceptions",                   middleware.RequireAuth(), api.GetVQExceptions)
+	router.GET("/api/vq/analytics",                    middleware.RequireAuth(), api.GetVQAnalytics)
+	router.GET("/api/vq/sla",                          middleware.RequireAuth(), api.GetVQSLA)
+	router.POST("/api/vq/exceptions",                  middleware.RequireAuth(), api.PostVQException)
+	router.POST("/api/vq/bulk",                        middleware.RequireAuth(), api.PostVQBulk)
+	router.POST("/api/vq/ai",                          middleware.RequireAuth(), api.PostVQAI)
+	router.POST("/api/vq/report",                      middleware.RequireAuth(), api.PostVQReport)
+	router.GET("/api/vq/items/:id",                    middleware.RequireAuth(), api.GetVQItem)
+	router.POST("/api/vq/items/:id/assign",            middleware.RequireAuth(), api.PostVQAssign)
+	router.POST("/api/vq/items/:id/action",            middleware.RequireAuth(), api.PostVQAction)
+	router.POST("/api/vq/items/:id/verify",            middleware.RequireAuth(), api.PostVQVerify)
+	router.GET("/api/vq/items/:id/dependencies",       middleware.RequireAuth(), api.GetVQDependencies)
+	router.POST("/api/vq/items/:id/dependencies",      middleware.RequireAuth(), api.PostVQDependency)
+	router.PATCH("/api/vq/exceptions/:eid",            middleware.RequireAuth(), api.PatchVQException)
+	router.DELETE("/api/vq/exceptions/:eid",           middleware.RequireAuth(), api.DeleteVQException)
+
 	// ── Vulnerability Management Enterprise ──────────────────────────────────
 	router.GET("/api/vm/dashboard",                    middleware.RequireAuth(), api.GetVMDashboard)
 	router.GET("/api/vm/inventory",                    middleware.RequireAuth(), api.GetVMInventory)
