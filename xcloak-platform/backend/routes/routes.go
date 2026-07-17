@@ -887,6 +887,30 @@ func SetupRoutes(router *gin.Engine) {
 	// Notebook entry deletion
 	router.DELETE("/api/dfir/notebook/:nid",                middleware.RequireAuth(), api.DeleteDFIRNotebookEntry)
 
+	// ── Vulnerability Management Enterprise ──────────────────────────────────
+	router.GET("/api/vm/dashboard",                    middleware.RequireAuth(), api.GetVMDashboard)
+	router.GET("/api/vm/inventory",                    middleware.RequireAuth(), api.GetVMInventory)
+	router.GET("/api/vm/assets",                       middleware.RequireAuth(), api.GetVMAssets)
+	router.GET("/api/vm/attack-surface",               middleware.RequireAuth(), api.GetVMAttackSurface)
+	router.GET("/api/vm/attack-paths",                 middleware.RequireAuth(), api.GetVMAttackPaths)
+	router.GET("/api/vm/threat-intel",                 middleware.RequireAuth(), api.GetVMThreatIntel)
+	router.GET("/api/vm/patches",                      middleware.RequireAuth(), api.GetVMPatches)
+	router.GET("/api/vm/compliance",                   middleware.RequireAuth(), api.GetVMCompliance)
+	router.GET("/api/vm/analytics",                    middleware.RequireAuth(), api.GetVMAnalytics)
+	router.GET("/api/vm/scans",                        middleware.RequireAuth(), api.GetVMScans)
+	router.POST("/api/vm/scans",                       middleware.RequireAuth(), api.PostVMScan)
+	router.GET("/api/vm/exceptions",                   middleware.RequireAuth(), api.GetVMExceptions)
+	router.POST("/api/vm/exceptions",                  middleware.RequireAuth(), api.PostVMException)
+	router.POST("/api/vm/ai",                          middleware.RequireAuth(), api.PostVMAI)
+	router.POST("/api/vm/report",                      middleware.RequireAuth(), api.PostVMReport)
+	router.GET("/api/vm/assets/:id",                   middleware.RequireAuth(), api.GetVMAsset)
+	router.GET("/api/vm/findings/:id",                 middleware.RequireAuth(), api.GetVMFinding)
+	router.POST("/api/vm/findings/:id/action",         middleware.RequireAuth(), api.PostVMFindingAction)
+	router.POST("/api/vm/findings/:id/verify",         middleware.RequireAuth(), api.PostVMVerify)
+	router.POST("/api/vm/patches/:id/action",          middleware.RequireAuth(), api.PostVMPatchAction)
+	router.PATCH("/api/vm/exceptions/:eid",            middleware.RequireAuth(), api.PatchVMException)
+	router.DELETE("/api/vm/exceptions/:eid",           middleware.RequireAuth(), api.DeleteVMException)
+
 	// ── Approval Queue Enterprise ────────────────────────────────────────────
 	router.GET("/api/aq/dashboard",                    middleware.RequireAuth(), api.GetAQDashboard)
 	router.GET("/api/aq/queue",                        middleware.RequireAuth(), api.GetAQQueue)

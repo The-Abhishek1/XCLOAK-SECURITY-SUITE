@@ -970,6 +970,31 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const vmAPI = {
+  getDashboard:     ()              => api.get('/vm/dashboard').catch(() => ({ data: null })),
+  getInventory:     (params?: any)  => api.get('/vm/inventory', { params }).catch(() => ({ data: [] })),
+  getFinding:       (id: number)    => api.get(`/vm/findings/${id}`).catch(() => ({ data: null })),
+  findingAction:    (id: number, data: any) => api.post(`/vm/findings/${id}/action`, data),
+  verifyFinding:    (id: number)    => api.post(`/vm/findings/${id}/verify`, {}),
+  getAssets:        (params?: any)  => api.get('/vm/assets', { params }).catch(() => ({ data: [] })),
+  getAsset:         (id: number)    => api.get(`/vm/assets/${id}`).catch(() => ({ data: null })),
+  getAttackSurface: ()              => api.get('/vm/attack-surface').catch(() => ({ data: null })),
+  getAttackPaths:   ()              => api.get('/vm/attack-paths').catch(() => ({ data: [] })),
+  getThreatIntel:   ()              => api.get('/vm/threat-intel').catch(() => ({ data: null })),
+  getPatches:       ()              => api.get('/vm/patches').catch(() => ({ data: [] })),
+  patchAction:      (id: number, data: any) => api.post(`/vm/patches/${id}/action`, data),
+  getCompliance:    ()              => api.get('/vm/compliance').catch(() => ({ data: null })),
+  getAnalytics:     ()              => api.get('/vm/analytics').catch(() => ({ data: null })),
+  getScans:         ()              => api.get('/vm/scans').catch(() => ({ data: [] })),
+  launchScan:       (data: any)     => api.post('/vm/scans', data).catch(() => ({ data: null })),
+  getExceptions:    ()              => api.get('/vm/exceptions').catch(() => ({ data: [] })),
+  createException:  (data: any)     => api.post('/vm/exceptions', data).catch(() => ({ data: null })),
+  updateException:  (eid: number, data: any) => api.patch(`/vm/exceptions/${eid}`, data),
+  deleteException:  (eid: number)   => api.delete(`/vm/exceptions/${eid}`),
+  askAI:            (data: any)     => api.post('/vm/ai', data).catch(() => ({ data: null })),
+  generateReport:   (data: any)     => api.post('/vm/report', data).catch(() => ({ data: null })),
+};
+
 export const aqAPI = {
   getDashboard:    ()              => api.get('/aq/dashboard').catch(() => ({ data: null })),
   getQueue:        (params?: any)  => api.get('/aq/queue', { params }).catch(() => ({ data: [] })),
