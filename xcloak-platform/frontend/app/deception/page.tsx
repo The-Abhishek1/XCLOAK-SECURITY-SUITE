@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { RootLayout } from '@/components/layout/RootLayout';
 import { deceptionAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import {
@@ -1133,35 +1134,30 @@ export default function DeceptionPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-1)]">Deception Technology</h1>
-        <p className="text-sm text-[var(--text-3)] mt-1">Decoys, honeytokens, honeypots and adversary engagement</p>
-      </div>
+    <RootLayout>
+      <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Deception Technology</h1>
+          <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>Decoys, honeytokens, honeypots and adversary engagement</div>
+        </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-px">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t transition-colors
-              ${tab === id
-                ? 'text-[var(--accent)] border-b-2 border-[var(--accent)] -mb-px bg-[var(--accent)]/5'
-                : 'text-[var(--text-3)] hover:text-[var(--text-1)]'}`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
-      </div>
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+          {TABS.map(({ id, label }) => (
+            <button key={id} onClick={() => setTab(id)}
+              style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === id ? 600 : 400, color: tab === id ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === id ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-      <div>
-        {TABS.map(({ id }) => loaded.current[id] && (
-          <div key={id} style={{ display: tab === id ? 'block' : 'none' }}>
-            {TAB_CONTENT[id]}
-          </div>
-        ))}
+        <div>
+          {TABS.map(({ id }) => loaded.current[id] && (
+            <div key={id} style={{ display: tab === id ? 'block' : 'none' }}>
+              {TAB_CONTENT[id]}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </RootLayout>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { RootLayout } from '@/components/layout/RootLayout';
 import { containerSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 
@@ -849,16 +850,18 @@ export default function ContainerSecurityPage() {
   };
   const visibleTabs: Tab[] = ['overview', 'inventory', 'images', 'runtime', 'rbac', 'intelligence', 'compliance', 'analytics', 'response'];
   return (
-    <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100vh', background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Container &amp; Kubernetes Security</h1>
-          <p style={{ margin: '4px 0 0', color: 'var(--text-2)', fontSize: 13 }}>Runtime protection, image scanning, RBAC analysis, and compliance for containerized workloads.</p>
-        </div>
+    <RootLayout>
+    <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Container &amp; Kubernetes Security</h1>
+        <div style={{ marginTop: 4, color: 'var(--text-3)', fontSize: 13 }}>Runtime protection, image scanning, RBAC analysis, and compliance for containerized workloads.</div>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {visibleTabs.map(t => (
-          <button key={t} className={tab === t ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setTab(t)} style={{ fontSize: 12 }}>{TAB_LABELS[t]}</button>
+          <button key={t} onClick={() => setTab(t)}
+            style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {TAB_LABELS[t]}
+          </button>
         ))}
       </div>
       <div>
@@ -873,5 +876,6 @@ export default function ContainerSecurityPage() {
         {loaded.current['response']      && <div style={{ display: tab === 'response'      ? 'block' : 'none' }}><ResponseTab /></div>}
       </div>
     </div>
+    </RootLayout>
   );
 }
