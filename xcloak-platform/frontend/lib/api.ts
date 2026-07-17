@@ -970,6 +970,35 @@ export const cloudSecurityAPI = {
   generateReport:    (data: any)          => api.post('/cloud/report', data),
 };
 
+export const pbAPI = {
+  getDashboard:     ()              => api.get('/pb/dashboard').catch(() => ({ data: null })),
+  getLibrary:       (params?: any)  => api.get('/pb/library', { params }).catch(() => ({ data: [] })),
+  createPlaybook:   (data: any)     => api.post('/pb/library', data).catch(() => ({ data: null })),
+  getPlaybook:      (id: number)    => api.get(`/pb/library/${id}`).catch(() => ({ data: null })),
+  updatePlaybook:   (id: number, d: any) => api.patch(`/pb/library/${id}`, d).catch(() => ({ data: null })),
+  deletePlaybook:   (id: number)    => api.delete(`/pb/library/${id}`).catch(() => ({ data: null })),
+  publishPlaybook:  (id: number)    => api.post(`/pb/library/${id}/publish`, {}).catch(() => ({ data: null })),
+  getWorkflow:      (id: number)    => api.get(`/pb/library/${id}/workflow`).catch(() => ({ data: { nodes: [], edges: [] } })),
+  saveWorkflow:     (id: number, d: any) => api.patch(`/pb/library/${id}/workflow`, d).catch(() => ({ data: null })),
+  executePlaybook:  (id: number, d: any) => api.post(`/pb/library/${id}/execute`, d).catch(() => ({ data: null })),
+  dryRun:           (id: number, d: any) => api.post(`/pb/library/${id}/dry-run`, d).catch(() => ({ data: null })),
+  getVersions:      (id: number)    => api.get(`/pb/library/${id}/versions`).catch(() => ({ data: [] })),
+  getExecutions:    (params?: any)  => api.get('/pb/executions', { params }).catch(() => ({ data: [] })),
+  getExecution:     (id: number)    => api.get(`/pb/executions/${id}`).catch(() => ({ data: null })),
+  getApprovals:     ()              => api.get('/pb/approvals').catch(() => ({ data: [] })),
+  approvalDecision: (id: number, d: any) => api.post(`/pb/approvals/${id}/decision`, d).catch(() => ({ data: null })),
+  getAnalytics:     ()              => api.get('/pb/analytics').catch(() => ({ data: null })),
+  getTemplates:     ()              => api.get('/pb/templates').catch(() => ({ data: [] })),
+  getMarketplace:   ()              => api.get('/pb/marketplace').catch(() => ({ data: [] })),
+  installTemplate:  (id: string)    => api.post(`/pb/marketplace/${id}/install`, {}).catch(() => ({ data: null })),
+  analyzeAI:        (data: any)     => api.post('/pb/ai', data).catch(() => ({ data: null })),
+  generateReport:   (data: any)     => api.post('/pb/report', data).catch(() => ({ data: null })),
+  getSchedules:     ()              => api.get('/pb/schedules').catch(() => ({ data: [] })),
+  createSchedule:   (data: any)     => api.post('/pb/schedules', data).catch(() => ({ data: null })),
+  deleteSchedule:   (id: number)    => api.delete(`/pb/schedules/${id}`).catch(() => ({ data: null })),
+  getIntegrations:  ()              => api.get('/pb/integrations').catch(() => ({ data: [] })),
+};
+
 export const casesAPI = {
   getDashboard:   ()             => api.get('/cases/dashboard').catch(() => ({ data: null })),
   getAnalytics:   ()             => api.get('/cases/analytics').catch(() => ({ data: null })),
