@@ -4,17 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { logSourcesAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  PlugZap, Plus, Trash2, Eye, EyeOff, Copy, Check, Loader2, RefreshCw,
-  Server, Globe2, Wifi, Terminal, Shield, Network, Cloud, Mail, Lock, Box,
-  Database, AppWindow, Container, Radio, Flame, MonitorCheck, SwitchCamera,
-  ChevronDown, ChevronRight, X, CheckCircle2, AlertTriangle, XCircle,
-  Activity, BarChart2, Code2, FileText, Settings, TestTube2, Bell,
-  Cpu, HardDrive, Layers, ArrowRight, Zap, Bot, Package, Search,
-  Filter, MoreHorizontal, Tag, RotateCcw, Download, Upload, Play,
-  ChevronLeft, GitBranch, Database as DbIcon, Workflow, Info,
-  TrendingUp, Clock, AlertCircle, CheckSquare, Square, Router,
-} from 'lucide-react';
+import { Activity, AlertTriangle, AppWindow, ArrowRight, BarChart2, Bell, Bot, Box, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, Cloud, Code2, Container, Copy, Database, DbIcon, Download, Eye, EyeOff, FileText, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, Mail, MonitorCheck, Network, Package, Play, PlugZap, Plus, Radio, RefreshCw, Router, Search, Server, Settings, Shield, Square, SwitchCamera, Terminal, TestTube2, Trash2, Workflow, X, XCircle, Zap } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1342,7 +1332,7 @@ export default function LogSourcesPage() {
                                     <button onClick={()=>toggle(src)} className="p-1.5 rounded hover:bg-[var(--glass-hover)]" style={{ color:'var(--text-3)' }}>
                                       {src.enabled ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                     </button>
-                                    <button onClick={()=>remove(src)} className="p-1.5 rounded hover:bg-red-500/10" style={{ color:'var(--text-3)' }}>
+                                    <button onClick={()=>remove(src)} className="p-1.5 rounded" style={{ color:'var(--text-3)' }}>
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
                                   </div>

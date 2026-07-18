@@ -7,12 +7,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { clustersAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import {
-  GitMerge, RefreshCw, AlertTriangle, BarChart3, Activity, Brain,
-  Shield, Network, Clock, Target, Layers, ChevronDown, ChevronUp,
-  Play, ExternalLink, VolumeX, Plus, X, Check, Copy, Zap,
-  Search, Filter, ArrowRight, Globe, Lock, CheckCircle2, Cpu,
-} from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Copy, Cpu, ExternalLink, GitMerge, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, VolumeX, X, Zap } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

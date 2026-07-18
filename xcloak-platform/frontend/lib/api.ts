@@ -419,6 +419,59 @@ export const firewallAPI = {
   pruneExpired: ()                       => api.delete('/firewall/expired'),
 };
 
+export const rpeAPI = {
+  getDashboard:          ()                            => api.get('/rpe/dashboard').catch(() => ({ data: null })),
+  getReports:            (params?: any)                => api.get('/rpe/reports', { params }).catch(() => ({ data: [] })),
+  createReport:          (data: any)                   => api.post('/rpe/reports', data),
+  updateReport:          (id: number, data: any)       => api.patch(`/rpe/reports/${id}`, data),
+  deleteReport:          (id: number)                  => api.delete(`/rpe/reports/${id}`),
+  generate:              (reportId: string, data?: any) => api.post(`/rpe/generate/${reportId}`, data || {}),
+  getVersions:           (reportId: string)            => api.get(`/rpe/reports/${reportId}/versions`).catch(() => ({ data: [] })),
+  shareReport:           (reportId: string, data: any) => api.post(`/rpe/reports/${reportId}/share`, data),
+  getTemplates:          ()                            => api.get('/rpe/templates').catch(() => ({ data: [] })),
+  createTemplate:        (data: any)                   => api.post('/rpe/templates', data),
+  deleteTemplate:        (id: number)                  => api.delete(`/rpe/templates/${id}`),
+  getSchedules:          ()                            => api.get('/rpe/schedules').catch(() => ({ data: [] })),
+  createSchedule:        (data: any)                   => api.post('/rpe/schedules', data),
+  updateSchedule:        (id: number, data: any)       => api.patch(`/rpe/schedules/${id}`, data),
+  deleteSchedule:        (id: number)                  => api.delete(`/rpe/schedules/${id}`),
+  getExecutions:         ()                            => api.get('/rpe/executions').catch(() => ({ data: [] })),
+  getExports:            ()                            => api.get('/rpe/exports').catch(() => ({ data: [] })),
+  getShared:             ()                            => api.get('/rpe/shared').catch(() => ({ data: [] })),
+  getNotifications:      ()                            => api.get('/rpe/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()                            => api.patch('/rpe/notifications/read', {}),
+  getAnalytics:          ()                            => api.get('/rpe/analytics').catch(() => ({ data: null })),
+  getAudit:              ()                            => api.get('/rpe/audit').catch(() => ({ data: [] })),
+  ai:                    (data: any)                   => api.post('/rpe/ai', data),
+};
+
+export const fweAPI = {
+  getDashboard:          ()                         => api.get('/fwe/dashboard').catch(() => ({ data: null })),
+  getPolicies:           ()                         => api.get('/fwe/policies').catch(() => ({ data: [] })),
+  createPolicy:          (data: any)                => api.post('/fwe/policies', data),
+  updatePolicy:          (id: number, data: any)    => api.patch(`/fwe/policies/${id}`, data),
+  deletePolicy:          (id: number)               => api.delete(`/fwe/policies/${id}`),
+  getZones:              ()                         => api.get('/fwe/zones').catch(() => ({ data: [] })),
+  createZone:            (data: any)                => api.post('/fwe/zones', data),
+  getNAT:                ()                         => api.get('/fwe/nat').catch(() => ({ data: [] })),
+  createNAT:             (data: any)                => api.post('/fwe/nat', data),
+  deleteNAT:             (id: number)               => api.delete(`/fwe/nat/${id}`),
+  getThreats:            (params?: any)             => api.get('/fwe/threats', { params }).catch(() => ({ data: [] })),
+  getConnections:        ()                         => api.get('/fwe/connections').catch(() => ({ data: [] })),
+  getBlocked:            ()                         => api.get('/fwe/blocked').catch(() => ({ data: [] })),
+  block:                 (data: any)                => api.post('/fwe/block', data),
+  getApprovals:          (params?: any)             => api.get('/fwe/approvals', { params }).catch(() => ({ data: [] })),
+  createApproval:        (data: any)                => api.post('/fwe/approvals', data),
+  decideApproval:        (id: number, data: any)    => api.post(`/fwe/approvals/${id}/decide`, data),
+  getNotifications:      ()                         => api.get('/fwe/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()                         => api.patch('/fwe/notifications/read', {}),
+  getAnalytics:          ()                         => api.get('/fwe/analytics').catch(() => ({ data: null })),
+  getAudit:              ()                         => api.get('/fwe/audit').catch(() => ({ data: [] })),
+  ai:                    (data: any)                => api.post('/fwe/ai', data),
+  validate:              ()                         => api.post('/fwe/validate', {}),
+  report:                (data: any)                => api.post('/fwe/report', data),
+};
+
 export const auditAPI = {
   getLogs:      ()                                     => api.get('/audit/logs'),
   getPaginated: (page = 1, perPage = 50, action = '') =>
@@ -452,6 +505,43 @@ export const exportAPI = {
 
 export const cveAPI = {
   lookup: (cveId: string) => api.get(`/cve/${cveId}`),
+};
+
+export const stteAPI = {
+  getOrg:              ()          => api.get('/stte/org').catch(() => ({ data: null })),
+  updateOrg:           (d: any)    => api.patch('/stte/org', d),
+  getAIConfig:         ()          => api.get('/stte/ai').catch(() => ({ data: null })),
+  updateAIConfig:      (d: any)    => api.patch('/stte/ai', d),
+  getBackups:          ()          => api.get('/stte/backups').catch(() => ({ data: null })),
+  triggerBackup:       ()          => api.post('/stte/backups/trigger', {}),
+  updateBackupConfig:  (d: any)    => api.patch('/stte/backups/config', d),
+  getUpdates:          ()          => api.get('/stte/updates').catch(() => ({ data: null })),
+  checkUpdates:        ()          => api.post('/stte/updates/check', {}),
+  getLicense:          ()          => api.get('/stte/license').catch(() => ({ data: null })),
+  activateLicense:     (d: any)    => api.post('/stte/license/activate', d),
+  getAgentsConfig:     ()          => api.get('/stte/agents-config').catch(() => ({ data: null })),
+  updateAgentsConfig:  (d: any)    => api.patch('/stte/agents-config', d),
+  getAudit:            ()          => api.get('/stte/audit').catch(() => ({ data: [] })),
+};
+
+export const aiaAPI = {
+  getDashboard:          ()                       => api.get('/aia/dashboard').catch(() => ({ data: null })),
+  getSessions:           (params?: any)           => api.get('/aia/sessions', { params }).catch(() => ({ data: [] })),
+  createSession:         (data: any)              => api.post('/aia/sessions', data),
+  getMessages:           (id: string)             => api.get(`/aia/sessions/${id}/messages`).catch(() => ({ data: [] })),
+  updateSession:         (id: string, data: any)  => api.patch(`/aia/sessions/${id}`, data),
+  chat:                  (data: any)              => api.post('/aia/chat', data),
+  getRecommendations:    ()                       => api.get('/aia/recommendations').catch(() => ({ data: [] })),
+  updateRecommendation:  (id: string, data: any)  => api.patch(`/aia/recommendations/${id}`, data),
+  getActions:            ()                       => api.get('/aia/actions').catch(() => ({ data: [] })),
+  createAction:          (data: any)              => api.post('/aia/actions', data),
+  approveAction:         (id: string, data: any)  => api.patch(`/aia/actions/${id}/approve`, data),
+  getPrompts:            (params?: any)           => api.get('/aia/prompts', { params }).catch(() => ({ data: [] })),
+  createPrompt:          (data: any)              => api.post('/aia/prompts', data),
+  getAnalytics:          ()                       => api.get('/aia/analytics').catch(() => ({ data: null })),
+  getReports:            ()                       => api.get('/aia/reports').catch(() => ({ data: [] })),
+  generateReport:        (data: any)              => api.post('/aia/reports', data),
+  getAudit:              ()                       => api.get('/aia/audit').catch(() => ({ data: [] })),
 };
 
 export const aiAPI = {
@@ -509,6 +599,27 @@ export const customRolesAPI = {
   delete:        (id: number)                                => api.delete(`/custom-roles/${id}`),
 };
 
+export const tneAPI = {
+  getDashboard:       ()                  => api.get('/tne/dashboard').catch(() => ({ data: null })),
+  getTenants:         (params?: any)      => api.get('/tne/tenants', { params }).catch(() => ({ data: [] })),
+  createTenant:       (data: any)         => api.post('/tne/tenants', data),
+  getTenantDetail:    (ref: string)       => api.get(`/tne/tenants/${ref}`).catch(() => ({ data: null })),
+  updateTenant:       (ref: string, d: any) => api.patch(`/tne/tenants/${ref}`, d),
+  updateStatus:       (ref: string, status: string) => api.patch(`/tne/tenants/${ref}/status`, { status }),
+  getModules:         (ref: string)       => api.get(`/tne/tenants/${ref}/modules`).catch(() => ({ data: [] })),
+  updateModule:       (ref: string, d: any) => api.patch(`/tne/tenants/${ref}/modules`, d),
+  getResources:       (ref: string)       => api.get(`/tne/tenants/${ref}/resources`).catch(() => ({ data: null })),
+  updateResources:    (ref: string, d: any) => api.patch(`/tne/tenants/${ref}/resources`, d),
+  getHealth:          (ref: string)       => api.get(`/tne/tenants/${ref}/health`).catch(() => ({ data: [] })),
+  getTenantUsage:     (ref: string)       => api.get(`/tne/tenants/${ref}/usage`).catch(() => ({ data: null })),
+  getBilling:         (ref: string)       => api.get(`/tne/tenants/${ref}/billing`).catch(() => ({ data: null })),
+  getPlatformHealth:  ()                  => api.get('/tne/health').catch(() => ({ data: null })),
+  getAnalytics:       ()                  => api.get('/tne/analytics').catch(() => ({ data: null })),
+  askAI:              (d: any)            => api.post('/tne/ai', d),
+  getReports:         ()                  => api.get('/tne/reports').catch(() => ({ data: null })),
+  getAudit:           ()                  => api.get('/tne/audit').catch(() => ({ data: [] })),
+};
+
 export const platformAPI = {
   getCapabilities:  ()                                                                            => api.get('/platform/capabilities'),
   getTenants:       ()                                                                            => api.get('/platform/tenants'),
@@ -562,9 +673,49 @@ export const assetsAPI = {
   delete:   (id: number)               => api.delete(`/assets/${id}`),
 };
 
+export const cmdbAPI = {
+  getDashboard:          ()                    => api.get('/ace/dashboard').catch(() => ({ data: null })),
+  getAssets:             (params?: any)        => api.get('/ace/assets', { params }).catch(() => ({ data: [] })),
+  getAssetDetail:        (id: string)          => api.get(`/ace/assets/${id}`).catch(() => ({ data: null })),
+  updateAsset:           (id: string, d: any)  => api.patch(`/ace/assets/${id}`, d),
+  getTimeline:           (id: string)          => api.get(`/ace/assets/${id}/timeline`).catch(() => ({ data: [] })),
+  getRelationships:      (assetId?: string)    => api.get('/ace/relationships', { params: assetId ? { asset_id: assetId } : {} }).catch(() => ({ data: { nodes: [], edges: [] } })),
+  getDiscovery:          ()                    => api.get('/ace/discovery').catch(() => ({ data: null })),
+  getHealth:             ()                    => api.get('/ace/health').catch(() => ({ data: null })),
+  getRisk:               ()                    => api.get('/ace/risk').catch(() => ({ data: null })),
+  getAnalytics:          ()                    => api.get('/ace/analytics').catch(() => ({ data: null })),
+  getCompliance:         ()                    => api.get('/ace/compliance').catch(() => ({ data: null })),
+  getSecurityEvents:     (assetId?: string)    => api.get('/ace/security', { params: assetId ? { asset_id: assetId } : {} }).catch(() => ({ data: { events: [] } })),
+  bulkOperation:         (data: any)           => api.post('/ace/bulk', data),
+  getReports:            ()                    => api.get('/ace/reports').catch(() => ({ data: [] })),
+  generateReport:        (data: any)           => api.post('/ace/reports', data),
+  getNotifications:      ()                    => api.get('/ace/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()                    => api.patch('/ace/notifications/read', {}),
+  getAudit:              ()                    => api.get('/ace/audit').catch(() => ({ data: [] })),
+  ai:                    (data: any)           => api.post('/ace/ai', data),
+};
+
 export const executiveAPI = {
-  getMetrics:     ()    => api.get('/executive/metrics'),
-  downloadReport: ()    => api.get('/executive/report/download', { responseType: 'blob' }),
+  getMetrics:          ()         => api.get('/executive/metrics').catch(() => ({ data: null })),
+  downloadReport:      ()         => api.get('/executive/report/download', { responseType: 'blob' }),
+  getDashboard:        ()         => api.get('/exe/dashboard').catch(() => ({ data: null })),
+  getRisk:             ()         => api.get('/exe/risk').catch(() => ({ data: null })),
+  getKPIs:             ()         => api.get('/exe/kpis').catch(() => ({ data: null })),
+  getBusinessImpact:   ()         => api.get('/exe/business-impact').catch(() => ({ data: null })),
+  getThreatLandscape:  ()         => api.get('/exe/threat-landscape').catch(() => ({ data: null })),
+  getCompliance:       ()         => api.get('/exe/compliance').catch(() => ({ data: null })),
+  getVulns:            ()         => api.get('/exe/vulnerabilities').catch(() => ({ data: null })),
+  getIncidents:        ()         => api.get('/exe/incidents').catch(() => ({ data: null })),
+  getAssets:           ()         => api.get('/exe/assets').catch(() => ({ data: null })),
+  getForecasting:      ()         => api.get('/exe/forecasting').catch(() => ({ data: null })),
+  getAnalytics:        ()         => api.get('/exe/analytics').catch(() => ({ data: null })),
+  getReports:          ()         => api.get('/exe/reports').catch(() => ({ data: [] })),
+  generateReport:      (data:any) => api.post('/exe/reports', data),
+  getNotifications:    ()         => api.get('/exe/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()       => api.patch('/exe/notifications/read', {}),
+  getIntegrations:     ()         => api.get('/exe/integrations').catch(() => ({ data: [] })),
+  getAudit:            ()         => api.get('/exe/audit').catch(() => ({ data: [] })),
+  ai:                  (data:any) => api.post('/exe/ai', data),
 };
 
 export const scheduledReportsAPI = {
@@ -701,6 +852,27 @@ export const securityPolicyAPI = {
 
 export const feedSyncAPI = {
   getLog: (feedID: number) => api.get(`/threat-feeds/${feedID}/sync-log`),
+};
+
+export const mdmeAPI = {
+  getDashboard:          ()                     => api.get('/mdme/dashboard').catch(() => ({ data: null })),
+  getDevices:            (params?: any)         => api.get('/mdme/devices', { params }).catch(() => ({ data: [] })),
+  getDeviceDetail:       (id: string)           => api.get(`/mdme/devices/${id}`).catch(() => ({ data: null })),
+  getTimeline:           (id: string)           => api.get(`/mdme/devices/${id}/timeline`).catch(() => ({ data: [] })),
+  getApps:               (params?: any)         => api.get('/mdme/apps', { params }).catch(() => ({ data: { apps: [], summary: {} } })),
+  getPolicies:           ()                     => api.get('/mdme/policies').catch(() => ({ data: [] })),
+  getCompliance:         ()                     => api.get('/mdme/compliance').catch(() => ({ data: null })),
+  getRemoteActions:      (deviceId?: string)    => api.get('/mdme/remote-actions', { params: deviceId ? { device_id: deviceId } : {} }).catch(() => ({ data: [] })),
+  sendRemoteAction:      (data: any)            => api.post('/mdme/remote-actions', data),
+  getThreats:            ()                     => api.get('/mdme/threats').catch(() => ({ data: { threats: [], summary: {} } })),
+  updateThreat:          (id: string, d: any)   => api.patch(`/mdme/threats/${id}`, d),
+  getAnalytics:          ()                     => api.get('/mdme/analytics').catch(() => ({ data: null })),
+  ai:                    (data: any)            => api.post('/mdme/ai', data),
+  getReports:            ()                     => api.get('/mdme/reports').catch(() => ({ data: [] })),
+  generateReport:        (data: any)            => api.post('/mdme/reports', data),
+  getNotifications:      ()                     => api.get('/mdme/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()                     => api.patch('/mdme/notifications/read', {}),
+  getAudit:              ()                     => api.get('/mdme/audit').catch(() => ({ data: [] })),
 };
 
 export const mdmAPI = {
@@ -1326,9 +1498,53 @@ export const schedulerAPI = {
   remove:  (id: number)                    => api.delete(`/scheduler/tasks/${id}`),
 };
 
+export const steAPI = {
+  getDashboard:          ()                          => api.get('/ste/dashboard').catch(() => ({ data: null })),
+  getTasks:              (params?: any)              => api.get('/ste/tasks', { params }).catch(() => ({ data: [] })),
+  getTask:               (id: number)               => api.get(`/ste/tasks/${id}`).catch(() => ({ data: null })),
+  createTask:            (data: any)                => api.post('/ste/tasks', data),
+  updateTask:            (id: number, data: any)    => api.patch(`/ste/tasks/${id}`, data),
+  deleteTask:            (id: number)               => api.delete(`/ste/tasks/${id}`),
+  runTask:               (id: number)               => api.post(`/ste/tasks/${id}/run`, {}),
+  getExecutions:         (params?: any)             => api.get('/ste/executions', { params }).catch(() => ({ data: [] })),
+  getUpcoming:           ()                         => api.get('/ste/upcoming').catch(() => ({ data: [] })),
+  getApprovals:          (params?: any)             => api.get('/ste/approvals', { params }).catch(() => ({ data: [] })),
+  decideApproval:        (id: number, data: any)    => api.post(`/ste/approvals/${id}/decide`, data),
+  getNotifications:      ()                         => api.get('/ste/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()                         => api.patch('/ste/notifications/read', {}),
+  getAnalytics:          ()                         => api.get('/ste/analytics').catch(() => ({ data: null })),
+  getAudit:              ()                         => api.get('/ste/audit').catch(() => ({ data: [] })),
+  ai:                    (data: any)                => api.post('/ste/ai', data),
+  report:                (data: any)                => api.post('/ste/report', data),
+};
+
 export const frameworkComplianceAPI = {
   getAll:    () => api.get('/framework-compliance').catch(() => ({ data: [] })),
   getByName: (name: string) => api.get(`/framework-compliance/${name}`).catch(() => ({ data: null })),
+};
+
+export const fceAPI = {
+  getDashboard:          ()                             => api.get('/fce/dashboard').catch(() => ({ data: null })),
+  getFrameworks:         (params?: any)                 => api.get('/fce/frameworks', { params }).catch(() => ({ data: [] })),
+  createFramework:       (data: any)                    => api.post('/fce/frameworks', data),
+  updateFramework:       (id: number, data: any)        => api.patch(`/fce/frameworks/${id}`, data),
+  deleteFramework:       (id: number)                   => api.delete(`/fce/frameworks/${id}`),
+  getControls:           (params?: any)                 => api.get('/fce/controls', { params }).catch(() => ({ data: [] })),
+  updateControl:         (id: number, data: any)        => api.patch(`/fce/controls/${id}`, data),
+  getEvidence:           (params?: any)                 => api.get('/fce/evidence', { params }).catch(() => ({ data: [] })),
+  addEvidence:           (data: any)                    => api.post('/fce/evidence', data),
+  deleteEvidence:        (id: number)                   => api.delete(`/fce/evidence/${id}`),
+  getGaps:               (params?: any)                 => api.get('/fce/gaps', { params }).catch(() => ({ data: { gaps: [], total_gaps: 0 } })),
+  getAssessments:        ()                             => api.get('/fce/assessments').catch(() => ({ data: [] })),
+  runAssessment:         (data: any)                    => api.post('/fce/assessments', data),
+  getRemediations:       (params?: any)                 => api.get('/fce/remediations', { params }).catch(() => ({ data: [] })),
+  createRemediation:     (data: any)                    => api.post('/fce/remediations', data),
+  updateRemediation:     (id: number, data: any)        => api.patch(`/fce/remediations/${id}`, data),
+  getNotifications:      ()                             => api.get('/fce/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()                             => api.patch('/fce/notifications/read', {}),
+  getAnalytics:          ()                             => api.get('/fce/analytics').catch(() => ({ data: null })),
+  getAudit:              ()                             => api.get('/fce/audit').catch(() => ({ data: [] })),
+  ai:                    (data: any)                    => api.post('/fce/ai', data),
 };
 
 export const integrationsAPI = {
@@ -1373,6 +1589,27 @@ export const elasticAPI = {
   explain:  (data: any)           => api.post('/elastic/explain', data),
   aiQuery:  (prompt: string)      => api.post('/ai/es-query', { prompt }),
 };
+export const socMetricsAPI = {
+  getDashboard:          ()         => api.get('/sme/dashboard').catch(() => ({ data: null })),
+  getAlerts:             ()         => api.get('/sme/alerts').catch(() => ({ data: null })),
+  getIncidents:          ()         => api.get('/sme/incidents').catch(() => ({ data: null })),
+  getCases:              ()         => api.get('/sme/cases').catch(() => ({ data: null })),
+  getAnalysts:           ()         => api.get('/sme/analysts').catch(() => ({ data: null })),
+  getDetection:          ()         => api.get('/sme/detection').catch(() => ({ data: null })),
+  getAutomation:         ()         => api.get('/sme/automation').catch(() => ({ data: null })),
+  getThreats:            ()         => api.get('/sme/threats').catch(() => ({ data: null })),
+  getEndpoints:          ()         => api.get('/sme/endpoints').catch(() => ({ data: null })),
+  getVulns:              ()         => api.get('/sme/vulns').catch(() => ({ data: null })),
+  getCompliance:         ()         => api.get('/sme/compliance').catch(() => ({ data: null })),
+  getInfrastructure:     ()         => api.get('/sme/infrastructure').catch(() => ({ data: null })),
+  getReports:            ()         => api.get('/sme/reports').catch(() => ({ data: [] })),
+  generateReport:        (data:any) => api.post('/sme/reports', data),
+  getNotifications:      ()         => api.get('/sme/notifications').catch(() => ({ data: [] })),
+  markNotificationsRead: ()         => api.patch('/sme/notifications/read', {}),
+  getAudit:              ()         => api.get('/sme/audit').catch(() => ({ data: [] })),
+  ai:                    (data:any) => api.post('/sme/ai', data),
+};
+
 export const alertDetailAPI = {
   getPlaybookRecs:   (id: number) => api.get(`/alerts/${id}/playbook-recommendations`),
   executeRec:        (id: number, recID: number) =>

@@ -5,15 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { nbaAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import {
-  Activity, AlertTriangle, Wifi, RefreshCw, Loader2, Search, X, Filter,
-  ChevronRight, Shield, Globe, Lock, Database, Server, Zap, Bot,
-  Network, Radio, GitBranch, Globe2, FileText, Play, Ban, Monitor,
-  TrendingUp, Eye, ArrowRight, ArrowLeft, BarChart2, Terminal,
-  Package, Layers, Clock, CheckCircle2, XCircle, Info, Download,
-  Cpu, HardDrive, Plus, Map, Crosshair, ShieldAlert, FlaskConical,
-  Columns, ArrowUpRight, ArrowDownLeft, Cable, Blocks, ScanLine,
-} from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, ArrowUpRight, Ban, BarChart2, Bot, Cable, CheckCircle2, ChevronRight, Clock, Cpu, Crosshair, Download, Eye, FileText, FlaskConical, GitBranch, Globe, HardDrive, Info, Layers, Loader2, Monitor, Network, Package, Play, Radio, RefreshCw, ScanLine, Search, Server, Shield, ShieldAlert, Terminal, TrendingUp, Wifi, X, XCircle, Zap } from '@/lib/icon-stubs';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

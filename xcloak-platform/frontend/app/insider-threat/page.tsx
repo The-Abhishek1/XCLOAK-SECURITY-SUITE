@@ -5,15 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { insiderThreatAPI, casesAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import {
-  UserX, RefreshCw, Loader2, AlertTriangle, Shield, Clock,
-  Database, ShieldAlert, TrendingUp, Search, X, Filter,
-  FileText, Usb, Cloud, Printer, Bot, Play, Lock, LogOut,
-  Ban, Server, XCircle, KeyRound, Users, Star, Plus, Trash2,
-  ChevronRight, BarChart2, Activity, Download, Eye, Check,
-  Layers, GitBranch, ArrowUpRight, Crosshair, Zap, Package,
-  Globe2, Terminal, CheckCircle2, Info, MessageSquare, Scale,
-} from 'lucide-react';
+import { Activity, AlertTriangle, Ban, BarChart2, Bot, Check, CheckCircle2, ChevronRight, Clock, Cloud, Crosshair, Database, Download, Eye, FileText, Filter, GitBranch, Globe2, KeyRound, Layers, Loader2, LogOut, Play, Plus, Printer, RefreshCw, Scale, Search, Server, Shield, ShieldAlert, Star, Trash2, TrendingUp, Usb, UserX, Users, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

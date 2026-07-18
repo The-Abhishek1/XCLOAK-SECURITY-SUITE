@@ -6,13 +6,7 @@ import { elasticAPI } from '@/lib/api';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import {
-  Play, Save, Download, Trash2, Clock, Database, ChevronDown, ChevronRight,
-  X, Copy, Check, AlertCircle, Layers, RefreshCw, BookOpen, Plus,
-  Search, Code2, Table2, Braces, Activity, Server, Bot, Wand2, Star, StarOff,
-  ArrowUpDown, Terminal, Zap, FileJson, Eye, RotateCcw,
-  Lightbulb, Hash, ChevronUp, Filter, DatabaseZap,
-} from 'lucide-react';
+import { Activity, AlertCircle, ArrowUpDown, BookOpen, Bot, Braces, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Database, DatabaseZap, Download, FileJson, Filter, Hash, Layers, Lightbulb, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, StarOff, Table2, Terminal, Trash2, Wand2, X } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -695,7 +689,7 @@ export default function ElasticQueryPage() {
                 className="text-[11px] px-4 py-2 flex items-center gap-1.5"
                 style={{ color: activeTabId===t.id ? 'var(--accent)' : 'var(--text-3)' }}>
                 {t.name}
-                {!isValidDSL && activeTabId===t.id && <AlertCircle className="h-3 w-3 text-red-400" />}
+                {!isValidDSL && activeTabId===t.id && <AlertCircle className="h-3 w-3" style={{ color: 'var(--red)' }} />}
               </button>
               {tabs.length > 1 && (
                 <button onClick={e => { e.stopPropagation(); closeTab(t.id); }}

@@ -9,14 +9,7 @@ import {
   suppressionAPI, threatAPI,
 } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Shield, Activity, AlertTriangle, CheckCircle2, XCircle,
-  RefreshCw, Search, Filter, Play, Brain, ChevronDown, ChevronUp,
-  Copy, Check, Zap, Target, Eye, Lock, Network, FileText,
-  BarChart2, GitBranch, Layers, Clock, Code2, Plus, Upload,
-  Download, Edit2, Trash2, ToggleLeft, ToggleRight, Settings,
-  FlaskConical, History, BookOpen, Cpu, Database, Globe,
-} from 'lucide-react';
+import { Activity, AlertTriangle, BarChart2, BookOpen, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Code2, Copy, Cpu, Database, Eye, FileText, FlaskConical, GitBranch, Globe, Layers, Play, Plus, RefreshCw, Search, Settings, Shield, Target, ToggleLeft, ToggleRight, Trash2, Upload, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

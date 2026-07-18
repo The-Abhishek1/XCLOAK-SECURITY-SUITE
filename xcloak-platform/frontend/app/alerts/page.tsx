@@ -7,8 +7,8 @@ import { alertsAPI, agentsAPI } from '@/lib/api';
 import { Alert, Agent } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import { Bell, Search, Filter, X, Loader2, ChevronRight, Cpu, Check, Clock, Download } from 'lucide-react';
 import { AlertDetailDrawer } from '@/components/alerts/AlertDetailDrawer';
+import { Check } from '@/lib/icon-stubs';
 
 const SEVERITIES = ['all', 'critical', 'high', 'medium', 'low'];
 const PER_PAGE = 50;
@@ -167,17 +167,15 @@ export default function AlertsPage() {
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search rule, message, MITRE…" className="g-input pl-9" />
+              placeholder="Search rule, message, MITRE…" className="g-input" />
           </div>
 
           {/* Agent picker */}
           {agents.length > 0 && (
             <div className="relative">
-              <Cpu className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" style={{ color: 'var(--text-3)' }} />
               <select value={agentId} onChange={e => changeAgent(e.target.value)}
-                className="g-select pl-8 text-xs" style={{ minWidth: 160 }}>
+                className="g-select text-xs" style={{ minWidth: 160 }}>
                 <option value="">All Agents</option>
                 {agents.map(a => (
                   <option key={a.id} value={String(a.id)}>{a.hostname}</option>
@@ -187,7 +185,6 @@ export default function AlertsPage() {
           )}
 
           <div className="flex items-center gap-1">
-            <Filter className="h-3.5 w-3.5 mr-1" style={{ color: 'var(--text-3)' }} />
             {SEVERITIES.map(s => (
               <button key={s} onClick={() => changeSev(s === 'all' ? '' : s)}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all"
@@ -209,7 +206,7 @@ export default function AlertsPage() {
             <button onClick={() => { setAgentId(''); setSeverity(''); setPage(1); }}
               className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
               style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)' }}>
-              <X className="h-3 w-3" /> Clear filters
+              × Clear filters
             </button>
           )}
 
@@ -217,7 +214,7 @@ export default function AlertsPage() {
           <button onClick={() => exportCSV(filtered)}
             className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
             style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-            <Download className="h-3.5 w-3.5" /> Export CSV
+            Export CSV
           </button>
         </div>
 
@@ -230,7 +227,7 @@ export default function AlertsPage() {
             </span>
             <button onClick={() => bulkAck('acknowledge')} disabled={bulking}
               className="g-btn g-btn-ghost text-xs">
-              {bulking ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Acknowledge All'}
+              {bulking ? 'Working…' : 'Acknowledge All'}
             </button>
             <button onClick={() => bulkAck('resolve')} disabled={bulking}
               className="g-btn text-xs"
@@ -239,7 +236,7 @@ export default function AlertsPage() {
             </button>
             <button onClick={() => setSelectedIds(new Set())}
               className="ml-auto" style={{ color: 'var(--text-3)' }}>
-              <X className="h-3.5 w-3.5" />
+              ×
             </button>
           </div>
         )}
@@ -255,7 +252,7 @@ export default function AlertsPage() {
                 border: `1px solid ${selectedIds.size > 0 ? 'var(--accent)' : 'var(--border-md)'}`,
               }}>
               {selectedIds.size > 0 && selectedIds.size === filtered.length && (
-                <Check className="h-2.5 w-2.5" style={{ color: 'var(--accent)' }} />
+                <span style={{ color: 'var(--accent)', fontSize: 10 }}>✓</span>
               )}
             </button>
             <span>Agent</span><span>Rule / Message</span>
@@ -267,7 +264,6 @@ export default function AlertsPage() {
             <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading…</div>
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center">
-              <Bell className="mx-auto h-8 w-8 mb-2" style={{ color: 'var(--text-3)' }} />
               <p className="text-sm" style={{ color: 'var(--text-2)' }}>
                 {search ? 'No alerts match your search.' : 'No alerts yet.'}
               </p>
@@ -310,10 +306,10 @@ export default function AlertsPage() {
               </span>
               <span className={sevClass(a.severity)}>{a.severity}</span>
               <span className="flex items-center gap-1 text-[11px]" style={{ color: isSlaBreach(a) ? 'var(--red)' : 'var(--text-3)' }}>
-                {isSlaBreach(a) && <span title={`SLA breach — ${SLA_HOURS[a.severity]}h unacknowledged`}><Clock className="h-3 w-3" /></span>}
+                {isSlaBreach(a) && <span title={`SLA breach — ${SLA_HOURS[a.severity]}h unacknowledged`} style={{ color: '#dc2626', fontWeight: 700 }}>!</span>}
                 {timeAgo(a.created_at)}
               </span>
-              <ChevronRight className="h-3.5 w-3.5" style={{ color: 'var(--text-3)' }} />
+              <span style={{ color: 'var(--text-3)', fontSize: 12 }}>›</span>
             </div>
           ))}
         </div>

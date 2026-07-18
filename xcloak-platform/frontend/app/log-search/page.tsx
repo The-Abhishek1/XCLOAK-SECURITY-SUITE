@@ -10,16 +10,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import {
-  Search, Download, Save, Trash2, Clock, Database, ChevronDown,
-  ChevronRight, Filter, RefreshCw, X, BarChart2, BookOpen, Play,
-  AlertCircle, Star, StarOff, ShieldAlert, Table2, GitMerge, Layers,
-  Link2, Hash, SlidersHorizontal, TrendingUp, ArrowRight, Sparkles,
-  Code, Calendar, Eye, EyeOff, Copy, Check, Plus, Bookmark,
-  BookmarkCheck, FileJson, Terminal, AlignLeft, Cpu,
-  Globe, Network, User, Monitor, FileText, AlertTriangle, Sigma,
-  Zap, MoreHorizontal, ExternalLink, ChevronUp,
-} from 'lucide-react';
+import { AlertCircle, AlertTriangle, AlignLeft, ArrowRight, BarChart2, BookOpen, Bookmark as BookmarkIcon, BookmarkCheck, Calendar, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code, Copy, Download, ExternalLink, Eye, EyeOff, FileJson, FileText, Filter, GitMerge, Globe, Hash, Layers, Link2, Monitor, Play, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, StarOff, Table2, Terminal, Trash2, TrendingUp, User, X } from '@/lib/icon-stubs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -317,7 +308,7 @@ function ContextPanel({ log, allLogs, tab, onTabChange, onPivot, bookmarks, onBo
           <>
             <div className="flex gap-1.5 flex-wrap">
               <button onClick={addBookmark} className="g-btn g-btn-ghost text-[10px] h-7 flex items-center gap-1">
-                {isBookmarked ? <BookmarkCheck className="h-3 w-3" style={{ color: 'var(--yellow)' }} /> : <Bookmark className="h-3 w-3" />}
+                {isBookmarked ? <BookmarkCheck className="h-3 w-3" style={{ color: 'var(--yellow)' }} /> : <BookmarkIcon className="h-3 w-3" />}
                 {isBookmarked ? 'Saved' : 'Bookmark'}
               </button>
               <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(log, null, 2)); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
@@ -652,7 +643,7 @@ function CtxMenu({ x, y, log, onClose, onPivot, onBookmark, bookmarked }: {
   let fields: Record<string, string> = {};
   try { fields = JSON.parse(log.parsed_fields || '{}'); } catch {}
   const items = [
-    { label: bookmarked ? 'Remove Bookmark' : 'Bookmark Event', icon: Bookmark, action: onBookmark },
+    { label: bookmarked ? 'Remove Bookmark' : 'Bookmark Event', icon: BookmarkIcon, action: onBookmark },
     { label: 'Copy Raw', icon: Copy, action: () => navigator.clipboard.writeText(log.log_message) },
     { label: 'Copy JSON', icon: FileJson, action: () => navigator.clipboard.writeText(JSON.stringify(log, null, 2)) },
     { label: '─', icon: null, action: () => {} },
@@ -967,7 +958,7 @@ export default function LogSearchPage() {
     { id: 'fields',    label: 'Fields',    icon: Hash },
     { id: 'saved',     label: 'Saved',     icon: Star },
     { id: 'templates', label: 'Templates', icon: BookOpen },
-    { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
+    { id: 'bookmarks', label: 'Bookmarks', icon: BookmarkIcon },
     { id: 'scheduled', label: 'Scheduled', icon: Clock },
   ];
 
@@ -1236,7 +1227,7 @@ export default function LogSearchPage() {
                 <Sparkles className="h-3.5 w-3.5" /> <span className="hidden sm:inline">AI Search</span><span className="sm:hidden">AI</span>
               </button>
               <button onClick={bookmarkQuery} className="g-btn g-btn-ghost text-xs flex items-center gap-1.5">
-                {bookmarks.some(b => b.query === query) ? <BookmarkCheck className="h-3.5 w-3.5" style={{ color: 'var(--yellow)' }} /> : <Bookmark className="h-3.5 w-3.5" />}
+                {bookmarks.some(b => b.query === query) ? <BookmarkCheck className="h-3.5 w-3.5" style={{ color: 'var(--yellow)' }} /> : <BookmarkIcon className="h-3.5 w-3.5" />}
               </button>
               <button onClick={() => setShowDetect(true)} disabled={allLogs.length === 0}
                 className="g-btn g-btn-ghost text-xs flex items-center gap-1.5 disabled:opacity-40">

@@ -3,11 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { dpiAPI, agentsAPI } from '@/lib/api';
-import {
-  Search, RefreshCw, Filter, AlertTriangle, ShieldAlert,
-  Globe, Lock, Code2, Network, Activity, ChevronDown, ChevronUp,
-  Copy, Check, Bell, BellOff, Layers,
-} from 'lucide-react';
+import { Activity, AlertTriangle, Bell, BellOff, Check, ChevronDown, ChevronUp, Code2, Copy, Filter, Globe, Layers, Network, RefreshCw, Search, ShieldAlert, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

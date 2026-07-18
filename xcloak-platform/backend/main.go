@@ -75,6 +75,20 @@ func main() {
 		panic(err)
 	}
 
+	api.InitRPETables()
+	api.InitFWETables()
+	api.InitSTETables()
+	api.InitQETables()
+	api.InitSRTables()
+	api.InitFCETables()
+	api.InitEXETables()
+	api.InitSMETables()
+	api.InitACETables()
+	api.InitMDMETables()
+	api.InitAIATables()
+	api.InitSTTETables()
+	api.InitTNETables()
+
 	services.InitRedis()
 	services.InitSaasMode()
 	services.InitLicenseMode()

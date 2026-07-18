@@ -10,20 +10,7 @@ import {
   Alert, FIMAlert, FIMBaseline, Connection, AgentAuditEntry, AgentGroup,
 } from '@/types';
 import { sevClass, formatDate, timeAgo, formatUptime } from '@/lib/utils';
-import {
-  ArrowLeft, Activity, Network, Database, Package,
-  Users, Clock, Bug, FileSearch, Bell, Play, ShieldAlert, Search,
-  ShieldCheck, Radio, Brain, ListChecks, Usb, LogIn, CalendarClock,
-  Cpu, Settings, Shield, ShieldOff, RotateCcw, Power, Upload,
-  Terminal, AlertTriangle, X, ChevronRight, ChevronDown,
-  Monitor, HardDrive, Wifi, Lock, Key, Eye,
-  Zap, Globe, Server, FileCode, GitBranch,
-  TrendingUp, TrendingDown, Check, AlertCircle, Filter, Download,
-  Flame, Crosshair, Hash, Fingerprint, WifiOff,
-  MemoryStick, Box, Tablet, Printer, Camera, Bluetooth,
-  BookOpen, BarChart2, Gauge, RefreshCw, Copy,
-  FolderOpen, Trash2, ExternalLink, Layers,
-} from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, ArrowLeft, Bell, Bluetooth, BookOpen, Box, Brain, Bug, CalendarClock, Camera, Check, Clock, Copy, Cpu, Crosshair, Database, Download, Eye, FileCode, FileSearch, Fingerprint, FolderOpen, Gauge, GitBranch, Globe, HardDrive, Hash, Layers, ListChecks, LogIn, MemoryStick, Network, Package, Play, Power, Printer, Radio, RefreshCw, RotateCcw, Search, Settings, Shield, ShieldAlert, ShieldCheck, ShieldOff, Tablet, Terminal, Trash2, TrendingDown, TrendingUp, Upload, Usb, Users, Wifi, WifiOff, X, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Tab definitions ────────────────────────────────────────────────────────────
 

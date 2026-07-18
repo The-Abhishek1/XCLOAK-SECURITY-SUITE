@@ -4,12 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { emailSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Mail, Shield, Key, Activity, GitBranch, Brain, BarChart2, Zap, Settings,
-  AlertTriangle, CheckCircle, XCircle, Search, RefreshCw, Plus, Trash2,
-  FileText, Lock, Eye, DollarSign, Link2, Paperclip, User, AlertCircle,
-  TrendingUp, ChevronRight, Clock,
-} from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from '@/lib/icon-stubs';
 
 const TABS = [
   { id: 'dashboard',    label: 'Dashboard',    icon: Activity },
@@ -23,34 +18,34 @@ const TABS = [
   { id: 'response',     label: 'Response',     icon: Zap },
 ];
 
-const THREAT_COLOR: Record<string, string> = {
-  phishing: 'bg-red-500/10 text-red-400 border border-red-500/30',
-  bec:      'bg-orange-500/10 text-orange-400 border border-orange-500/30',
-  malware:  'bg-purple-500/10 text-purple-400 border border-purple-500/30',
-  spam:     'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30',
-  clean:    'bg-green-500/10 text-green-400 border border-green-500/30',
+const THREAT_COLOR: Record<string, React.CSSProperties> = {
+  phishing: { background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)' },
+  bec:      { background: 'var(--orange-bg)', color: 'var(--orange)', border: '1px solid var(--orange-border)' },
+  malware:  { background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--blue-border)' },
+  spam:     { background: 'var(--yellow-bg)', color: 'var(--yellow)', border: '1px solid var(--yellow-border)' },
+  clean:    { background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)' },
 };
-const STATUS_COLOR: Record<string, string> = {
-  delivered:   'text-green-400',
-  quarantined: 'text-yellow-400',
-  blocked:     'text-red-400',
-  rejected:    'text-red-400',
+const STATUS_COLOR: Record<string, React.CSSProperties> = {
+  delivered:   { color: 'var(--green)' },
+  quarantined: { color: 'var(--yellow)' },
+  blocked:     { color: 'var(--red)' },
+  rejected:    { color: 'var(--red)' },
 };
-const AUTH_COLOR: Record<string, string> = {
-  pass: 'text-green-400',
-  fail: 'text-red-400',
-  none: 'text-[var(--text-3)]',
+const AUTH_COLOR: Record<string, React.CSSProperties> = {
+  pass: { color: 'var(--green)' },
+  fail: { color: 'var(--red)' },
+  none: { color: 'var(--text-3)' },
 };
 
-function StatCard({ label, value, sub, color = 'text-white', icon: Icon }: {
-  label: string; value: number | string; sub?: string; color?: string; icon?: any;
+function StatCard({ label, value, sub, color, icon: Icon }: {
+  label: string; value: number | string; sub?: string; color?: React.CSSProperties; icon?: any;
 }) {
   return (
     <div className="g-card p-4 space-y-1">
       <div className="flex items-center gap-1.5 text-xs text-[var(--text-3)]">
         {Icon && <Icon className="h-3.5 w-3.5" />}{label}
       </div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className="text-2xl font-bold" style={color ?? { color: 'var(--text-1)' }}>{value}</div>
       {sub && <div className="text-xs text-[var(--text-3)]">{sub}</div>}
     </div>
   );
@@ -58,7 +53,7 @@ function StatCard({ label, value, sub, color = 'text-white', icon: Icon }: {
 
 function ThreatBadge({ type }: { type: string }) {
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${THREAT_COLOR[type] ?? THREAT_COLOR.spam}`}>
+    <span className="text-[10px] px-1.5 py-0.5 rounded uppercase font-bold" style={THREAT_COLOR[type] ?? THREAT_COLOR.spam}>
       {type}
     </span>
   );
@@ -78,22 +73,22 @@ function DashboardTab() {
 
   if (loading) return <div className="text-[var(--text-3)] text-sm p-4">Loading...</div>;
 
-  const scoreColor = data?.email_security_score > 85 ? 'text-green-400' : data?.email_security_score > 70 ? 'text-yellow-400' : 'text-red-400';
+  const scoreColor: React.CSSProperties = data?.email_security_score > 85 ? { color: 'var(--green)' } : data?.email_security_score > 70 ? { color: 'var(--yellow)' } : { color: 'var(--red)' };
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Processed"      value={(data?.emails_processed ?? 0).toLocaleString()} icon={Mail} />
-        <StatCard label="Delivered"      value={(data?.emails_delivered ?? 0).toLocaleString()} color="text-green-400" icon={CheckCircle} />
-        <StatCard label="Blocked"        value={(data?.emails_blocked ?? 0).toLocaleString()}   color="text-red-400" icon={XCircle} />
+        <StatCard label="Delivered"      value={(data?.emails_delivered ?? 0).toLocaleString()} color={{ color: 'var(--green)' }} icon={CheckCircle} />
+        <StatCard label="Blocked"        value={(data?.emails_blocked ?? 0).toLocaleString()}   color={{ color: 'var(--red)' }} icon={XCircle} />
         <StatCard label="Security Score" value={`${data?.email_security_score ?? 0}%`}          color={scoreColor} />
-        <StatCard label="High-Risk Users" value={data?.high_risk_users ?? 0}                    color="text-orange-400" icon={User} />
+        <StatCard label="High-Risk Users" value={data?.high_risk_users ?? 0}                    color={{ color: 'var(--orange)' }} icon={User} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Phishing Attempts"    value={data?.phishing_attempts ?? 0}   color="text-red-400" icon={AlertCircle} />
-        <StatCard label="Malware Attachments"  value={data?.malware_attachments ?? 0} color="text-purple-400" icon={Paperclip} />
-        <StatCard label="BEC Attempts"         value={data?.bec_attempts ?? 0}        color="text-orange-400" icon={DollarSign} />
-        <StatCard label="URL Clicks"           value={data?.url_clicks ?? 0}          color={data?.url_clicks > 0 ? 'text-yellow-400' : 'text-green-400'} icon={Link2} />
+        <StatCard label="Phishing Attempts"    value={data?.phishing_attempts ?? 0}   color={{ color: 'var(--red)' }} icon={AlertCircle} />
+        <StatCard label="Malware Attachments"  value={data?.malware_attachments ?? 0} color={{ color: 'var(--blue)' }} icon={Paperclip} />
+        <StatCard label="BEC Attempts"         value={data?.bec_attempts ?? 0}        color={{ color: 'var(--orange)' }} icon={DollarSign} />
+        <StatCard label="URL Clicks"           value={data?.url_clicks ?? 0}          color={data?.url_clicks > 0 ? { color: 'var(--yellow)' } : { color: 'var(--green)' }} icon={Link2} />
       </div>
 
       {flow && (
@@ -105,8 +100,8 @@ function DashboardTab() {
                 <div className="g-card px-2 py-2 text-center w-full space-y-0.5">
                   <div className="text-[10px] text-[var(--text-3)] font-medium">{step.label}</div>
                   <div className="text-sm font-bold text-[var(--text-1)]">{(step.count ?? 0).toLocaleString()}</div>
-                  {step.dropped > 0 && <div className="text-[9px] text-red-400">-{step.dropped.toLocaleString()} blocked</div>}
-                  {step.quarantined > 0 && <div className="text-[9px] text-yellow-400">-{step.quarantined.toLocaleString()} quarantined</div>}
+                  {step.dropped > 0 && <div className="text-[9px]" style={{ color: 'var(--red)' }}>-{step.dropped.toLocaleString()} blocked</div>}
+                  {step.quarantined > 0 && <div className="text-[9px]" style={{ color: 'var(--yellow)' }}>-{step.quarantined.toLocaleString()} quarantined</div>}
                 </div>
                 {i < (flow.steps?.length ?? 0) - 1 && (
                   <div className="hidden md:flex absolute right-[-8px] top-1/2 -translate-y-1/2 text-[var(--text-3)] z-10">
@@ -118,8 +113,8 @@ function DashboardTab() {
           </div>
           <div className="flex gap-4 text-xs pt-1 border-t border-[var(--border)]">
             <span className="text-[var(--text-3)]">Total: <span className="text-[var(--text-1)] font-bold">{(flow.total ?? 0).toLocaleString()}</span></span>
-            <span className="text-[var(--text-3)]">Blocked: <span className="text-red-400 font-bold">{(flow.blocked ?? 0).toLocaleString()}</span></span>
-            <span className="text-[var(--text-3)]">Quarantined: <span className="text-yellow-400 font-bold">{(flow.quarantined ?? 0).toLocaleString()}</span></span>
+            <span className="text-[var(--text-3)]">Blocked: <span className="font-bold" style={{ color: 'var(--red)' }}>{(flow.blocked ?? 0).toLocaleString()}</span></span>
+            <span className="text-[var(--text-3)]">Quarantined: <span className="font-bold" style={{ color: 'var(--yellow)' }}>{(flow.quarantined ?? 0).toLocaleString()}</span></span>
           </div>
         </div>
       )}
@@ -200,14 +195,14 @@ function InboxTab() {
                       <td>
                         <div className="flex items-center gap-1">
                           <div className="w-8 h-1.5 rounded-full bg-[var(--border)]">
-                            <div className={`h-full rounded-full ${m.threat_score > 80 ? 'bg-red-500' : m.threat_score > 50 ? 'bg-orange-500' : 'bg-green-500'}`} style={{ width: `${m.threat_score}%` }} />
+                            <div className="h-full rounded-full" style={{ width: `${m.threat_score}%`, background: m.threat_score > 80 ? 'var(--red)' : m.threat_score > 50 ? 'var(--orange)' : 'var(--green)' }} />
                           </div>
-                          <span className={`text-xs font-bold ${m.threat_score > 80 ? 'text-red-400' : m.threat_score > 50 ? 'text-orange-400' : 'text-green-400'}`}>{m.threat_score}</span>
+                          <span className="text-xs font-bold" style={{ color: m.threat_score > 80 ? 'var(--red)' : m.threat_score > 50 ? 'var(--orange)' : 'var(--green)' }}>{m.threat_score}</span>
                         </div>
                       </td>
-                      <td>{m.has_attachment ? <Paperclip className="h-3.5 w-3.5 text-orange-400" /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                      <td><span className={`text-xs ${m.url_count > 0 ? 'text-blue-400' : 'text-[var(--text-3)]'}`}>{m.url_count}</span></td>
-                      <td><span className={`text-xs font-medium ${STATUS_COLOR[m.status] ?? 'text-[var(--text-2)]'}`}>{m.status}</span></td>
+                      <td>{m.has_attachment ? <Paperclip className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
+                      <td><span className="text-xs" style={{ color: m.url_count > 0 ? 'var(--blue)' : 'var(--text-3)' }}>{m.url_count}</span></td>
+                      <td><span className="text-xs font-medium" style={STATUS_COLOR[m.status] ?? { color: 'var(--text-2)' }}>{m.status}</span></td>
                       <td><span className="text-xs text-[var(--text-3)]">{timeAgo(m.created_at)}</span></td>
                     </tr>
                   ))}
@@ -247,7 +242,7 @@ function InboxTab() {
                     <Zap className="h-3 w-3" />{action.replace(/_/g, ' ')}
                   </button>
                 ))}
-                <button className="g-btn text-xs w-full text-left flex items-center gap-1.5 text-blue-400 hover:border-blue-500/30" onClick={() => {}}>
+                <button className="g-btn text-xs w-full text-left flex items-center gap-1.5" style={{ color: 'var(--blue)' }} onClick={() => {}}>
                   <Search className="h-3 w-3" />Pivot to SIEM
                 </button>
               </div>
@@ -331,10 +326,10 @@ function ThreatsTab() {
                     <td><div className="text-xs text-[var(--text-2)] truncate max-w-[200px]">{t.subject}</div></td>
                     <td><div className="text-xs text-[var(--text-3)] truncate max-w-[120px]">{t.recipient}</div></td>
                     <td><ThreatBadge type={t.threat_type} /></td>
-                    <td><span className={`text-sm font-bold ${t.threat_score > 90 ? 'text-red-400' : t.threat_score > 70 ? 'text-orange-400' : 'text-yellow-400'}`}>{t.threat_score}</span></td>
-                    <td>{t.has_attachment ? <Paperclip className="h-3.5 w-3.5 text-orange-400" /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                    <td><span className={`text-xs ${t.url_count > 0 ? 'text-blue-400' : 'text-[var(--text-3)]'}`}>{t.url_count}</span></td>
-                    <td><span className={`text-xs font-medium ${STATUS_COLOR[t.status] ?? 'text-[var(--text-2)]'}`}>{t.status}</span></td>
+                    <td><span className="text-sm font-bold" style={{ color: t.threat_score > 90 ? 'var(--red)' : t.threat_score > 70 ? 'var(--orange)' : 'var(--yellow)' }}>{t.threat_score}</span></td>
+                    <td>{t.has_attachment ? <Paperclip className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
+                    <td><span className="text-xs" style={{ color: t.url_count > 0 ? 'var(--blue)' : 'var(--text-3)' }}>{t.url_count}</span></td>
+                    <td><span className="text-xs font-medium" style={STATUS_COLOR[t.status] ?? { color: 'var(--text-2)' }}>{t.status}</span></td>
                     <td><span className="text-xs text-[var(--text-3)]">{timeAgo(t.created_at)}</span></td>
                   </tr>
                 ))}
@@ -358,9 +353,9 @@ function ThreatsTab() {
                   <td><div className="text-xs font-medium text-[var(--text-1)] truncate max-w-[180px]">{a.filename}</div></td>
                   <td><span className="text-[10px] font-mono text-[var(--accent)] uppercase">{a.file_type}</span></td>
                   <td><span className="text-xs text-[var(--text-2)]">{Math.round(a.file_size / 1024)} KB</span></td>
-                  <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${THREAT_COLOR[a.verdict === 'malicious' ? 'phishing' : a.verdict === 'suspicious' ? 'spam' : 'clean']}`}>{a.verdict}</span></td>
-                  <td>{a.has_macros ? <AlertTriangle className="h-3.5 w-3.5 text-red-400" /> : <CheckCircle className="h-3.5 w-3.5 text-green-400" />}</td>
-                  <td>{a.has_embedded ? <AlertTriangle className="h-3.5 w-3.5 text-orange-400" /> : <CheckCircle className="h-3.5 w-3.5 text-green-400" />}</td>
+                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={THREAT_COLOR[a.verdict === 'malicious' ? 'phishing' : a.verdict === 'suspicious' ? 'spam' : 'clean']}>{a.verdict}</span></td>
+                  <td>{a.has_macros ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
+                  <td>{a.has_embedded ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
                   <td><div className="text-[10px] text-[var(--text-3)] truncate max-w-[200px]">{a.sandbox_result || '—'}</div></td>
                   <td><span className="text-[10px] font-mono text-[var(--text-3)] truncate max-w-[100px] block">{a.sha256?.slice(0, 16)}...</span></td>
                   <td><span className="text-xs text-[var(--text-3)]">{timeAgo(a.created_at)}</span></td>
@@ -394,13 +389,13 @@ function ThreatsTab() {
                 <tr key={u.id} className="g-tr">
                   <td><div className="text-xs font-mono text-[var(--text-1)] truncate max-w-[200px]">{u.url}</div></td>
                   <td><span className="text-xs text-[var(--accent)]">{u.domain}</span></td>
-                  <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${THREAT_COLOR[u.verdict === 'malicious' ? 'phishing' : u.verdict === 'suspicious' ? 'spam' : 'clean']}`}>{u.verdict}</span></td>
-                  <td><span className={`text-xs font-medium ${u.reputation === 'malicious' ? 'text-red-400' : u.reputation === 'clean' ? 'text-green-400' : 'text-yellow-400'}`}>{u.reputation}</span></td>
-                  <td><span className={`text-xs font-bold ${u.redirect_count > 1 ? 'text-orange-400' : 'text-[var(--text-2)]'}`}>{u.redirect_count}</span></td>
-                  <td>{u.is_shortened ? <AlertTriangle className="h-3.5 w-3.5 text-orange-400" /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                  <td>{u.is_newly_registered ? <AlertTriangle className="h-3.5 w-3.5 text-red-400" /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                  <td>{u.has_login_form ? <Eye className="h-3.5 w-3.5 text-yellow-400" /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                  <td><span className={`text-xs font-bold ${u.click_count > 0 ? 'text-red-400' : 'text-[var(--text-3)]'}`}>{u.click_count}</span></td>
+                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={THREAT_COLOR[u.verdict === 'malicious' ? 'phishing' : u.verdict === 'suspicious' ? 'spam' : 'clean']}>{u.verdict}</span></td>
+                  <td><span className="text-xs font-medium" style={{ color: u.reputation === 'malicious' ? 'var(--red)' : u.reputation === 'clean' ? 'var(--green)' : 'var(--yellow)' }}>{u.reputation}</span></td>
+                  <td><span className="text-xs font-bold" style={{ color: u.redirect_count > 1 ? 'var(--orange)' : 'var(--text-2)' }}>{u.redirect_count}</span></td>
+                  <td>{u.is_shortened ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
+                  <td>{u.is_newly_registered ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
+                  <td>{u.has_login_form ? <Eye className="h-3.5 w-3.5" style={{ color: 'var(--yellow)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
+                  <td><span className="text-xs font-bold" style={{ color: u.click_count > 0 ? 'var(--red)' : 'var(--text-3)' }}>{u.click_count}</span></td>
                   <td><span className="text-xs text-[var(--text-3)]">{timeAgo(u.created_at)}</span></td>
                 </tr>
               ))}
@@ -435,9 +430,9 @@ function AuthTab() {
         {PROTOCOLS.map(proto => (
           <div key={proto} className="g-card p-4 text-center space-y-2">
             <div className="text-sm font-bold text-[var(--text-1)]">{proto}</div>
-            <div className={`text-2xl font-bold ${rates[proto] > 80 ? 'text-green-400' : rates[proto] > 60 ? 'text-yellow-400' : 'text-red-400'}`}>{rates[proto]}%</div>
+            <div className="text-2xl font-bold" style={{ color: rates[proto] > 80 ? 'var(--green)' : rates[proto] > 60 ? 'var(--yellow)' : 'var(--red)' }}>{rates[proto]}%</div>
             <div className="h-1.5 rounded-full bg-[var(--border)]">
-              <div className={`h-full rounded-full ${rates[proto] > 80 ? 'bg-green-500' : rates[proto] > 60 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${rates[proto]}%` }} />
+              <div className="h-full rounded-full" style={{ width: `${rates[proto]}%`, background: rates[proto] > 80 ? 'var(--green)' : rates[proto] > 60 ? 'var(--yellow)' : 'var(--red)' }} />
             </div>
             <div className="text-[10px] text-[var(--text-3)]">pass rate</div>
           </div>
@@ -457,13 +452,13 @@ function AuthTab() {
               {(data?.domains ?? []).map((d: any) => (
                 <tr key={d.domain} className="g-tr">
                   <td><span className="text-xs font-mono text-[var(--text-1)]">{d.domain}</span></td>
-                  <td><span className={`text-xs font-bold ${AUTH_COLOR[d.spf] ?? 'text-[var(--text-3)]'}`}>{d.spf}</span></td>
-                  <td><span className={`text-xs font-bold ${AUTH_COLOR[d.dkim] ?? 'text-[var(--text-3)]'}`}>{d.dkim}</span></td>
-                  <td><span className={`text-xs font-bold ${AUTH_COLOR[d.dmarc] ?? 'text-[var(--text-3)]'}`}>{d.dmarc}</span></td>
-                  <td><span className={`text-xs font-bold ${AUTH_COLOR[d.arc] ?? 'text-[var(--text-3)]'}`}>{d.arc}</span></td>
-                  <td><span className={`text-xs font-bold ${AUTH_COLOR[d.bimi] ?? 'text-[var(--text-3)]'}`}>{d.bimi}</span></td>
-                  <td>{d.aligned ? <CheckCircle className="h-3.5 w-3.5 text-green-400" /> : <XCircle className="h-3.5 w-3.5 text-red-400" />}</td>
-                  <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${d.policy === 'reject' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : d.policy === 'quarantine' ? 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400' : 'bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--text-3)]'}`}>{d.policy}</span></td>
+                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.spf] ?? { color: 'var(--text-3)' }}>{d.spf}</span></td>
+                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.dkim] ?? { color: 'var(--text-3)' }}>{d.dkim}</span></td>
+                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.dmarc] ?? { color: 'var(--text-3)' }}>{d.dmarc}</span></td>
+                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.arc] ?? { color: 'var(--text-3)' }}>{d.arc}</span></td>
+                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.bimi] ?? { color: 'var(--text-3)' }}>{d.bimi}</span></td>
+                  <td>{d.aligned ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} />}</td>
+                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={d.policy === 'reject' ? { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' } : d.policy === 'quarantine' ? { background: 'var(--yellow-bg)', border: '1px solid var(--yellow-border)', color: 'var(--yellow)' } : { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>{d.policy}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -471,7 +466,7 @@ function AuthTab() {
         </div>
         <div className="g-card p-3 text-xs text-[var(--text-2)] space-y-1">
           <div className="font-medium text-[var(--text-1)]">Recommendations</div>
-          <div>• Set DMARC policy to <span className="text-green-400 font-bold">reject</span> on all owned domains to prevent spoofing</div>
+          <div>• Set DMARC policy to <span className="font-bold" style={{ color: 'var(--green)' }}>reject</span> on all owned domains to prevent spoofing</div>
           <div>• 29% of inbound emails fail DMARC — consider enforcing strict alignment</div>
           <div>• Implement BIMI with VMC to enable brand logo display in supported email clients</div>
           <div>• Enable ARC sealing on your outbound email gateway</div>
@@ -492,7 +487,7 @@ function CampaignsTab() {
     emailSecurityAPI.getCampaigns().then(r => { setCampaigns(r.data ?? []); setLoading(false); });
   }, []);
 
-  const CAMPAIGN_COLOR: Record<string, string> = {
+  const CAMPAIGN_COLOR: Record<string, React.CSSProperties> = {
     phishing: THREAT_COLOR.phishing,
     bec: THREAT_COLOR.bec,
     malware: THREAT_COLOR.malware,
@@ -514,12 +509,12 @@ function CampaignsTab() {
                   {campaigns.map((c: any) => (
                     <tr key={c.id} className={`g-tr cursor-pointer ${selected?.id === c.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === c.id ? null : c)}>
                       <td><span className="text-xs font-medium text-[var(--text-1)]">{c.name}</span></td>
-                      <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${CAMPAIGN_COLOR[c.campaign_type] ?? THREAT_COLOR.spam}`}>{c.campaign_type}</span></td>
+                      <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={CAMPAIGN_COLOR[c.campaign_type] ?? THREAT_COLOR.spam}>{c.campaign_type}</span></td>
                       <td><span className="text-xs text-[var(--text-2)]">{c.threat_actor || '—'}</span></td>
                       <td><span className="text-xs font-bold text-[var(--text-1)]">{c.email_count}</span></td>
-                      <td><span className={`text-xs font-bold ${c.victim_count > 0 ? 'text-red-400' : 'text-green-400'}`}>{c.victim_count}</span></td>
-                      <td><span className="text-xs text-purple-400">{c.malware_family || '—'}</span></td>
-                      <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${c.status === 'active' ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-green-500/10 border border-green-500/30 text-green-400'}`}>{c.status}</span></td>
+                      <td><span className="text-xs font-bold" style={{ color: c.victim_count > 0 ? 'var(--red)' : 'var(--green)' }}>{c.victim_count}</span></td>
+                      <td><span className="text-xs" style={{ color: 'var(--blue)' }}>{c.malware_family || '—'}</span></td>
+                      <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={c.status === 'active' ? { background: 'var(--red-bg)', border: '1px solid var(--red-border)', color: 'var(--red)' } : { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' }}>{c.status}</span></td>
                       <td><span className="text-xs text-[var(--text-3)]">{timeAgo(c.last_seen)}</span></td>
                     </tr>
                   ))}
@@ -624,7 +619,7 @@ function IntelligenceTab() {
             {(intel.malicious_domains ?? []).map((d: any) => (
               <div key={d.domain} className="space-y-0.5">
                 <div className="flex justify-between text-xs">
-                  <span className="font-mono text-red-400">{d.domain}</span>
+                  <span className="font-mono" style={{ color: 'var(--red)' }}>{d.domain}</span>
                   <span className="text-[var(--text-3)] font-bold">{d.hits} hits</span>
                 </div>
                 <div className="text-[10px] text-[var(--text-3)] capitalize">{d.category.replace(/_/g, ' ')} · since {d.first_seen}</div>
@@ -649,7 +644,7 @@ function IntelligenceTab() {
               <div className="text-xs font-medium text-[var(--text-1)]">Malware Families</div>
               {(intel.malware_families ?? []).map((m: any) => (
                 <div key={m.family} className="flex justify-between text-xs">
-                  <span className="text-purple-400">{m.family}</span>
+                  <span style={{ color: 'var(--blue)' }}>{m.family}</span>
                   <span className="text-[var(--text-3)]">{m.category} · {m.count}</span>
                 </div>
               ))}
@@ -660,7 +655,7 @@ function IntelligenceTab() {
             <div className="text-sm font-medium text-[var(--text-1)]">Threat Actors</div>
             {(intel.threat_actors ?? []).map((a: any) => (
               <div key={a.actor} className="space-y-0.5">
-                <div className="text-xs font-medium text-orange-400">{a.actor}</div>
+                <div className="text-xs font-medium" style={{ color: 'var(--orange)' }}>{a.actor}</div>
                 <div className="text-[10px] text-[var(--text-3)]">{a.campaigns} campaigns · targeting {a.target_industry}</div>
                 <div className="text-[10px] text-[var(--text-3)]">{a.email_volume} emails</div>
               </div>
@@ -669,7 +664,7 @@ function IntelligenceTab() {
               <div className="text-xs font-medium text-[var(--text-1)]">Malicious IPs</div>
               {(intel.malicious_ips ?? []).map((ip: any) => (
                 <div key={ip.ip} className="flex justify-between text-xs">
-                  <span className="font-mono text-red-400">{ip.ip}</span>
+                  <span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span>
                   <span className="text-[var(--text-3)]">{ip.country} · {ip.hits}</span>
                 </div>
               ))}
@@ -688,19 +683,19 @@ function IntelligenceTab() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="g-card p-3 text-center">
               <div className="text-xs text-[var(--text-3)]">Reputation</div>
-              <div className={`text-sm font-bold ${senderData.reputation === 'malicious' ? 'text-red-400' : senderData.reputation === 'trusted' ? 'text-green-400' : 'text-yellow-400'}`}>{senderData.reputation}</div>
+              <div className="text-sm font-bold" style={{ color: senderData.reputation === 'malicious' ? 'var(--red)' : senderData.reputation === 'trusted' ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation}</div>
             </div>
             <div className="g-card p-3 text-center">
               <div className="text-xs text-[var(--text-3)]">Score</div>
-              <div className={`text-sm font-bold ${senderData.reputation_score < 30 ? 'text-red-400' : senderData.reputation_score > 70 ? 'text-green-400' : 'text-yellow-400'}`}>{senderData.reputation_score}/100</div>
+              <div className="text-sm font-bold" style={{ color: senderData.reputation_score < 30 ? 'var(--red)' : senderData.reputation_score > 70 ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation_score}/100</div>
             </div>
             <div className="g-card p-3 text-center">
               <div className="text-xs text-[var(--text-3)]">Domain Age</div>
-              <div className={`text-sm font-bold ${senderData.domain_age_days < 30 ? 'text-red-400' : 'text-[var(--text-1)]'}`}>{senderData.domain_age_days}d</div>
+              <div className="text-sm font-bold" style={{ color: senderData.domain_age_days < 30 ? 'var(--red)' : 'var(--text-1)' }}>{senderData.domain_age_days}d</div>
             </div>
             <div className="g-card p-3 text-center">
               <div className="text-xs text-[var(--text-3)]">Threat Intel Hits</div>
-              <div className={`text-sm font-bold ${senderData.threat_intel_hits > 0 ? 'text-red-400' : 'text-green-400'}`}>{senderData.threat_intel_hits}</div>
+              <div className="text-sm font-bold" style={{ color: senderData.threat_intel_hits > 0 ? 'var(--red)' : 'var(--green)' }}>{senderData.threat_intel_hits}</div>
             </div>
             <div className="g-card p-3 col-span-2">
               <div className="text-xs text-[var(--text-3)]">WHOIS</div>
@@ -757,13 +752,13 @@ function IntelligenceTab() {
             {aiResult.indicators?.length > 0 && (
               <div>
                 <div className="text-xs text-[var(--text-3)] mb-1">Indicators</div>
-                <ul className="space-y-0.5">{aiResult.indicators.map((ind: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span className="text-red-400">!</span>{ind}</li>)}</ul>
+                <ul className="space-y-0.5">{aiResult.indicators.map((ind: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span style={{ color: 'var(--red)' }}>!</span>{ind}</li>)}</ul>
               </div>
             )}
             {aiResult.mitre_techniques?.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {aiResult.mitre_techniques.map((t: string) => (
-                  <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-400">{t}</span>
+                  <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue-border)', color: 'var(--blue)' }}>{t}</span>
                 ))}
               </div>
             )}
@@ -803,10 +798,10 @@ function UserRiskTab() {
     reload();
   };
 
-  const TRAINING_COLOR: Record<string, string> = {
-    completed:   'text-green-400',
-    in_progress: 'text-yellow-400',
-    pending:     'text-red-400',
+  const TRAINING_COLOR: Record<string, React.CSSProperties> = {
+    completed:   { color: 'var(--green)' },
+    in_progress: { color: 'var(--yellow)' },
+    pending:     { color: 'var(--red)' },
   };
 
   return (
@@ -835,16 +830,16 @@ function UserRiskTab() {
                     <div className="text-[10px] text-[var(--text-3)]">{u.email}</div>
                   </td>
                   <td><span className="text-xs text-[var(--text-2)]">{u.department}</span></td>
-                  <td><span className={`text-xs font-bold ${u.click_count > 0 ? 'text-red-400' : 'text-green-400'}`}>{u.click_count}</span></td>
-                  <td><span className={`text-xs font-bold ${u.phishing_failures > 0 ? 'text-red-400' : 'text-green-400'}`}>{u.phishing_failures}</span></td>
-                  <td>{u.is_repeated_victim ? <AlertTriangle className="h-3.5 w-3.5 text-orange-400" /> : <CheckCircle className="h-3.5 w-3.5 text-green-400" />}</td>
-                  <td><span className={`text-xs font-medium capitalize ${TRAINING_COLOR[u.training_status] ?? 'text-[var(--text-2)]'}`}>{u.training_status.replace('_', ' ')}</span></td>
+                  <td><span className="text-xs font-bold" style={{ color: u.click_count > 0 ? 'var(--red)' : 'var(--green)' }}>{u.click_count}</span></td>
+                  <td><span className="text-xs font-bold" style={{ color: u.phishing_failures > 0 ? 'var(--red)' : 'var(--green)' }}>{u.phishing_failures}</span></td>
+                  <td>{u.is_repeated_victim ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
+                  <td><span className="text-xs font-medium capitalize" style={TRAINING_COLOR[u.training_status] ?? { color: 'var(--text-2)' }}>{u.training_status.replace('_', ' ')}</span></td>
                   <td>
                     <div className="flex items-center gap-1.5">
                       <div className="w-12 h-1.5 rounded-full bg-[var(--border)]">
-                        <div className={`h-full rounded-full ${u.risk_score > 75 ? 'bg-red-500' : u.risk_score > 50 ? 'bg-orange-500' : 'bg-yellow-500'}`} style={{ width: `${u.risk_score}%` }} />
+                        <div className="h-full rounded-full" style={{ width: `${u.risk_score}%`, background: u.risk_score > 75 ? 'var(--red)' : u.risk_score > 50 ? 'var(--orange)' : 'var(--yellow)' }} />
                       </div>
-                      <span className={`text-xs font-bold ${u.risk_score > 75 ? 'text-red-400' : u.risk_score > 50 ? 'text-orange-400' : 'text-[var(--text-2)]'}`}>{u.risk_score}</span>
+                      <span className="text-xs font-bold" style={{ color: u.risk_score > 75 ? 'var(--red)' : u.risk_score > 50 ? 'var(--orange)' : 'var(--text-2)' }}>{u.risk_score}</span>
                     </div>
                   </td>
                   <td><span className="text-xs text-[var(--text-3)]">{u.last_click_at ? timeAgo(u.last_click_at) : 'Never'}</span></td>
@@ -865,17 +860,17 @@ function UserRiskTab() {
                   <div className="text-[10px] text-[var(--text-3)]">{timeAgo(r.reported_at)}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={
                     r.auto_verdict === 'phishing' ? THREAT_COLOR.phishing :
                     r.auto_verdict === 'bec' ? THREAT_COLOR.bec :
                     r.auto_verdict === 'clean' ? THREAT_COLOR.clean : THREAT_COLOR.spam
-                  }`}>{r.auto_verdict || 'unknown'}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                    r.triage_status === 'confirmed_phishing' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
-                    r.triage_status === 'false_positive' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
-                    r.triage_status === 'escalated' ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
-                    'bg-[var(--glass-bg)] border-[var(--border)] text-[var(--text-3)]'
-                  }`}>{r.triage_status.replace('_', ' ')}</span>
+                  }>{r.auto_verdict || 'unknown'}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={
+                    r.triage_status === 'confirmed_phishing' ? { background: 'var(--red-bg)', border: '1px solid var(--red-border)', color: 'var(--red)' } :
+                    r.triage_status === 'false_positive' ? { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' } :
+                    r.triage_status === 'escalated' ? { background: 'var(--orange-bg)', border: '1px solid var(--orange-border)', color: 'var(--orange)' } :
+                    { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }
+                  }>{r.triage_status.replace('_', ' ')}</span>
                 </div>
               </div>
               {r.analyst_notes && <div className="text-xs text-[var(--text-2)] italic">{r.analyst_notes}</div>}
@@ -924,7 +919,7 @@ function AnalyticsTab() {
           {(data?.top_senders ?? []).map((s: any, i: number) => (
             <div key={i} className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="font-mono text-red-400 truncate max-w-[160px]">{s.sender}</span>
+                <span className="font-mono truncate max-w-[160px]" style={{ color: 'var(--red)' }}>{s.sender}</span>
                 <span className="text-[var(--text-2)] font-bold shrink-0 ml-2">{s.count}</span>
               </div>
             </div>
@@ -936,7 +931,7 @@ function AnalyticsTab() {
           {(data?.top_blocked_urls ?? []).map((u: any, i: number) => (
             <div key={i} className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="font-mono text-orange-400">{u.domain}</span>
+                <span className="font-mono" style={{ color: 'var(--orange)' }}>{u.domain}</span>
                 <span className="text-[var(--text-2)] font-bold">{u.count}</span>
               </div>
             </div>
@@ -948,7 +943,7 @@ function AnalyticsTab() {
           <div className="flex items-end gap-0.5 h-20">
             {(data?.bec_trend ?? []).map((d: any, i: number) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                <div className="w-full rounded-sm bg-orange-500 opacity-70 hover:opacity-100" style={{ height: `${Math.round(d.count / becBarMax * 72) + 2}px` }} title={`${d.date}: ${d.count}`} />
+                <div className="w-full rounded-sm opacity-70 hover:opacity-100" style={{ height: `${Math.round(d.count / becBarMax * 72) + 2}px`, background: 'var(--orange)' }} title={`${d.date}: ${d.count}`} />
                 {i % 3 === 0 && <div className="text-[9px] text-[var(--text-3)]">{d.date?.slice(5)}</div>}
               </div>
             ))}
@@ -961,7 +956,7 @@ function AnalyticsTab() {
         <div className="flex items-end gap-0.5 h-24">
           {(data?.phishing_trend ?? []).map((d: any, i: number) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-              <div className="w-full rounded-sm bg-red-500 opacity-70 hover:opacity-100" style={{ height: `${Math.round(d.count / phishingBarMax * 88) + 2}px` }} title={`${d.date}: ${d.count}`} />
+              <div className="w-full rounded-sm opacity-70 hover:opacity-100" style={{ height: `${Math.round(d.count / phishingBarMax * 88) + 2}px`, background: 'var(--red)' }} title={`${d.date}: ${d.count}`} />
               {i % 2 === 0 && <div className="text-[9px] text-[var(--text-3)]">{d.date?.slice(5)}</div>}
             </div>
           ))}
@@ -1058,7 +1053,7 @@ function ResponseTab() {
               </div>
             ))}
           </div>
-          {actionResult && <div className="g-card p-2 text-xs text-green-400">{actionResult}</div>}
+          {actionResult && <div className="g-card p-2 text-xs" style={{ color: 'var(--green)' }}>{actionResult}</div>}
         </div>
 
         <div className="space-y-4">
@@ -1095,8 +1090,8 @@ function ResponseTab() {
                       {p.criteria && <div className="text-[10px] font-mono text-[var(--text-3)] truncate max-w-[220px]">{p.criteria}</div>}
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      <button className={`text-[10px] px-1.5 py-0.5 rounded border ${p.enabled ? 'border-green-500/30 text-green-400' : 'border-[var(--border)] text-[var(--text-3)]'}`} onClick={() => doTogglePolicy(p)}>{p.enabled ? 'ON' : 'OFF'}</button>
-                      <button className="text-[var(--text-3)] hover:text-red-400 transition-colors p-0.5" onClick={() => doDeletePolicy(p.id)}><Trash2 className="h-3 w-3" /></button>
+                      <button className="text-[10px] px-1.5 py-0.5 rounded border transition-colors" style={p.enabled ? { borderColor: 'var(--green-border)', color: 'var(--green)' } : { borderColor: 'var(--border)', color: 'var(--text-3)' }} onClick={() => doTogglePolicy(p)}>{p.enabled ? 'ON' : 'OFF'}</button>
+                      <button className="text-[var(--text-3)] transition-colors p-0.5" style={{}} onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')} onClick={() => doDeletePolicy(p.id)}><Trash2 className="h-3 w-3" /></button>
                     </div>
                   </div>
                 ))}
@@ -1129,14 +1124,14 @@ function ResponseTab() {
             <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{reportResult.executive_summary}</div>
             {reportResult.key_findings?.length > 0 && (
               <div><div className="text-xs text-[var(--text-3)] mb-1">Key Findings</div>
-                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span className="text-red-400">!</span>{f}</li>)}</ul>
+                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span style={{ color: 'var(--red)' }}>!</span>{f}</li>)}</ul>
               </div>
             )}
             {reportResult.risk_breakdown && (
               <div className="grid grid-cols-3 gap-3">
-                <StatCard label="Phishing"  value={reportResult.risk_breakdown.phishing ?? 0}  color="text-red-400" />
-                <StatCard label="Malware"   value={reportResult.risk_breakdown.malware ?? 0}   color="text-purple-400" />
-                <StatCard label="BEC"       value={reportResult.risk_breakdown.bec ?? 0}       color="text-orange-400" />
+                <StatCard label="Phishing"  value={reportResult.risk_breakdown.phishing ?? 0}  color={{ color: 'var(--red)' }} />
+                <StatCard label="Malware"   value={reportResult.risk_breakdown.malware ?? 0}   color={{ color: 'var(--blue)' }} />
+                <StatCard label="BEC"       value={reportResult.risk_breakdown.bec ?? 0}       color={{ color: 'var(--orange)' }} />
               </div>
             )}
             {reportResult.top_recommendations?.length > 0 && (

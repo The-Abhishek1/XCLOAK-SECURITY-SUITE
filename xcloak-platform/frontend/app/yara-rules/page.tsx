@@ -5,13 +5,8 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { yaraAPI, agentsAPI, schedulerAPI } from '@/lib/api';
 import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
-import {
-  Bug, Plus, Trash2, Edit2, X, ToggleLeft, ToggleRight, Search, FileWarning,
-  Code2, Upload, ChevronDown, ChevronUp, Clock, Hash, Download, BarChart3,
-  Bot, Zap, Copy, CheckSquare, Grid, Layers, BarChart, Shield,
-  ChevronRight, AlertTriangle,
-} from 'lucide-react';
 import { Agent } from '@/types';
+import { AlertTriangle, BarChart, Bot, CheckSquare, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Download, Edit2, FileWarning, Grid, Hash, Layers, Plus, Search, Shield, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

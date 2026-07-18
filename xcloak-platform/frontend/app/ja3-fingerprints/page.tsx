@@ -4,11 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { ja3API } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Fingerprint, Grid, Layers, Lock, Activity, Shield, Share2, Bot, Bookmark,
-  Plus, Trash2, Search, Download, Zap, Copy, Globe, ChevronDown, ChevronUp,
-  AlertTriangle, CheckSquare, X, Hash, BarChart3, BookmarkPlus,
-} from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Bookmark, BookmarkPlus, Bot, CheckSquare, ChevronDown, ChevronUp, Copy, Download, Fingerprint, Globe, Grid, Hash, Layers, Plus, Search, Share2, Shield, Trash2, X, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

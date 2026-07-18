@@ -11,7 +11,7 @@ import (
 	"xcloak-platform/services"
 )
 
-func init() { createQETables() }
+func InitQETables() { createQETables() }
 
 func createQETables() {
 	database.DB.Exec(`CREATE TABLE IF NOT EXISTS qe_items (

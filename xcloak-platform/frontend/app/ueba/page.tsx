@@ -6,15 +6,7 @@ import { uebaAPI } from '@/lib/api';
 import { UserRiskProfile, UEBAEvent } from '@/types';
 import { timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import {
-  User, AlertTriangle, Search, Shield, Clock, RefreshCw, Bot,
-  Loader2, Activity, TrendingUp, X, ChevronRight, Filter,
-  Server, Globe2, Lock, Terminal, FileText, Database, Network,
-  Eye, Users, Star, Cpu, Wifi, CheckCircle2, XCircle,
-  BarChart2, Layers, Target, Crosshair, Plus, Trash2,
-  MessageSquare, Play, KeyRound, LogOut, Ban, Zap,
-  ArrowUpRight, Check, Info, GitBranch, Package,
-} from 'lucide-react';
+import { Activity, AlertTriangle, ArrowUpRight, Ban, BarChart2, Bot, Check, CheckCircle2, ChevronRight, Clock, Cpu, Crosshair, Database, FileText, Filter, GitBranch, Globe2, KeyRound, Loader2, LogOut, Network, Package, Play, Plus, RefreshCw, Search, Server, Shield, Star, Target, Terminal, Trash2, TrendingUp, User, Users, Wifi, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

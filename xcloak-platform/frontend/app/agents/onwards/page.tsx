@@ -3,11 +3,7 @@
 import { useState } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { integrationsAPI, agentsAPI } from '@/lib/api';
-import {
-  Terminal, Copy, Check, ChevronRight,
-  Key, Cpu, CheckCircle, RefreshCw, ArrowLeft,
-  FileText, Play, Shield,
-} from 'lucide-react';
+import { ArrowLeft, Check, CheckCircle, ChevronRight, Copy, Cpu, FileText, Key, Play, RefreshCw, Shield, Terminal } from '@/lib/icon-stubs';
 
 const STEPS = [
   { id: 1, label: 'Generate Token', icon: Key      },

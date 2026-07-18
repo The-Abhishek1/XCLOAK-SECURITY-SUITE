@@ -12,7 +12,7 @@ import (
 	"xcloak-platform/services"
 )
 
-func init() { createSRTables() }
+func InitSRTables() { createSRTables() }
 
 func createSRTables() {
 	database.DB.Exec(`

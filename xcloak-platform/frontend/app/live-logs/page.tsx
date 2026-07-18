@@ -7,14 +7,7 @@ import { RootLayout }    from '@/components/layout/RootLayout';
 import { agentsAPI, liveLogAPI } from '@/lib/api';
 import { Agent }         from '@/types';
 import { formatDate }    from '@/lib/utils';
-import {
-  Activity, Pause, Play, Trash2, Search, X, Download,
-  Bookmark, BookmarkCheck, Save, RotateCcw, Code, Zap, ChevronDown,
-  ChevronRight, Shield, Globe, Server, Database, Terminal, Cpu, Clock,
-  Monitor, Key, Network, AlertTriangle, Filter, Table2, FileJson,
-  SlidersHorizontal, BarChart2, Sparkles, Copy, Check, Tag, FileText,
-  Plus, ArrowRight, MoreHorizontal, Eye, EyeOff, Columns, Hash,
-} from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, BarChart2, Bookmark, BookmarkCheck, Check, ChevronDown, ChevronRight, Clock, Code, Columns, Copy, Cpu, Database, Download, Eye, EyeOff, FileJson, Filter, Globe, Hash, Key, Monitor, Network, Pause, Play, Plus, RotateCcw, Save, Search, Server, Shield, SlidersHorizontal, Sparkles, Table2, Terminal, Trash2, X, Zap } from '@/lib/icon-stubs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

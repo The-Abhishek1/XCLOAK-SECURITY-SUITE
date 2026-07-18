@@ -5,13 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, timelineAPI } from '@/lib/api';
 import { TimelineEvent, Agent } from '@/types';
 import { formatDate, timeAgo } from '@/lib/utils';
-import {
-  Clock, Search, AlertTriangle, Terminal, Shield, Globe, Server,
-  Monitor, FileText, Database, LogIn, Activity, Network, Flame,
-  Play, Cpu, HardDrive, Wifi, Lock, X, ChevronDown, ChevronRight,
-  Download, Bookmark, BookmarkCheck, RefreshCw, Filter, Zap,
-  Eye, Copy, Check, MoreHorizontal, SlidersHorizontal,
-} from 'lucide-react';
+import { Activity, AlertTriangle, Bookmark, BookmarkCheck, Check, Clock, Copy, Cpu, Database, Download, Eye, FileText, Filter, Flame, Globe, HardDrive, LogIn, Monitor, Play, Search, Server, Shield, SlidersHorizontal, X, Zap } from '@/lib/icon-stubs';
 
 // ── Category metadata ─────────────────────────────────────────────────────────
 

@@ -10,13 +10,7 @@ import {
 } from '@/lib/api';
 import { IOC, SigmaRule, ThreatFeed } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
-import {
-  Shield, Plus, Trash2, ToggleLeft, ToggleRight, X, Edit2,
-  Upload, Rss, FileCode, Search, RefreshCw, ChevronLeft, ChevronRight,
-  Brain, BarChart3, Target, Network, Clock, AlertTriangle, Globe,
-  Activity, CheckCircle2, Lock, Zap, Play, Copy, Check,
-  ArrowRight, Layers, Eye, Users, Database,
-} from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Brain, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, Database, Edit2, Eye, FileCode, Layers, Network, Plus, RefreshCw, Rss, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, Upload, Users, X, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

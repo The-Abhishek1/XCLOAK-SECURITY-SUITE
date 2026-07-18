@@ -14,7 +14,7 @@ import {
   Building2, Crosshair, Activity, SearchCode, FolderOpen,
   Server, BarChart2, ListChecks, Users, Aperture, Gauge, Microscope,
   Target, Wifi, Layers, HardDrive, ScrollText, PlugZap, Fingerprint, UserX,
-  Cloud, Mail, Container, ShieldOff, Package,
+  Cloud, Mail, Container, ShieldOff, Package, Download,
   EyeOff, Wrench, Smartphone, DatabaseZap,
   PanelLeft,
 } from 'lucide-react';
@@ -29,8 +29,9 @@ const NAV = [
     { href: '/risk-posture', label: 'Risk Posture', icon: Gauge },
   ]},
   { group: 'MONITORING', icon: Activity, items: [
-    { href: '/agents',      label: 'Agents',      icon: Cpu },
-    { href: '/timeline',    label: 'Timeline',    icon: Clock },
+    { href: '/agents',          label: 'Agents',          icon: Cpu },
+    { href: '/agents/onwards',  label: 'Deploy Agent',    icon: Download },
+    { href: '/timeline',        label: 'Timeline',        icon: Clock },
     { href: '/live-logs',   label: 'Live Logs',   icon: Radio },
     { href: '/log-search',     label: 'Log Search',   icon: SearchCode },
     { href: '/elastic-query',  label: 'ES Query',     icon: DatabaseZap },

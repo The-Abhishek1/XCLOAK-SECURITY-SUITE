@@ -5,16 +5,10 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { riskPostureAPI } from '@/lib/api';
 import { sevClass } from '@/lib/utils';
 import {
-  RefreshCw, TrendingUp, TrendingDown, Shield, AlertTriangle, Users, Bug, Zap,
-  BellOff, Globe, Wifi, Cpu, Lock, Package, UserX, Building2,
-  ShieldAlert, Wrench, CheckCircle, AlertCircle, ArrowRight, Server,
-  Cloud, Network, Flame, BarChart2, Target, Activity, Database,
-  FileWarning, TrendingUp as TrendUp, ChevronRight, Clock, Layers,
-} from 'lucide-react';
-import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, Legend,
 } from 'recharts';
+import { Activity, BarChart2, Bug, Building2, CheckCircle, ChevronRight, Cloud, Database, Flame, Globe, Layers, Network, Package, RefreshCw, Server, Shield, ShieldAlert, Target, TrendingDown, TrendingUp, UserX, Users, Wifi, Wrench, Lock } from '@/lib/icon-stubs';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface AssetRisk {

@@ -4,12 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { dfirAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Search, Plus, Play, Trash2, ChevronRight, ChevronDown, Brain,
-  Shield, Activity, FileText, Database, Clock, CheckCircle,
-  AlertTriangle, Eye, Download, RefreshCw, Save, Zap,
-  TrendingUp, BookOpen, GitBranch, Globe, X, Package,
-} from 'lucide-react';
+import { Activity, BookOpen, Brain, ChevronDown, ChevronRight, Clock, Database, Download, Eye, FileText, GitBranch, Globe, Package, Play, Plus, Save, Search, Shield, Trash2, X, Zap } from '@/lib/icon-stubs';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

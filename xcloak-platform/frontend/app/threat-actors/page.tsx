@@ -6,12 +6,7 @@ import {
 import { RootLayout } from '@/components/layout/RootLayout';
 import { threatActorsAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Shield, Plus, Trash2, X, Edit2, Globe, Target, Search, RefreshCw,
-  AlertTriangle, ChevronDown, ChevronRight, Brain, BarChart3, Network,
-  Clock, Eye, Layers, Crosshair, Users, Activity, Lock, Check, Copy,
-  Zap, Play, ArrowRight, CheckCircle2, AlertCircle, Database,
-} from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Clock, Copy, Crosshair, Database, Edit2, Eye, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, Users, X, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

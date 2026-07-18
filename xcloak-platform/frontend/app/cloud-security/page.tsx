@@ -4,12 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { cloudSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Cloud, Shield, Key, Globe, Activity, GitBranch, Brain, BarChart2, Zap,
-  Plus, RefreshCw, Trash2, CheckCircle, AlertTriangle, XCircle,
-  Database, Server, Lock, FileText, Search, Settings,
-  TrendingUp, Map, Eye, AlertCircle, ChevronDown,
-} from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, Cloud, Database, Eye, FileText, GitBranch, Globe, Key, Plus, RefreshCw, Server, Shield, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 const TABS = [
   { id: 'overview',     label: 'Overview',     icon: Activity },
@@ -23,36 +18,37 @@ const TABS = [
   { id: 'analytics',    label: 'Analytics',    icon: BarChart2 },
 ];
 
-const SEV_BG: Record<string, string> = {
-  critical: 'bg-red-500/10 text-red-400 border border-red-500/30',
-  high:     'bg-orange-500/10 text-orange-400 border border-orange-500/30',
-  medium:   'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30',
-  low:      'bg-blue-500/10 text-blue-400 border border-blue-500/30',
+const SEV_STYLE: Record<string, React.CSSProperties> = {
+  critical: { background: 'var(--red-bg)',    color: 'var(--red)',    border: '1px solid var(--red-border)' },
+  high:     { background: 'var(--orange-bg)', color: 'var(--orange)', border: '1px solid var(--orange-border)' },
+  medium:   { background: 'var(--yellow-bg)', color: 'var(--yellow)', border: '1px solid var(--yellow-border)' },
+  low:      { background: 'var(--blue-bg)',   color: 'var(--blue)',   border: '1px solid var(--blue-border)' },
 };
-const PROV_COLOR: Record<string, string> = {
-  aws:   'text-orange-400',
-  azure: 'text-blue-400',
-  gcp:   'text-green-400',
+const PROV_STYLE: Record<string, React.CSSProperties> = {
+  aws:   { color: 'var(--orange)' },
+  azure: { color: 'var(--blue)' },
+  gcp:   { color: 'var(--green)' },
 };
-const PROV_BG: Record<string, string> = {
-  aws:   'bg-orange-500/10 border-orange-500/30 text-orange-400',
-  azure: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
-  gcp:   'bg-green-500/10 border-green-500/30 text-green-400',
+const PROV_BG_STYLE: Record<string, React.CSSProperties> = {
+  aws:   { background: 'var(--orange-bg)', border: '1px solid var(--orange-border)', color: 'var(--orange)' },
+  azure: { background: 'var(--blue-bg)',   border: '1px solid var(--blue-border)',   color: 'var(--blue)' },
+  gcp:   { background: 'var(--green-bg)',  border: '1px solid var(--green-border)',  color: 'var(--green)' },
 };
 
-function StatCard({ label, value, sub, color = 'text-white' }: { label: string; value: number | string; sub?: string; color?: string }) {
+function StatCard({ label, value, sub, color = 'var(--text-1)' }: { label: string; value: number | string; sub?: string; color?: string }) {
   return (
     <div className="g-card p-4 space-y-1">
       <div className="text-xs text-[var(--text-3)]">{label}</div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className="text-2xl font-bold" style={{ color }}>{value}</div>
       {sub && <div className="text-xs text-[var(--text-3)]">{sub}</div>}
     </div>
   );
 }
 
 function ProviderBadge({ provider }: { provider: string }) {
+  const baseStyle: React.CSSProperties = PROV_BG_STYLE[provider] ?? { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' };
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold ${PROV_BG[provider] ?? 'bg-[var(--glass-bg)] border-[var(--border)] text-[var(--text-3)]'}`}>
+    <span className="text-[10px] px-1.5 py-0.5 rounded uppercase font-bold" style={baseStyle}>
       {provider}
     </span>
   );
@@ -71,24 +67,24 @@ function OverviewTab() {
   if (loading) return <div className="text-[var(--text-3)] text-sm p-4">Loading...</div>;
   if (!data) return <div className="text-[var(--text-3)] p-4">No data</div>;
 
-  const riskColor = data.multi_cloud_risk > 75 ? 'text-red-400' : data.multi_cloud_risk > 50 ? 'text-orange-400' : 'text-yellow-400';
-  const compColor = data.compliance_score > 85 ? 'text-green-400' : data.compliance_score > 70 ? 'text-yellow-400' : 'text-red-400';
+  const riskColor = data.multi_cloud_risk > 75 ? 'var(--red)' : data.multi_cloud_risk > 50 ? 'var(--orange)' : 'var(--yellow)';
+  const compColor = data.compliance_score > 85 ? 'var(--green)' : data.compliance_score > 70 ? 'var(--yellow)' : 'var(--red)';
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="AWS Accounts"     value={data.aws_accounts}     color="text-orange-400" />
-        <StatCard label="Azure Subs"       value={data.azure_subs}       color="text-blue-400" />
-        <StatCard label="GCP Projects"     value={data.gcp_projects}     color="text-green-400" />
+        <StatCard label="AWS Accounts"     value={data.aws_accounts}     color="var(--orange)" />
+        <StatCard label="Azure Subs"       value={data.azure_subs}       color="var(--blue)" />
+        <StatCard label="GCP Projects"     value={data.gcp_projects}     color="var(--green)" />
         <StatCard label="Multi-Cloud Risk" value={`${data.multi_cloud_risk}%`} color={riskColor} />
         <StatCard label="Compliance Score" value={`${data.compliance_score}%`} color={compColor} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Total Assets"    value={data.total_assets} />
-        <StatCard label="Public Assets"  value={data.public_assets}   color={data.public_assets > 0 ? 'text-red-400' : 'text-green-400'} />
-        <StatCard label="Critical Findings" value={data.critical_findings} color="text-red-400" />
-        <StatCard label="IAM Risks"      value={data.iam_risks}       color="text-orange-400" />
-        <StatCard label="Active Threats" value={data.active_threats}  color={data.active_threats > 0 ? 'text-red-400' : 'text-green-400'} />
+        <StatCard label="Public Assets"  value={data.public_assets}   color={data.public_assets > 0 ? 'var(--red)' : 'var(--green)'} />
+        <StatCard label="Critical Findings" value={data.critical_findings} color="var(--red)" />
+        <StatCard label="IAM Risks"      value={data.iam_risks}       color="var(--orange)" />
+        <StatCard label="Active Threats" value={data.active_threats}  color={data.active_threats > 0 ? 'var(--red)' : 'var(--green)'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -100,12 +96,12 @@ function OverviewTab() {
               return (
                 <div key={inv.provider} className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className={`uppercase font-bold ${PROV_COLOR[inv.provider] ?? 'text-[var(--text-2)]'}`}>{inv.provider}</span>
+                    <span className="uppercase font-bold" style={PROV_STYLE[inv.provider] ?? { color: 'var(--text-2)' }}>{inv.provider}</span>
                     <span className="text-[var(--text-2)]">{inv.count} assets</span>
                   </div>
                   <div className="h-2 rounded-full bg-[var(--border)]">
-                    <div className={`h-full rounded-full ${inv.provider === 'aws' ? 'bg-orange-500' : inv.provider === 'azure' ? 'bg-blue-500' : 'bg-green-500'}`}
-                      style={{ width: `${Math.round(inv.count / total * 100)}%` }} />
+                    <div className="h-full rounded-full"
+                      style={{ width: `${Math.round(inv.count / total * 100)}%`, background: (PROV_STYLE[inv.provider] ?? { color: 'var(--accent)' }).color }} />
                   </div>
                 </div>
               );
@@ -125,7 +121,7 @@ function OverviewTab() {
                 <div className="flex flex-col items-end gap-0.5 shrink-0">
                   <div className="flex items-center gap-1">
                     <ProviderBadge provider={t.provider} />
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[t.severity] ?? SEV_BG.medium}`}>{t.severity}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[t.severity] ?? SEV_STYLE.medium}>{t.severity}</span>
                   </div>
                   <span className="text-[10px] text-[var(--text-3)]">{timeAgo(t.created_at)}</span>
                 </div>
@@ -166,14 +162,14 @@ function InventoryTab() {
   };
 
   const RESOURCE_ICONS: Record<string, React.ReactNode> = {
-    ec2: <Server className="h-4 w-4 text-orange-400" />,
-    s3: <Database className="h-4 w-4 text-orange-300" />,
-    rds: <Database className="h-4 w-4 text-blue-400" />,
-    eks: <Cloud className="h-4 w-4 text-purple-400" />,
-    lambda: <Zap className="h-4 w-4 text-yellow-400" />,
-    storage_account: <Database className="h-4 w-4 text-blue-400" />,
-    bigquery: <BarChart2 className="h-4 w-4 text-green-400" />,
-    vpc: <Globe className="h-4 w-4 text-cyan-400" />,
+    ec2:             <Server   className="h-4 w-4" style={{ color: 'var(--orange)' }} />,
+    s3:              <Database className="h-4 w-4" style={{ color: 'var(--orange)' }} />,
+    rds:             <Database className="h-4 w-4" style={{ color: 'var(--blue)' }} />,
+    eks:             <Cloud    className="h-4 w-4" style={{ color: 'var(--accent)' }} />,
+    lambda:          <Zap      className="h-4 w-4" style={{ color: 'var(--yellow)' }} />,
+    storage_account: <Database className="h-4 w-4" style={{ color: 'var(--blue)' }} />,
+    bigquery:        <BarChart2 className="h-4 w-4" style={{ color: 'var(--green)' }} />,
+    vpc:             <Globe    className="h-4 w-4" style={{ color: 'var(--blue)' }} />,
   };
 
   return (
@@ -182,12 +178,12 @@ function InventoryTab() {
         {accounts.map((a: any) => (
           <div key={a.id} className="g-card p-3 space-y-1">
             <div className="flex items-center justify-between">
-              <span className={`text-[10px] uppercase font-bold ${PROV_COLOR[a.provider]}`}>{a.provider}</span>
-              <div className={`h-1.5 w-1.5 rounded-full ${a.status === 'connected' ? 'bg-green-400' : 'bg-yellow-400'}`} />
+              <span className="text-[10px] uppercase font-bold" style={PROV_STYLE[a.provider] ?? { color: 'var(--text-3)' }}>{a.provider}</span>
+              <div className="h-1.5 w-1.5 rounded-full" style={{ background: a.status === 'connected' ? 'var(--green)' : 'var(--yellow)' }} />
             </div>
             <div className="text-xs font-medium text-[var(--text-1)] truncate">{a.name}</div>
             <div className="text-[10px] text-[var(--text-3)]">{a.asset_count} assets</div>
-            <div className={`text-[10px] font-bold ${a.risk_score > 70 ? 'text-red-400' : a.risk_score > 50 ? 'text-orange-400' : 'text-green-400'}`}>Risk: {a.risk_score}%</div>
+            <div className="text-[10px] font-bold" style={{ color: a.risk_score > 70 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--green)' }}>Risk: {a.risk_score}%</div>
           </div>
         ))}
         <button className="g-card p-3 flex flex-col items-center justify-center gap-1 text-[var(--text-3)] hover:text-[var(--accent)] hover:border-[var(--accent-border)] transition-colors cursor-pointer" onClick={() => setShowAddAccount(true)}>
@@ -264,13 +260,13 @@ function InventoryTab() {
                   <td>
                     <div className="flex items-center gap-1">
                       <div className="w-12 h-1.5 rounded-full bg-[var(--border)]">
-                        <div className={`h-full rounded-full ${a.risk_score > 75 ? 'bg-red-500' : a.risk_score > 50 ? 'bg-orange-500' : 'bg-yellow-500'}`}
-                          style={{ width: `${a.risk_score}%` }} />
+                        <div className="h-full rounded-full"
+                          style={{ width: `${a.risk_score}%`, background: a.risk_score > 75 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--yellow)' }} />
                       </div>
-                      <span className={`text-xs font-bold ${a.risk_score > 75 ? 'text-red-400' : a.risk_score > 50 ? 'text-orange-400' : 'text-[var(--text-2)]'}`}>{a.risk_score}</span>
+                      <span className="text-xs font-bold" style={{ color: a.risk_score > 75 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--text-2)' }}>{a.risk_score}</span>
                     </div>
                   </td>
-                  <td>{a.internet_exposed ? <Eye className="h-3.5 w-3.5 text-red-400" /> : <Lock className="h-3.5 w-3.5 text-green-400" />}</td>
+                  <td>{a.internet_exposed ? <Eye className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <Lock className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
                   <td><span className="text-xs text-[var(--text-3)]">{a.last_activity ? timeAgo(a.last_activity) : '—'}</span></td>
                 </tr>
               ))}
@@ -322,10 +318,10 @@ function PostureTab() {
     <div className="space-y-4">
       {exposure && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Public Buckets"  value={exposure.public_buckets}  color={exposure.public_buckets > 0 ? 'text-red-400' : 'text-green-400'} />
-          <StatCard label="Open Databases"  value={exposure.open_databases}  color={exposure.open_databases > 0 ? 'text-red-400' : 'text-green-400'} />
-          <StatCard label="Public APIs"     value={exposure.public_apis}     color={exposure.public_apis > 0 ? 'text-orange-400' : 'text-green-400'} />
-          <StatCard label="Weak Sec Groups" value={exposure.weak_security_groups} color="text-orange-400" />
+          <StatCard label="Public Buckets"  value={exposure.public_buckets}  color={exposure.public_buckets > 0 ? 'var(--red)' : 'var(--green)'} />
+          <StatCard label="Open Databases"  value={exposure.open_databases}  color={exposure.open_databases > 0 ? 'var(--red)' : 'var(--green)'} />
+          <StatCard label="Public APIs"     value={exposure.public_apis}     color={exposure.public_apis > 0 ? 'var(--orange)' : 'var(--green)'} />
+          <StatCard label="Weak Sec Groups" value={exposure.weak_security_groups} color="var(--orange)" />
         </div>
       )}
 
@@ -337,8 +333,8 @@ function PostureTab() {
               <div className="flex justify-between text-xs">
                 <span className={`capitalize ${filterCat === s.category ? 'text-[var(--accent)]' : 'text-[var(--text-2)]'}`}>{s.category.replace(/_/g, ' ')}</span>
                 <div className="flex gap-1">
-                  {s.critical > 0 && <span className="text-red-400 font-bold">{s.critical}C</span>}
-                  {s.high > 0 && <span className="text-orange-400 font-bold">{s.high}H</span>}
+                  {s.critical > 0 && <span className="font-bold" style={{ color: 'var(--red)' }}>{s.critical}C</span>}
+                  {s.high > 0 && <span className="font-bold" style={{ color: 'var(--orange)' }}>{s.high}H</span>}
                   <span className="text-[var(--text-3)]">{s.total}</span>
                 </div>
               </div>
@@ -372,7 +368,7 @@ function PostureTab() {
                     <div className="text-xs font-medium text-[var(--text-1)]">{f.title}</div>
                     <div className="flex items-center gap-1 shrink-0">
                       <ProviderBadge provider={f.provider} />
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[f.severity] ?? SEV_BG.medium}`}>{f.severity}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[f.severity] ?? SEV_STYLE.medium}>{f.severity}</span>
                     </div>
                   </div>
                   {selected?.id === f.id && (
@@ -412,13 +408,13 @@ function PostureTab() {
                 <tr key={d.id} className={`g-tr ${d.acknowledged ? 'opacity-50' : ''}`}>
                   <td><span className="text-xs font-mono text-[var(--text-1)]">{d.resource_id}</span></td>
                   <td><span className="text-xs text-[var(--text-2)] capitalize">{d.change_type.replace(/_/g, ' ')}</span></td>
-                  <td><span className="text-xs font-mono text-green-400">{d.previous_state || '—'}</span></td>
-                  <td><span className="text-xs font-mono text-red-400">{d.new_state || '—'}</span></td>
+                  <td><span className="text-xs font-mono" style={{ color: 'var(--green)' }}>{d.previous_state || '—'}</span></td>
+                  <td><span className="text-xs font-mono" style={{ color: 'var(--red)' }}>{d.new_state || '—'}</span></td>
                   <td><span className="text-xs text-[var(--text-3)]">{d.changed_by || '—'}</span></td>
                   <td><ProviderBadge provider={d.provider} /></td>
-                  <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[d.severity] ?? SEV_BG.medium}`}>{d.severity}</span></td>
+                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[d.severity] ?? SEV_STYLE.medium}>{d.severity}</span></td>
                   <td><span className="text-xs text-[var(--text-3)]">{timeAgo(d.created_at)}</span></td>
-                  <td>{!d.acknowledged && <button className="text-xs text-[var(--text-3)] hover:text-green-400" onClick={() => doAckDrift(d.id)}>Ack</button>}</td>
+                  <td>{!d.acknowledged && <button className="text-xs text-[var(--text-3)] hover:text-[var(--green)]" onClick={() => doAckDrift(d.id)}>Ack</button>}</td>
                 </tr>
               ))}
               {drift.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-6 text-xs">No drift detected</td></tr>}
@@ -453,11 +449,11 @@ function IdentityTab() {
     <div className="space-y-4">
       {risks && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <StatCard label="Dormant Accounts"      value={risks.dormant_accounts}      color="text-orange-400" />
-          <StatCard label="No MFA"                value={risks.no_mfa}                color="text-red-400" />
-          <StatCard label="Old Access Keys (90d)" value={risks.old_access_keys}       color="text-orange-400" />
-          <StatCard label="Excessive Permissions" value={risks.excessive_permissions} color="text-red-400" />
-          <StatCard label="Privilege Escalation"  value={risks.privilege_escalation}  color="text-red-400" />
+          <StatCard label="Dormant Accounts"      value={risks.dormant_accounts}      color="var(--orange)" />
+          <StatCard label="No MFA"                value={risks.no_mfa}                color="var(--red)" />
+          <StatCard label="Old Access Keys (90d)" value={risks.old_access_keys}       color="var(--orange)" />
+          <StatCard label="Excessive Permissions" value={risks.excessive_permissions} color="var(--red)" />
+          <StatCard label="Privilege Escalation"  value={risks.privilege_escalation}  color="var(--red)" />
         </div>
       )}
 
@@ -494,11 +490,11 @@ function IdentityTab() {
                   <td><span className="text-xs text-[var(--text-2)] capitalize">{id.identity_type.replace(/_/g, ' ')}</span></td>
                   <td><ProviderBadge provider={id.provider} /></td>
                   <td><span className="text-xs font-mono text-[var(--text-3)] truncate max-w-[160px] block">{id.permissions || '—'}</span></td>
-                  <td>{id.mfa_enabled ? <CheckCircle className="h-3.5 w-3.5 text-green-400" /> : id.identity_type === 'iam_user' ? <XCircle className="h-3.5 w-3.5 text-red-400" /> : <span className="text-[10px] text-[var(--text-3)]">N/A</span>}</td>
-                  <td><span className={`text-xs ${id.access_key_age_days > 90 ? 'text-red-400 font-bold' : 'text-[var(--text-2)]'}`}>{id.access_key_age_days > 0 ? `${id.access_key_age_days}d` : '—'}</span></td>
-                  <td>{id.is_dormant ? <AlertTriangle className="h-3.5 w-3.5 text-orange-400" /> : <CheckCircle className="h-3.5 w-3.5 text-green-400" />}</td>
+                  <td>{id.mfa_enabled ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : id.identity_type === 'iam_user' ? <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <span className="text-[10px] text-[var(--text-3)]">N/A</span>}</td>
+                  <td><span className="text-xs" style={{ color: id.access_key_age_days > 90 ? 'var(--red)' : 'var(--text-2)', fontWeight: id.access_key_age_days > 90 ? 700 : undefined }}>{id.access_key_age_days > 0 ? `${id.access_key_age_days}d` : '—'}</span></td>
+                  <td>{id.is_dormant ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
                   <td><span className="text-xs text-[var(--text-3)]">{id.last_used ? timeAgo(id.last_used) : 'Never'}</span></td>
-                  <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[id.risk_level] ?? SEV_BG.low}`}>{id.risk_level}</span></td>
+                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[id.risk_level] ?? SEV_STYLE.low}>{id.risk_level}</span></td>
                 </tr>
               ))}
               {identities.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-8">No identities found</td></tr>}
@@ -580,11 +576,11 @@ function DetectionTab() {
                         <tr key={t.id} className={`g-tr cursor-pointer ${selected?.id === t.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === t.id ? null : t)}>
                           <td><span className="text-xs text-[var(--text-1)] capitalize">{t.threat_type.replace(/_/g, ' ')}</span></td>
                           <td><span className="text-xs font-mono text-[var(--text-2)] truncate max-w-[140px] block">{t.resource_id}</span></td>
-                          <td><span className="text-xs font-mono text-red-400">{t.source_ip || '—'}</span></td>
+                          <td><span className="text-xs font-mono" style={{ color: 'var(--red)' }}>{t.source_ip || '—'}</span></td>
                           <td><span className="text-xs text-[var(--text-3)]">{t.source_user || '—'}</span></td>
                           <td><ProviderBadge provider={t.provider} /></td>
-                          <td><span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-400">{t.mitre_technique || '—'}</span></td>
-                          <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[t.severity] ?? SEV_BG.medium}`}>{t.severity}</span></td>
+                          <td><span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--accent-bg, var(--blue-bg))', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>{t.mitre_technique || '—'}</span></td>
+                          <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[t.severity] ?? SEV_STYLE.medium}>{t.severity}</span></td>
                           <td><span className="text-xs text-[var(--text-3)]">{timeAgo(t.created_at)}</span></td>
                         </tr>
                       ))}
@@ -648,7 +644,7 @@ function DetectionTab() {
                   <td><span className="text-xs text-[var(--text-2)] capitalize">{v.category.replace(/_/g, ' ')}</span></td>
                   <td><span className="text-xs font-mono text-[var(--text-3)]">{v.resource_id}</span></td>
                   <td><ProviderBadge provider={v.provider} /></td>
-                  <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[v.severity] ?? SEV_BG.medium}`}>{v.severity}</span></td>
+                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[v.severity] ?? SEV_STYLE.medium}>{v.severity}</span></td>
                   <td><span className="text-[10px] text-[var(--text-3)]">{v.framework}</span></td>
                   <td><span className="text-xs text-[var(--text-3)]">{timeAgo(v.created_at)}</span></td>
                 </tr>
@@ -680,15 +676,15 @@ function ComplianceTab() {
         {FRAMEWORKS.map(fw => {
           const comp = compliance.find(c => c.framework === fw);
           const score = comp ? Math.round(comp.score) : 0;
-          const color = score > 85 ? 'text-green-400' : score > 70 ? 'text-yellow-400' : score > 0 ? 'text-red-400' : 'text-[var(--text-3)]';
+          const scoreColor = score > 85 ? 'var(--green)' : score > 70 ? 'var(--yellow)' : score > 0 ? 'var(--red)' : 'var(--text-3)';
           return (
             <div key={fw} className="g-card p-3 space-y-2">
               <div className="text-xs font-medium text-[var(--text-1)]">{fw}</div>
-              <div className={`text-2xl font-bold ${color}`}>{score > 0 ? `${score}%` : '—'}</div>
+              <div className="text-2xl font-bold" style={{ color: scoreColor }}>{score > 0 ? `${score}%` : '—'}</div>
               {comp && (
                 <div className="space-y-1">
                   <div className="h-1.5 rounded-full bg-[var(--border)]">
-                    <div className={`h-full rounded-full ${score > 85 ? 'bg-green-500' : score > 70 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${score}%` }} />
+                    <div className="h-full rounded-full" style={{ width: `${score}%`, background: score > 85 ? 'var(--green)' : score > 70 ? 'var(--yellow)' : 'var(--red)' }} />
                   </div>
                   <div className="text-[10px] text-[var(--text-3)]">{comp.passed}/{comp.total} controls passed</div>
                 </div>
@@ -709,13 +705,13 @@ function ComplianceTab() {
               {compliance.map((c: any) => (
                 <tr key={c.framework} className="g-tr">
                   <td><span className="font-medium text-[var(--text-1)]">{c.framework}</span></td>
-                  <td><span className={`text-sm font-bold ${c.score > 85 ? 'text-green-400' : c.score > 70 ? 'text-yellow-400' : 'text-red-400'}`}>{Math.round(c.score)}%</span></td>
-                  <td><span className="text-xs text-green-400">{c.passed}</span></td>
-                  <td><span className="text-xs text-red-400">{c.failed}</span></td>
+                  <td><span className="text-sm font-bold" style={{ color: c.score > 85 ? 'var(--green)' : c.score > 70 ? 'var(--yellow)' : 'var(--red)' }}>{Math.round(c.score)}%</span></td>
+                  <td><span className="text-xs" style={{ color: 'var(--green)' }}>{c.passed}</span></td>
+                  <td><span className="text-xs" style={{ color: 'var(--red)' }}>{c.failed}</span></td>
                   <td><span className="text-xs text-[var(--text-2)]">{c.total}</span></td>
                   <td>
                     <div className="w-24 h-1.5 rounded-full bg-[var(--border)]">
-                      <div className={`h-full rounded-full ${c.score > 85 ? 'bg-green-500' : c.score > 70 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${c.score}%` }} />
+                      <div className="h-full rounded-full" style={{ width: `${c.score}%`, background: c.score > 85 ? 'var(--green)' : c.score > 70 ? 'var(--yellow)' : 'var(--red)' }} />
                     </div>
                   </td>
                 </tr>
@@ -750,11 +746,11 @@ function AttackPathsTab() {
     return groups;
   }, [graph]);
 
-  const NODE_COLOR: Record<string, string> = {
-    'Source': 'bg-red-500/10 border-red-500/30 text-red-400',
-    'Public Assets': 'bg-orange-500/10 border-orange-500/30 text-orange-400',
-    'Identity': 'bg-purple-500/10 border-purple-500/30 text-purple-400',
-    'Data / Targets': 'bg-blue-500/10 border-blue-500/30 text-blue-400',
+  const NODE_STYLE: Record<string, React.CSSProperties> = {
+    'Source':        { background: 'var(--red-bg)',    border: '1px solid var(--red-border)',    color: 'var(--red)' },
+    'Public Assets': { background: 'var(--orange-bg)', border: '1px solid var(--orange-border)', color: 'var(--orange)' },
+    'Identity':      { background: 'var(--accent-bg, var(--blue-bg))', border: '1px solid var(--accent-border)', color: 'var(--accent)' },
+    'Data / Targets':{ background: 'var(--blue-bg)',   border: '1px solid var(--blue-border)',   color: 'var(--blue)' },
   };
 
   return (
@@ -768,11 +764,11 @@ function AttackPathsTab() {
                 <div key={groupName} className="space-y-2">
                   <div className="text-[10px] text-[var(--text-3)] font-medium uppercase tracking-wider">{groupName}</div>
                   {nodes.map(n => (
-                    <div key={n.id} className={`rounded-lg px-3 py-2 border text-xs ${NODE_COLOR[groupName]}`}>
+                    <div key={n.id} className="rounded-lg px-3 py-2 text-xs" style={NODE_STYLE[groupName] ?? { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
                       <div className="font-medium">{n.label}</div>
                       {n.permissions && <div className="text-[10px] opacity-70 truncate">{n.permissions}</div>}
                       {n.risk && <div className="text-[10px] opacity-70">Risk: {n.risk}%</div>}
-                      {n.sensitive && <div className="text-[10px] text-yellow-400">Sensitive Data</div>}
+                      {n.sensitive && <div className="text-[10px]" style={{ color: 'var(--yellow)' }}>Sensitive Data</div>}
                     </div>
                   ))}
                 </div>
@@ -784,10 +780,10 @@ function AttackPathsTab() {
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {graph.edges.map((e: any, i: number) => (
                     <div key={i} className="flex items-center gap-2 text-xs text-[var(--text-2)]">
-                      <span className="text-red-400 font-mono text-[10px]">{e.source}</span>
+                      <span className="font-mono text-[10px]" style={{ color: 'var(--red)' }}>{e.source}</span>
                       <span className="text-[var(--text-3)]">→ {e.label} →</span>
                       <span className="text-[var(--accent)] font-mono text-[10px]">{e.target}</span>
-                      <span className={`ml-auto text-[10px] px-1 py-0.5 rounded ${SEV_BG[e.risk] ?? SEV_BG.medium}`}>{e.risk}</span>
+                      <span className="ml-auto text-[10px] px-1 py-0.5 rounded" style={SEV_STYLE[e.risk] ?? SEV_STYLE.medium}>{e.risk}</span>
                     </div>
                   ))}
                 </div>
@@ -801,12 +797,12 @@ function AttackPathsTab() {
               {timeline.map((t: any, i: number) => (
                 <div key={i} className="flex gap-3">
                   <div className="flex flex-col items-center">
-                    <div className={`h-2.5 w-2.5 rounded-full mt-0.5 shrink-0 ${t.severity === 'critical' ? 'bg-red-400' : t.severity === 'high' ? 'bg-orange-400' : 'bg-yellow-400'}`} />
+                    <div className="h-2.5 w-2.5 rounded-full mt-0.5 shrink-0" style={{ background: t.severity === 'critical' ? 'var(--red)' : t.severity === 'high' ? 'var(--orange)' : 'var(--yellow)' }} />
                     {i < timeline.length - 1 && <div className="w-px flex-1 bg-[var(--border)] mt-1" />}
                   </div>
                   <div className="pb-2 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] px-1 py-0.5 rounded ${t.event_type === 'threat' ? 'bg-red-500/10 text-red-400 border border-red-500/30' : t.event_type === 'drift' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30' : 'bg-blue-500/10 text-blue-400 border border-blue-500/30'}`}>{t.event_type}</span>
+                      <span className="text-[10px] px-1 py-0.5 rounded" style={t.event_type === 'threat' ? SEV_STYLE.critical : t.event_type === 'drift' ? SEV_STYLE.high : SEV_STYLE.low}>{t.event_type}</span>
                       <ProviderBadge provider={t.provider} />
                     </div>
                     <div className="text-xs text-[var(--text-1)] mt-0.5 capitalize">{t.title.replace(/_/g, ' ')}</div>
@@ -859,7 +855,7 @@ function IntelligenceTab() {
             <div className="text-sm font-medium text-[var(--text-1)]">Top Attack Sources</div>
             {(intel.top_source_ips ?? []).map((ip: any, i: number) => (
               <div key={i} className="space-y-1">
-                <div className="flex justify-between text-xs"><span className="font-mono text-red-400">{ip.ip}</span><span className="text-[var(--text-2)] font-bold">{ip.hits}</span></div>
+                <div className="flex justify-between text-xs"><span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span><span className="text-[var(--text-2)] font-bold">{ip.hits}</span></div>
                 <div className="text-[10px] text-[var(--text-3)] capitalize">{ip.threat_types}</div>
               </div>
             ))}
@@ -950,7 +946,7 @@ function IntelligenceTab() {
                     {aiResult.prioritized_actions.map((a: any, i: number) => (
                       <tr key={i} className="g-tr">
                         <td><span className="text-xs text-[var(--text-1)]">{a.action}</span></td>
-                        <td><span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_BG[a.severity] ?? SEV_BG.medium}`}>{a.severity}</span></td>
+                        <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[a.severity] ?? SEV_STYLE.medium}>{a.severity}</span></td>
                         <td><span className="text-xs text-[var(--text-2)]">{a.effort}</span></td>
                         <td><span className="text-xs text-[var(--text-2)]">{a.impact}</span></td>
                       </tr>
@@ -997,7 +993,7 @@ function AnalyticsTab() {
               {(analytics.top_exposed ?? []).map((r: any, i: number) => (
                 <div key={i} className="flex items-center justify-between text-xs">
                   <div><div className="text-[var(--text-1)]">{r.name}</div><div className="text-[10px] text-[var(--text-3)]">{r.resource_type} · {r.provider}</div></div>
-                  <span className={`font-bold ${r.risk_score > 75 ? 'text-red-400' : 'text-orange-400'}`}>{r.risk_score}</span>
+                  <span className="font-bold" style={{ color: r.risk_score > 75 ? 'var(--red)' : 'var(--orange)' }}>{r.risk_score}</span>
                 </div>
               ))}
             </div>
@@ -1008,7 +1004,7 @@ function AnalyticsTab() {
                 <div key={i} className="flex items-center justify-between text-xs">
                   <span className="text-[var(--text-2)] capitalize">{m.category.replace(/_/g, ' ')}</span>
                   <div className="flex gap-1.5">
-                    {m.critical > 0 && <span className="text-red-400 font-bold">{m.critical}C</span>}
+                    {m.critical > 0 && <span className="font-bold" style={{ color: 'var(--red)' }}>{m.critical}C</span>}
                     <span className="text-[var(--text-3)]">{m.total}</span>
                   </div>
                 </div>
@@ -1021,9 +1017,9 @@ function AnalyticsTab() {
                 <div key={i} className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-[var(--text-2)]">{r.region}</span>
-                    <span className={`font-bold ${r.avg_risk > 60 ? 'text-orange-400' : 'text-[var(--text-2)]'}`}>{r.avg_risk}% risk</span>
+                    <span className="font-bold" style={{ color: r.avg_risk > 60 ? 'var(--orange)' : 'var(--text-2)' }}>{r.avg_risk}% risk</span>
                   </div>
-                  <div className="h-1 rounded-full bg-[var(--border)]"><div className={`h-full rounded-full ${r.avg_risk > 60 ? 'bg-orange-500' : 'bg-[var(--accent)]'}`} style={{ width: `${r.avg_risk}%` }} /></div>
+                  <div className="h-1 rounded-full bg-[var(--border)]"><div className="h-full rounded-full" style={{ width: `${r.avg_risk}%`, background: r.avg_risk > 60 ? 'var(--orange)' : 'var(--accent)' }} /></div>
                 </div>
               ))}
             </div>
@@ -1034,7 +1030,7 @@ function AnalyticsTab() {
             <div className="flex items-end gap-1 h-20">
               {(analytics.threat_trend ?? []).map((d: any, i: number) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                  <div className="w-full rounded-sm bg-red-500 opacity-70 hover:opacity-100" style={{ height: `${Math.round(d.count / threatBarMax * 72) + 2}px` }} title={`${d.date}: ${d.count}`} />
+                  <div className="w-full rounded-sm opacity-70 hover:opacity-100" style={{ height: `${Math.round(d.count / threatBarMax * 72) + 2}px`, background: 'var(--red)' }} title={`${d.date}: ${d.count}`} />
                   {i % 3 === 0 && <div className="text-[9px] text-[var(--text-3)]">{d.date?.slice(5)}</div>}
                 </div>
               ))}
@@ -1066,15 +1062,15 @@ function AnalyticsTab() {
             <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{reportResult.executive_summary}</div>
             {reportResult.risk_breakdown && (
               <div className="grid grid-cols-4 gap-3">
-                <StatCard label="Critical" value={reportResult.risk_breakdown.critical} color="text-red-400" />
-                <StatCard label="High"     value={reportResult.risk_breakdown.high}     color="text-orange-400" />
-                <StatCard label="Medium"   value={reportResult.risk_breakdown.medium}   color="text-yellow-400" />
-                <StatCard label="Low"      value={reportResult.risk_breakdown.low}      color="text-blue-400" />
+                <StatCard label="Critical" value={reportResult.risk_breakdown.critical} color="var(--red)" />
+                <StatCard label="High"     value={reportResult.risk_breakdown.high}     color="var(--orange)" />
+                <StatCard label="Medium"   value={reportResult.risk_breakdown.medium}   color="var(--yellow)" />
+                <StatCard label="Low"      value={reportResult.risk_breakdown.low}      color="var(--blue)" />
               </div>
             )}
             {reportResult.key_findings?.length > 0 && (
               <div><div className="text-xs text-[var(--text-3)] mb-1">Key Findings</div>
-                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span className="text-red-400">!</span>{f}</li>)}</ul>
+                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span style={{ color: 'var(--red)' }}>!</span>{f}</li>)}</ul>
               </div>
             )}
             {reportResult.top_recommendations?.length > 0 && (

@@ -6,12 +6,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, tasksAPI, integrationsAPI, agentGroupsAPI } from '@/lib/api';
 import { Agent, AgentGroup } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import {
-  Cpu, Search, Play, ChevronRight, Wifi, WifiOff, X, Plus, Minus, Heart, Key, Copy,
-  Check, Terminal, ShieldCheck, ArrowRight, RefreshCw, Activity, ShieldOff, Monitor,
-  Shield, AlertTriangle, Power, RotateCcw, Upload, MemoryStick, Filter, Users,
-  Layers, CheckSquare, Square, ChevronDown, Zap, Bug, RotateCw, Trash2,
-} from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Bug, Check, CheckSquare, ChevronRight, Copy, Cpu, Heart, Key, Layers, Minus, Play, Plus, Power, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, Square, Terminal, Upload, Wifi, WifiOff, X } from '@/lib/icon-stubs';
 
 interface AgentHealth {
   agent_id: number;
@@ -313,8 +308,8 @@ export default function AgentsPage() {
                 <button key={tab} onClick={() => setStatusTab(tab)}
                   className="px-3 py-1.5 text-[11px] font-semibold capitalize transition-all flex items-center gap-1.5"
                   style={{ background: statusTab === tab ? 'var(--accent)' : 'transparent', color: statusTab === tab ? '#fff' : 'var(--text-3)' }}>
-                  {tab === 'online' && <span className="h-1.5 w-1.5 rounded-full bg-green-400" />}
-                  {tab === 'offline' && <span className="h-1.5 w-1.5 rounded-full bg-gray-500" />}
+                  {tab === 'online' && <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--green)' }} />}
+                  {tab === 'offline' && <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--text-3)' }} />}
                   {tab} <span className="opacity-70">({count})</span>
                 </button>
               );

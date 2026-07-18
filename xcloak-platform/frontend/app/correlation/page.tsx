@@ -7,13 +7,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { correlationAPI, playbooksAPI } from '@/lib/api';
 import { CorrelationMatch } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import {
-  GitMerge, Plus, Trash2, ToggleLeft, ToggleRight, X, ArrowRight,
-  ChevronDown, ChevronUp, Zap, BarChart3, Activity, RefreshCw,
-  Brain, Play, Shield, AlertTriangle, CheckCircle2, Layers,
-  Network, Target, GitBranch, Cpu, Clock, Search, Database,
-  Globe, Lock, Filter, Copy, Check,
-} from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Cpu, Database, Filter, GitBranch, GitMerge, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, X, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

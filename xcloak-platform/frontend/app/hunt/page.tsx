@@ -4,12 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { threatHuntAPI, huntAPI, agentsAPI, huntWorkbenchAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import {
-  Search, Plus, Play, Trash2, Clock, CheckCircle, AlertCircle, ChevronDown,
-  ChevronRight, Brain, Shield, Activity, Grid3X3, FileText, Target, Zap, Save,
-  Download, RefreshCw, Eye, AlertTriangle, Users, TrendingUp, X, Filter,
-  BookOpen, Settings, ExternalLink,
-} from 'lucide-react';
+import { Activity, AlertTriangle, BookOpen, Brain, CheckCircle, ExternalLink, Eye, FileText, Grid3X3, Play, Plus, RefreshCw, Save, Search, Shield, Target, TrendingUp, Zap } from '@/lib/icon-stubs';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

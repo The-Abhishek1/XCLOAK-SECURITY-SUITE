@@ -5,12 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { sigmaAPI } from '@/lib/api';
 import { SigmaRule, SigmaRuleStat } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
-import {
-  FileCode, Plus, Trash2, Edit2, X, TestTube,
-  ToggleLeft, ToggleRight, Search, Info, Upload, BarChart2, Copy,
-  Shield, Zap, Grid, BarChart, Layers, Download, Bot, Repeat2,
-  CheckSquare, ChevronRight, AlertTriangle, Eye,
-} from 'lucide-react';
+import { AlertTriangle, BarChart, BarChart2, Bot, CheckSquare, ChevronRight, Copy, Download, Edit2, Eye, FileCode, Grid, Layers, Plus, Repeat2, Search, Shield, TestTube, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

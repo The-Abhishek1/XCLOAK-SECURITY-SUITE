@@ -6,17 +6,7 @@ import { incidentsAPI, aiAPI } from '@/lib/api';
 import { Incident } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import {
-  AlertTriangle, X, Clock, Bot, Loader2, MessageSquare, Send,
-  ChevronRight, Bell, TrendingUp, Search, CheckSquare, Square,
-  CheckCheck, Filter, ShieldAlert, Flame, Activity, Shield,
-  Network, Database, User, Users, FileText, Lock, Globe2,
-  Server, ArrowRight, Play, Download, Copy, Check, CheckCircle2,
-  XCircle, Info, BarChart2, Layers, Zap, RefreshCw, Plus,
-  MoreHorizontal, AlertCircle, Target, Cpu, Eye, ChevronDown,
-  ChevronLeft, Crosshair, GitBranch, Package, Workflow,
-  Terminal, FileSearch, HardDrive, Wifi, BookOpen,
-} from 'lucide-react';
+import { Activity, AlertTriangle, BarChart2, Bell, BookOpen, Bot, Check, CheckCheck, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Clock, Copy, Cpu, Crosshair, Database, Download, Eye, FileSearch, FileText, Filter, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, MessageSquare, Network, Package, Play, Plus, Search, Send, Server, Shield, ShieldAlert, Square, Target, Terminal, TrendingUp, User, Users, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
