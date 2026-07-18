@@ -12,7 +12,19 @@ func GetMySubscriptionHandler(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 	sub, err := services.GetSubscription(tenantID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		// No subscription row yet (e.g. demo tenant) — return a synthetic trial.
+		usage := services.GetTenantUsage(tenantID)
+		c.JSON(200, gin.H{
+			"subscription": gin.H{
+				"plan_name":         "trial",
+				"plan_display_name": "Free Trial",
+				"status":            "trial",
+				"max_agents":        10,
+				"max_users":         3,
+				"features":          gin.H{},
+			},
+			"usage": usage,
+		})
 		return
 	}
 	usage := services.GetTenantUsage(tenantID)
