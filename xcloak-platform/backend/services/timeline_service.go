@@ -158,7 +158,7 @@ FROM (
                'pid', ce.pid,
                'comm', ce.comm
            )::text AS details_json
-    FROM connect_events ce
+    FROM network_connect_events ce
     JOIN agents ag ON ag.id = ce.agent_id
     WHERE ag.tenant_id = $1
 ) t
@@ -336,7 +336,7 @@ FROM (
            'info', ce.created_at, COALESCE(ag.hostname,''), '', COALESCE(ce.comm,''),
            '', '', 'edr_agent',
            json_build_object('protocol', ce.protocol, 'remote_address', ce.remote_address, 'local_address', ce.local_address, 'state', ce.state)::text
-    FROM connect_events ce JOIN agents ag ON ag.id = ce.agent_id WHERE ce.agent_id = $1
+    FROM network_connect_events ce JOIN agents ag ON ag.id = ce.agent_id WHERE ce.agent_id = $1
 ) t
 ORDER BY created_at DESC LIMIT 500
 `
