@@ -1,9 +1,12 @@
 package api
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -50,6 +53,20 @@ func CreatePlaybook(
 			"message": "Playbook Created",
 		},
 	)
+}
+
+func GetPlaybookByID(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid id"})
+		return
+	}
+	p, err := repositories.GetPlaybookByID(id, tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(200, p)
 }
 
 func GetPlaybooks(

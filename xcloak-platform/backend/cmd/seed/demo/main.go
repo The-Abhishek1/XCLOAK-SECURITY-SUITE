@@ -2242,9 +2242,9 @@ func seedFirewallEnterprise(db *sql.DB) {
 		{"ZONE-CLOUD", "Cloud Egress", "cloud", "AWS/Azure VPC peering", `["172.31.0.0/16"]`, "medium"},
 	}
 	for _, z := range zones {
-		mustExec(db, `INSERT INTO fwe_zones (tenant_id, zone_id, name, zone_type, description, cidr_ranges, trust_level)
-			VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7) ON CONFLICT DO NOTHING`,
-			tid, z.id, z.name, z.ztype, z.desc, z.cidrs, z.trust,
+		mustExec(db, `INSERT INTO fwe_zones (tenant_id, name, zone_type, description, cidr_ranges, trust_level)
+			VALUES ($1,$2,$3,$4,$5::jsonb,$6) ON CONFLICT DO NOTHING`,
+			tid, z.name, z.ztype, z.desc, z.cidrs, z.trust,
 		)
 	}
 
@@ -2292,9 +2292,9 @@ func seedFirewallEnterprise(db *sql.DB) {
 		{"THR-012", "port_scan", "77.83.142.33", "192.168.100.1", "NL", "RULE-PS-002", "blocked", "medium", 43210, 0, 72, 240},
 	}
 	for _, t := range threatRows {
-		mustExec(db, `INSERT INTO fwe_threats (tenant_id, threat_id, threat_type, src_ip, dst_ip, src_port, dst_port, protocol, country, action_taken, severity, confidence, rule_triggered, created_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,'tcp',$8,$9,$10,$11,$12,$13) ON CONFLICT DO NOTHING`,
-			tid, t.id, t.ttype, t.srcIP, t.dstIP, t.srcP, t.dstP,
+		mustExec(db, `INSERT INTO fwe_threats (tenant_id, threat_type, src_ip, dst_ip, src_port, dst_port, protocol, country, action_taken, severity, confidence, rule_triggered, created_at)
+			VALUES ($1,$2,$3,$4,$5,$6,'tcp',$7,$8,$9,$10,$11,$12)`,
+			tid, t.ttype, t.srcIP, t.dstIP, t.srcP, t.dstP,
 			t.country, t.action, t.sev, t.conf, t.rule,
 			now.Add(-time.Duration(t.minsAgo)*time.Minute),
 		)
@@ -2317,9 +2317,9 @@ func seedFirewallEnterprise(db *sql.DB) {
 		{"CONN-008", "10.10.5.20", "10.10.5.25", "tcp", "MySQL", "established", "srv", "srv", "RULE-040", 3306, 34521, 9823, 423100, 84231},
 	}
 	for _, c := range connRows {
-		mustExec(db, `INSERT INTO fwe_connections (tenant_id, conn_id, src_ip, src_port, dst_ip, dst_port, protocol, application, state, bytes_sent, bytes_recv, duration, zone_src, zone_dst, rule_id, started_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING`,
-			tid, c.id, c.srcIP, c.srcP, c.dstIP, c.dstP, c.proto, c.app, c.state,
+		mustExec(db, `INSERT INTO fwe_connections (tenant_id, src_ip, src_port, dst_ip, dst_port, protocol, application, state, bytes_sent, bytes_recv, duration, zone_src, zone_dst, rule_id, started_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+			tid, c.srcIP, c.srcP, c.dstIP, c.dstP, c.proto, c.app, c.state,
 			c.bsent, c.brecv, c.dur, c.zsrc, c.zdst, c.rule,
 			now.Add(-time.Duration(c.dur)*time.Second),
 		)
@@ -2343,9 +2343,9 @@ func seedFirewallEnterprise(db *sql.DB) {
 		if a.status != "pending" {
 			decidedAt = now.Add(time.Duration(a.daysAgo) * 24 * time.Hour)
 		}
-		mustExec(db, `INSERT INTO fwe_approvals (tenant_id, approval_id, change_type, description, requester, approver, status, priority, decision_note, decided_at, created_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
-			tid, a.id, a.ctype, a.desc, a.requester, a.approver, a.status, a.priority, a.note,
+		mustExec(db, `INSERT INTO fwe_approvals (tenant_id, change_type, description, requester, approver, status, priority, decision_note, decided_at, created_at)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			tid, a.ctype, a.desc, a.requester, a.approver, a.status, a.priority, a.note,
 			decidedAt, now.Add(time.Duration(a.daysAgo-1)*24*time.Hour),
 		)
 	}

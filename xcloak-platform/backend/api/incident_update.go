@@ -124,10 +124,12 @@ func GetIncidentAlerts(c *gin.Context) {
 	}
 
 	rows, err := database.DB.Query(`
-		SELECT id, agent_id, severity, rule_name, created_at
-		FROM alerts
-		WHERE incident_id = $1 AND tenant_id = $2
-		ORDER BY created_at DESC
+		SELECT a.id, a.agent_id, a.severity, a.rule_name, a.created_at
+		FROM alerts a
+		JOIN alert_cluster_members acm ON acm.alert_id = a.id
+		JOIN alert_clusters ac ON ac.id = acm.cluster_id
+		WHERE ac.auto_incident_id = $1 AND a.tenant_id = $2
+		ORDER BY a.created_at DESC
 		LIMIT 50
 	`, id, tenantID)
 	if err != nil {

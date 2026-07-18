@@ -307,6 +307,7 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Playbooks ─────────────────────────────────────────────────
 	router.POST("/api/playbooks", middleware.RequireAuth(), middleware.RequirePermission("manage_playbooks"), api.CreatePlaybook)
 	router.GET("/api/playbooks", middleware.RequireAuth(), api.GetPlaybooks)
+	router.GET("/api/playbooks/:id", middleware.RequireAuth(), api.GetPlaybookByID)
 	router.PUT("/api/playbooks/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_playbooks"), api.UpdatePlaybook)
 	router.DELETE("/api/playbooks/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_playbooks"), api.DeletePlaybook)
 	router.PATCH("/api/playbooks/:id/enable", middleware.RequireAuth(), middleware.RequirePermission("manage_playbooks"), api.EnablePlaybook)
