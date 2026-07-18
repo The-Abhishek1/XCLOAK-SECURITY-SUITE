@@ -46,7 +46,7 @@ func GetCustomRolesByTenant(tenantID int) ([]models.CustomRole, error) {
 	}
 	defer rows.Close()
 
-	var roles []models.CustomRole
+	roles := []models.CustomRole{}
 	for rows.Next() {
 		var r models.CustomRole
 		if err := rows.Scan(&r.ID, &r.TenantID, &r.Name, pq.Array(&r.Permissions), &r.CreatedBy, &r.CreatedAt); err == nil {

@@ -98,7 +98,7 @@ func EnrichConnections(agentID int) {
 		ID      int
 		Remote  string
 	}
-	var conns []conn
+	conns := []conn{}
 	for rows.Next() {
 		var c conn
 		if err := rows.Scan(&c.ID, &c.Remote); err == nil {

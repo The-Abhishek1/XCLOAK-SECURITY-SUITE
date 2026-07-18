@@ -77,7 +77,7 @@ func GetFileHashesByAgent(agentID string) ([]models.FileHash, error) {
 	}
 	defer rows.Close()
 
-	var hashes []models.FileHash
+	hashes := []models.FileHash{}
 
 	for rows.Next() {
 

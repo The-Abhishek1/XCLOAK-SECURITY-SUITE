@@ -9,7 +9,7 @@ import (
 
 func ReceiveUsers(c *gin.Context) {
 
-	var users []models.Users
+	users := []models.Users{}
 
 	if err := c.ShouldBindJSON(&users); err != nil {
 

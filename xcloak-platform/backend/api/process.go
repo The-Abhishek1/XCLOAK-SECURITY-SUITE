@@ -9,7 +9,7 @@ import (
 
 func ReceiveProcesses(c *gin.Context) {
 
-	var processes []models.Process
+	processes := []models.Process{}
 
 	if err := c.ShouldBindJSON(&processes); err != nil {
 

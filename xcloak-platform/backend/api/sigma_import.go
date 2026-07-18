@@ -65,7 +65,7 @@ func ImportSigmaYAML(c *gin.Context) {
 
 	imported := 0
 	skipped := 0
-	var errs []string
+	errs := []string{}
 
 	tid := tenantIDFromContext(c)
 
@@ -122,7 +122,7 @@ func ImportSigmaYAML(c *gin.Context) {
 func splitYAMLDocs(data []byte) [][]byte {
 	sep := []byte("\n---")
 	parts := bytes.Split(data, sep)
-	var docs [][]byte
+	docs := [][]byte{}
 	for _, p := range parts {
 		p = bytes.TrimPrefix(p, []byte("---"))
 		docs = append(docs, p)
@@ -221,7 +221,7 @@ func buildSelections(detection map[string]interface{}) (map[string][]string, str
 		keys := selectionNames(selections)
 		// Remove the synthetic sub-selections from the top-level condition;
 		// they are already ANDed in below.
-		var topLevel []string
+		topLevel := []string{}
 		for _, k := range keys {
 			if !isSubSelection(k, extraAnd) {
 				topLevel = append(topLevel, k)
@@ -265,7 +265,7 @@ func processFieldMap(selName string, m map[string]interface{}) (mainKeywords []s
 		modifiers := parts[1:]
 
 		hasAll := false
-		var otherMods []string
+		otherMods := []string{}
 		for _, mod := range modifiers {
 			if strings.EqualFold(mod, "all") {
 				hasAll = true
@@ -288,7 +288,7 @@ func processFieldMap(selName string, m map[string]interface{}) (mainKeywords []s
 		if hasAll && len(values) > 1 {
 			// Multiple values with |all → separate sub-selection, all must match.
 			subName := selName + "_all_" + sanitizeFieldName(fieldName)
-			var subKws []string
+			subKws := []string{}
 			for _, v := range values {
 				subKws = append(subKws, "__ALL__"+fieldExpr+":"+v)
 			}
@@ -316,7 +316,7 @@ func flattenToStrings(val interface{}) []string {
 	case float64:
 		return []string{fmt.Sprintf("%g", v)}
 	case []interface{}:
-		var out []string
+		out := []string{}
 		for _, item := range v {
 			out = append(out, flattenToStrings(item)...)
 		}

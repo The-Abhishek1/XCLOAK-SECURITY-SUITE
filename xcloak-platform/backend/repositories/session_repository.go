@@ -54,7 +54,7 @@ func GetActiveSessions(tenantID, userID int) ([]models.Session, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Session
+	out := []models.Session{}
 	for rows.Next() {
 		var s models.Session
 		var uid sql.NullInt64
@@ -82,7 +82,7 @@ func GetAllActiveSessions(tenantID int) ([]models.Session, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Session
+	out := []models.Session{}
 	for rows.Next() {
 		var s models.Session
 		var uid sql.NullInt64

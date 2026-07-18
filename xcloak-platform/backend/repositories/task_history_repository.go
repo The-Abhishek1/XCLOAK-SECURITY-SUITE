@@ -24,7 +24,7 @@ func GetAgentTaskHistory(agentID string) ([]models.AgentTask, error) {
 	}
 	defer rows.Close()
 
-	var tasks []models.AgentTask
+	tasks := []models.AgentTask{}
 	for rows.Next() {
 		var t models.AgentTask
 		var payloadStr, result string

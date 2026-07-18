@@ -146,7 +146,7 @@ func GetPBLibrary(c *gin.Context) {
 		CreatedAt      string  `json:"created_at"`
 		UpdatedAt      string  `json:"updated_at"`
 	}
-	var list []PB
+	list := []PB{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -389,7 +389,7 @@ func GetPBExecutions(c *gin.Context) {
 		FailedStep   string  `json:"failed_step"`
 		IsDryRun     bool    `json:"is_dry_run"`
 	}
-	var list []Exec
+	list := []Exec{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -452,7 +452,7 @@ func GetPBApprovals(c *gin.Context) {
 		Notes        string `json:"notes"`
 		CreatedAt    string `json:"created_at"`
 	}
-	var list []Approval
+	list := []Approval{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -591,7 +591,7 @@ func GetPBSchedules(c *gin.Context) {
 		LastRun      *string `json:"last_run"`
 		NextRun      *string `json:"next_run"`
 	}
-	var list []Sched
+	list := []Sched{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

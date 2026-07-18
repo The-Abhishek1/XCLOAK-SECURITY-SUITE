@@ -153,7 +153,7 @@ func AssessFramework(framework string, tenantID int) (models.FrameworkAssessment
 
 // AssessAllFrameworks returns assessments for CIS, NIST, and PCI-DSS.
 func AssessAllFrameworks(tenantID int) []models.FrameworkAssessment {
-	var out []models.FrameworkAssessment
+	out := []models.FrameworkAssessment{}
 	for _, fw := range []string{"CIS", "NIST", "PCI-DSS"} {
 		a, _ := AssessFramework(fw, tenantID)
 		out = append(out, a)

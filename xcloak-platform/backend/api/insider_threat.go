@@ -50,10 +50,10 @@ func GetInsiderThreatScores(c *gin.Context) {
 		UpdatedAt    time.Time      `json:"updated_at"`
 	}
 
-	var result []scoreRow
+	result := []scoreRow{}
 	for rows.Next() {
 		var r scoreRow
-		var contribRaw []byte
+		contribRaw := []byte{}
 		var scoreDate time.Time
 		if err := rows.Scan(&r.Username, &scoreDate, &r.Score, &r.RiskLevel, &contribRaw, &r.AlertFired, &r.UpdatedAt); err != nil {
 			continue
@@ -94,7 +94,7 @@ func GetInsiderThreatSummary(c *gin.Context) {
 		Score     int    `json:"score"`
 		RiskLevel string `json:"risk_level"`
 	}
-	var result []summary
+	result := []summary{}
 	for rows.Next() {
 		var s summary
 		if rows.Scan(&s.Username, &s.Score, &s.RiskLevel) == nil {

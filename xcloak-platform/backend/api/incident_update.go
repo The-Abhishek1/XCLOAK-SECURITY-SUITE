@@ -136,7 +136,7 @@ func GetIncidentAlerts(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var alerts []linkedAlert
+	alerts := []linkedAlert{}
 	for rows.Next() {
 		var a linkedAlert
 		if err := rows.Scan(&a.ID, &a.AgentID, &a.Severity, &a.RuleName, &a.CreatedAt); err == nil {

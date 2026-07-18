@@ -61,7 +61,7 @@ func queryYaraRules(query string, args ...interface{}) ([]models.YaraRule, error
 	}
 	defer rows.Close()
 
-	var rules []models.YaraRule
+	rules := []models.YaraRule{}
 
 	for rows.Next() {
 		var r models.YaraRule

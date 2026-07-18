@@ -15,7 +15,7 @@ import (
 // Called by the agent's auditd collector every 30 seconds with new execve events.
 func ReceiveAuditEvents(c *gin.Context) {
 
-	var events []models.AuditEvent
+	events := []models.AuditEvent{}
 	if err := c.ShouldBindJSON(&events); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

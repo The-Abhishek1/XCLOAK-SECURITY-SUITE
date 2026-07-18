@@ -125,7 +125,7 @@ func runProcessNoveltyDetection() {
 		processName string
 	}
 
-	var procs []procRow
+	procs := []procRow{}
 	for rows.Next() {
 		var p procRow
 		if err := rows.Scan(&p.agentID, &p.tenantID, &p.processName); err == nil {

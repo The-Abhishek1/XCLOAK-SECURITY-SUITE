@@ -30,7 +30,7 @@ func GetAuditLogs(tenantID int) ([]models.AuditLog, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var logs []models.AuditLog
+	logs := []models.AuditLog{}
 	for rows.Next() {
 		var l models.AuditLog
 		if err := rows.Scan(&l.ID, &l.Action, &l.Details, &l.Username, &l.CreatedAt); err == nil {
@@ -102,7 +102,7 @@ func GetAuditLogsFiltered(tenantID int, page, perPage int, q, from, to string) (
 	}
 	defer rows.Close()
 
-	var logs []models.AuditLog
+	logs := []models.AuditLog{}
 	for rows.Next() {
 		var l models.AuditLog
 		if err := rows.Scan(&l.ID, &l.Action, &l.Details, &l.Username, &l.CreatedAt); err == nil {

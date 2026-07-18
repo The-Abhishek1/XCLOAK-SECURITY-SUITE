@@ -158,7 +158,7 @@ func GetOTAssets(c *gin.Context) {
 		LastSeen    string `json:"last_seen"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var assets []Asset
+	assets := []Asset{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -189,7 +189,7 @@ func GetOTTopology(c *gin.Context) {
 		IsOnline    bool   `json:"is_online"`
 		RiskScore   int    `json:"risk_score"`
 	}
-	var nodes []Node
+	nodes := []Node{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -219,7 +219,7 @@ func GetOTProtocols(c *gin.Context) {
 		Protocol string `json:"protocol"`
 		Count    int    `json:"count"`
 	}
-	var stats []ProtoStat
+	stats := []ProtoStat{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -278,7 +278,7 @@ func GetOTTraffic(c *gin.Context) {
 		Severity     string `json:"severity"`
 		CreatedAt    string `json:"created_at"`
 	}
-	var traffic []Traffic
+	traffic := []Traffic{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -320,7 +320,7 @@ func GetOTAlerts(c *gin.Context) {
 		Status      string `json:"status"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var alerts []Alert
+	alerts := []Alert{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -355,7 +355,7 @@ func GetOTDeviceStatus(c *gin.Context) {
 		UptimeHours int    `json:"uptime_hours"`
 		LastSeen    string `json:"last_seen"`
 	}
-	var devices []Device
+	devices := []Device{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -377,7 +377,7 @@ func GetOTDeviceStatus(c *gin.Context) {
 		ChangedBy       string `json:"changed_by"`
 		IsAuthorized    bool   `json:"is_authorized"`
 	}
-	var fwChanges []FWChange
+	fwChanges := []FWChange{}
 	if fwRows != nil {
 		defer fwRows.Close()
 		for fwRows.Next() {
@@ -409,7 +409,7 @@ func GetOTThreatDetection(c *gin.Context) {
 		Status      string `json:"status"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var threats []Threat
+	threats := []Threat{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -451,7 +451,7 @@ func GetOTDPI(c *gin.Context) {
 		Severity     string `json:"severity"`
 		CreatedAt    string `json:"created_at"`
 	}
-	var entries []DPIEntry
+	entries := []DPIEntry{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -518,7 +518,7 @@ func GetOTVulnerabilities(c *gin.Context) {
 		RequiresMaintenanceWindow bool   `json:"requires_maintenance_window"`
 		CreatedAt                string  `json:"created_at"`
 	}
-	var vulns []Vuln
+	vulns := []Vuln{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -552,7 +552,7 @@ func GetOTZones(c *gin.Context) {
 		FirewallPolicy   string `json:"firewall_policy"`
 		RiskScore        int    `json:"risk_score"`
 	}
-	var zones []Zone
+	zones := []Zone{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -596,7 +596,7 @@ func GetOTBaseline(c *gin.Context) {
 		LearnedAt     string `json:"learned_at"`
 		IsActive      bool   `json:"is_active"`
 	}
-	var baselines []Baseline
+	baselines := []Baseline{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -671,7 +671,7 @@ func GetOTTimeline(c *gin.Context) {
 		Status    string `json:"status"`
 		CreatedAt string `json:"created_at"`
 	}
-	var events []TLEvent
+	events := []TLEvent{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -747,7 +747,7 @@ func GetOTAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendPoint
+	trend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int

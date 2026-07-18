@@ -196,7 +196,7 @@ func GetPlatformSummary(tenantID int) ([]PlatformCount, error) {
 	}
 	defer rows.Close()
 
-	var out []PlatformCount
+	out := []PlatformCount{}
 	for rows.Next() {
 		var pc PlatformCount
 		if rows.Scan(&pc.Category, &pc.AgentCount, &pc.AssetCount, &pc.OnlineCount) != nil {

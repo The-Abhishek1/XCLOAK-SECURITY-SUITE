@@ -167,7 +167,7 @@ func GetVQQueue(c *gin.Context) {
 		CreatedAt         time.Time  `json:"created_at"`
 		UpdatedAt         time.Time  `json:"updated_at"`
 	}
-	var items []Item
+	items := []Item{}
 	for rows.Next() {
 		var it Item
 		if err := rows.Scan(&it.ID, &it.QueueID, &it.CVEID, &it.AssetName, &it.AssetIP, &it.AssetOwner, &it.BusinessUnit, &it.Priority, &it.RiskScore, &it.Status, &it.AssignedTeam, &it.AssignedTo, &it.DueDate, &it.SLAHours, &it.RemediationAction, &it.BlockerType, &it.Notes, &it.CreatedAt, &it.UpdatedAt); err == nil {
@@ -339,7 +339,7 @@ func GetVQExceptions(c *gin.Context) {
 		CreatedBy           *string    `json:"created_by"`
 		CreatedAt           time.Time  `json:"created_at"`
 	}
-	var exs []Ex
+	exs := []Ex{}
 	for rows.Next() {
 		var e Ex
 		if err := rows.Scan(&e.ID, &e.VQItemID, &e.CVEID, &e.ExceptionType, &e.Reason, &e.CompensatingControl, &e.Approver, &e.ExpirationDate, &e.ReviewSchedule, &e.Status, &e.CreatedBy, &e.CreatedAt); err == nil {
@@ -415,7 +415,7 @@ func GetVQDependencies(c *gin.Context) {
 		Status      string    `json:"status"`
 		CreatedAt   time.Time `json:"created_at"`
 	}
-	var deps []Dep
+	deps := []Dep{}
 	for rows.Next() {
 		var d Dep
 		if err := rows.Scan(&d.ID, &d.BlockerType, &d.Notes, &d.Status, &d.CreatedAt); err == nil {

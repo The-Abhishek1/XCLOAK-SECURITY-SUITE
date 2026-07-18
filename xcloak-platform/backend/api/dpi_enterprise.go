@@ -43,7 +43,7 @@ func GetDPIOverview(c *gin.Context) {
 		Proto string `json:"proto"`
 		Count int    `json:"count"`
 	}
-	var protoDist []ProtoDist
+	protoDist := []ProtoDist{}
 	pRows, _ := database.DB.Query(`
 		SELECT COALESCE(NULLIF(dpi_proto,''), COALESCE(NULLIF(protocol,''),'unknown')) AS p, COUNT(*) AS cnt
 		FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2
@@ -60,7 +60,7 @@ func GetDPIOverview(c *gin.Context) {
 		Type  string `json:"type"`
 		Count int    `json:"count"`
 	}
-	var findingBreakdown []FindingBreak
+	findingBreakdown := []FindingBreak{}
 	fbRows, _ := database.DB.Query(`
 		SELECT finding_type, COUNT(*) AS cnt FROM dpi_findings
 		WHERE tenant_id=$1 AND detected_at>=$2
@@ -165,7 +165,7 @@ func GetDPISessions(c *gin.Context) {
 		}
 	}
 
-	var sessions []Session
+	sessions := []Session{}
 	for rows.Next() {
 		var s Session
 		rows.Scan(&s.AgentID, &s.Hostname, &s.LocalAddr, &s.RemoteAddr,
@@ -235,7 +235,7 @@ func GetDPIHTTPInspection(c *gin.Context) {
 	// High-risk patterns
 	suspPatterns := []string{".php?", "cmd=", "exec=", "eval(", "../", "passwd", "admin/upload", "wp-admin", "/.git"}
 
-	var sessions []HTTPSession
+	sessions := []HTTPSession{}
 	for rows.Next() {
 		var s HTTPSession
 		rows.Scan(&s.AgentID, &s.Hostname, &s.RemoteAddr, &s.HTTPHost,
@@ -304,7 +304,7 @@ func GetDPIDNSInspection(c *gin.Context) {
 		  AND df.finding_type IN ('dga','dns_tunnel','dns_tcp_tunnel','dns_flood','nxdomain_storm','dns_anomaly','icmp_tunnel')
 		ORDER BY df.detected_at DESC LIMIT 100`, tid, since)
 
-	var findings []DNSFinding
+	findings := []DNSFinding{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -318,7 +318,7 @@ func GetDPIDNSInspection(c *gin.Context) {
 
 	// Top DNS destinations
 	type DNSDest struct{ Dest string `json:"dest"`; Count int `json:"count"` }
-	var topDests []DNSDest
+	topDests := []DNSDest{}
 	dRows, _ := database.DB.Query(`
 		SELECT remote_address, COUNT(*) FROM network_connect_events
 		WHERE tenant_id=$1 AND created_at>=$2 AND remote_address LIKE '%:53'
@@ -374,7 +374,7 @@ func GetDPITLSInspection(c *gin.Context) {
 		GROUP BY nce.agent_id, a.hostname, nce.remote_address, nce.sni, nce.tls_version, nce.tls_cipher, nce.dpi_proto
 		ORDER BY COUNT(*) DESC LIMIT $3`, tid, since, limit)
 
-	var sessions []TLSSession
+	sessions := []TLSSession{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -396,7 +396,7 @@ func GetDPITLSInspection(c *gin.Context) {
 		Desc       string `json:"description"`
 		DetectedAt string `json:"detected_at"`
 	}
-	var findings []TLSFinding
+	findings := []TLSFinding{}
 	fr, _ := database.DB.Query(`
 		SELECT id, indicator, severity, score, description,
 		       to_char(detected_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"')
@@ -411,20 +411,20 @@ func GetDPITLSInspection(c *gin.Context) {
 		Label       string `json:"label"`
 		Severity    string `json:"severity"`
 	}
-	var ja3s []JA3Entry
+	ja3s := []JA3Entry{}
 	jr, _ := database.DB.Query(`SELECT fingerprint, label, severity FROM ja3_fingerprints WHERE tenant_id=$1 OR tenant_id=0 OR tenant_id IS NULL ORDER BY severity DESC LIMIT 20`, tid)
 	if jr != nil { defer jr.Close(); for jr.Next() { var j JA3Entry; jr.Scan(&j.Fingerprint, &j.Label, &j.Severity); ja3s = append(ja3s, j) } }
 	if ja3s == nil { ja3s = []JA3Entry{} }
 
 	// Version breakdown
 	type VersionCount struct{ Version string `json:"version"`; Count int `json:"count"` }
-	var versions []VersionCount
+	versions := []VersionCount{}
 	vr, _ := database.DB.Query(`SELECT tls_version, COUNT(*) FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2 AND tls_version!='' GROUP BY tls_version ORDER BY COUNT(*) DESC`, tid, since)
 	if vr != nil { defer vr.Close(); for vr.Next() { var v VersionCount; vr.Scan(&v.Version, &v.Count); versions = append(versions, v) } }
 
 	// Cipher breakdown
 	type CipherCount struct{ Cipher string `json:"cipher"`; Count int `json:"count"` }
-	var ciphers []CipherCount
+	ciphers := []CipherCount{}
 	cr, _ := database.DB.Query(`SELECT tls_cipher, COUNT(*) FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2 AND tls_cipher!='' GROUP BY tls_cipher ORDER BY COUNT(*) DESC LIMIT 15`, tid, since)
 	if cr != nil { defer cr.Close(); for cr.Next() { var cv CipherCount; cr.Scan(&cv.Cipher, &cv.Count); ciphers = append(ciphers, cv) } }
 
@@ -470,7 +470,7 @@ func GetDPIFiles(c *gin.Context) {
 		  AND df.finding_type IN ('yara_match','hash_match','malware','file_download','file_upload','pe_anomaly','macro_detection','file_extraction','high_entropy')
 		ORDER BY df.severity DESC, df.detected_at DESC LIMIT 200`, tid, since)
 
-	var files []FileEntry
+	files := []FileEntry{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -528,7 +528,7 @@ func GetDPIDLP(c *gin.Context) {
 		  AND (df.finding_type LIKE 'dlp_%' OR df.finding_type IN ('secret_detected','api_key','credit_card','pii','sql_injection','xss','webshell','http_pattern'))
 		ORDER BY df.severity DESC, df.detected_at DESC LIMIT 200`, tid, since)
 
-	var findings []DLPFinding
+	findings := []DLPFinding{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -544,7 +544,7 @@ func GetDPIDLP(c *gin.Context) {
 	catMap := map[string]int{}
 	for _, f := range findings { catMap[f.Category]++ }
 	type CatCount struct{ Category string `json:"category"`; Count int `json:"count"` }
-	var cats []CatCount
+	cats := []CatCount{}
 	for k, v := range catMap { cats = append(cats, CatCount{Category: k, Count: v}) }
 
 	c.JSON(http.StatusOK, gin.H{"findings": findings, "total": len(findings), "by_category": cats})
@@ -564,7 +564,7 @@ func GetDPIAnalytics(c *gin.Context) {
 		rows, err := database.DB.Query(q, args...)
 		if err != nil { return nil }
 		defer rows.Close()
-		var out []TopEntry
+		out := []TopEntry{}
 		for rows.Next() { var e TopEntry; rows.Scan(&e.Value, &e.Count); out = append(out, e) }
 		return out
 	}
@@ -580,7 +580,7 @@ func GetDPIAnalytics(c *gin.Context) {
 
 	// Hourly finding trend
 	type HourBucket struct{ Hour string `json:"hour"`; Count int `json:"count"` }
-	var trend []HourBucket
+	trend := []HourBucket{}
 	tr, _ := database.DB.Query(`
 		SELECT to_char(date_trunc('hour', detected_at), 'HH24:MI'), COUNT(*)
 		FROM dpi_findings WHERE tenant_id=$1 AND detected_at>=$2
@@ -619,7 +619,7 @@ func PostDPIAIInspect(c *gin.Context) {
 		Count int     `json:"count"`
 		MaxScore int  `json:"max_score"`
 	}
-	var anomalies []AnomalySummary
+	anomalies := []AnomalySummary{}
 	rows, _ := database.DB.Query(`
 		SELECT finding_type, COUNT(*), MAX(score) FROM dpi_findings
 		WHERE tenant_id=$1 AND detected_at>NOW()-INTERVAL '24 hours'
@@ -633,7 +633,7 @@ func PostDPIAIInspect(c *gin.Context) {
 	findingDetail := ""
 	if body.FindingID > 0 {
 		var indicator, desc, ftype string
-		var rawCtx []byte
+		rawCtx := []byte{}
 		database.DB.QueryRow(`SELECT indicator, description, finding_type, raw_context FROM dpi_findings WHERE id=$1 AND tenant_id=$2`, body.FindingID, tid).
 			Scan(&indicator, &desc, &ftype, &rawCtx)
 		if indicator != "" {
@@ -752,7 +752,7 @@ func GetDPIPerformance(c *gin.Context) {
 
 	// Hourly connection trend (last 12 hours)
 	type Bucket struct{ Hour string `json:"hour"`; Count int `json:"count"` }
-	var trend []Bucket
+	trend := []Bucket{}
 	tr, _ := database.DB.Query(`
 		SELECT to_char(date_trunc('hour', created_at), 'HH24:MI'), COUNT(*)
 		FROM network_connect_events WHERE tenant_id=$1 AND created_at>NOW()-INTERVAL '12 hours'
@@ -809,7 +809,7 @@ func GetDPIProtocolAnomalies(c *gin.Context) {
 		      'malformed_packet','doh_detected','http_smuggling','tls_anomaly')
 		ORDER BY df.severity DESC, df.detected_at DESC LIMIT 200`, tid, since)
 
-	var findings []PAFinding
+	findings := []PAFinding{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -825,7 +825,7 @@ func GetDPIProtocolAnomalies(c *gin.Context) {
 	typeMap := map[string]int{}
 	for _, f := range findings { typeMap[f.Type]++ }
 	type TypeCount struct{ Type string `json:"type"`; Count int `json:"count"` }
-	var types []TypeCount
+	types := []TypeCount{}
 	for k, v := range typeMap { types = append(types, TypeCount{Type: k, Count: v}) }
 
 	c.JSON(http.StatusOK, gin.H{"findings": findings, "total": len(findings), "by_type": types})
@@ -855,7 +855,7 @@ func GetDPISearch(c *gin.Context) {
 		Score       int    `json:"score"`
 	}
 
-	var results []SearchResult
+	results := []SearchResult{}
 	pat := "%" + q + "%"
 
 	// dpi_findings

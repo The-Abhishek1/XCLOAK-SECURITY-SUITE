@@ -66,7 +66,7 @@ func scanReports(rows interface {
 	Close() error
 }) ([]models.ScheduledReport, error) {
 	defer rows.Close()
-	var out []models.ScheduledReport
+	out := []models.ScheduledReport{}
 	for rows.Next() {
 		var r models.ScheduledReport
 		if err := rows.Scan(

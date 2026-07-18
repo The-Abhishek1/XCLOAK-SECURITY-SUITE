@@ -74,7 +74,7 @@ func GetYaraMatches(agentID string, tenantID int) ([]models.YaraMatch, error) {
 	}
 	defer rows.Close()
 
-	var matches []models.YaraMatch
+	matches := []models.YaraMatch{}
 
 	for rows.Next() {
 		var m models.YaraMatch

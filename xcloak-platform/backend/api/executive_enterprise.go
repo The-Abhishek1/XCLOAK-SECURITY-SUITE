@@ -246,7 +246,7 @@ func GetEXERisk(c *gin.Context) {
 		Value int    `json:"value"`
 	}
 	rows, _ := db.Query(`SELECT snapshot_date, risk_score FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date ASC LIMIT 30`, tid)
-	var trend []dp
+	trend := []dp{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -407,7 +407,7 @@ func GetEXECompliance(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	frows, _ := db.Query(`SELECT name, overall_score, compliance_status FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 8`, tid)
-	var frameworks []fwRow
+	frameworks := []fwRow{}
 	if frows != nil {
 		defer frows.Close()
 		for frows.Next() {
@@ -565,7 +565,7 @@ func GetEXEForecasting(c *gin.Context) {
 	}
 	rows, _ := db.Query(`SELECT forecast_date, metric, predicted_value, confidence_low, confidence_high
 		FROM exe_forecasts WHERE tenant_id=$1 ORDER BY forecast_date ASC, metric`, tid)
-	var forecasts []fcRow
+	forecasts := []fcRow{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -612,7 +612,7 @@ func GetEXEAnalytics(c *gin.Context) {
 	rows, _ := db.Query(`SELECT snapshot_date, security_score, risk_score, compliance_score,
 		total_incidents, total_vulns, mttd_hours, mttr_hours, sla_compliance, detection_coverage
 		FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date ASC`, tid)
-	var series []snap
+	series := []snap{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -671,7 +671,7 @@ func GetEXEReports(c *gin.Context) {
 		SizeBytes    int64     `json:"size_bytes"`
 		CreatedAt    time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ReportID, &r.Title, &r.ReportType, &r.GeneratedBy,
@@ -728,7 +728,7 @@ func GetEXENotifications(c *gin.Context) {
 		Read      bool      `json:"read"`
 		CreatedAt time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.EventType, &r.Title, &r.Message, &r.Severity, &r.Source, &r.Read, &r.CreatedAt)
@@ -763,7 +763,7 @@ func GetEXEIntegrations(c *gin.Context) {
 		ErrorCount    int        `json:"error_count"`
 		ConfigSummary *string    `json:"config_summary"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.IntegrationID, &r.Name, &r.Category, &r.Status, &r.LastSyncAt, &r.RecordsSynced, &r.HealthScore, &r.ErrorCount, &r.ConfigSummary)
@@ -792,7 +792,7 @@ func GetEXEAudit(c *gin.Context) {
 		Details    *string   `json:"details"`
 		CreatedAt  time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.Action, &r.ObjectType, &r.ObjectID, &r.ObjectName, &r.Actor, &r.IP, &r.Details, &r.CreatedAt)

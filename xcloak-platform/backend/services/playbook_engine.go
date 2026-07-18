@@ -689,7 +689,7 @@ func evalAnd(expr string, ctx map[string]string) bool {
 
 // splitLogic splits on op (|| or &&), ignoring occurrences inside [...].
 func splitLogic(expr, op string) []string {
-	var parts []string
+	parts := []string{}
 	depth, last := 0, 0
 	for i := 0; i < len(expr); i++ {
 		switch expr[i] {
@@ -834,8 +834,8 @@ func groupByStepOrder(actions []models.PlaybookAction) [][]models.PlaybookAction
 	if len(actions) == 0 {
 		return nil
 	}
-	var groups [][]models.PlaybookAction
-	var cur []models.PlaybookAction
+	groups := [][]models.PlaybookAction{}
+	cur := []models.PlaybookAction{}
 	curOrder := -1
 	for _, a := range actions {
 		if a.StepOrder != curOrder {

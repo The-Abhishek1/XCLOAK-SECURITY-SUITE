@@ -49,7 +49,7 @@ func RecommendPlaybooks(alertID, tenantID int) ([]models.PlaybookRecommendation,
 	}
 	defer rows.Close()
 
-	var scored []pbScored
+	scored := []pbScored{}
 
 	for rows.Next() {
 		var pbID int
@@ -57,7 +57,7 @@ func RecommendPlaybooks(alertID, tenantID int) ([]models.PlaybookRecommendation,
 		rows.Scan(&pbID, &name, &desc)
 
 		score := 0
-		var reasons []string
+		reasons := []string{}
 
 		nameLower := strings.ToLower(name)
 		descLower := strings.ToLower(desc)
@@ -153,7 +153,7 @@ func RecommendPlaybooks(alertID, tenantID int) ([]models.PlaybookRecommendation,
 	}
 
 	// Upsert recommendations
-	var out []models.PlaybookRecommendation
+	out := []models.PlaybookRecommendation{}
 	for _, s := range scored {
 		var rec models.PlaybookRecommendation
 		err := database.DB.QueryRow(`
@@ -187,7 +187,7 @@ func GetPlaybookRecommendations(alertID, tenantID int) ([]models.PlaybookRecomme
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.PlaybookRecommendation
+	out := []models.PlaybookRecommendation{}
 	for rows.Next() {
 		var r models.PlaybookRecommendation
 		rows.Scan(&r.ID, &r.AlertID, &r.TenantID, &r.PlaybookID, &r.PlaybookName,

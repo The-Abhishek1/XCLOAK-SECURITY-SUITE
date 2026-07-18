@@ -71,7 +71,7 @@ func DispatchScript(c *gin.Context) {
 		TaskID   int    `json:"task_id"`
 		Error    string `json:"error,omitempty"`
 	}
-	var tasks []taskRow
+	tasks := []taskRow{}
 
 	for _, agentID := range req.AgentIDs {
 		// Without this check, any admin could run an arbitrary script on
@@ -208,7 +208,7 @@ func GetScriptHistory(c *gin.Context) {
 		CreatedAt   string  `json:"created_at"`
 		CompletedAt *string `json:"completed_at"`
 	}
-	var history []Row
+	history := []Row{}
 	for rows.Next() {
 		var r Row
 		var payload string

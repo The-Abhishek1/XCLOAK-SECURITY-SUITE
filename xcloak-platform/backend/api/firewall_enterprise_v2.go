@@ -932,7 +932,7 @@ func PostFWEValidate(c *gin.Context) {
 		protocol, portRange  string
 		action               string
 	}
-	var allRules []rule
+	allRules := []rule{}
 	if rules != nil {
 		for rules.Next() {
 			var r rule

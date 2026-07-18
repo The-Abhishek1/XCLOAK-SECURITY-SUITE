@@ -297,7 +297,7 @@ func ListRemediationPlans(incidentID, tenantID int) ([]models.RemediationPlan, e
 	}
 	defer rows.Close()
 
-	var out []models.RemediationPlan
+	out := []models.RemediationPlan{}
 	for rows.Next() {
 		var p models.RemediationPlan
 		rows.Scan(&p.ID, &p.IncidentID, &p.TenantID, &p.AgentID, &p.Label,

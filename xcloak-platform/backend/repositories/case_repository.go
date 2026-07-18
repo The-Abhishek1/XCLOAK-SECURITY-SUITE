@@ -62,7 +62,7 @@ func GetCases(tenantID, page, limit int, status, severity string) ([]models.Case
 	}
 	defer rows.Close()
 
-	var out []models.Case
+	out := []models.Case{}
 	for rows.Next() {
 		var c models.Case
 		if err := rows.Scan(
@@ -147,7 +147,7 @@ func GetCaseAlerts(caseID, tenantID int) ([]models.Alert, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.Alert
+	out := []models.Alert{}
 	for rows.Next() {
 		var a models.Alert
 		if err := rows.Scan(
@@ -182,7 +182,7 @@ func GetCaseComments(caseID, tenantID int) ([]models.CaseComment, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.CaseComment
+	out := []models.CaseComment{}
 	for rows.Next() {
 		var c models.CaseComment
 		if err := rows.Scan(&c.ID, &c.CaseID, &c.UserID, &c.Username, &c.Body, &c.IsSystem, &c.CreatedAt); err == nil {
@@ -215,7 +215,7 @@ func GetCaseEvidence(caseID, tenantID int) ([]models.CaseEvidence, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.CaseEvidence
+	out := []models.CaseEvidence{}
 	for rows.Next() {
 		var e models.CaseEvidence
 		if err := rows.Scan(&e.ID, &e.CaseID, &e.EvidenceType, &e.ReferenceID, &e.Title,
@@ -239,7 +239,7 @@ func FindCasesBreachingSLA() ([]models.Case, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.Case
+	out := []models.Case{}
 	for rows.Next() {
 		var c models.Case
 		if err := rows.Scan(&c.ID, &c.TenantID, &c.Title, &c.Severity, &c.Status, &c.Phase, &c.SLABreachAt); err == nil {
@@ -288,7 +288,7 @@ func GetCasesGrouped(tenantID int, groupBy string) ([]models.LabelCount, error) 
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.LabelCount
+	out := []models.LabelCount{}
 	for rows.Next() {
 		var lc models.LabelCount
 		if err := rows.Scan(&lc.Label, &lc.Count); err == nil {
@@ -308,7 +308,7 @@ func GetTopMITRETactics(tenantID int) ([]models.LabelCount, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.LabelCount
+	out := []models.LabelCount{}
 	for rows.Next() {
 		var lc models.LabelCount
 		rows.Scan(&lc.Label, &lc.Count)
@@ -329,7 +329,7 @@ func GetAlertVolumeLast30Days(tenantID int) ([]models.DailyCount, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.DailyCount
+	out := []models.DailyCount{}
 	for rows.Next() {
 		var dc models.DailyCount
 		rows.Scan(&dc.Date, &dc.Count)
@@ -351,7 +351,7 @@ func GetRiskTrend(tenantID int) ([]models.DailyScore, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.DailyScore
+	out := []models.DailyScore{}
 	for rows.Next() {
 		var ds models.DailyScore
 		rows.Scan(&ds.Date, &ds.Score)

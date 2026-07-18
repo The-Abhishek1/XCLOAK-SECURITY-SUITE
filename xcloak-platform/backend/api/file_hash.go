@@ -12,7 +12,7 @@ import (
 // Route: POST /api/filehashes  (requires agent auth)
 func SaveFileHashes(c *gin.Context) {
 
-	var hashes []models.FileHash
+	hashes := []models.FileHash{}
 
 	if err := c.ShouldBindJSON(&hashes); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})

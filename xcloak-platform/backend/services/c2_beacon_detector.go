@@ -63,7 +63,7 @@ func RunBeaconAnalysisForTenant(tenantID int) {
 	for rows.Next() {
 		var agentID, tid int
 		var comm, remoteAddr string
-		var tsList []int64
+		tsList := []int64{}
 
 		if err := rows.Scan(&agentID, &tid, &comm, &remoteAddr, &tsList); err != nil {
 			continue
@@ -144,7 +144,7 @@ func scoreBeacon(tsList []int64, dstIP string, dstPort int, comm string, agentID
 	cv := coefficientOfVariation(intervals)
 
 	score := 0
-	var tags []string
+	tags := []string{}
 
 	// CV thresholds — the lower the CV, the more clockwork-regular the beacon
 	switch {

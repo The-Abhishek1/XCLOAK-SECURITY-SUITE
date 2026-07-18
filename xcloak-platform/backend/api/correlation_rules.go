@@ -91,7 +91,7 @@ func GetCorrelationRules(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var rules []CorrelationRule
+	rules := []CorrelationRule{}
 	for rows.Next() {
 		var r CorrelationRule
 		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.Severity,
@@ -357,7 +357,7 @@ func GetAgentAuthLogs(c *gin.Context) {
 		CreatedAt  time.Time `json:"created_at"`
 	}
 
-	var logs []LogEntry
+	logs := []LogEntry{}
 	for rows.Next() {
 		var l LogEntry
 		err := rows.Scan(&l.ID, &l.AgentID, &l.LogSource, &l.LogMessage, &l.CreatedAt)

@@ -151,7 +151,7 @@ func GetADInventory(c *gin.Context) {
 		RiskScore       int    `json:"risk_score"`
 		CreatedAt       string `json:"created_at"`
 	}
-	var domainList []Domain
+	domainList := []Domain{}
 	if domRows != nil {
 		defer domRows.Close()
 		for domRows.Next() {
@@ -225,7 +225,7 @@ func GetADIdentityRisk(c *gin.Context) {
 		RiskScore           int    `json:"risk_score"`
 		CreatedAt           string `json:"created_at"`
 	}
-	var users []User
+	users := []User{}
 	for rows.Next() {
 		var u User
 		if rows.Scan(&u.ID, &u.SAMAccount, &u.DisplayName, &u.Email, &u.Department, &u.IsAdmin,
@@ -276,7 +276,7 @@ func GetADAuthMonitor(c *gin.Context) {
 		Status         string `json:"status"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var events []Event
+	events := []Event{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -346,7 +346,7 @@ func GetADAttacks(c *gin.Context) {
 		Status         string `json:"status"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var attacks []Attack
+	attacks := []Attack{}
 	for rows.Next() {
 		var a Attack
 		if rows.Scan(&a.ID, &a.AttackType, &a.Severity, &a.SourceUser, &a.SourceComputer,
@@ -391,7 +391,7 @@ func GetADGPOChanges(c *gin.Context) {
 		LastModified string `json:"last_modified"`
 		CreatedAt    string `json:"created_at"`
 	}
-	var gpos []GPO
+	gpos := []GPO{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -424,7 +424,7 @@ func GetADChanges(c *gin.Context) {
 		Status         string `json:"status"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var changes []Change
+	changes := []Change{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -554,7 +554,7 @@ func GetADTimeline(c *gin.Context) {
 		Description    string `json:"description"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var events []TLEvent
+	events := []TLEvent{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -650,7 +650,7 @@ func GetADAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var authTrend []TrendPoint
+	authTrend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int

@@ -354,7 +354,7 @@ func GetSigmaStats(tenantID int) ([]SigmaRuleStat, error) {
 	}
 	defer rows.Close()
 
-	var stats []SigmaRuleStat
+	stats := []SigmaRuleStat{}
 	for rows.Next() {
 		var s SigmaRuleStat
 		if err := rows.Scan(&s.RuleID, &s.Title, &s.HitCount, &s.LastMatchedAt); err != nil {

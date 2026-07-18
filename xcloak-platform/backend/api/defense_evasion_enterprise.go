@@ -96,7 +96,7 @@ func GetDEControls(c *gin.Context) {
 		Tampered    bool   `json:"tampered"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var controls []Control
+	controls := []Control{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -133,7 +133,7 @@ func GetDETamper(c *gin.Context) {
 		Status    string `json:"status"`
 		CreatedAt string `json:"created_at"`
 	}
-	var events []TamperEvent
+	events := []TamperEvent{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -167,7 +167,7 @@ func GetDELogEvasion(c *gin.Context) {
 		UserName    string `json:"user_name"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var events []Event
+	events := []Event{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -210,7 +210,7 @@ func GetDEEvasionEvents(c *gin.Context) {
 		UserName    string `json:"user_name"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var events []Event
+	events := []Event{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -254,7 +254,7 @@ func GetDECorrelation(c *gin.Context) {
 		Hostname   string `json:"hostname"`
 		CreatedAt  string `json:"created_at"`
 	}
-	var incidents []Incident
+	incidents := []Incident{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -332,7 +332,7 @@ func GetDETimeline(c *gin.Context) {
 		CmdLine     string `json:"cmdline"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var events []TLEvent
+	events := []TLEvent{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -354,7 +354,7 @@ func GetDEAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendPoint
+	trend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int

@@ -52,7 +52,7 @@ func GetAllSubscriptions() ([]models.Subscription, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.Subscription
+	out := []models.Subscription{}
 	for rows.Next() {
 		sub, err := scanSub(rows)
 		if err != nil {
@@ -71,7 +71,7 @@ func GetAllPlans() ([]models.Plan, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var plans []models.Plan
+	plans := []models.Plan{}
 	for rows.Next() {
 		var p models.Plan
 		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.PriceMonthly, &p.MaxAgents, &p.MaxUsers, &p.Features); err != nil {

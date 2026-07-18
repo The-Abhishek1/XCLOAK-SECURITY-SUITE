@@ -77,7 +77,7 @@ func scoreInsiderThreatsForTenant(tenantID int) {
 	}
 	defer rows.Close()
 
-	var users []string
+	users := []string{}
 	for rows.Next() {
 		var u string
 		if rows.Scan(&u) == nil && u != "" {

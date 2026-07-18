@@ -62,7 +62,7 @@ func runPropagationCycle() error {
 		iocType   string
 		severity  string
 	}
-	var iocs []shareableIOC
+	iocs := []shareableIOC{}
 	for rows.Next() {
 		var s shareableIOC
 		if err := rows.Scan(&s.id, &s.tenantID, &s.indicator, &s.iocType, &s.severity); err != nil {
@@ -84,7 +84,7 @@ func runPropagationCycle() error {
 	}
 	defer destRows.Close()
 
-	var destTenants []int
+	destTenants := []int{}
 	for destRows.Next() {
 		var id int
 		if err := destRows.Scan(&id); err != nil {

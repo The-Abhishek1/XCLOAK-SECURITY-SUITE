@@ -52,7 +52,7 @@ func GetEnabledCorrelationRules(tenantID int) ([]EnabledCorrelationRule, error) 
 	}
 	defer rows.Close()
 
-	var rules []EnabledCorrelationRule
+	rules := []EnabledCorrelationRule{}
 	for rows.Next() {
 		var r EnabledCorrelationRule
 		if err := rows.Scan(&r.ID, &r.Severity, &r.RuleName, &r.MitreTechnique, &r.AgentID, &r.Action,
@@ -90,7 +90,7 @@ func GetCorrelationRuleStages(ruleID int) ([]CorrelationStage, error) {
 	}
 	defer rows.Close()
 
-	var stages []CorrelationStage
+	stages := []CorrelationStage{}
 	for rows.Next() {
 		var s CorrelationStage
 		if err := rows.Scan(&s.Pattern, &s.SourceType); err != nil {

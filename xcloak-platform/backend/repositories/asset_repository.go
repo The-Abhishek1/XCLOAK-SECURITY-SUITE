@@ -48,7 +48,7 @@ func GetAssets(tenantID int) ([]models.Asset, error) {
 
 func GetAssetByID(id, tenantID int) (models.Asset, error) {
 	var a models.Asset
-	var tagsJSON []byte
+	tagsJSON := []byte{}
 	err := database.DB.QueryRow(`
 		SELECT a.id, a.tenant_id, a.agent_id, a.name, a.hostname, a.ip_address,
 		       a.asset_type, a.platform_category, a.owner, a.business_unit, a.criticality,
@@ -120,10 +120,10 @@ func scanAssets(rows interface {
 	Close() error
 }) ([]models.Asset, error) {
 	defer rows.Close()
-	var out []models.Asset
+	out := []models.Asset{}
 	for rows.Next() {
 		var a models.Asset
-		var tagsJSON []byte
+		tagsJSON := []byte{}
 		if err := rows.Scan(
 			&a.ID, &a.TenantID, &a.AgentID, &a.Name, &a.Hostname, &a.IPAddress,
 			&a.AssetType, &a.PlatformCategory, &a.Owner, &a.BusinessUnit, &a.Criticality,

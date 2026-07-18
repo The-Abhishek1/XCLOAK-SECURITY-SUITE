@@ -49,7 +49,7 @@ func GetTenants() ([]models.Tenant, error) {
 	}
 	defer rows.Close()
 
-	var tenants []models.Tenant
+	tenants := []models.Tenant{}
 	for rows.Next() {
 		var t models.Tenant
 		if err := rows.Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Slug, &t.IsActive, &t.CreatedAt, &t.UserCount); err == nil {
@@ -159,7 +159,7 @@ func GetTenantDomains(tenantID int) ([]TenantDomain, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []TenantDomain
+	out := []TenantDomain{}
 	for rows.Next() {
 		var d TenantDomain
 		if rows.Scan(&d.ID, &d.TenantID, &d.Domain, &d.CreatedAt) == nil {

@@ -187,7 +187,7 @@ func GetFCEDashboard(c *gin.Context) {
 		Count  int    `json:"count"`
 	}
 	srows, _ := db.Query(`SELECT compliance_status, COUNT(*) FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE GROUP BY compliance_status`, tid)
-	var statusBreakdown []statusCount
+	statusBreakdown := []statusCount{}
 	if srows != nil {
 		defer srows.Close()
 		for srows.Next() {
@@ -206,7 +206,7 @@ func GetFCEDashboard(c *gin.Context) {
 		Status      string `json:"compliance_status"`
 	}
 	frows, _ := db.Query(`SELECT framework_id, name, overall_score, failed_controls, compliance_status FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 5`, tid)
-	var bottomFrameworks []frameworkScore
+	bottomFrameworks := []frameworkScore{}
 	if frows != nil {
 		defer frows.Close()
 		for frows.Next() {
@@ -294,7 +294,7 @@ func GetFCEFrameworks(c *gin.Context) {
 		CreatedAt        time.Time  `json:"created_at"`
 		UpdatedAt        time.Time  `json:"updated_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.FrameworkID, &r.Name, &r.Version, &r.Category, &r.Description,
@@ -434,7 +434,7 @@ func GetFCEControls(c *gin.Context) {
 		CreatedAt        time.Time  `json:"created_at"`
 		UpdatedAt        time.Time  `json:"updated_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.FrameworkID, &r.ControlID, &r.Name, &r.Description, &r.Category,
@@ -519,7 +519,7 @@ func GetFCEEvidence(c *gin.Context) {
 		Tags         string     `json:"tags"`
 		CreatedAt    time.Time  `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.EvidenceID, &r.FrameworkID, &r.ControlID, &r.Name, &r.Description,
@@ -610,7 +610,7 @@ func GetFCEGapAnalysis(c *gin.Context) {
 		Score       int    `json:"score"`
 		Evidence    int    `json:"evidence_count"`
 	}
-	var gaps []GapRow
+	gaps := []GapRow{}
 	var criticalCount, highCount, missingEvidence int
 	for rows.Next() {
 		var r GapRow
@@ -661,7 +661,7 @@ func GetFCEAssessments(c *gin.Context) {
 		Score          int        `json:"score"`
 		Notes          *string    `json:"notes"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.AssessmentID, &r.FrameworkID, &r.FrameworkName, &r.Type, &r.Status,
@@ -774,7 +774,7 @@ func GetFCERemediations(c *gin.Context) {
 		CreatedAt          time.Time  `json:"created_at"`
 		UpdatedAt          time.Time  `json:"updated_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.RemediationID, &r.FrameworkID, &r.ControlID, &r.ControlName,
@@ -872,7 +872,7 @@ func GetFCENotifications(c *gin.Context) {
 		Read        bool      `json:"read"`
 		CreatedAt   time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.EventType, &r.Title, &r.Message, &r.Severity, &r.FrameworkID, &r.ControlID, &r.Read, &r.CreatedAt)
@@ -899,7 +899,7 @@ func GetFCEAnalytics(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	frows, _ := db.Query(`SELECT name, overall_score, compliance_status FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score DESC`, tid)
-	var byFramework []fwScore
+	byFramework := []fwScore{}
 	if frows != nil {
 		defer frows.Close()
 		for frows.Next() {
@@ -914,7 +914,7 @@ func GetFCEAnalytics(c *gin.Context) {
 		Count    int    `json:"count"`
 	}
 	crows, _ := db.Query(`SELECT category, COUNT(*) FROM fce_controls WHERE tenant_id=$1 AND assessment_status='failed' GROUP BY category ORDER BY COUNT(*) DESC LIMIT 8`, tid)
-	var failedByCategory []catFail
+	failedByCategory := []catFail{}
 	if crows != nil {
 		defer crows.Close()
 		for crows.Next() {
@@ -929,7 +929,7 @@ func GetFCEAnalytics(c *gin.Context) {
 		Count int    `json:"count"`
 	}
 	rrows, _ := db.Query(`SELECT risk_level, COUNT(*) FROM fce_controls WHERE tenant_id=$1 AND assessment_status='failed' GROUP BY risk_level ORDER BY COUNT(*) DESC`, tid)
-	var riskDistribution []riskDist
+	riskDistribution := []riskDist{}
 	if rrows != nil {
 		defer rrows.Close()
 		for rrows.Next() {
@@ -988,7 +988,7 @@ func GetFCEAudit(c *gin.Context) {
 		Details    *string   `json:"details"`
 		CreatedAt  time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.Action, &r.ObjectType, &r.ObjectID, &r.ObjectName, &r.Actor, &r.Details, &r.CreatedAt)

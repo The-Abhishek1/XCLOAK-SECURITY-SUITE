@@ -49,7 +49,7 @@ func GetIntelOverview(c *gin.Context) {
 		Day   string `json:"day"`
 		Count int    `json:"count"`
 	}
-	var trend []DayBucket
+	trend := []DayBucket{}
 	if trendRows != nil {
 		for trendRows.Next() {
 			var b DayBucket
@@ -80,7 +80,7 @@ func GetIntelOverview(c *gin.Context) {
 		Type  string `json:"type"`
 		Count int    `json:"count"`
 	}
-	var typeBreakdown []TypeBucket
+	typeBreakdown := []TypeBucket{}
 	if typeRows != nil {
 		for typeRows.Next() {
 			var b TypeBucket
@@ -131,7 +131,7 @@ func GetIntelAnalytics(c *gin.Context) {
 		LastSeen    *time.Time `json:"last_seen"`
 		Description string     `json:"description"`
 	}
-	var topIOCs []MatchedIOC
+	topIOCs := []MatchedIOC{}
 	if matchRows != nil {
 		for matchRows.Next() {
 			var m MatchedIOC
@@ -161,7 +161,7 @@ func GetIntelAnalytics(c *gin.Context) {
 		Sophistication string `json:"sophistication"`
 		AlertCount   int    `json:"alert_count"`
 	}
-	var topActors []ActorStat
+	topActors := []ActorStat{}
 	if actorRows != nil {
 		for actorRows.Next() {
 			var a ActorStat
@@ -184,7 +184,7 @@ func GetIntelAnalytics(c *gin.Context) {
 		Week  string `json:"week"`
 		Count int    `json:"count"`
 	}
-	var growth []WeekBucket
+	growth := []WeekBucket{}
 	if growthRows != nil {
 		for growthRows.Next() {
 			var b WeekBucket
@@ -214,7 +214,7 @@ func GetIntelAnalytics(c *gin.Context) {
 		IOCCount  int        `json:"ioc_count"`
 		Healthy   bool       `json:"healthy"`
 	}
-	var feedStats []FeedStat
+	feedStats := []FeedStat{}
 	if feedRows != nil {
 		for feedRows.Next() {
 			var f FeedStat
@@ -234,7 +234,7 @@ func GetIntelAnalytics(c *gin.Context) {
 		Severity string `json:"severity"`
 		Count    int    `json:"count"`
 	}
-	var sevDist []SevBucket
+	sevDist := []SevBucket{}
 	if sevRows != nil {
 		for sevRows.Next() {
 			var s SevBucket
@@ -288,7 +288,7 @@ func GetIntelCampaigns(c *gin.Context) {
 		Earliest     time.Time `json:"earliest"`
 		Status       string    `json:"status"`
 	}
-	var out []Campaign
+	out := []Campaign{}
 	for rows.Next() {
 		var cp Campaign
 		rows.Scan(&cp.Technique, &cp.ClusterCount, &cp.TotalAlerts, &cp.Latest, &cp.Earliest)
@@ -326,7 +326,7 @@ func GetIntelMITRECoverage(c *gin.Context) {
 		Enabled   int    `json:"enabled"`
 		Source    string `json:"source"`
 	}
-	var techniques []TechBucket
+	techniques := []TechBucket{}
 	if sigmaRows != nil {
 		for sigmaRows.Next() {
 			var b TechBucket
@@ -395,8 +395,8 @@ func GetIntelRelationships(c *gin.Context) {
 		Label  string `json:"label"`
 	}
 
-	var nodes []GraphNode
-	var edges []GraphEdge
+	nodes := []GraphNode{}
+	edges := []GraphEdge{}
 
 	// Threat actor nodes
 	actorRows, _ := database.DB.Query(`
@@ -526,7 +526,7 @@ func PostIntelSearch(c *gin.Context) {
 		Description string     `json:"description"`
 		Enabled     bool       `json:"enabled"`
 	}
-	var iocs []IOCResult
+	iocs := []IOCResult{}
 	if iocRows != nil {
 		for iocRows.Next() {
 			var r IOCResult
@@ -552,7 +552,7 @@ func PostIntelSearch(c *gin.Context) {
 		Sophistication string `json:"sophistication"`
 		Description    string `json:"description"`
 	}
-	var actors []ActorResult
+	actors := []ActorResult{}
 	if actorRows != nil {
 		for actorRows.Next() {
 			var a ActorResult
@@ -577,7 +577,7 @@ func PostIntelSearch(c *gin.Context) {
 		MitreTechnique string `json:"mitre_technique"`
 		Severity       string `json:"severity"`
 	}
-	var sigma []SigmaResult
+	sigma := []SigmaResult{}
 	if sigmaRows != nil {
 		for sigmaRows.Next() {
 			var s SigmaResult
@@ -603,7 +603,7 @@ func PostIntelSearch(c *gin.Context) {
 		Time     time.Time `json:"time"`
 		SourceIP string    `json:"source_ip"`
 	}
-	var alerts []AlertResult
+	alerts := []AlertResult{}
 	if alertRows != nil {
 		for alertRows.Next() {
 			var a AlertResult
@@ -641,7 +641,7 @@ func PostIntelAI(c *gin.Context) {
 	}
 
 	// Enrich with recent data
-	var contextLines []string
+	contextLines := []string{}
 	if body.Indicator != "" {
 		// IOC context
 		var iocDesc, iocType, iocSev string
@@ -740,7 +740,7 @@ func GetIntelWatchlist(c *gin.Context) {
 		Description string     `json:"description"`
 		AddedAt     time.Time  `json:"added_at"`
 	}
-	var out []WatchItem
+	out := []WatchItem{}
 	for rows.Next() {
 		var w WatchItem
 		rows.Scan(&w.ID, &w.Indicator, &w.Type, &w.Severity, &w.HitCount, &w.LastSeen, &w.Description, &w.AddedAt)
@@ -782,7 +782,7 @@ func GetIntelIOCTimeline(c *gin.Context) {
 		LastSeen  *time.Time `json:"last_seen"`
 		ExpiresAt *time.Time `json:"expires_at"`
 	}
-	var out []TimelineIOC
+	out := []TimelineIOC{}
 	for rows.Next() {
 		var t TimelineIOC
 		rows.Scan(&t.ID, &t.Indicator, &t.Type, &t.Severity, &t.HitCount, &t.CreatedAt, &t.LastSeen, &t.ExpiresAt)

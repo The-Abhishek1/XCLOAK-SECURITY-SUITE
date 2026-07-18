@@ -141,7 +141,7 @@ func GetThreatHuntDashboard(c *gin.Context) {
 		SELECT id, name, category, status, hit_count, COALESCE(last_run_at::text, created_at::text)
 		FROM threat_hunts WHERE tenant_id = $1 AND last_run_at IS NOT NULL
 		ORDER BY last_run_at DESC LIMIT 10`, tid)
-	var recent []recentHunt
+	recent := []recentHunt{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -164,7 +164,7 @@ func GetThreatHuntDashboard(c *gin.Context) {
 		SELECT DATE_TRUNC('day', created_at)::date, COUNT(*), COALESCE(SUM(hit_count),0)
 		FROM threat_hunts WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '30 days'
 		GROUP BY 1 ORDER BY 1`, tid)
-	var trend []trendPt
+	trend := []trendPt{}
 	if trendRows != nil {
 		defer trendRows.Close()
 		for trendRows.Next() {
@@ -253,7 +253,7 @@ func GetThreatHuntLibrary(c *gin.Context) {
 		SuccessRate      float64 `json:"success_rate"`
 		CreatedAt        string  `json:"created_at"`
 	}
-	var hunts []huntRow
+	hunts := []huntRow{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -642,7 +642,7 @@ func GetThreatHuntFindings(c *gin.Context) {
 		Status         string `json:"status"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var findings []finding
+	findings := []finding{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -747,7 +747,7 @@ func GetThreatHuntMetrics(c *gin.Context) {
 		       COALESCE(SUM(success_count)::float/NULLIF(SUM(run_count),0)*100, 0)
 		FROM threat_hunts WHERE tenant_id = $1
 		GROUP BY category ORDER BY 2 DESC`, tid)
-	var byCat []catStat
+	byCat := []catStat{}
 	if cRows != nil {
 		defer cRows.Close()
 		for cRows.Next() {
@@ -772,7 +772,7 @@ func GetThreatHuntMetrics(c *gin.Context) {
 		       COALESCE(SUM(success_count)::float/NULLIF(SUM(run_count),0)*100, 0)
 		FROM threat_hunts WHERE tenant_id = $1
 		GROUP BY 1 ORDER BY 2 DESC LIMIT 10`, tid)
-	var byAnalyst []analystStat
+	byAnalyst := []analystStat{}
 	if aRows != nil {
 		defer aRows.Close()
 		for aRows.Next() {
@@ -797,7 +797,7 @@ func GetThreatHuntMetrics(c *gin.Context) {
 		JOIN threat_hunts th ON th.id = thf.hunt_id
 		WHERE thf.tenant_id = $1 AND thf.created_at > NOW() - INTERVAL '30 days'
 		GROUP BY 1 ORDER BY 1`, tid)
-	var daily []dailyPt
+	daily := []dailyPt{}
 	if dRows != nil {
 		defer dRows.Close()
 		for dRows.Next() {
@@ -1036,7 +1036,7 @@ func GetThreatHuntComments(c *gin.Context) {
 		SELECT id, author, content, created_at
 		FROM threat_hunt_comments WHERE tenant_id = $1 AND hunt_id = $2
 		ORDER BY created_at ASC`, tid, id)
-	var comments []comment
+	comments := []comment{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

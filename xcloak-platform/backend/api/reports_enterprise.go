@@ -208,7 +208,7 @@ func GetRPEDashboard(c *gin.Context) {
 	}
 	rows, _ := db.Query(`SELECT execution_id, report_name, status, duration_ms, executed_by, started_at
 		FROM rpe_executions WHERE tenant_id=$1 ORDER BY started_at DESC LIMIT 8`, tid)
-	var recentExecs []execRow
+	recentExecs := []execRow{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -225,7 +225,7 @@ func GetRPEDashboard(c *gin.Context) {
 		Count    int    `json:"count"`
 	}
 	crows, _ := db.Query(`SELECT category, COUNT(*) FROM rpe_reports WHERE tenant_id=$1 AND status='active' GROUP BY category ORDER BY COUNT(*) DESC`, tid)
-	var cats []catCount
+	cats := []catCount{}
 	if crows != nil {
 		defer crows.Close()
 		for crows.Next() {
@@ -245,7 +245,7 @@ func GetRPEDashboard(c *gin.Context) {
 	}
 	srows, _ := db.Query(`SELECT schedule_id, report_name, frequency, next_run_at
 		FROM rpe_schedules WHERE tenant_id=$1 AND status='active' ORDER BY next_run_at ASC LIMIT 5`, tid)
-	var upcoming []schedRow
+	upcoming := []schedRow{}
 	if srows != nil {
 		defer srows.Close()
 		for srows.Next() {
@@ -318,7 +318,7 @@ func GetRPEReports(c *gin.Context) {
 		CreatedAt       time.Time  `json:"created_at"`
 		UpdatedAt       time.Time  `json:"updated_at"`
 	}
-	var results []Row
+	results := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ReportID, &r.Name, &r.Description, &r.Category, &r.ReportType, &r.TemplateID,
@@ -440,7 +440,7 @@ func GetRPETemplates(c *gin.Context) {
 		UseCount       int       `json:"use_count"`
 		CreatedAt      time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.TemplateID, &r.Name, &r.Description, &r.Category, &r.IsBuiltin, &r.Sections, &r.DataSources, &r.Owner, &r.UseCount, &r.CreatedAt)
@@ -523,7 +523,7 @@ func GetRPESchedules(c *gin.Context) {
 		CreatedBy      string     `json:"created_by"`
 		CreatedAt      time.Time  `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ScheduleID, &r.ReportID, &r.ReportName, &r.Frequency, &r.CronExpr,
@@ -695,7 +695,7 @@ func GetRPEExecutions(c *gin.Context) {
 		ErrorMessage *string    `json:"error_message"`
 		DownloadURL  *string    `json:"download_url"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ExecutionID, &r.ReportID, &r.ReportName, &r.ScheduleID,
@@ -730,7 +730,7 @@ func GetRPEExports(c *gin.Context) {
 		DownloadURL *string   `json:"download_url"`
 		CreatedAt   time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ExportID, &r.ReportID, &r.ReportName, &r.ExecutionID,
@@ -761,7 +761,7 @@ func GetRPEVersions(c *gin.Context) {
 		GeneratedAt *time.Time `json:"generated_at"`
 		CreatedAt   time.Time  `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.Version, &r.Author, &r.Changes, &r.GeneratedAt, &r.CreatedAt)
@@ -793,7 +793,7 @@ func GetRPEShared(c *gin.Context) {
 		ExpiresAt  *time.Time `json:"expires_at"`
 		CreatedAt  time.Time  `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ShareID, &r.ReportID, &r.ReportName, &r.SharedBy, &r.ShareType, &r.ViewCount, &r.ExpiresAt, &r.CreatedAt)
@@ -856,7 +856,7 @@ func GetRPENotifications(c *gin.Context) {
 		Read       bool      `json:"read"`
 		CreatedAt  time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.EventType, &r.Title, &r.Message, &r.Severity, &r.ReportID, &r.ReportName, &r.Read, &r.CreatedAt)
@@ -883,7 +883,7 @@ func GetRPEAnalytics(c *gin.Context) {
 	}
 	rows, _ := db.Query(
 		`SELECT report_name, COUNT(*) as cnt FROM rpe_executions WHERE tenant_id=$1 GROUP BY report_name ORDER BY cnt DESC LIMIT 8`, tid)
-	var mostGenerated []mostGen
+	mostGenerated := []mostGen{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -899,7 +899,7 @@ func GetRPEAnalytics(c *gin.Context) {
 	}
 	frows, _ := db.Query(
 		`SELECT format, COUNT(*) FROM rpe_exports WHERE tenant_id=$1 GROUP BY format ORDER BY COUNT(*) DESC`, tid)
-	var byFormat []formatStat
+	byFormat := []formatStat{}
 	if frows != nil {
 		defer frows.Close()
 		for frows.Next() {
@@ -956,7 +956,7 @@ func GetRPEAudit(c *gin.Context) {
 		Details    *string   `json:"details"`
 		CreatedAt  time.Time `json:"created_at"`
 	}
-	var result []Row
+	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.Action, &r.ObjectType, &r.ObjectID, &r.ObjectName, &r.Actor, &r.Details, &r.CreatedAt)

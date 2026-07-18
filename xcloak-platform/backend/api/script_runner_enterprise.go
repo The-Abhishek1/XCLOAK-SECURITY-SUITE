@@ -610,7 +610,7 @@ func GetSRAnalytics(c *gin.Context) {
 		Name  string `json:"name"`
 		Count int    `json:"count"`
 	}
-	var topScripts []scriptCount
+	topScripts := []scriptCount{}
 	rows, _ := database.DB.Query(
 		`SELECT script_name,COUNT(*) c FROM sr_executions WHERE tenant_id=? GROUP BY script_name ORDER BY c DESC LIMIT 5`, tid,
 	)
@@ -627,7 +627,7 @@ func GetSRAnalytics(c *gin.Context) {
 		Category string `json:"category"`
 		Count    int    `json:"count"`
 	}
-	var byCategory []catCount
+	byCategory := []catCount{}
 	rows2, _ := database.DB.Query(
 		`SELECT category,COUNT(*) c FROM sr_scripts WHERE tenant_id=? GROUP BY category ORDER BY c DESC`, tid,
 	)

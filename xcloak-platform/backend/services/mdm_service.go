@@ -239,7 +239,7 @@ func ListDevices(tenantID int, platform, status, ownerEmail string) ([]MDMDevice
 	}
 	defer rows.Close()
 
-	var out []MDMDevice
+	out := []MDMDevice{}
 	for rows.Next() {
 		d, err := scanDevice(rows)
 		if err == nil {
@@ -304,7 +304,7 @@ func ListPolicies(tenantID int) ([]MDMPolicy, error) {
 	}
 	defer rows.Close()
 
-	var out []MDMPolicy
+	out := []MDMPolicy{}
 	for rows.Next() {
 		var p MDMPolicy
 		var platStr string
@@ -332,7 +332,7 @@ func loadPolicyRules(policyID int) []MDMPolicyRule {
 		return nil
 	}
 	defer rows.Close()
-	var rules []MDMPolicyRule
+	rules := []MDMPolicyRule{}
 	for rows.Next() {
 		var r MDMPolicyRule
 		if rows.Scan(&r.ID, &r.PolicyID, &r.RuleType, &r.Value, &r.Severity) == nil {
@@ -352,7 +352,7 @@ func RunComplianceForTenant(tenantID int) {
 		return
 	}
 	// Filter to active policies with rules.
-	var active []MDMPolicy
+	active := []MDMPolicy{}
 	for _, p := range policies {
 		if p.IsActive && len(p.Rules) > 0 {
 			active = append(active, p)
@@ -535,7 +535,7 @@ func GetDeviceCompliance(deviceID, tenantID int) ([]MDMComplianceResult, error) 
 	}
 	defer rows.Close()
 
-	var out []MDMComplianceResult
+	out := []MDMComplianceResult{}
 	for rows.Next() {
 		var r MDMComplianceResult
 		if rows.Scan(&r.RuleID, &r.RuleType, &r.Status, &r.ActualValue, &r.Severity, &r.CheckedAt) == nil {
@@ -573,7 +573,7 @@ func GetComplianceSummary(tenantID int) map[string]any {
 		ORDER BY cnt DESC
 		LIMIT 10
 	`, tenantID)
-	var topFailures []failRow
+	topFailures := []failRow{}
 	if failRows != nil {
 		defer failRows.Close()
 		for failRows.Next() {
@@ -600,7 +600,7 @@ func GetComplianceSummary(tenantID int) map[string]any {
 		Fail     int    `json:"fail"`
 		Total    int    `json:"total"`
 	}
-	var byPlatform []platRow
+	byPlatform := []platRow{}
 	if platRows != nil {
 		defer platRows.Close()
 		for platRows.Next() {
@@ -666,10 +666,10 @@ func ListCommands(deviceID, tenantID, limit int) ([]MDMCommand, error) {
 	}
 	defer rows.Close()
 
-	var out []MDMCommand
+	out := []MDMCommand{}
 	for rows.Next() {
 		var c MDMCommand
-		var payloadJSON []byte
+		payloadJSON := []byte{}
 		if rows.Scan(&c.ID, &c.TenantID, &c.DeviceID, &c.CommandType, &payloadJSON,
 			&c.Status, &c.QueuedBy, &c.QueuedAt, &c.SentAt, &c.AcknowledgedAt, &c.ErrorMsg) == nil {
 			json.Unmarshal(payloadJSON, &c.Payload)
@@ -712,7 +712,7 @@ func DeliverPendingCommands() {
 	for rows.Next() {
 		var id int
 		var commandType, pushToken, platform string
-		var payloadJSON []byte
+		payloadJSON := []byte{}
 		if rows.Scan(&id, &commandType, &payloadJSON, &pushToken, &platform) != nil {
 			continue
 		}
@@ -761,7 +761,7 @@ func ListProfiles(tenantID int) ([]MDMProfile, error) {
 	}
 	defer rows.Close()
 
-	var out []MDMProfile
+	out := []MDMProfile{}
 	for rows.Next() {
 		var p MDMProfile
 		if rows.Scan(&p.ID, &p.TenantID, &p.Name, &p.Description,

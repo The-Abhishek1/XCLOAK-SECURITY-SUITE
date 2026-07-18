@@ -199,7 +199,7 @@ func GetEmailMessages(c *gin.Context) {
 		SizeBytes       int    `json:"size_bytes"`
 		CreatedAt       string `json:"created_at"`
 	}
-	var msgs []Msg
+	msgs := []Msg{}
 	for rows.Next() {
 		var m Msg
 		if rows.Scan(&m.ID, &m.MessageID, &m.Sender, &m.Recipient, &m.Subject,
@@ -250,7 +250,7 @@ func GetEmailThreats(c *gin.Context) {
 		URLCount      int    `json:"url_count"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var threats []Threat
+	threats := []Threat{}
 	for rows.Next() {
 		var t Threat
 		if rows.Scan(&t.ID, &t.MessageID, &t.Sender, &t.Recipient, &t.Subject,
@@ -303,7 +303,7 @@ func GetEmailAttachments(c *gin.Context) {
 		SandboxResult string `json:"sandbox_result"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var atts []Att
+	atts := []Att{}
 	for rows.Next() {
 		var a Att
 		if rows.Scan(&a.ID, &a.MessageID, &a.Filename, &a.FileType, &a.FileSize,
@@ -356,7 +356,7 @@ func GetEmailURLs(c *gin.Context) {
 		ClickCount        int    `json:"click_count"`
 		CreatedAt         string `json:"created_at"`
 	}
-	var urls []URL
+	urls := []URL{}
 	for rows.Next() {
 		var u URL
 		if rows.Scan(&u.ID, &u.MessageID, &u.URL, &u.Domain, &u.Reputation,
@@ -522,7 +522,7 @@ func GetEmailCampaigns(c *gin.Context) {
 		MalwareFamily string `json:"malware_family"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var camps []Camp
+	camps := []Camp{}
 	for rows.Next() {
 		var ca Camp
 		if rows.Scan(&ca.ID, &ca.Name, &ca.CampaignType, &ca.ThreatActor, &ca.EmailCount,
@@ -563,7 +563,7 @@ func GetEmailTimeline(c *gin.Context) {
 		Status      string `json:"status"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var events []Event
+	events := []Event{}
 	for rows.Next() {
 		var e Event
 		if rows.Scan(&e.ID, &e.MessageID, &e.Sender, &e.Recipient, &e.Subject,
@@ -603,7 +603,7 @@ func GetEmailUserRisk(c *gin.Context) {
 		LastClickAt      *string `json:"last_click_at"`
 		CreatedAt        string  `json:"created_at"`
 	}
-	var users []User
+	users := []User{}
 	for rows.Next() {
 		var u User
 		if rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.Department, &u.ClickCount,
@@ -634,7 +634,7 @@ func GetEmailAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var topSenders []SenderStat
+	topSenders := []SenderStat{}
 	sRows, _ := database.DB.Query(`SELECT sender, COUNT(*) as cnt FROM email_messages WHERE tenant_id=$1 GROUP BY sender ORDER BY cnt DESC LIMIT 10`, tid)
 	if sRows != nil {
 		defer sRows.Close()
@@ -648,7 +648,7 @@ func GetEmailAnalytics(c *gin.Context) {
 	if topSenders == nil {
 		topSenders = []SenderStat{}
 	}
-	var topURLs []URLStat
+	topURLs := []URLStat{}
 	uRows, _ := database.DB.Query(`SELECT domain, COUNT(*) as cnt FROM email_urls WHERE tenant_id=$1 AND verdict='malicious' GROUP BY domain ORDER BY cnt DESC LIMIT 10`, tid)
 	if uRows != nil {
 		defer uRows.Close()
@@ -701,7 +701,7 @@ func GetEmailPolicies(c *gin.Context) {
 		Priority   int    `json:"priority"`
 		CreatedAt  string `json:"created_at"`
 	}
-	var policies []Policy
+	policies := []Policy{}
 	for rows.Next() {
 		var p Policy
 		if rows.Scan(&p.ID, &p.Name, &p.PolicyType, &p.Action, &p.Criteria, &p.Enabled, &p.Priority, &p.CreatedAt) == nil {
@@ -813,7 +813,7 @@ func GetUserReported(c *gin.Context) {
 		CampaignID     int    `json:"campaign_id"`
 		AutoVerdict    string `json:"auto_verdict"`
 	}
-	var reports []Report
+	reports := []Report{}
 	for rows.Next() {
 		var r Report
 		if rows.Scan(&r.ID, &r.ReporterEmail, &r.MessageID, &r.Subject, &r.OriginalSender,

@@ -101,7 +101,7 @@ func GetAuditEventsByAgent(agentID string, limit int) ([]models.AuditEvent, erro
 	}
 	defer rows.Close()
 
-	var out []models.AuditEvent
+	out := []models.AuditEvent{}
 	for rows.Next() {
 		var e models.AuditEvent
 		err := rows.Scan(
@@ -135,7 +135,7 @@ func GetThreatAuditEvents(limit int, tenantID int) ([]models.AuditEvent, error) 
 	}
 	defer rows.Close()
 
-	var out []models.AuditEvent
+	out := []models.AuditEvent{}
 	for rows.Next() {
 		var e models.AuditEvent
 		if err := rows.Scan(

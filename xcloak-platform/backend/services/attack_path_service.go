@@ -334,7 +334,7 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 	// second pass, so the first-seen connection wins for port-technique lookup.
 
 	pairSeen := map[string]bool{} // "source|target" or "target|source"
-	var edges []AttackPathEdge
+	edges := []AttackPathEdge{}
 	adjacency := map[string][]string{} // undirected; used for Dijkstra + blast_radius
 
 	addEdge := func(source, target, kind, port string) {
@@ -473,8 +473,8 @@ func BuildAttackPathGraph(tenantID int) (*AttackPathGraph, error) {
 	for i, p := range topPaths {
 		techSeen := map[string]bool{}
 		phaseSeen := map[string]bool{}
-		var techs []TechniqueRef
-		var phases []string
+		techs := []TechniqueRef{}
+		phases := []string{}
 		hasPrivEsc := false
 
 		for j := 0; j < len(p.Hops)-1; j++ {
@@ -581,7 +581,7 @@ func rankAttackPaths(nodes map[string]*AttackPathNode, dist map[string]float64, 
 		id    string
 		score float64
 	}
-	var candidates []candidate
+	candidates := []candidate{}
 
 	for id, n := range nodes {
 		if n.Type != "agent" || dist[id] >= inf {
@@ -610,7 +610,7 @@ func rankAttackPaths(nodes map[string]*AttackPathNode, dist map[string]float64, 
 
 	out := make([]RankedAttackPath, 0, limit)
 	for _, c := range candidates[:limit] {
-		var hops []string
+		hops := []string{}
 		for at := c.id; at != ""; at = prev[at] {
 			hops = append([]string{at}, hops...)
 			if at == internetNodeID {

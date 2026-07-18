@@ -662,7 +662,7 @@ func GetEmailRecipients(severity string, agentID int) []string {
 		return nil
 	}
 	defer rows.Close()
-	var recipients []string
+	recipients := []string{}
 	for rows.Next() {
 		var r string
 		if rows.Scan(&r) == nil {

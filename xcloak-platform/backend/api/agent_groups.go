@@ -35,7 +35,7 @@ func ListAgentGroups(c *gin.Context) {
 		return
 	}
 	defer rows.Close()
-	var groups []AgentGroup
+	groups := []AgentGroup{}
 	for rows.Next() {
 		var g AgentGroup
 		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.AgentCount, &g.CreatedAt); err == nil {

@@ -147,7 +147,7 @@ func GetSupRules(c *gin.Context) {
 		CreatedAt       time.Time  `json:"created_at"`
 		UpdatedAt       time.Time  `json:"updated_at"`
 	}
-	var rules []Rule
+	rules := []Rule{}
 	for rows.Next() {
 		var r Rule
 		if err := rows.Scan(&r.ID, &r.RuleName, &r.Description, &r.Status, &r.Owner, &r.Priority, &r.SuppressionType, &r.Scope, &r.ScopeValue, &r.TimeType, &r.ExpiresAt, &r.Conditions, &r.Exceptions, &r.ApprovalStatus, &r.ApprovedBy, &r.TotalSuppressed, &r.LastTriggeredAt, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt); err == nil {
@@ -407,7 +407,7 @@ func GetSupAudit(c *gin.Context) {
 		Details   *string    `json:"details"`
 		CreatedAt time.Time  `json:"created_at"`
 	}
-	var entries []Entry
+	entries := []Entry{}
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.RuleID, &e.RuleName, &e.Action, &e.Actor, &e.Details, &e.CreatedAt); err == nil {

@@ -53,7 +53,7 @@ func GetPlaybookExecutions(tenantID int) ([]models.PlaybookExecution, error) {
 	}
 	defer rows.Close()
 
-	var execs []models.PlaybookExecution
+	execs := []models.PlaybookExecution{}
 	for rows.Next() {
 		var e models.PlaybookExecution
 		if err := rows.Scan(
@@ -101,7 +101,7 @@ func GetPlaybookStepResults(executionID, tenantID int) ([]models.PlaybookStepRes
 	}
 	defer rows.Close()
 
-	var results []models.PlaybookStepResult
+	results := []models.PlaybookStepResult{}
 	for rows.Next() {
 		var r models.PlaybookStepResult
 		if err := rows.Scan(

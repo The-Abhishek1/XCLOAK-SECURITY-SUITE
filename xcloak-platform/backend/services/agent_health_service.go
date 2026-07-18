@@ -159,7 +159,7 @@ func GetAgentHealthScores(tenantID int) ([]AgentHealth, error) {
 	}
 	defer rows.Close()
 
-	var results []AgentHealth
+	results := []AgentHealth{}
 	for rows.Next() {
 		var h AgentHealth
 		if err := rows.Scan(&h.AgentID, &h.Hostname, &h.HealthScore, &h.HealthStatus,

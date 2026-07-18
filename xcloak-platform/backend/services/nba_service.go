@@ -141,7 +141,7 @@ func GetNetworkAnomalies(tenantID, limit int) ([]models.NetworkAnomaly, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.NetworkAnomaly
+	out := []models.NetworkAnomaly{}
 	for rows.Next() {
 		var n models.NetworkAnomaly
 		rows.Scan(&n.ID, &n.AgentID, &n.Hostname, &n.TenantID,
@@ -166,7 +166,7 @@ func AcknowledgeNetworkAnomaly(id, tenantID int) error {
 
 func GetNetworkBaselineStats(agentID, tenantID int) (map[string]any, error) {
 	var totalDests, totalPorts int
-	var topPorts []map[string]any
+	topPorts := []map[string]any{}
 
 	database.DB.QueryRow(`SELECT COUNT(DISTINCT dst_ip), COUNT(DISTINCT dst_port)
 		FROM network_baselines WHERE agent_id=$1 AND tenant_id=$2`, agentID, tenantID,

@@ -136,7 +136,7 @@ func queryIOCs(query string, args ...interface{}) ([]models.IOC, error) {
 	}
 	defer rows.Close()
 
-	var iocs []models.IOC
+	iocs := []models.IOC{}
 	for rows.Next() {
 		var ioc models.IOC
 		if err := rows.Scan(

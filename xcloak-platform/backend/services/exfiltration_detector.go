@@ -105,7 +105,7 @@ func detectVolumeFlood(tenantID int, window string, threshHigh, threshCrit int64
 		bytesSent int64
 	}
 
-	var candidates []row
+	candidates := []row{}
 
 	logRows, err := database.DB.Query(fmt.Sprintf(`
 		SELECT el.agent_id,

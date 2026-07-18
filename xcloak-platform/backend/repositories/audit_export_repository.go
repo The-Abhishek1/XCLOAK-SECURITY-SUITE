@@ -22,7 +22,7 @@ func GetAuditLogsAfter(afterID, limit int) ([]models.AuditLog, error) {
 	}
 	defer rows.Close()
 
-	var logs []models.AuditLog
+	logs := []models.AuditLog{}
 	for rows.Next() {
 		var l models.AuditLog
 		if err := rows.Scan(&l.ID, &l.Action, &l.Details, &l.Username, &l.CreatedAt); err == nil {

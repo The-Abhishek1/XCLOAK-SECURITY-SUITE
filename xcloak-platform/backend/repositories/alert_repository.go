@@ -106,7 +106,7 @@ func queryAlerts(query string, args ...interface{}) ([]models.Alert, error) {
 	}
 	defer rows.Close()
 
-	var alerts []models.Alert
+	alerts := []models.Alert{}
 	for rows.Next() {
 		var a models.Alert
 		if err := rows.Scan(

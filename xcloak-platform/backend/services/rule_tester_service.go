@@ -18,7 +18,7 @@ func TestRules(message string, tenantID int) []models.RuleTestResult {
 
 	messageLower := strings.ToLower(message)
 
-	var results []models.RuleTestResult
+	results := []models.RuleTestResult{}
 
 	for _, rule := range rules {
 

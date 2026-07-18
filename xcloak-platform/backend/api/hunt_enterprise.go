@@ -52,7 +52,7 @@ func GetHuntDashboard(c *gin.Context) {
 		SELECT id, name, status, hit_count, COALESCE(analyst,''), COALESCE(severity,''), started_at
 		FROM hunt_runs WHERE tenant_id = $1
 		ORDER BY started_at DESC LIMIT 10`, tid)
-	var recentRuns []recentRun
+	recentRuns := []recentRun{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -74,7 +74,7 @@ func GetHuntDashboard(c *gin.Context) {
 		SELECT mitre_technique, COUNT(*)
 		FROM hunt_templates WHERE tenant_id = $1 AND mitre_technique != ''
 		GROUP BY mitre_technique ORDER BY 2 DESC LIMIT 8`, tid)
-	var topTechs []techStat
+	topTechs := []techStat{}
 	if techRows != nil {
 		defer techRows.Close()
 		for techRows.Next() {
@@ -97,7 +97,7 @@ func GetHuntDashboard(c *gin.Context) {
 		SELECT DATE_TRUNC('day', started_at)::date, COUNT(*), COALESCE(SUM(hit_count), 0)
 		FROM hunt_runs WHERE tenant_id = $1 AND started_at > NOW() - INTERVAL '14 days'
 		GROUP BY 1 ORDER BY 1`, tid)
-	var trend []trendPt
+	trend := []trendPt{}
 	if trendRows != nil {
 		defer trendRows.Close()
 		for trendRows.Next() {
@@ -143,7 +143,7 @@ func GetHuntAnalytics(c *gin.Context) {
 		       COUNT(*) FILTER (WHERE hit_count > 0)
 		FROM hunt_runs WHERE tenant_id = $1
 		GROUP BY 1 ORDER BY 2 DESC LIMIT 10`, tid)
-	var analysts []analystStat
+	analysts := []analystStat{}
 	if aRows != nil {
 		defer aRows.Close()
 		for aRows.Next() {
@@ -172,7 +172,7 @@ func GetHuntAnalytics(c *gin.Context) {
 		JOIN hunt_templates ht ON ht.id = hr.template_id
 		WHERE hr.tenant_id = $1 AND hr.template_id IS NOT NULL
 		GROUP BY ht.name ORDER BY 2 DESC LIMIT 10`, tid)
-	var topTemplates []tplStat
+	topTemplates := []tplStat{}
 	if tRows != nil {
 		defer tRows.Close()
 		for tRows.Next() {
@@ -195,7 +195,7 @@ func GetHuntAnalytics(c *gin.Context) {
 		SELECT DATE_TRUNC('day', started_at)::date, COUNT(*), COALESCE(SUM(hit_count),0)
 		FROM hunt_runs WHERE tenant_id = $1 AND started_at > NOW() - INTERVAL '30 days'
 		GROUP BY 1 ORDER BY 1`, tid)
-	var daily []dailyPt
+	daily := []dailyPt{}
 	if dRows != nil {
 		defer dRows.Close()
 		for dRows.Next() {
@@ -639,7 +639,7 @@ func PostHuntTTP(c *gin.Context) {
 		WHERE ag.tenant_id = $1 AND (%s)
 		  AND el.collected_at > NOW() - INTERVAL '%s'
 		ORDER BY el.collected_at DESC LIMIT 100`, whereOR, interval), tid)
-	var logHits []logHit
+	logHits := []logHit{}
 	if lRows != nil {
 		defer lRows.Close()
 		for lRows.Next() {
@@ -674,7 +674,7 @@ func PostHuntTTP(c *gin.Context) {
 		WHERE ag.tenant_id = $1 AND (%s)
 		  AND a.created_at > NOW() - INTERVAL '%s'
 		ORDER BY a.created_at DESC LIMIT 50`, alertWhere, interval), tid)
-	var alertHits []alertHit
+	alertHits := []alertHit{}
 	if aRows != nil {
 		defer aRows.Close()
 		for aRows.Next() {
@@ -725,7 +725,7 @@ func PostHuntActor(c *gin.Context) {
 		Type      string `json:"type"`
 		Source    string `json:"source"`
 	}
-	var iocHits []iocHit
+	iocHits := []iocHit{}
 	iRows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT COALESCE(indicator,''), COALESCE(indicator_type,''), COALESCE(source,'')
 		FROM iocs
@@ -758,7 +758,7 @@ func PostHuntActor(c *gin.Context) {
 		WHERE ag.tenant_id = $1 AND (a.rule_name ILIKE '%%%s%%' OR a.log_message ILIKE '%%%s%%')
 		  AND a.created_at > NOW() - INTERVAL '%s'
 		ORDER BY a.created_at DESC LIMIT 50`, actorSearch, actorSearch, interval), tid)
-	var alertHits []alertHit
+	alertHits := []alertHit{}
 	if aRows != nil {
 		defer aRows.Close()
 		for aRows.Next() {
@@ -877,7 +877,7 @@ func GetHuntNotebook(c *gin.Context) {
 		CreatedBy   string `json:"created_by"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var entries []entry
+	entries := []entry{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

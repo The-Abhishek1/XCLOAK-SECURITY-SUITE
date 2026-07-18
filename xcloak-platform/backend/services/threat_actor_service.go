@@ -101,7 +101,7 @@ func GetThreatActors(tenantID int) ([]models.ThreatActor, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.ThreatActor
+	out := []models.ThreatActor{}
 	for rows.Next() {
 		var a models.ThreatActor
 		rows.Scan(&a.ID, &a.TenantID, &a.Name,
@@ -174,7 +174,7 @@ func GetActorTagsForAlert(alertID, tenantID int) ([]models.ActorAlertTag, error)
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.ActorAlertTag
+	out := []models.ActorAlertTag{}
 	for rows.Next() {
 		var t models.ActorAlertTag
 		rows.Scan(&t.ID, &t.ActorID, &t.ActorName, &t.AlertID, &t.TenantID,
@@ -199,7 +199,7 @@ func GetRecentActorAlerts(actorID, tenantID, limit int) ([]map[string]any, error
 		return nil, err
 	}
 	defer rows.Close()
-	var out []map[string]any
+	out := []map[string]any{}
 	for rows.Next() {
 		var id, conf int
 		var ruleName, severity, status, hostname, technique string

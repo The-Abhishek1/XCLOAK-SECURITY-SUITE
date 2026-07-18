@@ -104,7 +104,7 @@ func GetCasesAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendPoint
+	trend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int
@@ -187,7 +187,7 @@ func GetCasesEnt(c *gin.Context) {
 		CreatedAt   string  `json:"created_at"`
 		UpdatedAt   string  `json:"updated_at"`
 	}
-	var cases []Case
+	cases := []Case{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -310,7 +310,7 @@ func GetCaseTasks(c *gin.Context) {
 		Notes     string  `json:"notes"`
 		CreatedAt string  `json:"created_at"`
 	}
-	var tasks []Task
+	tasks := []Task{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -382,7 +382,7 @@ func GetCaseEvidence(c *gin.Context) {
 		Notes        string `json:"notes"`
 		CreatedAt    string `json:"created_at"`
 	}
-	var items []Evidence
+	items := []Evidence{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -431,7 +431,7 @@ func GetCaseNotes(c *gin.Context) {
 		NoteType  string `json:"note_type"`
 		CreatedAt string `json:"created_at"`
 	}
-	var notes []Note
+	notes := []Note{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -478,7 +478,7 @@ func GetCaseTimeline(c *gin.Context) {
 		EventType string `json:"event_type"`
 		CreatedAt string `json:"created_at"`
 	}
-	var events []TLEvent
+	events := []TLEvent{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -505,7 +505,7 @@ func GetCaseComments(c *gin.Context) {
 		IsInternal bool   `json:"is_internal"`
 		CreatedAt  string `json:"created_at"`
 	}
-	var comments []Comment
+	comments := []Comment{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

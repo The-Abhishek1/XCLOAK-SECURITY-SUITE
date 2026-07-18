@@ -38,7 +38,7 @@ func GetPendingApprovalTasks(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var out []pendingApprovalRow
+	out := []pendingApprovalRow{}
 	for rows.Next() {
 		var r pendingApprovalRow
 		if err := rows.Scan(&r.ID, &r.AgentID, &r.Hostname, &r.TaskType, &r.Payload, &r.CreatedAt); err == nil {

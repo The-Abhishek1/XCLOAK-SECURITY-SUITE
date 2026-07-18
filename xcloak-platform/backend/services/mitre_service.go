@@ -115,7 +115,7 @@ func GetMITREMappings() ([]map[string]string, error) {
 	}
 	defer rows.Close()
 
-	var out []map[string]string
+	out := []map[string]string{}
 	for rows.Next() {
 		var ruleName, tactic, technique, name string
 		if err := rows.Scan(&ruleName, &tactic, &technique, &name); err == nil {

@@ -142,7 +142,7 @@ func GetSCRepositories(c *gin.Context) {
 		RiskScore        int    `json:"risk_score"`
 		CreatedAt        string `json:"created_at"`
 	}
-	var repos []Repo
+	repos := []Repo{}
 	for rows.Next() {
 		var r Repo
 		if rows.Scan(&r.ID, &r.Name, &r.Owner, &r.Platform, &r.Language, &r.DefaultBranch,
@@ -191,7 +191,7 @@ func GetSCDependencies(c *gin.Context) {
 		RiskScore     int    `json:"risk_score"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var deps []Dep
+	deps := []Dep{}
 	for rows.Next() {
 		var d Dep
 		if rows.Scan(&d.ID, &d.RepoID, &d.PackageName, &d.Version, &d.LatestVersion, &d.Ecosystem,
@@ -240,7 +240,7 @@ func GetSCVulnerabilities(c *gin.Context) {
 		AffectedProjects string  `json:"affected_projects"`
 		CreatedAt        string  `json:"created_at"`
 	}
-	var vulns []Vuln
+	vulns := []Vuln{}
 	for rows.Next() {
 		var v Vuln
 		if rows.Scan(&v.ID, &v.DepID, &v.CVEID, &v.CVSS, &v.EPSS, &v.IsKEV, &v.FixVersion,
@@ -276,7 +276,7 @@ func GetSCSBOMs(c *gin.Context) {
 		GeneratedAt        string `json:"generated_at"`
 		CreatedAt          string `json:"created_at"`
 	}
-	var sboms []SBOM
+	sboms := []SBOM{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -311,7 +311,7 @@ func GetSCBuildPipelines(c *gin.Context) {
 		RiskScore           int    `json:"risk_score"`
 		CreatedAt           string `json:"created_at"`
 	}
-	var pipelines []Pipeline
+	pipelines := []Pipeline{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -343,7 +343,7 @@ func GetSCSecretFindings(c *gin.Context) {
 		Status     string `json:"status"`
 		CreatedAt  string `json:"created_at"`
 	}
-	var secrets []Secret
+	secrets := []Secret{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -404,7 +404,7 @@ func GetSCArtifacts(c *gin.Context) {
 		RiskScore           int    `json:"risk_score"`
 		CreatedAt           string `json:"created_at"`
 	}
-	var artifacts []Artifact
+	artifacts := []Artifact{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -502,7 +502,7 @@ func GetSCTimeline(c *gin.Context) {
 		Detail    string `json:"detail"`
 		CreatedAt string `json:"created_at"`
 	}
-	var events []TLEvent
+	events := []TLEvent{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -525,7 +525,7 @@ func GetSCAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendPoint
+	trend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int
@@ -598,7 +598,7 @@ func GetSCPolicies(c *gin.Context) {
 		Description string `json:"description"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var policies []Policy
+	policies := []Policy{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -643,7 +643,7 @@ func PatchSCPolicy(c *gin.Context) {
 	}
 	allowed := map[string]bool{"name": true, "action": true, "is_enabled": true, "description": true}
 	i := 1
-	var sets []string
+	sets := []string{}
 	var args []interface{}
 	for k, v := range body {
 		if allowed[k] {

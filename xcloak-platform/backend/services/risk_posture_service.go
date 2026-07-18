@@ -106,7 +106,7 @@ func computeAssetRisks(tenantID int) []models.AssetRisk {
 	defer rows.Close()
 
 	critMap := map[string]int{"critical": 30, "high": 20, "medium": 10, "low": 5, "": 0}
-	var out []models.AssetRisk
+	out := []models.AssetRisk{}
 	for rows.Next() {
 		var ar models.AssetRisk
 		var vulnCount, alertCount int
@@ -137,7 +137,7 @@ func GetRiskPostureHistory(tenantID, limit int) ([]models.RiskPostureSnapshot, e
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.RiskPostureSnapshot
+	out := []models.RiskPostureSnapshot{}
 	for rows.Next() {
 		var s models.RiskPostureSnapshot
 		var assetJSON string

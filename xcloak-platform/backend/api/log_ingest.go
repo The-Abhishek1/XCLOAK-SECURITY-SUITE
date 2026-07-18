@@ -48,7 +48,7 @@ func IngestLogs(c *gin.Context) {
 	}
 
 	ct := c.ContentType()
-	var rawMessages []string
+	rawMessages := []string{}
 
 	switch {
 	case strings.Contains(ct, "application/json"):
@@ -150,7 +150,7 @@ func parseJSONBody(body []byte) []string {
 		return nil
 	}
 	if body[0] == '[' {
-		var arr []json.RawMessage
+		arr := []json.RawMessage{}
 		if json.Unmarshal(body, &arr) != nil {
 			return nil
 		}
@@ -165,7 +165,7 @@ func parseJSONBody(body []byte) []string {
 
 // parseNDJSON handles newline-delimited JSON (one JSON object per line).
 func parseNDJSON(body []byte) []string {
-	var out []string
+	out := []string{}
 	scanner := bufio.NewScanner(bytes.NewReader(body))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -179,7 +179,7 @@ func parseNDJSON(body []byte) []string {
 // parseTextLines splits a plain-text body on newlines. Each line is one log
 // message (syslog, CEF, LEEF, or arbitrary text).
 func parseTextLines(body []byte) []string {
-	var out []string
+	out := []string{}
 	scanner := bufio.NewScanner(bytes.NewReader(body))
 	for scanner.Scan() {
 		line := scanner.Text()

@@ -221,7 +221,7 @@ func GetVMInventory(c *gin.Context) {
 		DetectedAt       string  `json:"detected_at"`
 		PublishedAt      *string `json:"published_at"`
 	}
-	var list []Finding
+	list := []Finding{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -345,7 +345,7 @@ func GetVMAssets(c *gin.Context) {
 		LastScannedAt    *string `json:"last_scanned_at"`
 		CreatedAt        string  `json:"created_at"`
 	}
-	var list []Asset
+	list := []Asset{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -513,7 +513,7 @@ func GetVMPatches(c *gin.Context) {
 		RollbackAvailable bool    `json:"rollback_available"`
 		CreatedAt         string  `json:"created_at"`
 	}
-	var list []Patch
+	list := []Patch{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -657,7 +657,7 @@ func GetVMScans(c *gin.Context) {
 		CreatedBy     string  `json:"created_by"`
 		CreatedAt     string  `json:"created_at"`
 	}
-	var list []Scan
+	list := []Scan{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -708,7 +708,7 @@ func GetVMExceptions(c *gin.Context) {
 		CreatedBy           string  `json:"created_by"`
 		CreatedAt           string  `json:"created_at"`
 	}
-	var list []Exception
+	list := []Exception{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

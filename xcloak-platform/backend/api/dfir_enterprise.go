@@ -218,7 +218,7 @@ func GetDFIRInvestigations(c *gin.Context) {
 		CreatedAt        string `json:"created_at"`
 		UpdatedAt        string `json:"updated_at"`
 	}
-	var result []Inv
+	result := []Inv{}
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT i.id, i.investigation_id, i.case_id, i.title, i.analyst, i.priority, i.status,
 		       i.tags, i.target_hosts, i.mitre_techniques, i.version, i.created_at, i.updated_at,
@@ -541,7 +541,7 @@ func GetDFIRCollectionTasks(c *gin.Context) {
 		CreatedAt     string `json:"created_at"`
 		CompletedAt   string `json:"completed_at"`
 	}
-	var tasks []Task
+	tasks := []Task{}
 	rows, _ := database.DB.Query(`SELECT id, target_host, collection_type, artifacts, status, requested_by,
 		evidence_count, result_summary, created_at, COALESCE(completed_at::text,'')
 		FROM dfir_collection_tasks WHERE tenant_id=$1 AND investigation_id=$2 ORDER BY created_at DESC`, tid, invID)
@@ -593,7 +593,7 @@ func GetDFIREvidence(c *gin.Context) {
 		Status          string `json:"status"`
 		CollectedAt     string `json:"collected_at"`
 	}
-	var result []EvItem
+	result := []EvItem{}
 	rows, _ := database.DB.Query(fmt.Sprintf(`SELECT id, evidence_id, investigation_id, type, label, description,
 		source_host, collector, sha256, size_bytes, status, collected_at
 		FROM dfir_evidence %s ORDER BY collected_at DESC LIMIT 200`, where), args...)
@@ -659,7 +659,7 @@ func GetDFIRCustody(c *gin.Context) {
 		HashVerified bool   `json:"hash_verified"`
 		CreatedAt    string `json:"created_at"`
 	}
-	var records []CustodyRecord
+	records := []CustodyRecord{}
 	rows, _ := database.DB.Query(`SELECT id, action, actor, location, notes, hash_verified, created_at
 		FROM dfir_custody WHERE tenant_id=$1 AND evidence_id=$2 ORDER BY created_at ASC`, tid, eid)
 	if rows != nil {
@@ -728,7 +728,7 @@ func GetDFIRTimeline(c *gin.Context) {
 		IsManual       bool   `json:"is_manual"`
 	}
 
-	var events []TLEvent
+	events := []TLEvent{}
 
 	// Manual events stored in dfir_timeline_events
 	manualRows, _ := database.DB.Query(`
@@ -887,7 +887,7 @@ func GetDFIRProcessTree(c *gin.Context) {
 		Children    []ProcNode `json:"children,omitempty"`
 	}
 
-	var procs []ProcNode
+	procs := []ProcNode{}
 	if targetHosts != "" {
 		hosts := strings.Split(targetHosts, ",")
 		for _, host := range hosts {
@@ -922,7 +922,7 @@ func GetDFIRProcessTree(c *gin.Context) {
 	for i := range procs {
 		pidMap[procs[i].PID] = &procs[i]
 	}
-	var roots []ProcNode
+	roots := []ProcNode{}
 	for i := range procs {
 		p := &procs[i]
 		if parent, ok := pidMap[p.PPID]; ok && p.PPID != 0 && p.PPID != p.PID {
@@ -1021,7 +1021,7 @@ func GetDFIRNetworkForensics(c *gin.Context) {
 		Host          string `json:"host"`
 		CollectedAt   string `json:"collected_at"`
 	}
-	var conns []ConnRow
+	conns := []ConnRow{}
 	if targetHosts != "" {
 		hosts := strings.Split(targetHosts, ",")
 		for _, host := range hosts {
@@ -1408,7 +1408,7 @@ func GetDFIRNotebook(c *gin.Context) {
 		CreatedAt    string `json:"created_at"`
 		UpdatedAt    string `json:"updated_at"`
 	}
-	var entries []Entry
+	entries := []Entry{}
 	rows, _ := database.DB.Query(`SELECT id, entry_type, title, content, author, evidence_refs, tags, created_at, updated_at
 		FROM dfir_notebook_entries WHERE tenant_id=$1 AND investigation_id=$2 ORDER BY created_at DESC`, tid, invID)
 	if rows != nil {
@@ -1564,7 +1564,7 @@ func GetDFIRSearch(c *gin.Context) {
 		Title   string `json:"title"`
 		Context string `json:"context"`
 	}
-	var results []SearchResult
+	results := []SearchResult{}
 
 	// Search investigations
 	rows, _ := database.DB.Query(`SELECT id, title, notes FROM dfir_investigations
@@ -1729,7 +1729,7 @@ func GetDFIRArtifacts(c *gin.Context) {
 		Message   string `json:"message"`
 		Timestamp string `json:"timestamp"`
 	}
-	var artifacts []ArtifactEntry
+	artifacts := []ArtifactEntry{}
 
 	if targetHosts != "" && pattern != "" {
 		for _, host := range strings.Split(targetHosts, ",") {

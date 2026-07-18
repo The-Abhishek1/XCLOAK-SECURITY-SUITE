@@ -495,7 +495,7 @@ func GetSMEDetection(c *gin.Context) {
 	db := database.DB
 	tid := tenantIDFromContext(c)
 
-	var rules []map[string]interface{}
+	rules := []map[string]interface{}{}
 	rows, _ := db.Query(`SELECT rule_id,rule_name,rule_type,mitre_technique,mitre_tactic,
 		total_hits,true_positives,false_positives,avg_execution_ms,status,accuracy_score
 		FROM sme_detection_rules WHERE tenant_id=$1 ORDER BY total_hits DESC LIMIT 20`, tid)
@@ -562,7 +562,7 @@ func GetSMEAutomation(c *gin.Context) {
 		FROM sme_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).
 		Scan(&pbExec, &scriptExec, &hoursaved, &autoRate)
 
-	var playbooks []map[string]interface{}
+	playbooks := []map[string]interface{}{}
 	rows, _ := db.Query(`SELECT playbook_id,playbook_name,category,total_executions,
 		successful,failed,avg_runtime_secs,analyst_hours_saved,status
 		FROM sme_playbook_stats WHERE tenant_id=$1 ORDER BY total_executions DESC`, tid)

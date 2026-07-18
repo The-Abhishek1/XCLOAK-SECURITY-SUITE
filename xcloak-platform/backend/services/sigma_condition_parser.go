@@ -61,7 +61,7 @@ func EvaluateCondition(condition string, results map[string]bool) bool {
 // "not", "of", "(", ")".
 func tokenizeCondition(s string) []string {
 
-	var tokens []string
+	tokens := []string{}
 	var cur strings.Builder
 
 	flush := func() {

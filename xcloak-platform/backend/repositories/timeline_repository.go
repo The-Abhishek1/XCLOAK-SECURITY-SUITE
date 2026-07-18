@@ -34,7 +34,7 @@ func GetAlertsByAgentID(
 
 	defer rows.Close()
 
-	var alerts []models.Alert
+	alerts := []models.Alert{}
 
 	for rows.Next() {
 
@@ -92,7 +92,7 @@ func GetIncidentsByAgentID(
 
 	defer rows.Close()
 
-	var incidents []models.Incident
+	incidents := []models.Incident{}
 
 	for rows.Next() {
 
@@ -147,7 +147,7 @@ func GetPlaybookExecutionsByAgentID(
 
 	defer rows.Close()
 
-	var executions []models.PlaybookExecution
+	executions := []models.PlaybookExecution{}
 
 	for rows.Next() {
 

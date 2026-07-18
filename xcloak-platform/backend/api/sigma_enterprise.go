@@ -84,7 +84,7 @@ func GetSigmaDashboard(c *gin.Context) {
 		Hits7d   int    `json:"hits_7d"`
 		Hits24h  int    `json:"hits_24h"`
 	}
-	var topRules []TopRule
+	topRules := []TopRule{}
 	tr, err := db.Query(`
 		SELECT sr.id, sr.title, sr.severity,
 		       COUNT(h.id) hits_7d,
@@ -113,7 +113,7 @@ func GetSigmaDashboard(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []DayHit
+	trend := []DayHit{}
 	trows, err := db.Query(`
 		SELECT DATE(matched_at AT TIME ZONE 'UTC'), COUNT(*)
 		FROM sigma_rule_hits
@@ -138,7 +138,7 @@ func GetSigmaDashboard(c *gin.Context) {
 		Total    int    `json:"total"`
 		Enabled  int    `json:"enabled"`
 	}
-	var categories []CatStat
+	categories := []CatStat{}
 	crows, err := db.Query(`
 		SELECT COALESCE(NULLIF(logsource_prod,''),'unknown'), COUNT(*), SUM(CASE WHEN enabled THEN 1 ELSE 0 END)
 		FROM sigma_rules WHERE tenant_id=$1 GROUP BY 1 ORDER BY 2 DESC LIMIT 12`, tid)
@@ -285,7 +285,7 @@ func GetSigmaAnalytics(c *gin.Context) {
 		Hits  int    `json:"hits"`
 		Rules int    `json:"rules"`
 	}
-	var daily []DayTotal
+	daily := []DayTotal{}
 	drows, err := database.DB.Query(`
 		SELECT DATE(matched_at AT TIME ZONE 'UTC'), COUNT(*), COUNT(DISTINCT rule_id)
 		FROM sigma_rule_hits WHERE tenant_id=$1 AND matched_at>=NOW()-INTERVAL '30 days'
@@ -308,7 +308,7 @@ func GetSigmaAnalytics(c *gin.Context) {
 		Severity string `json:"severity"`
 		Hits     int    `json:"hits"`
 	}
-	var sevHits []SevHit
+	sevHits := []SevHit{}
 	svrows, err := database.DB.Query(`
 		SELECT sr.severity, COUNT(h.id)
 		FROM sigma_rules sr
@@ -396,7 +396,7 @@ func GetSigmaPerformance(c *gin.Context) {
 		Hour  string `json:"hour"`
 		Count int    `json:"count"`
 	}
-	var hourly []HourlyHit
+	hourly := []HourlyHit{}
 	hrows, err := database.DB.Query(`
 		SELECT DATE_TRUNC('hour', matched_at AT TIME ZONE 'UTC'), COUNT(*)
 		FROM sigma_rule_hits WHERE tenant_id=$1 AND matched_at>=NOW()-INTERVAL '24 hours'
@@ -419,7 +419,7 @@ func GetSigmaPerformance(c *gin.Context) {
 		AgentName string `json:"agent_name"`
 		Hits      int    `json:"hits"`
 	}
-	var topAgents []AgentHit
+	topAgents := []AgentHit{}
 	arows, err := database.DB.Query(`
 		SELECT h.agent_id, COALESCE(a.hostname, a.name, 'Agent '||h.agent_id::text), COUNT(h.id)
 		FROM sigma_rule_hits h
@@ -909,7 +909,7 @@ func PostSigmaExport(c *gin.Context) {
 		CreatedAt   time.Time `json:"created_at" yaml:"created_at"`
 	}
 
-	var rules []ExportRule
+	rules := []ExportRule{}
 	for rows.Next() {
 		var r ExportRule
 		if rows.Scan(&r.ID, &r.Title, &r.Description, &r.Status, &r.Severity, &r.MITRETactic, &r.MITREtech, &r.MITREname, &r.Category, &r.Product, &r.Service, &r.Condition, &r.Enabled, &r.CreatedAt) == nil {
@@ -1008,7 +1008,7 @@ func GetSigmaRuleDetail(c *gin.Context) {
 		AgentName string `json:"agent_name"`
 		MatchedAt string `json:"matched_at"`
 	}
-	var recentHits []HitEvent
+	recentHits := []HitEvent{}
 	hrows, err := database.DB.Query(`
 		SELECT COALESCE(a.hostname, a.name, 'Agent '||h.agent_id::text), h.matched_at::TEXT
 		FROM sigma_rule_hits h

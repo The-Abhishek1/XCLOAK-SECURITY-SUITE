@@ -34,7 +34,7 @@ func GetHuntTemplates(tenantID int) ([]models.HuntTemplate, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.HuntTemplate
+	out := []models.HuntTemplate{}
 	for rows.Next() {
 		var t models.HuntTemplate
 		rows.Scan(&t.ID, &t.TenantID, &t.Name, &t.Description, &t.MitreTactic, &t.MitreTechnique,
@@ -120,7 +120,7 @@ func runKQLHunt(tenantID int, query string) ([]models.HuntFinding, int) {
 		return nil, 0
 	}
 
-	var findings []models.HuntFinding
+	findings := []models.HuntFinding{}
 	for _, r := range result.Logs {
 		findings = append(findings, models.HuntFinding{
 			LogID:     r.ID,
@@ -185,7 +185,7 @@ type rowsIface interface {
 
 func scanHuntRuns(rows rowsIface) ([]models.HuntRun, error) {
 	defer rows.Close()
-	var out []models.HuntRun
+	out := []models.HuntRun{}
 	for rows.Next() {
 		var r models.HuntRun
 		var findingsJSON string

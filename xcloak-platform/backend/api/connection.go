@@ -9,7 +9,7 @@ import (
 
 func ReceiveConnections(c *gin.Context) {
 
-	var connections []models.Connection
+	connections := []models.Connection{}
 
 	if err := c.ShouldBindJSON(&connections); err != nil {
 

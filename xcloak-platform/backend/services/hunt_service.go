@@ -98,7 +98,7 @@ func RunHuntQuery(queryID int, queryType, queryText string, tenantID int) (*mode
 	defer rows.Close()
 
 	cols, _ := rows.Columns()
-	var results []models.HuntResult
+	results := []models.HuntResult{}
 
 	for rows.Next() {
 		vals := make([]interface{}, len(cols))
@@ -169,7 +169,7 @@ func GetHuntQueries(tenantID int) ([]models.HuntQuery, error) {
 	}
 	defer rows.Close()
 
-	var queries []models.HuntQuery
+	queries := []models.HuntQuery{}
 	for rows.Next() {
 		var q models.HuntQuery
 		if err := rows.Scan(&q.ID, &q.Name, &q.Description, &q.QueryType,

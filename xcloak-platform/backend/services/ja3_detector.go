@@ -64,7 +64,7 @@ func DetectJA3ForTenant(tenantID int) {
 		logMessage string
 	}
 
-	var hits []hit
+	hits := []hit{}
 
 	// Query 1: parsed_fields->>'ja3_hash'
 	pfRows, err := database.DB.Query(`

@@ -106,7 +106,7 @@ func LiveLogsWS(c *gin.Context) {
 	`, agentID)
 
 	if err == nil {
-		var hist []wsLogEntry
+		hist := []wsLogEntry{}
 		for histRows.Next() {
 			var e wsLogEntry
 			var collectedAt time.Time

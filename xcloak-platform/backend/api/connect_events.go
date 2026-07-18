@@ -16,7 +16,7 @@ import (
 // /api/agents/connections' destructive snapshot-replace semantics.
 func ReceiveConnectEvents(c *gin.Context) {
 
-	var events []models.ConnectEvent
+	events := []models.ConnectEvent{}
 	if err := c.ShouldBindJSON(&events); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

@@ -80,7 +80,7 @@ func SyncFirewallToAgents(
 		return nil, fmt.Errorf("fetch rules: %w", fetchErr)
 	}
 
-	var syncRules []FirewallSyncRule
+	syncRules := []FirewallSyncRule{}
 	for _, r := range dbRules {
 		if !r.Enabled {
 			continue
@@ -118,7 +118,7 @@ func SyncFirewallToAgents(
 		wantAgent[id] = true
 	}
 
-	var results []SyncResult
+	results := []SyncResult{}
 
 	for _, agent := range agents {
 		// Skip offline agents unless explicitly targeted.
@@ -191,7 +191,7 @@ func GetFirewallSyncLog(agentID int, tenantID int) ([]map[string]any, error) {
 	}
 	defer rows.Close()
 
-	var logs []map[string]any
+	logs := []map[string]any{}
 	for rows.Next() {
 		var id, agentId, ruleCount int
 		var hostname, status, result, syncedBy, syncedAt string

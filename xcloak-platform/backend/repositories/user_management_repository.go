@@ -30,7 +30,7 @@ func GetAllUsers(tenantID int) ([]models.User, error) {
 	}
 	defer rows.Close()
 
-	var users []models.User
+	users := []models.User{}
 	for rows.Next() {
 		var u models.User
 		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.TenantID, &u.IsActive, &u.LastLogin, &u.CreatedAt); err != nil {

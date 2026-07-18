@@ -236,7 +236,7 @@ func SearchLogsES(p LogSearchParams) (*LogSearchResult, error) {
 		return nil, fmt.Errorf("elasticsearch parse response: %w", err)
 	}
 
-	var logs []models.Log
+	logs := []models.Log{}
 	for _, hit := range result.Hits.Hits {
 		ts, _ := time.Parse(time.RFC3339, hit.Source.CollectedAt)
 		logs = append(logs, models.Log{

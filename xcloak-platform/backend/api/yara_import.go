@@ -124,7 +124,7 @@ func splitYARARules(content string) []string {
 		return nil
 	}
 
-	var rules []string
+	rules := []string{}
 	for i, idx := range indices {
 		start := idx[0]
 		var end int

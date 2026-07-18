@@ -50,7 +50,7 @@ func GetUserRiskProfiles(tenantID, limit, offset int) ([]models.UserRiskProfile,
 	}
 	defer rows.Close()
 
-	var out []models.UserRiskProfile
+	out := []models.UserRiskProfile{}
 	for rows.Next() {
 		var p models.UserRiskProfile
 		var flags pq.StringArray
@@ -127,7 +127,7 @@ func GetUEBAEvents(tenantID int, username string, limit, offset int) ([]models.U
 	}
 	defer rows.Close()
 
-	var out []models.UEBAEvent
+	out := []models.UEBAEvent{}
 	for rows.Next() {
 		var e models.UEBAEvent
 		var agentID sql.NullInt64
@@ -160,7 +160,7 @@ func GetFeedSyncLog(feedID, tenantID, limit int) ([]models.FeedSyncLog, error) {
 	}
 	defer rows.Close()
 
-	var out []models.FeedSyncLog
+	out := []models.FeedSyncLog{}
 	for rows.Next() {
 		var l models.FeedSyncLog
 		rows.Scan(&l.ID, &l.FeedID, &l.TenantID, &l.Status, &l.IOCsAdded, &l.ErrorMessage, &l.SyncedAt)

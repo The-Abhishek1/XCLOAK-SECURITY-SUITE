@@ -108,7 +108,7 @@ func syncMalwareBazaarFeed(feed models.ThreatFeed) (int, error) {
 
 // csvSplitLine splits a CSV line respecting double-quoted fields.
 func csvSplitLine(line string) []string {
-	var result []string
+	result := []string{}
 	var cur strings.Builder
 	inQuote := false
 	for _, ch := range line {

@@ -287,7 +287,7 @@ func RunCISBenchmark(agentID, tenantID int) error {
 		return fmt.Errorf("agent %d not found: %w", agentID, err)
 	}
 
-	var findings []CISFinding
+	findings := []CISFinding{}
 	if strings.Contains(osType, "win") {
 		findings = checkWindowsControls(agentID, tenantID)
 	} else {
@@ -468,7 +468,7 @@ func checkLinuxControls(agentID, tenantID int) []CISFinding {
 
 		// Empty passwords — check for users with empty shell (proxy for unconfigured accounts)
 		case "CIS-L-5.4.1":
-			var empties []string
+			empties := []string{}
 			for _, u := range users {
 				if u.shell == "" || u.shell == "/bin/sh" && u.uid == 0 && u.username != "root" {
 					empties = append(empties, u.username)
@@ -489,7 +489,7 @@ func checkLinuxControls(agentID, tenantID int) []CISFinding {
 					uidCounts[u.uid] = append(uidCounts[u.uid], u.username)
 				}
 			}
-			var dups []string
+			dups := []string{}
 			for uid, names := range uidCounts {
 				if len(names) > 1 {
 					dups = append(dups, fmt.Sprintf("uid=%d: %s", uid, strings.Join(names, ",")))
@@ -508,7 +508,7 @@ func checkLinuxControls(agentID, tenantID int) []CISFinding {
 				"/bin/bash": true, "/bin/sh": true, "/bin/zsh": true,
 				"/bin/ksh": true, "/usr/bin/bash": true, "/usr/bin/zsh": true,
 			}
-			var bad []string
+			bad := []string{}
 			for _, u := range users {
 				if u.uid > 0 && u.uid < 1000 && u.username != "sync" && loginShells[u.shell] {
 					bad = append(bad, fmt.Sprintf("%s(uid=%d,shell=%s)", u.username, u.uid, u.shell))
@@ -523,7 +523,7 @@ func checkLinuxControls(agentID, tenantID int) []CISFinding {
 
 		// Root is only UID 0
 		case "CIS-L-5.4.4":
-			var uid0 []string
+			uid0 := []string{}
 			for _, u := range users {
 				if u.uid == 0 && u.username != "root" {
 					uid0 = append(uid0, u.username)
@@ -808,7 +808,7 @@ func agentUsers(agentID int) []agentUser {
 		return nil
 	}
 	defer rows.Close()
-	var users []agentUser
+	users := []agentUser{}
 	for rows.Next() {
 		var u agentUser
 		rows.Scan(&u.username, &u.uid, &u.shell)

@@ -76,7 +76,7 @@ func GetDPIFindings(c *gin.Context) {
 		DetectedAt     string `json:"detected_at"`
 	}
 
-	var findings []DPIFinding
+	findings := []DPIFinding{}
 	for rows.Next() {
 		var f DPIFinding
 		if rows.Scan(&f.ID, &f.AgentID, &f.FindingType, &f.Severity, &f.Score,
@@ -116,7 +116,7 @@ func GetDPIFindingsSummary(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var breakdown []TypeCount
+	breakdown := []TypeCount{}
 	for rows.Next() {
 		var tc TypeCount
 		if rows.Scan(&tc.FindingType, &tc.Severity, &tc.Count) == nil {

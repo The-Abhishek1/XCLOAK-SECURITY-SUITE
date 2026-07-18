@@ -9,7 +9,7 @@ import (
 
 func ReceiveServices(c *gin.Context) {
 
-	var servicesData []models.Service
+	servicesData := []models.Service{}
 
 	if err := c.ShouldBindJSON(&servicesData); err != nil {
 

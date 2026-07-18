@@ -39,7 +39,7 @@ func GetCanaryTokens(tenantID int) ([]models.CanaryToken, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.CanaryToken
+	out := []models.CanaryToken{}
 	for rows.Next() {
 		var t models.CanaryToken
 		rows.Scan(&t.ID, &t.TenantID, &t.TokenType, &t.Name, &t.TokenValue,
@@ -118,7 +118,7 @@ func GetCanaryTrips(tenantID, tokenID, limit int) ([]models.CanaryTrip, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.CanaryTrip
+	out := []models.CanaryTrip{}
 	for rows.Next() {
 		var t models.CanaryTrip
 		var extraStr string
@@ -141,7 +141,7 @@ func GetHoneyports(tenantID int) ([]models.Honeyport, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.Honeyport
+	out := []models.Honeyport{}
 	for rows.Next() {
 		var h models.Honeyport
 		rows.Scan(&h.ID, &h.TenantID, &h.AgentID, &h.Port, &h.Protocol,

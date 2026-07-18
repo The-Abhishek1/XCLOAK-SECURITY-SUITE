@@ -90,7 +90,7 @@ func GetPendingTasks(agentID string) ([]models.AgentTask, error) {
 	}
 	defer rows.Close()
 
-	var tasks []models.AgentTask
+	tasks := []models.AgentTask{}
 	for rows.Next() {
 		var task models.AgentTask
 		var payloadStr string

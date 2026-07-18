@@ -35,7 +35,7 @@ func GetInsiderThreatAnalytics(c *gin.Context) {
 		RiskLevel  string `json:"risk_level"`
 		AlertFired bool   `json:"alert_fired"`
 	}
-	var topUsers []RiskUser
+	topUsers := []RiskUser{}
 	if rows, _ := database.DB.Query(`SELECT username,score,risk_level,alert_fired FROM insider_threat_scores WHERE tenant_id=$1 AND score_date=CURRENT_DATE ORDER BY score DESC LIMIT 10`, tenantID); rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -53,7 +53,7 @@ func GetInsiderThreatAnalytics(c *gin.Context) {
 		AvgScore float64 `json:"avg_score"`
 		Count    int     `json:"count"`
 	}
-	var trend []TrendDay
+	trend := []TrendDay{}
 	if rows, _ := database.DB.Query(`SELECT TO_CHAR(score_date,'YYYY-MM-DD'),ROUND(AVG(score)::numeric,1),COUNT(*) FROM insider_threat_scores WHERE tenant_id=$1 AND score_date>CURRENT_DATE-14 GROUP BY score_date ORDER BY score_date`, tenantID); rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -70,7 +70,7 @@ func GetInsiderThreatAnalytics(c *gin.Context) {
 		EventType string `json:"event_type"`
 		Count     int    `json:"count"`
 	}
-	var topViolations []ViolCat
+	topViolations := []ViolCat{}
 	if rows, _ := database.DB.Query(`SELECT event_type,COUNT(*) FROM ueba_events WHERE tenant_id=$1 AND detected_at>NOW()-INTERVAL '7 days' GROUP BY event_type ORDER BY COUNT(*) DESC LIMIT 8`, tenantID); rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -105,7 +105,7 @@ func GetInsiderThreatUserDetail(c *gin.Context) {
 		ScoreDate    string         `json:"score_date"`
 	}
 	var sd ScoreDetail
-	var contribRaw []byte
+	contribRaw := []byte{}
 	var scoreDate time.Time
 	if err := database.DB.QueryRow(`SELECT username,score,risk_level,contributors,alert_fired,score_date FROM insider_threat_scores WHERE tenant_id=$1 AND username=$2 ORDER BY score_date DESC LIMIT 1`, tenantID, username).Scan(&sd.Username, &sd.Score, &sd.RiskLevel, &contribRaw, &sd.AlertFired, &scoreDate); err != nil {
 		c.JSON(404, gin.H{"error": "user not found"})
@@ -118,7 +118,7 @@ func GetInsiderThreatUserDetail(c *gin.Context) {
 
 	profiles, _, _ := repositories.GetUserRiskProfiles(tenantID, 500, 0)
 	var uebaScore int
-	var flags []string
+	flags := []string{}
 	for _, p := range profiles {
 		if p.Username == username {
 			uebaScore = p.RiskScore
@@ -134,7 +134,7 @@ func GetInsiderThreatUserDetail(c *gin.Context) {
 		Category string `json:"category"`
 		Count    int    `json:"count"`
 	}
-	var catCounts []CatCount
+	catCounts := []CatCount{}
 	if rows, _ := database.DB.Query(`SELECT event_type,COUNT(*) FROM ueba_events WHERE tenant_id=$1 AND username=$2 AND detected_at>NOW()-INTERVAL '30 days' GROUP BY event_type ORDER BY COUNT(*) DESC`, tenantID, username); rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -147,7 +147,7 @@ func GetInsiderThreatUserDetail(c *gin.Context) {
 		catCounts = []CatCount{}
 	}
 
-	var caseTitles []string
+	caseTitles := []string{}
 	if rows, _ := database.DB.Query(`SELECT title FROM cases WHERE tenant_id=$1 AND (title ILIKE $2 OR description ILIKE $3) LIMIT 5`, tenantID, "%"+username+"%", "%"+username+"%"); rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -214,7 +214,7 @@ func GetInsiderPolicyViolations(c *gin.Context) {
 		DetectedAt  time.Time `json:"detected_at"`
 		Policy      string    `json:"policy"`
 	}
-	var result []ViolRow
+	result := []ViolRow{}
 	if rows, err := database.DB.Query(q, args...); err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -247,7 +247,7 @@ func GetInsiderPolicies(c *gin.Context) {
 		Enabled     bool      `json:"enabled"`
 		CreatedAt   time.Time `json:"created_at"`
 	}
-	var policies []Policy
+	policies := []Policy{}
 	if rows, err := database.DB.Query(`SELECT id,name,event_type,threshold,severity,enabled,created_at FROM insider_threat_policies WHERE tenant_id=$1 ORDER BY created_at DESC`, tenantID); err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -308,7 +308,7 @@ func GetInsiderWatchlist(c *gin.Context) {
 		AddedBy   string    `json:"added_by"`
 		Score     int       `json:"score"`
 	}
-	var entries []WatchEntry
+	entries := []WatchEntry{}
 	if rows, err := database.DB.Query(`SELECT w.username,w.category,w.added_at,w.added_by,COALESCE(s.score,0) FROM ueba_watchlist w LEFT JOIN insider_threat_scores s ON s.username=w.username AND s.tenant_id=w.tenant_id AND s.score_date=CURRENT_DATE WHERE w.tenant_id=$1 ORDER BY COALESCE(s.score,0) DESC`, tenantID); err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -359,11 +359,11 @@ func GetInsiderThreatAIAnalysis(c *gin.Context) {
 
 	var score int
 	var riskLevel string
-	var contribRaw []byte
+	contribRaw := []byte{}
 	database.DB.QueryRow(`SELECT score,risk_level,contributors FROM insider_threat_scores WHERE tenant_id=$1 AND username=$2 ORDER BY score_date DESC LIMIT 1`, tenantID, username).Scan(&score, &riskLevel, &contribRaw)
 
 	events, _, _ := repositories.GetUEBAEvents(tenantID, username, 15, 0)
-	var recentDesc []string
+	recentDesc := []string{}
 	for _, e := range events {
 		recentDesc = append(recentDesc, fmt.Sprintf("[%s/%s] %s", e.EventType, e.Severity, e.Description))
 	}

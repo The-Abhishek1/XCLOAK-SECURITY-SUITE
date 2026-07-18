@@ -106,7 +106,7 @@ func RunDGASweepForTenant(tenantID int) {
 		agentID int
 		domain  string
 	}
-	var hits []domainHit
+	hits := []domainHit{}
 
 	// SNI field (populated after migration 000064)
 	sniRows, err := database.DB.Query(`
@@ -180,7 +180,7 @@ func scoreDomain(agentID, tenantID int, domain, source string) int {
 	tld  := "." + parts[len(parts)-1]
 
 	totalScore := 0
-	var indicators []string
+	indicators := []string{}
 
 	// 1. Label-level DGA scoring
 	dgaS := DGAScore(sld)

@@ -97,7 +97,7 @@ func queryIncidents(query string, args ...interface{}) ([]models.Incident, error
 
 	defer rows.Close()
 
-	var incidents []models.Incident
+	incidents := []models.Incident{}
 
 	for rows.Next() {
 

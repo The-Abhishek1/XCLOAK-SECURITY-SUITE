@@ -103,7 +103,7 @@ func monitorCollection(collID, tenantID, agentID int, artifactTypes []string) {
 // Called by the task-completion handler when payload has a collection_id.
 func StoreForensicArtifact(collID, tenantID, agentID int, artifactType string, data json.RawMessage) error {
 	// Count items in the JSON array
-	var items []json.RawMessage
+	items := []json.RawMessage{}
 	json.Unmarshal(data, &items)
 
 	_, err := database.DB.Exec(`
@@ -133,7 +133,7 @@ func ListForensicCollections(tenantID, limit int) ([]models.ForensicCollection, 
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.ForensicCollection
+	out := []models.ForensicCollection{}
 	for rows.Next() {
 		var c models.ForensicCollection
 		rows.Scan(&c.ID, &c.TenantID, &c.IncidentID, &c.AgentID, &c.AgentHostname,
@@ -153,7 +153,7 @@ func GetCollectionArtifacts(collID, tenantID int) ([]models.ForensicArtifact, er
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.ForensicArtifact
+	out := []models.ForensicArtifact{}
 	for rows.Next() {
 		var a models.ForensicArtifact
 		rows.Scan(&a.ID, &a.CollectionID, &a.TenantID, &a.AgentID,
@@ -179,7 +179,7 @@ func BuildForensicTimeline(incidentID, tenantID int) ([]models.ForensicTimelineE
 	windowStart := start.Add(-1 * time.Hour)
 	windowEnd := end.Add(1 * time.Hour)
 
-	var events []models.ForensicTimelineEvent
+	events := []models.ForensicTimelineEvent{}
 
 	// Alerts
 	rows, _ := database.DB.Query(`

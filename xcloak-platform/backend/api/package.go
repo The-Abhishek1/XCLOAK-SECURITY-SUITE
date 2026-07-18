@@ -9,7 +9,7 @@ import (
 
 func ReceivePackages(c *gin.Context) {
 
-	var packages []models.Package
+	packages := []models.Package{}
 
 	if err := c.ShouldBindJSON(&packages); err != nil {
 

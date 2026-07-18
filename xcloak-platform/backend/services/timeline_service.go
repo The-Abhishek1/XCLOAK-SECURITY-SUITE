@@ -170,7 +170,7 @@ func scanRows(rows interface {
 	Close() error
 }) ([]models.TimelineEvent, error) {
 	defer rows.Close()
-	var out []models.TimelineEvent
+	out := []models.TimelineEvent{}
 	for rows.Next() {
 		var e models.TimelineEvent
 		var detailsJSON string

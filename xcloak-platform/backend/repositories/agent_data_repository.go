@@ -30,7 +30,7 @@ func GetProcessesByAgent(agentID string) ([]models.Process, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Process
+	out := []models.Process{}
 	for rows.Next() {
 		var p models.Process
 		if err := rows.Scan(
@@ -61,7 +61,7 @@ func GetConnectionsByAgent(agentID string) ([]models.Connection, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Connection
+	out := []models.Connection{}
 	for rows.Next() {
 		var c models.Connection
 		if err := rows.Scan(
@@ -94,7 +94,7 @@ func GetConnectionsByTenant(tenantID int) ([]models.Connection, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Connection
+	out := []models.Connection{}
 	for rows.Next() {
 		var c models.Connection
 		if err := rows.Scan(
@@ -123,7 +123,7 @@ func GetServicesByAgent(agentID string) ([]models.Service, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Service
+	out := []models.Service{}
 	for rows.Next() {
 		var s models.Service
 		if err := rows.Scan(&s.ID, &s.AgentID, &s.ServiceName, &s.ServiceState, &s.CollectedAt); err == nil {
@@ -148,7 +148,7 @@ func GetUsersByAgent(agentID string) ([]models.Users, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Users
+	out := []models.Users{}
 	for rows.Next() {
 		var u models.Users
 		if err := rows.Scan(&u.ID, &u.AgentID, &u.Username, &u.UID, &u.Shell, &u.CollectedAt); err == nil {
@@ -174,7 +174,7 @@ func GetAgentPackagesList(agentID string) ([]models.Package, error) {
 	}
 	defer rows.Close()
 
-	var out []models.Package
+	out := []models.Package{}
 	for rows.Next() {
 		var p models.Package
 		if err := rows.Scan(&p.ID, &p.AgentID, &p.PackageName, &p.Version, &p.CollectedAt); err == nil {

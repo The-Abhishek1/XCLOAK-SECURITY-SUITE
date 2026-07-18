@@ -121,7 +121,7 @@ func GetDetectionTrends(c *gin.Context) {
 		Hour string `json:"hour"`
 		Hits int    `json:"hits"`
 	}
-	var sigma []HourBucket
+	sigma := []HourBucket{}
 	for rows.Next() {
 		var b HourBucket
 		var t time.Time
@@ -140,7 +140,7 @@ func GetDetectionTrends(c *gin.Context) {
 		FROM yara_matches
 		WHERE tenant_id=$1 AND matched_at>=NOW()-($2 * INTERVAL '1 hour')
 		GROUP BY hour ORDER BY hour`, tid, hours)
-	var yara []HourBucket
+	yara := []HourBucket{}
 	if yRows != nil {
 		defer yRows.Close()
 		for yRows.Next() {
@@ -162,7 +162,7 @@ func GetDetectionTrends(c *gin.Context) {
 		FROM alerts
 		WHERE tenant_id=$1 AND created_at>=NOW()-($2 * INTERVAL '1 hour')
 		GROUP BY hour ORDER BY hour`, tid, hours)
-	var alerts []HourBucket
+	alerts := []HourBucket{}
 	if aRows != nil {
 		defer aRows.Close()
 		for aRows.Next() {
@@ -205,7 +205,7 @@ func GetDetectionCoverage(c *gin.Context) {
 		RuleCount  int    `json:"rule_count"`
 		ActiveCount int   `json:"active_count"`
 	}
-	var techniques []TechCoverage
+	techniques := []TechCoverage{}
 	tacticMap := map[string]int{}
 	for rows.Next() {
 		var t TechCoverage
@@ -222,7 +222,7 @@ func GetDetectionCoverage(c *gin.Context) {
 		Tactic    string `json:"tactic"`
 		RuleCount int    `json:"rule_count"`
 	}
-	var tactics []TacticSummary
+	tactics := []TacticSummary{}
 	for tactic, count := range tacticMap {
 		tactics = append(tactics, TacticSummary{Tactic: tactic, RuleCount: count})
 	}
@@ -237,7 +237,7 @@ func GetDetectionCoverage(c *gin.Context) {
 		Technique string `json:"technique"`
 		Hits      int    `json:"hits"`
 	}
-	var topHits []TechHit
+	topHits := []TechHit{}
 	if hitRows != nil {
 		defer hitRows.Close()
 		for hitRows.Next() {
@@ -290,7 +290,7 @@ func GetDetectionAnalytics(c *gin.Context) {
 		HitCount      int        `json:"hit_count"`
 		LastTriggered *time.Time `json:"last_triggered"`
 	}
-	var rules []RuleAnalytic
+	rules := []RuleAnalytic{}
 	for rows.Next() {
 		var r RuleAnalytic
 		if err := rows.Scan(&r.ID, &r.Title, &r.Severity, &r.MitreTactic, &r.MitreTech,
@@ -314,7 +314,7 @@ func GetDetectionAnalytics(c *gin.Context) {
 		TriggeredRules int   `json:"triggered_rules"`
 		TotalHits     int    `json:"total_hits"`
 	}
-	var sevDist []SevDist
+	sevDist := []SevDist{}
 	if sevRows != nil {
 		defer sevRows.Close()
 		for sevRows.Next() {
@@ -504,7 +504,7 @@ func PostDetectionSimulate(c *gin.Context) {
 		Hour  string `json:"hour"`
 		Count int    `json:"count"`
 	}
-	var hourly []HourCount
+	hourly := []HourCount{}
 	if hRows != nil {
 		defer hRows.Close()
 		for hRows.Next() {

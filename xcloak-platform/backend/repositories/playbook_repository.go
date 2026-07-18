@@ -58,7 +58,7 @@ func GetPlaybooks(tenantID int) (
 
 	defer rows.Close()
 
-	var playbooks []models.Playbook
+	playbooks := []models.Playbook{}
 
 	for rows.Next() {
 
@@ -136,7 +136,7 @@ func GetEnabledPlaybooksForAgent(agentID int) (
 
 	defer rows.Close()
 
-	var playbooks []models.Playbook
+	playbooks := []models.Playbook{}
 
 	for rows.Next() {
 

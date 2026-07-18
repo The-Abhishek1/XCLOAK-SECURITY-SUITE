@@ -80,7 +80,7 @@ func GetAlertsPaginated(tenantID int, page, perPage int, severity, agentID strin
 	}
 	defer rows.Close()
 
-	var alerts []models.Alert
+	alerts := []models.Alert{}
 	for rows.Next() {
 		var a models.Alert
 		if err := rows.Scan(&a.ID, &a.AgentID, &a.Severity, &a.RuleName, &a.Fingerprint,
@@ -151,7 +151,7 @@ func GetIncidentsPaginated(tenantID int, page, perPage int, status string) (*Pag
 	}
 	defer rows.Close()
 
-	var incidents []models.Incident
+	incidents := []models.Incident{}
 	for rows.Next() {
 		var i models.Incident
 		if err := rows.Scan(&i.ID, &i.AgentID, &i.Hostname, &i.Title, &i.Severity,
@@ -215,7 +215,7 @@ func GetAuditLogsPaginated(page, perPage int, action string) (*PaginatedAuditLog
 	}
 	defer rows.Close()
 
-	var logs []models.AuditLog
+	logs := []models.AuditLog{}
 	for rows.Next() {
 		var l models.AuditLog
 		if err := rows.Scan(&l.ID, &l.Action, &l.Details, &l.Username, &l.CreatedAt); err == nil {

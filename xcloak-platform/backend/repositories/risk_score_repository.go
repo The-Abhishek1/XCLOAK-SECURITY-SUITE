@@ -51,7 +51,7 @@ func GetRiskScoresByTenant(tenantID int) ([]models.AssetRiskScore, error) {
 	}
 	defer rows.Close()
 
-	var out []models.AssetRiskScore
+	out := []models.AssetRiskScore{}
 	for rows.Next() {
 		var s models.AssetRiskScore
 		if err := rows.Scan(&s.ID, &s.AgentID, &s.RiskScore, &s.RiskLevel, &s.UpdatedAt); err == nil {

@@ -158,7 +158,7 @@ func GetAQQueue(c *gin.Context) {
 		CreatedAt       string  `json:"created_at"`
 		UpdatedAt       string  `json:"updated_at"`
 	}
-	var list []Req
+	list := []Req{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -327,7 +327,7 @@ func GetAQComments(c *gin.Context) {
 		CommentType string `json:"comment_type"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var list []Comment
+	list := []Comment{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -374,7 +374,7 @@ func GetAQTimeline(c *gin.Context) {
 		Details   string `json:"details"`
 		CreatedAt string `json:"created_at"`
 	}
-	var list []Entry
+	list := []Entry{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -431,7 +431,7 @@ func GetAQPolicies(c *gin.Context) {
 		Enabled         bool   `json:"enabled"`
 		CreatedAt       string `json:"created_at"`
 	}
-	var list []Policy
+	list := []Policy{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -578,7 +578,7 @@ func GetAQAudit(c *gin.Context) {
 		IPAddress  string `json:"ip_address"`
 		CreatedAt  string `json:"created_at"`
 	}
-	var list []Entry
+	list := []Entry{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

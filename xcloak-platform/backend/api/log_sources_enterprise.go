@@ -206,7 +206,7 @@ func GetLogSourceRecentLogs(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var logs []Entry
+	logs := []Entry{}
 	for rows.Next() {
 		var e Entry
 		if rows.Scan(&e.ID, &e.LogSource, &e.LogMessage, &e.CollectedAt) == nil {
@@ -273,7 +273,7 @@ func GetLogSourceMonitoring(c *gin.Context) {
 		LastEvent  *time.Time `json:"last_event"`
 		EventCount int64      `json:"event_count"`
 	}
-	var list []Summary
+	list := []Summary{}
 	for _, src := range sources {
 		s := deriveStatus(&src)
 		switch s {

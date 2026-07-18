@@ -224,7 +224,7 @@ func GetAlertsPaginated(c *gin.Context) {
 		Note           string `json:"note"`
 	}
 
-	var alerts []AlertRow
+	alerts := []AlertRow{}
 	for rows.Next() {
 		var a AlertRow
 		if err := rows.Scan(

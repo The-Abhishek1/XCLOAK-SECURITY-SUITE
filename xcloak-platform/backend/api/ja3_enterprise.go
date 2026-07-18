@@ -64,7 +64,7 @@ func GetJA3Dashboard(c *gin.Context) {
 		ORDER BY hit_count DESC, jf.severity DESC
 		LIMIT 8
 	`, tid)
-	var topFP []fpStat
+	topFP := []fpStat{}
 	if err == nil {
 		defer fpRows.Close()
 		for fpRows.Next() {
@@ -89,7 +89,7 @@ func GetJA3Dashboard(c *gin.Context) {
 		  AND created_at > NOW() - INTERVAL '14 days'
 		GROUP BY 1 ORDER BY 1
 	`, tid)
-	var trend []trendPt
+	trend := []trendPt{}
 	if trendRows != nil {
 		defer trendRows.Close()
 		for trendRows.Next() {
@@ -113,7 +113,7 @@ func GetJA3Dashboard(c *gin.Context) {
 		WHERE enabled = TRUE AND (tenant_id = $1 OR tenant_id IS NULL)
 		GROUP BY severity ORDER BY COUNT(*) DESC
 	`, tid)
-	var sevBreakdown []sevPt
+	sevBreakdown := []sevPt{}
 	if sevRows != nil {
 		defer sevRows.Close()
 		for sevRows.Next() {
@@ -173,7 +173,7 @@ func GetJA3Analytics(c *gin.Context) {
 		ORDER BY 5 DESC
 		LIMIT 50
 	`, tid)
-	var stats []fpStat
+	stats := []fpStat{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -201,7 +201,7 @@ func GetJA3Analytics(c *gin.Context) {
 		  AND created_at > NOW() - INTERVAL '30 days'
 		GROUP BY 1 ORDER BY 1
 	`, tid)
-	var daily []dayPt
+	daily := []dayPt{}
 	if tRows != nil {
 		defer tRows.Close()
 		for tRows.Next() {
@@ -230,7 +230,7 @@ func GetJA3Analytics(c *gin.Context) {
 		GROUP BY a.id, a.hostname
 		ORDER BY hits DESC LIMIT 10
 	`, tid)
-	var topAgents []agStat
+	topAgents := []agStat{}
 	if agRows != nil {
 		defer agRows.Close()
 		for agRows.Next() {
@@ -268,7 +268,7 @@ func GetJA3TLSStats(c *gin.Context) {
 		  AND el.parsed_fields->>'tls_version' IS NOT NULL
 		GROUP BY 1 ORDER BY 2 DESC LIMIT 10
 	`, tid)
-	var tlsVersions []verPt
+	tlsVersions := []verPt{}
 	if verRows != nil {
 		defer verRows.Close()
 		for verRows.Next() {
@@ -300,7 +300,7 @@ func GetJA3TLSStats(c *gin.Context) {
 		  AND el.parsed_fields->>'cipher_suite' IS NOT NULL
 		GROUP BY 1 ORDER BY 2 DESC LIMIT 15
 	`, tid)
-	var ciphers []cipherPt
+	ciphers := []cipherPt{}
 	if cipherRows != nil {
 		defer cipherRows.Close()
 		for cipherRows.Next() {
@@ -373,7 +373,7 @@ func GetJA3Behavioral(c *gin.Context) {
 		HAVING COUNT(al.id) >= 3
 		ORDER BY 3 DESC LIMIT 10
 	`, tid)
-	var beaconing []beaconEntry
+	beaconing := []beaconEntry{}
 	if beaconRows != nil {
 		defer beaconRows.Close()
 		for beaconRows.Next() {
@@ -404,7 +404,7 @@ func GetJA3Behavioral(c *gin.Context) {
 		HAVING COUNT(a.id) < 3
 		ORDER BY 4 ASC, jf.severity DESC LIMIT 10
 	`, tid)
-	var rares []rareFP
+	rares := []rareFP{}
 	if rareRows != nil {
 		defer rareRows.Close()
 		for rareRows.Next() {
@@ -432,7 +432,7 @@ func GetJA3Behavioral(c *gin.Context) {
 		  AND created_at > NOW() - INTERVAL '24 hours'
 		ORDER BY created_at DESC LIMIT 10
 	`, tid)
-	var newFPs []newFP
+	newFPs := []newFP{}
 	if newRows != nil {
 		defer newRows.Close()
 		for newRows.Next() {
@@ -469,8 +469,8 @@ func GetJA3Relationships(c *gin.Context) {
 		Target string `json:"target"`
 		Weight int    `json:"weight"`
 	}
-	var nodes []node
-	var edges []edge
+	nodes := []node{}
+	edges := []edge{}
 
 	fpRows, err := database.DB.Query(`
 		SELECT hash, threat_name, severity FROM ja3_fingerprints
@@ -665,7 +665,7 @@ func GetJA3ThreatIntel(c *gin.Context) {
 		  AND al.created_at > NOW() - INTERVAL '7 days'
 		ORDER BY al.created_at DESC LIMIT 20
 	`, tid)
-	var tiHits []tiHit
+	tiHits := []tiHit{}
 	if hitRows != nil {
 		defer hitRows.Close()
 		for hitRows.Next() {
@@ -712,7 +712,7 @@ func GetJA3Timeline(c *gin.Context) {
 		ORDER BY MAX(a.created_at) DESC NULLS LAST
 		LIMIT 20
 	`, tid)
-	var entries []tlEntry
+	entries := []tlEntry{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -740,7 +740,7 @@ func GetJA3Timeline(c *gin.Context) {
 		  AND created_at > NOW() - INTERVAL '30 days'
 		GROUP BY 1 ORDER BY 1
 	`, tid)
-	var daily []dayPt
+	daily := []dayPt{}
 	if dailyRows != nil {
 		defer dailyRows.Close()
 		for dailyRows.Next() {
@@ -782,7 +782,7 @@ func GetJA3Watchlist(c *gin.Context) {
 		WatchType string `json:"watch_type"`
 		CreatedAt string `json:"created_at"`
 	}
-	var items []wlItem
+	items := []wlItem{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -918,7 +918,7 @@ func PostJA3Export(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 
 	var sqlStr string
-	var args []any
+	args := []any{}
 	if len(body.IDs) > 0 {
 		ph := make([]string, len(body.IDs))
 		args = []any{tid}
@@ -952,7 +952,7 @@ func PostJA3Export(c *gin.Context) {
 		Enabled     bool   `json:"enabled"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var fps []fp
+	fps := []fp{}
 	for rows.Next() {
 		var f fp
 		if rows.Scan(&f.ID, &f.Hash, &f.ThreatName, &f.Severity, &f.Source, &f.Description, &f.Enabled, &f.CreatedAt) == nil {
@@ -1078,7 +1078,7 @@ func GetJA3FingerprintDetail(c *gin.Context) {
 		WHERE al.tenant_id = $1 AND al.log_message ILIKE '%' || $2 || '%'
 		ORDER BY al.created_at DESC LIMIT 20
 	`, tid, h)
-	var alerts []alEntry
+	alerts := []alEntry{}
 	if alRows != nil {
 		defer alRows.Close()
 		for alRows.Next() {
@@ -1106,7 +1106,7 @@ func GetJA3FingerprintDetail(c *gin.Context) {
 		GROUP BY ec.remote_addr, ec.protocol, ag.hostname
 		ORDER BY cnt DESC LIMIT 10
 	`, tid)
-	var connections []connEntry
+	connections := []connEntry{}
 	if connRows != nil {
 		defer connRows.Close()
 		for connRows.Next() {

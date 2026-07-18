@@ -128,7 +128,7 @@ func GetPIProcesses(c *gin.Context) {
 		RiskScore      int    `json:"risk_score"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var procs []Process
+	procs := []Process{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -166,7 +166,7 @@ func GetPIProcessTree(c *gin.Context) {
 		RiskScore int    `json:"risk_score"`
 		Children  []int  `json:"children"`
 	}
-	var nodes []Node
+	nodes := []Node{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -215,7 +215,7 @@ func GetPIInjections(c *gin.Context) {
 		MITRETechnique string `json:"mitre_technique"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var injections []Injection
+	injections := []Injection{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -257,7 +257,7 @@ func GetPIMemory(c *gin.Context) {
 		IsBacked        bool    `json:"is_backed"`
 		CreatedAt       string  `json:"created_at"`
 	}
-	var regions []MemRegion
+	regions := []MemRegion{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -322,7 +322,7 @@ func GetPIAPICalls(c *gin.Context) {
 		IsSuspicious bool  `json:"is_suspicious"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var calls []APICall
+	calls := []APICall{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -398,7 +398,7 @@ func GetPITimeline(c *gin.Context) {
 		Status         string `json:"status"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var events []TLEvent
+	events := []TLEvent{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -452,7 +452,7 @@ func GetPIAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendPoint
+	trend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int

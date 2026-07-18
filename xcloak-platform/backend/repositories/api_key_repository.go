@@ -53,7 +53,7 @@ func GetAPIKeysByTenant(tenantID int) ([]models.APIKey, error) {
 	}
 	defer rows.Close()
 
-	var keys []models.APIKey
+	keys := []models.APIKey{}
 	for rows.Next() {
 		var k models.APIKey
 		if err := rows.Scan(&k.ID, &k.TenantID, &k.Label, &k.KeyPrefix, &k.Role, &k.CreatedBy,

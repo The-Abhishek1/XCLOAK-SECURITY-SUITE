@@ -67,7 +67,7 @@ func GetAgentRiskBreakdown(c *gin.Context) {
 	}
 
 	// Build factor breakdown by querying real data
-	var factors []RiskFactor
+	factors := []RiskFactor{}
 
 	// Critical alerts
 	critAlerts := countQuery(`SELECT COUNT(*) FROM alerts a JOIN agents ag ON ag.id=a.agent_id WHERE a.agent_id=$1 AND ag.tenant_id=$2 AND a.severity='critical'`, agentID, tenantID)

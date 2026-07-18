@@ -98,7 +98,7 @@ func GetThreatFeeds(tenantID int) (
 
 	defer rows.Close()
 
-	var feeds []models.ThreatFeed
+	feeds := []models.ThreatFeed{}
 
 	for rows.Next() {
 

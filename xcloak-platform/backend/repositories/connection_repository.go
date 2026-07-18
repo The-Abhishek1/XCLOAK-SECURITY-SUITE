@@ -28,7 +28,7 @@ func GetEndpointConnectionsByTenant(tenantID int, limit int) ([]models.ConnectEv
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.ConnectEvent
+	out := []models.ConnectEvent{}
 	for rows.Next() {
 		var ev models.ConnectEvent
 		if err := rows.Scan(

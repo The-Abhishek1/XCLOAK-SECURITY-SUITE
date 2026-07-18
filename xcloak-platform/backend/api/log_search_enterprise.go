@@ -44,7 +44,7 @@ func GetLogFields(c *gin.Context) {
 		Count       int64
 		UniqueCount int64
 	}
-	var rawFields []rawField
+	rawFields := []rawField{}
 	rows, err := database.DB.Query(`
 		SELECT kv.key,
 		       COUNT(*) AS cnt,
@@ -343,7 +343,7 @@ func GetScheduledSearches(c *gin.Context) {
 		return
 	}
 	defer rows.Close()
-	var result []ScheduledSearch
+	result := []ScheduledSearch{}
 	for rows.Next() {
 		var s ScheduledSearch
 		if rows.Scan(&s.ID, &s.Name, &s.Query, &s.TimeRange, &s.Schedule, &s.Action, &s.Enabled, &s.CreatedAt, &s.LastRunAt) == nil {

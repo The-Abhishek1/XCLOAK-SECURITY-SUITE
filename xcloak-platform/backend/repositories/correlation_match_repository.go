@@ -38,7 +38,7 @@ func GetCorrelationMatches(tenantID, ruleID, limit int) ([]models.CorrelationMat
 	}
 	defer rows.Close()
 
-	var out []models.CorrelationMatch
+	out := []models.CorrelationMatch{}
 	for rows.Next() {
 		var m models.CorrelationMatch
 		if err := rows.Scan(&m.ID, &m.RuleID, &m.RuleName, &m.AgentID, &m.Hostname,

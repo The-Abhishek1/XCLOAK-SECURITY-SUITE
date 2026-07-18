@@ -140,7 +140,7 @@ func GetNBAOverview(c *gin.Context) {
 		UniqueIPs  int    `json:"unique_ips"`
 		AnomalyCount int  `json:"anomaly_count"`
 	}
-	var topTalkers []TopTalker
+	topTalkers := []TopTalker{}
 	rows, _ := database.DB.Query(`
 		SELECT COALESCE(a.hostname,'Agent #'||nce.agent_id::text), nce.agent_id,
 		       COUNT(*) AS conn_count, COUNT(DISTINCT nce.remote_address) AS unique_ips,
@@ -237,7 +237,7 @@ func GetNBAFlows(c *gin.Context) {
 		}
 	}
 
-	var flows []Flow
+	flows := []Flow{}
 	for rows.Next() {
 		var f Flow
 		var isExt bool
@@ -275,7 +275,7 @@ func GetNBATrafficAnalysis(c *gin.Context) {
 		UniqueExt int    `json:"unique_external_ips"`
 	}
 
-	var protocols []ProtocolCount
+	protocols := []ProtocolCount{}
 	pRows, _ := database.DB.Query(`
 		SELECT COALESCE(protocol,'unknown'), COUNT(*) AS cnt
 		FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2
@@ -287,7 +287,7 @@ func GetNBATrafficAnalysis(c *gin.Context) {
 		}
 	}
 
-	var topTalkers []TalkerEntry
+	topTalkers := []TalkerEntry{}
 	tRows, _ := database.DB.Query(`
 		SELECT COALESCE(a.hostname,'Agent #'||nce.agent_id::text),
 		       COUNT(*) AS conn_count,
@@ -319,7 +319,7 @@ func GetNBATrafficAnalysis(c *gin.Context) {
 		Hour  string `json:"hour"`
 		Count int    `json:"count"`
 	}
-	var trend []HourBucket
+	trend := []HourBucket{}
 	hrRows, _ := database.DB.Query(`
 		SELECT to_char(date_trunc('hour', created_at), 'HH24:MI') AS hr, COUNT(*)
 		FROM network_connect_events
@@ -337,7 +337,7 @@ func GetNBATrafficAnalysis(c *gin.Context) {
 		RemoteAddr string `json:"remote_address"`
 		Count      int    `json:"count"`
 	}
-	var topDests []DestEntry
+	topDests := []DestEntry{}
 	dRows, _ := database.DB.Query(`
 		SELECT remote_address, COUNT(*) AS cnt
 		FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2 AND remote_address!=''
@@ -387,7 +387,7 @@ func GetNBADNSAnalytics(c *gin.Context) {
 		Desc       string `json:"description"`
 		DetectedAt string `json:"detected_at"`
 	}
-	var dnsEvents []DNSEntry
+	dnsEvents := []DNSEntry{}
 	dr, _ := database.DB.Query(`
 		SELECT na.agent_id, COALESCE(a.hostname,''), na.anomaly_type,
 		       na.deviation_score, na.description,
@@ -412,7 +412,7 @@ func GetNBADNSAnalytics(c *gin.Context) {
 		Dest  string `json:"dest"`
 		Count int    `json:"count"`
 	}
-	var topDNSDests []DNSDest
+	topDNSDests := []DNSDest{}
 	tdRows, _ := database.DB.Query(`
 		SELECT remote_address, COUNT(*) AS cnt
 		FROM network_connect_events
@@ -461,7 +461,7 @@ func GetNBATLSAnalytics(c *gin.Context) {
 		Description string `json:"description"`
 		TenantWide  bool   `json:"tenant_wide"`
 	}
-	var ja3Entries []JA3Entry
+	ja3Entries := []JA3Entry{}
 	jr, _ := database.DB.Query(`
 		SELECT id, fingerprint, label, severity, COALESCE(description,''), (tenant_id=0 OR tenant_id IS NULL)
 		FROM ja3_fingerprints WHERE tenant_id=$1 OR tenant_id=0 OR tenant_id IS NULL
@@ -481,7 +481,7 @@ func GetNBATLSAnalytics(c *gin.Context) {
 		Count int    `json:"count"`
 		Host  string `json:"hostname"`
 	}
-	var rareTLS []TLSConn
+	rareTLS := []TLSConn{}
 	rtr, _ := database.DB.Query(`
 		SELECT remote_address, COUNT(*), COALESCE(a.hostname,'')
 		FROM network_connect_events nce
@@ -541,7 +541,7 @@ func GetNBABeacons(c *gin.Context) {
 		defer rows.Close()
 	}
 
-	var beacons []Beacon
+	beacons := []Beacon{}
 	if rows != nil {
 		for rows.Next() {
 			var b Beacon
@@ -600,7 +600,7 @@ func GetNBALateralMovement(c *gin.Context) {
 		LastSeen  string `json:"last_seen"`
 	}
 
-	var events []LateralEvent
+	events := []LateralEvent{}
 	// Look for internal connections to lateral movement ports
 	portList := "'445','3389','22','5985','5986','135','139','47001','23','4444'"
 	q := fmt.Sprintf(`
@@ -647,7 +647,7 @@ func GetNBALateralMovement(c *gin.Context) {
 		Description string `json:"description"`
 		DetectedAt  string `json:"detected_at"`
 	}
-	var anomalies []LateralAnomaly
+	anomalies := []LateralAnomaly{}
 	ar, _ := database.DB.Query(`
 		SELECT na.id, na.agent_id, COALESCE(a.hostname,''),
 		       COALESCE(na.dst_ip,''), na.deviation_score, na.description,
@@ -696,7 +696,7 @@ func GetNBAThreatIntel(c *gin.Context) {
 		FirstSeen   string `json:"first_seen"`
 	}
 
-	var hits []TIHit
+	hits := []TIHit{}
 	// Join network connections with IOC table
 	rows, _ := database.DB.Query(`
 		SELECT nce.agent_id, COALESCE(a.hostname,'Agent #'||nce.agent_id::text),
@@ -734,7 +734,7 @@ func GetNBAThreatIntel(c *gin.Context) {
 		HitCount   int    `json:"hit_count"`
 		BlockedAt  string `json:"blocked_at"`
 	}
-	var blocks []IOCBlock
+	blocks := []IOCBlock{}
 	br, _ := database.DB.Query(`
 		SELECT ip_address, hit_count, to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM ioc_blocks WHERE tenant_id=$1 ORDER BY hit_count DESC LIMIT 20`, tid)
@@ -773,7 +773,7 @@ func PostNBAAIInsights(c *gin.Context) {
 		Count int     `json:"count"`
 		AvgScore float64 `json:"avg_score"`
 	}
-	var anomalies []AnomalySummary
+	anomalies := []AnomalySummary{}
 	rows, _ := database.DB.Query(`
 		SELECT anomaly_type, COUNT(*), AVG(deviation_score)
 		FROM network_anomalies WHERE tenant_id=$1 AND detected_at>NOW()-INTERVAL '24 hours'
@@ -936,7 +936,7 @@ func GetNBAMitreMapping(c *gin.Context) {
 		Count       int    `json:"count"`
 		MaxScore    int    `json:"max_score"`
 	}
-	var anomalyCounts []AnomalyCount
+	anomalyCounts := []AnomalyCount{}
 	rows, _ := database.DB.Query(`
 		SELECT anomaly_type, COUNT(*), MAX(deviation_score)
 		FROM network_anomalies WHERE tenant_id=$1 AND detected_at>=$2
@@ -976,7 +976,7 @@ func GetNBAMitreMapping(c *gin.Context) {
 		}
 	}
 
-	var entries []MITREEntry
+	entries := []MITREEntry{}
 	for _, e := range techMap {
 		entries = append(entries, *e)
 	}
@@ -1032,7 +1032,7 @@ func GetNBAProtocolBreakdown(c *gin.Context) {
 		FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2 AND remote_address LIKE '%:%'
 		GROUP BY port ORDER BY cnt DESC LIMIT 30`, tid, since)
 
-	var entries []ProtoEntry
+	entries := []ProtoEntry{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -1076,7 +1076,7 @@ func GetNBAHostTimeline(c *gin.Context) {
 		Timestamp  string `json:"timestamp"`
 	}
 
-	var events []TimelineEvent
+	events := []TimelineEvent{}
 
 	// Network connect events
 	hostCond := ""; args := []any{tid, since, limit}
@@ -1150,7 +1150,7 @@ func GetNBAAnalytics(c *gin.Context) {
 		CountryCode string `json:"country_code"`
 		Count       int    `json:"count"`
 	}
-	var geoDistribution []GeoEntry
+	geoDistribution := []GeoEntry{}
 	gr, _ := database.DB.Query(`
 		SELECT COALESCE(ec.country,'Unknown'), COALESCE(ec.country_code,'XX'), COUNT(*) AS cnt
 		FROM endpoint_connections ec
@@ -1169,7 +1169,7 @@ func GetNBAAnalytics(c *gin.Context) {
 		Count int    `json:"count"`
 		Avg   int    `json:"avg_score"`
 	}
-	var anomalyTrend []AnomalyTrend
+	anomalyTrend := []AnomalyTrend{}
 	atr, _ := database.DB.Query(`
 		SELECT to_char(date_trunc('hour', detected_at), 'HH24:MI'),
 		       COUNT(*), COALESCE(AVG(deviation_score)::int,0)
@@ -1189,7 +1189,7 @@ func GetNBAAnalytics(c *gin.Context) {
 		AnomalyCount int    `json:"anomaly_count"`
 		MaxScore     int    `json:"max_score"`
 	}
-	var mostSuspicious []HostRisk
+	mostSuspicious := []HostRisk{}
 	hsr, _ := database.DB.Query(`
 		SELECT COALESCE(a.hostname,'Agent #'||na.agent_id::text), na.agent_id,
 		       COUNT(*), MAX(na.deviation_score)
@@ -1211,7 +1211,7 @@ func GetNBAAnalytics(c *gin.Context) {
 		Count    int    `json:"count"`
 		MaxScore int    `json:"max_score"`
 	}
-	var beaconFrequency []BeaconFreq
+	beaconFrequency := []BeaconFreq{}
 	bfr, _ := database.DB.Query(`
 		SELECT COALESCE(a.hostname,'Agent #'||na.agent_id::text),
 		       COUNT(*), MAX(na.deviation_score)

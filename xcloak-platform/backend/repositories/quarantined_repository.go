@@ -56,7 +56,7 @@ func GetQuarantinedFiles(tenantID int) ([]models.QuarantinedFile, error) {
 
 	defer rows.Close()
 
-	var files []models.QuarantinedFile
+	files := []models.QuarantinedFile{}
 
 	for rows.Next() {
 

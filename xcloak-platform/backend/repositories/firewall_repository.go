@@ -385,7 +385,7 @@ func scanRules(rows interface {
 	Close() error
 }) ([]models.FirewallRule, error) {
 	defer rows.Close()
-	var rules []models.FirewallRule
+	rules := []models.FirewallRule{}
 	for rows.Next() {
 		var r models.FirewallRule
 		var tags pq.StringArray

@@ -11,7 +11,7 @@ func ReceiveYaraMatches(
 	c *gin.Context,
 ) {
 
-	var matches []models.YaraMatch
+	matches := []models.YaraMatch{}
 
 	if err := c.ShouldBindJSON(
 		&matches,

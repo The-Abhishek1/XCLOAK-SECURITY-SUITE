@@ -97,7 +97,7 @@ func GetClusterOverview(c *gin.Context) {
 		Day   string `json:"day"`
 		Count int    `json:"count"`
 	}
-	var trend []dayBucket
+	trend := []dayBucket{}
 	if trendRows != nil {
 		for trendRows.Next() {
 			var b dayBucket
@@ -206,7 +206,7 @@ func GetClusterList(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var out []clusterListRow
+	out := []clusterListRow{}
 	for rows.Next() {
 		var r clusterListRow
 		rows.Scan(&r.ID, &r.ClusterKey, &r.MitreTechnique, &r.RuleName,
@@ -284,7 +284,7 @@ func GetClusterDetail(c *gin.Context) {
 		MitreTactic    string    `json:"mitre_tactic"`
 		SourceIP       string    `json:"source_ip"`
 	}
-	var alerts []AlertMember
+	alerts := []AlertMember{}
 	if alertRows != nil {
 		for alertRows.Next() {
 			var a AlertMember
@@ -312,7 +312,7 @@ func GetClusterDetail(c *gin.Context) {
 		WHERE acm.cluster_id=$1 AND a.tenant_id=$2
 		GROUP BY ag.hostname, a.agent_id
 		ORDER BY 3 DESC`, id, tid)
-	var hosts []HostEntry
+	hosts := []HostEntry{}
 	if hostRows != nil {
 		for hostRows.Next() {
 			var h HostEntry
@@ -336,7 +336,7 @@ func GetClusterDetail(c *gin.Context) {
 		IP    string `json:"ip"`
 		Count int    `json:"count"`
 	}
-	var ips []IPEntry
+	ips := []IPEntry{}
 	if ipRows != nil {
 		for ipRows.Next() {
 			var e IPEntry
@@ -362,7 +362,7 @@ func GetClusterDetail(c *gin.Context) {
 		Tactic    string `json:"tactic"`
 		Count     int    `json:"count"`
 	}
-	var mitre []MITREEntry
+	mitre := []MITREEntry{}
 	if mitreRows != nil {
 		for mitreRows.Next() {
 			var e MITREEntry
@@ -416,7 +416,7 @@ func GetClusterTimeline(c *gin.Context) {
 		SourceIP       string    `json:"source_ip"`
 		Status         string    `json:"status"`
 	}
-	var events []TimelineEvent
+	events := []TimelineEvent{}
 	for rows.Next() {
 		var e TimelineEvent
 		rows.Scan(&e.ID, &e.RuleName, &e.Severity, &e.Hostname,
@@ -446,8 +446,8 @@ func GetClusterGraph(c *gin.Context) {
 		Target string `json:"target"`
 	}
 
-	var nodes []GraphNode
-	var edges []GraphEdge
+	nodes := []GraphNode{}
+	edges := []GraphEdge{}
 
 	// Host nodes
 	hostRows, _ := database.DB.Query(`
@@ -573,7 +573,7 @@ func GetClusterAnalytics(c *gin.Context) {
 		Bucket string `json:"bucket"`
 		Count  int    `json:"count"`
 	}
-	var sizeDist []SizeBucket
+	sizeDist := []SizeBucket{}
 	if sizeRows != nil {
 		for sizeRows.Next() {
 			var b SizeBucket
@@ -599,7 +599,7 @@ func GetClusterAnalytics(c *gin.Context) {
 		Clusters  int    `json:"clusters"`
 		Alerts    int    `json:"alerts"`
 	}
-	var campaigns []CampBucket
+	campaigns := []CampBucket{}
 	if campRows != nil {
 		for campRows.Next() {
 			var tech string
@@ -637,7 +637,7 @@ func GetClusterAnalytics(c *gin.Context) {
 		Status     string `json:"status"`
 		Technique  string `json:"technique"`
 	}
-	var topClusters []TopCluster
+	topClusters := []TopCluster{}
 	if topRows != nil {
 		for topRows.Next() {
 			var tc TopCluster
@@ -691,7 +691,7 @@ func GetClusterCampaigns(c *gin.Context) {
 		HasOpen      bool      `json:"has_open"`
 		RiskLevel    string    `json:"risk_level"`
 	}
-	var out []CampaignRow
+	out := []CampaignRow{}
 	for rows.Next() {
 		var r CampaignRow
 		var hasOpen int
@@ -741,7 +741,7 @@ func PostClusterAI(c *gin.Context) {
 			LEFT JOIN agents ag ON ag.id=a.agent_id
 			WHERE acm.cluster_id=$1 AND a.tenant_id=$2
 			ORDER BY a.created_at LIMIT 30`, body.ClusterID, tid)
-		var lines []string
+		lines := []string{}
 		if rows != nil {
 			for rows.Next() {
 				var rname, sev, tech, host string

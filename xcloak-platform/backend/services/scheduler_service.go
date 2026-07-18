@@ -58,7 +58,7 @@ func scanAgentIDs(raw string) []int {
 	if strings.HasPrefix(raw, "{") {
 		raw = "[" + raw[1:len(raw)-1] + "]"
 	}
-	var ids []int
+	ids := []int{}
 	json.Unmarshal([]byte(raw), &ids)
 	return ids
 }
@@ -77,7 +77,7 @@ func runDueScheduledTasks() {
 	}
 	defer rows.Close()
 
-	var due []models.ScheduledTask
+	due := []models.ScheduledTask{}
 	for rows.Next() {
 		var st models.ScheduledTask
 		var agentIDsRaw, payloadRaw string
@@ -100,7 +100,7 @@ func runDueScheduledTasks() {
 // tenant's own agents, so one tenant's schedule can never dispatch
 // (including destructive task types) against another tenant's fleet.
 func dispatchScheduledTask(st models.ScheduledTask) {
-	var targets []int
+	targets := []int{}
 	if len(st.AgentIDs) == 0 {
 		agents, err := repositories.GetAgents(st.TenantID)
 		if err == nil {
@@ -142,7 +142,7 @@ func filterAgentIDsByTenant(ids []int, tenantID int) []int {
 		return nil
 	}
 	defer rows.Close()
-	var valid []int
+	valid := []int{}
 	for rows.Next() {
 		var id int
 		if rows.Scan(&id) == nil {
@@ -217,7 +217,7 @@ func GetScheduledTasks(tenantID int) ([]models.ScheduledTask, error) {
 	}
 	defer rows.Close()
 
-	var tasks []models.ScheduledTask
+	tasks := []models.ScheduledTask{}
 	for rows.Next() {
 		var st models.ScheduledTask
 		var agentIDsRaw, payloadRaw string

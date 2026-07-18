@@ -26,7 +26,7 @@ func GetJA3Fingerprints(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var out []map[string]any
+	out := []map[string]any{}
 	for rows.Next() {
 		var id int
 		var hash, threatName, severity, source, description, createdAt string
@@ -135,7 +135,7 @@ func GetIdentityCache(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var out []map[string]any
+	out := []map[string]any{}
 	for rows.Next() {
 		var username, displayName, email, dept, title, manager, groupsRaw, status, cachedAt string
 		if err := rows.Scan(&username, &displayName, &email, &dept,
@@ -166,7 +166,7 @@ func parsePGArray(s string) []string {
 	if s == "" {
 		return []string{}
 	}
-	var parts []string
+	parts := []string{}
 	var cur strings.Builder
 	inQ := false
 	for i := 0; i < len(s); i++ {

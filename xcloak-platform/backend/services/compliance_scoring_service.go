@@ -31,7 +31,7 @@ func ComputeAllFrameworkScores(reportID int, tenantID int) ([]FrameworkScore, er
 	snapshot := buildDataSnapshot(tenantID)
 
 	frameworks := []string{"SOC2", "NIST", "PCI-DSS", "ISO27001"}
-	var scores []FrameworkScore
+	scores := []FrameworkScore{}
 
 	for _, fw := range frameworks {
 		fs := computeFrameworkScore(fw, snapshot)
@@ -59,10 +59,10 @@ func GetFrameworkScores(reportID int, tenantID int) ([]FrameworkScore, error) {
 	}
 	defer rows.Close()
 
-	var scores []FrameworkScore
+	scores := []FrameworkScore{}
 	for rows.Next() {
 		var fs FrameworkScore
-		var checksJSON []byte
+		checksJSON := []byte{}
 		if err := rows.Scan(&fs.Framework, &fs.Score, &fs.Passed, &fs.Failed, &checksJSON); err == nil {
 			json.Unmarshal(checksJSON, &fs.Checks)
 			scores = append(scores, fs)
@@ -150,7 +150,7 @@ func buildDataSnapshot(tenantID int) platformSnapshot {
 }
 
 func computeFrameworkScore(framework string, s platformSnapshot) FrameworkScore {
-	var checks []ComplianceCheck
+	checks := []ComplianceCheck{}
 
 	switch framework {
 	case "SOC2":

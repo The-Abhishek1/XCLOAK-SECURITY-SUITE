@@ -51,8 +51,8 @@ func parseKQL(query string, startIdx int) (conditions []string, args []interface
 	tokens := tokenizeKQL(query)
 
 	// Split the token stream on OR sentinels into term groups.
-	var groups [][]string
-	var cur []string
+	groups := [][]string{}
+	cur := []string{}
 	for _, tok := range tokens {
 		if tok == kqlOR {
 			if len(cur) > 0 {
@@ -78,7 +78,7 @@ func parseKQL(query string, startIdx int) (conditions []string, args []interface
 	}
 
 	// Multiple OR groups: build (groupA) OR (groupB) OR ...
-	var orParts []string
+	orParts := []string{}
 	for _, group := range groups {
 		conds, gArgs := buildKQLConditions(group, idx)
 		idx += len(gArgs)
@@ -150,7 +150,7 @@ func buildKQLConditions(tokens []string, startIdx int) (conditions []string, arg
 //   - `-token` and `NOT token` are both supported and combinable.
 //   - Double-quoted phrases are kept intact (including interior spaces).
 func tokenizeKQL(q string) []string {
-	var tokens []string
+	tokens := []string{}
 	q = strings.TrimSpace(q)
 	pendingNot := false
 
@@ -271,7 +271,7 @@ func SearchLogs(p LogSearchParams) (*LogSearchResult, error) {
 	}
 
 	// Build WHERE clause.
-	var whereParts []string
+	whereParts := []string{}
 	var args []interface{}
 
 	// Tenant isolation via agents join — ensures cross-tenant isolation.
@@ -340,7 +340,7 @@ func SearchLogs(p LogSearchParams) (*LogSearchResult, error) {
 	}
 	defer rows.Close()
 
-	var logs []models.Log
+	logs := []models.Log{}
 	for rows.Next() {
 		var l models.Log
 		if err := rows.Scan(&l.ID, &l.AgentID, &l.LogSource, &l.LogMessage,
@@ -563,7 +563,7 @@ func GetSavedLogSearches(tenantID int) ([]SavedLogSearch, error) {
 	}
 	defer rows.Close()
 
-	var searches []SavedLogSearch
+	searches := []SavedLogSearch{}
 	for rows.Next() {
 		var s SavedLogSearch
 		if err := rows.Scan(&s.ID, &s.Name, &s.Query, &s.Filters, &s.TimeRange,

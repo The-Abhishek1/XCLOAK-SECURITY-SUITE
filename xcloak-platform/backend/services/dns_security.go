@@ -177,7 +177,7 @@ func AnalyzeDNSLogEntry(agentID, tenantID int, domain string) {
 		return
 	}
 
-	var findings []string
+	findings := []string{}
 
 	// 1. DGA detection via multi-factor scorer (delegates to dga_detector.go)
 	dgaS := ScoreDomainDGA(agentID, tenantID, domain)

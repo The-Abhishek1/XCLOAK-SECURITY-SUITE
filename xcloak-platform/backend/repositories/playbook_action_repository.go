@@ -29,7 +29,7 @@ func GetPlaybookActions(playbookID int) ([]models.PlaybookAction, error) {
 	}
 	defer rows.Close()
 
-	var actions []models.PlaybookAction
+	actions := []models.PlaybookAction{}
 	for rows.Next() {
 		var a models.PlaybookAction
 		if err := rows.Scan(
@@ -64,7 +64,7 @@ func GetPlaybookActionsByPlaybookID(playbookID string, tenantID int) ([]models.P
 	}
 	defer rows.Close()
 
-	var actions []models.PlaybookAction
+	actions := []models.PlaybookAction{}
 	for rows.Next() {
 		var a models.PlaybookAction
 		if err := rows.Scan(

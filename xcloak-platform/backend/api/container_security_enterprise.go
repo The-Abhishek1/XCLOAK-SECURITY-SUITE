@@ -154,7 +154,7 @@ func GetK8sClusters(c *gin.Context) {
 		LastScan        string `json:"last_scan"`
 		CreatedAt       string `json:"created_at"`
 	}
-	var clusters []Cluster
+	clusters := []Cluster{}
 	for rows.Next() {
 		var cl Cluster
 		if rows.Scan(&cl.ID, &cl.Name, &cl.Provider, &cl.K8sVersion, &cl.NodeCount,
@@ -207,7 +207,7 @@ func GetK8sNodes(c *gin.Context) {
 		LastHeartbeat string `json:"last_heartbeat"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var nodes []Node
+	nodes := []Node{}
 	for rows.Next() {
 		var n Node
 		if rows.Scan(&n.ID, &n.ClusterID, &n.Name, &n.OS, &n.Kernel, &n.CPUCores,
@@ -268,7 +268,7 @@ func GetK8sPods(c *gin.Context) {
 		RiskScore         int    `json:"risk_score"`
 		CreatedAt         string `json:"created_at"`
 	}
-	var pods []Pod
+	pods := []Pod{}
 	for rows.Next() {
 		var p Pod
 		if rows.Scan(&p.ID, &p.ClusterID, &p.Namespace, &p.Name, &p.Image, &p.Status,
@@ -305,7 +305,7 @@ func GetK8sNamespaces(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
 	}
 	defer rows.Close()
-	var ns []NSRow
+	ns := []NSRow{}
 	for rows.Next() {
 		var r NSRow
 		if rows.Scan(&r.Namespace, &r.PodCount, &r.Privileged, &r.RiskScore) == nil {
@@ -362,7 +362,7 @@ func GetK8sImages(c *gin.Context) {
 		LastScanned    string `json:"last_scanned"`
 		CreatedAt      string `json:"created_at"`
 	}
-	var imgs []Img
+	imgs := []Img{}
 	for rows.Next() {
 		var im Img
 		if rows.Scan(&im.ID, &im.Image, &im.Registry, &im.Tag, &im.BaseImage, &im.OS,
@@ -446,7 +446,7 @@ func GetRuntimeAlerts(c *gin.Context) {
 		Status        string `json:"status"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var alerts []Alert
+	alerts := []Alert{}
 	for rows.Next() {
 		var a Alert
 		if rows.Scan(&a.ID, &a.ClusterID, &a.Namespace, &a.PodName, &a.ContainerName,
@@ -487,7 +487,7 @@ func GetK8sRBAC(c *gin.Context) {
 		Description string `json:"description"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var findings []RBAC
+	findings := []RBAC{}
 	for rows.Next() {
 		var r RBAC
 		if rows.Scan(&r.ID, &r.ClusterID, &r.Kind, &r.Name, &r.Namespace, &r.Subject,
@@ -561,7 +561,7 @@ func GetNetworkPolicies(c *gin.Context) {
 		Port        string `json:"port"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var policies []NP
+	policies := []NP{}
 	for rows.Next() {
 		var p NP
 		if rows.Scan(&p.ID, &p.ClusterID, &p.Namespace, &p.Name, &p.PolicyType,
@@ -600,7 +600,7 @@ func GetAdmissionControl(c *gin.Context) {
 		Action        string `json:"action"`
 		CreatedAt     string `json:"created_at"`
 	}
-	var violations []AV
+	violations := []AV{}
 	for rows.Next() {
 		var v AV
 		if rows.Scan(&v.ID, &v.ClusterID, &v.Namespace, &v.Workload, &v.Kind,
@@ -695,7 +695,7 @@ func GetContainerTimeline(c *gin.Context) {
 		Description string `json:"description"`
 		CreatedAt   string `json:"created_at"`
 	}
-	var events []Event
+	events := []Event{}
 	for rows.Next() {
 		var e Event
 		if rows.Scan(&e.ID, &e.Namespace, &e.PodName, &e.EventType, &e.Severity, &e.Description, &e.CreatedAt) == nil {
@@ -735,7 +735,7 @@ func GetContainerVulns(c *gin.Context) {
 		RiskScore   int    `json:"risk_score"`
 		LastScanned string `json:"last_scanned"`
 	}
-	var vulns []VulnImage
+	vulns := []VulnImage{}
 	for rows.Next() {
 		var v VulnImage
 		if rows.Scan(&v.ID, &v.Image, &v.CVECritical, &v.CVEHigh, &v.CVEMedium, &v.CVELow, &v.RiskScore, &v.LastScanned) == nil {
@@ -785,7 +785,7 @@ func GetContainerAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendPoint
+	trend := []TrendPoint{}
 	for i := 13; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
 		var cnt int

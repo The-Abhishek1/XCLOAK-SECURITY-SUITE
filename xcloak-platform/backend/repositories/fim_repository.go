@@ -18,7 +18,7 @@ func GetFIMBaseline(agentID int) ([]models.FIMBaseline, error) {
 	}
 	defer rows.Close()
 
-	var baselines []models.FIMBaseline
+	baselines := []models.FIMBaseline{}
 	for rows.Next() {
 		var b models.FIMBaseline
 		if err := rows.Scan(
@@ -106,7 +106,7 @@ func GetFIMAlerts(agentID string) ([]models.FIMAlert, error) {
 	}
 	defer rows.Close()
 
-	var alerts []models.FIMAlert
+	alerts := []models.FIMAlert{}
 	for rows.Next() {
 		var a models.FIMAlert
 		if err := rows.Scan(

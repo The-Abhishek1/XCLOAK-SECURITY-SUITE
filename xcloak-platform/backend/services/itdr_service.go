@@ -54,7 +54,7 @@ type itdrFinding struct {
 
 // RunITDRAnalysis runs all detections for one tenant and upserts findings.
 func RunITDRAnalysis(tenantID int) {
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 
 	findings = append(findings, itdrPasswordSpray(tenantID)...)
 	findings = append(findings, detectShadowAdmins(tenantID)...)
@@ -136,11 +136,11 @@ func itdrPasswordSpray(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var srcIP string
 		var distinctUsers, totalFailures int
-		var accountsJSON []byte
+		accountsJSON := []byte{}
 		if err := rows.Scan(&srcIP, &distinctUsers, &totalFailures, &accountsJSON); err != nil {
 			continue
 		}
@@ -198,7 +198,7 @@ func detectShadowAdmins(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var targetUser, groupName, addedBy string
 		var agentID int
@@ -259,7 +259,7 @@ func detectLateralMovementID(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var username string
 		var distinctHosts int
@@ -311,7 +311,7 @@ func detectStaleAccounts(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var username string
 		var lastSeen time.Time
@@ -358,7 +358,7 @@ func detectDormantAdmins(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var username, email, role string
 		var lastLogin time.Time
@@ -402,7 +402,7 @@ func detectMFAGaps(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var username, email, role string
 		if err := rows.Scan(&username, &email, &role); err != nil {
@@ -451,7 +451,7 @@ func detectMFAFatigue(tenantID int) []itdrFinding {
 	}
 	defer rows.Close()
 
-	var findings []itdrFinding
+	findings := []itdrFinding{}
 	for rows.Next() {
 		var email string
 		var failedAttempts int

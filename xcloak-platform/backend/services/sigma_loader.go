@@ -14,7 +14,7 @@ func LoadSigmaRules() (
 	error,
 ) {
 
-	var rules []models.SigmaRule
+	rules := []models.SigmaRule{}
 
 	files, err := filepath.Glob(
 		"rules/*.yaml",

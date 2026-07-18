@@ -138,7 +138,7 @@ func GetInstallTokens(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var tokens []map[string]any
+	tokens := []map[string]any{}
 	for rows.Next() {
 		var id int
 		var label, createdBy, expiresAt, createdAt string

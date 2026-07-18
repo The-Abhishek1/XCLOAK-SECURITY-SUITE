@@ -27,14 +27,14 @@ func DetectFirewallConflicts(tenantID int) ([]FirewallConflict, error) {
 		return nil, err
 	}
 
-	var enabled []models.FirewallRule
+	enabled := []models.FirewallRule{}
 	for _, r := range rules {
 		if r.Enabled {
 			enabled = append(enabled, r)
 		}
 	}
 
-	var conflicts []FirewallConflict
+	conflicts := []FirewallConflict{}
 
 	for i := 0; i < len(enabled); i++ {
 		for j := i + 1; j < len(enabled); j++ {

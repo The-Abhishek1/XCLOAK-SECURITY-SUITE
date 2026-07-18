@@ -46,10 +46,10 @@ func loadSplunkConfigs() []splunkEntry {
 	}
 	defer rows.Close()
 
-	var entries []splunkEntry
+	entries := []splunkEntry{}
 	for rows.Next() {
 		var tenantID int
-		var cfgRaw []byte
+		cfgRaw := []byte{}
 		if err := rows.Scan(&tenantID, &cfgRaw); err != nil {
 			continue
 		}

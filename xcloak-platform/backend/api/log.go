@@ -14,7 +14,7 @@ const maxAgentLogBytes = 10 << 20 // 10 MiB per batch — matches /api/ingest li
 func ReceiveLogs(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAgentLogBytes)
 
-	var logs []models.Log
+	logs := []models.Log{}
 
 	if err := c.ShouldBindJSON(&logs); err != nil {
 

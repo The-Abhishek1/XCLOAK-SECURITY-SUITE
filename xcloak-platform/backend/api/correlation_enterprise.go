@@ -62,7 +62,7 @@ func GetCorrelationOverview(c *gin.Context) {
 		       SUM(CASE WHEN enabled THEN 1 ELSE 0 END)
 		FROM correlation_rules WHERE tenant_id=$1
 		GROUP BY correlation_type`, tid)
-	var breakdown []TypeCount
+	breakdown := []TypeCount{}
 	if ruleRows != nil {
 		defer ruleRows.Close()
 		for ruleRows.Next() {
@@ -85,7 +85,7 @@ func GetCorrelationOverview(c *gin.Context) {
 	topRows, _ := database.DB.Query(`
 		SELECT id, name, match_count, severity FROM correlation_rules
 		WHERE tenant_id=$1 AND enabled=true ORDER BY match_count DESC LIMIT 5`, tid)
-	var topRules []TopRule
+	topRules := []TopRule{}
 	if topRows != nil {
 		defer topRows.Close()
 		for topRows.Next() {
@@ -136,7 +136,7 @@ func GetCorrelationTrends(c *gin.Context) {
 		Matches   int    `json:"matches"`
 		Incidents int    `json:"incidents"`
 	}
-	var buckets []Bucket
+	buckets := []Bucket{}
 	for rows.Next() {
 		var b Bucket
 		var t time.Time
@@ -188,7 +188,7 @@ func GetCorrelationAnalytics(c *gin.Context) {
 		Incidents24h    int        `json:"incidents_24h"`
 		LastTriggered   *time.Time `json:"last_triggered"`
 	}
-	var rules []RuleAnalytic
+	rules := []RuleAnalytic{}
 	for rows.Next() {
 		var r RuleAnalytic
 		rows.Scan(&r.ID, &r.Name, &r.Severity, &r.CorrelationType, &r.Enabled, &r.MatchCount,
@@ -234,7 +234,7 @@ func GetCorrelationGraph(c *gin.Context) {
 	}
 
 	nodeMap := map[string]*GraphNode{}
-	var edges []GraphEdge
+	edges := []GraphEdge{}
 
 	addNode := func(id, label, typ string) {
 		if n, ok := nodeMap[id]; ok {
@@ -306,7 +306,7 @@ func GetCorrelationAlertGrouping(c *gin.Context) {
 		AlertCount  int    `json:"alert_count"`
 		MaxSeverity string `json:"max_severity"`
 	}
-	var byHost []HostGroup
+	byHost := []HostGroup{}
 	if hostRows != nil {
 		defer hostRows.Close()
 		for hostRows.Next() {
@@ -330,7 +330,7 @@ func GetCorrelationAlertGrouping(c *gin.Context) {
 		Technique string `json:"technique"`
 		Count     int    `json:"count"`
 	}
-	var byMitre []MitreGroup
+	byMitre := []MitreGroup{}
 	if mitreRows != nil {
 		defer mitreRows.Close()
 		for mitreRows.Next() {
@@ -352,7 +352,7 @@ func GetCorrelationAlertGrouping(c *gin.Context) {
 		Severity string `json:"severity"`
 		Count    int    `json:"count"`
 	}
-	var bySev []SevGroup
+	bySev := []SevGroup{}
 	if sevRows != nil {
 		defer sevRows.Close()
 		for sevRows.Next() {
@@ -387,7 +387,7 @@ func PostCorrelationAI(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 
 	// Fetch recent match context for AI
-	var recentMatches []string
+	recentMatches := []string{}
 	rows, _ := database.DB.Query(`
 		SELECT r.name, COALESCE(a.hostname,'unknown'), m.confidence, m.detail
 		FROM correlation_matches m
@@ -519,7 +519,7 @@ func PostCorrelationSimulate(c *gin.Context) {
 		WindowMinutes   int    `json:"window_minutes"`
 		CorrelationType string `json:"correlation_type"`
 	}
-	var temporalRules []SimRule
+	temporalRules := []SimRule{}
 	for rows.Next() {
 		var r SimRule
 		rows.Scan(&r.ID, &r.Name, &r.Severity, &r.WindowMinutes, &r.CorrelationType)
@@ -536,7 +536,7 @@ func PostCorrelationSimulate(c *gin.Context) {
 		Coverage       float64  `json:"coverage_pct"`
 	}
 
-	var matches []SimMatch
+	matches := []SimMatch{}
 	for _, rule := range temporalRules {
 		// Fetch stages for this rule
 		stageRows, err := database.DB.Query(`
@@ -544,7 +544,7 @@ func PostCorrelationSimulate(c *gin.Context) {
 		if err != nil {
 			continue
 		}
-		var stagePatterns []string
+		stagePatterns := []string{}
 		for stageRows.Next() {
 			var p string
 			stageRows.Scan(&p)

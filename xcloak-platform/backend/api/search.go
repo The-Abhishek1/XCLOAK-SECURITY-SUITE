@@ -41,7 +41,7 @@ func GlobalSearch(c *gin.Context) {
 
 	pattern := "%" + strings.ToLower(q) + "%"
 	tenantID := tenantIDFromContext(c)
-	var results []SearchResult
+	results := []SearchResult{}
 
 	// ── Agents ─────────────────────────────────────────────────
 	if want("agent") {

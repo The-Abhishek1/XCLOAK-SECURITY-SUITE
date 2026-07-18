@@ -30,7 +30,7 @@ func runITDRForAllTenants() error {
 	}
 	defer rows.Close()
 
-	var tenantIDs []int
+	tenantIDs := []int{}
 	for rows.Next() {
 		var id int
 		if err := rows.Scan(&id); err != nil {

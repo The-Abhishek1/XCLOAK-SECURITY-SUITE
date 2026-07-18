@@ -25,7 +25,7 @@ func GetTenantTimeline(c *gin.Context) {
 		to, _ = time.Parse(time.RFC3339, t)
 	}
 
-	var eventTypes []string
+	eventTypes := []string{}
 	if et := c.Query("event_types"); et != "" {
 		for _, s := range strings.Split(et, ",") {
 			if s = strings.TrimSpace(s); s != "" {

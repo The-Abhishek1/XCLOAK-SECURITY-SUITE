@@ -74,7 +74,7 @@ func analyzeEndpointLogs(tenantID int) []models.UEBAEvent {
 	}
 	defer rows.Close()
 
-	var events []models.UEBAEvent
+	events := []models.UEBAEvent{}
 	for rows.Next() {
 		var id, agentID int
 		var msg string
@@ -144,7 +144,7 @@ func analyzePlatformAuditLogs(tenantID int) []models.UEBAEvent {
 	}
 	defer rows.Close()
 
-	var events []models.UEBAEvent
+	events := []models.UEBAEvent{}
 	failCounts := map[string]int{}
 
 	for rows.Next() {
@@ -211,7 +211,7 @@ func buildAndSaveProfiles(tenantID int, events []models.UEBAEvent, source string
 			score = 100
 		}
 
-		var flags []string
+		flags := []string{}
 		if s.failedLogins >= 10 {
 			flags = append(flags, "high_failure_rate")
 		}

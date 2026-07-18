@@ -62,7 +62,7 @@ func ChatWithAssistant(username, userMessage string, history []models.ChatMessag
 // this a user in one tenant could load another tenant's chat transcript.
 func GetChatHistory(username string, tenantID int) ([]models.ChatMessage, error) {
 
-	var messagesJSON []byte
+	messagesJSON := []byte{}
 
 	err := database.DB.QueryRow(`
 		SELECT messages FROM ai_chat_sessions
@@ -75,7 +75,7 @@ func GetChatHistory(username string, tenantID int) ([]models.ChatMessage, error)
 		return []models.ChatMessage{}, nil // No history yet.
 	}
 
-	var messages []models.ChatMessage
+	messages := []models.ChatMessage{}
 	json.Unmarshal(messagesJSON, &messages)
 
 	return messages, nil
@@ -109,7 +109,7 @@ func persistChatHistory(username string, tenantID int, messages []models.ChatMes
 // logged-in user via the chat assistant, not an internal background job.
 func buildPlatformContext(tenantID int) string {
 
-	var lines []string
+	lines := []string{}
 
 	// Agents
 	agents, _ := repositories.GetAgents(tenantID)

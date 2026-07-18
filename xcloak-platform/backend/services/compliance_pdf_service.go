@@ -320,7 +320,7 @@ func drawSeverityBars(pdf *reportPDF, bySeverity map[string]int, total int) {
 	// Catch any severity label outside the known set (defensive — current
 	// severity values are always one of the four above) so nothing silently
 	// disappears from the chart.
-	var extra []string
+	extra := []string{}
 	for sev := range bySeverity {
 		known := false
 		for _, o := range order {

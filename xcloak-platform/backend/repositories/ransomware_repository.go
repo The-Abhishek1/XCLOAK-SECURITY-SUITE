@@ -12,7 +12,7 @@ func GetActiveTenantIDs() ([]int, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var ids []int
+	ids := []int{}
 	for rows.Next() {
 		var id int
 		if rows.Scan(&id) == nil {
@@ -50,7 +50,7 @@ func GetFIMRansomwareCandidates(tenantID, threshold int, cryptoExtSQL string) ([
 	}
 	defer rows.Close()
 
-	var out []FIMCandidate
+	out := []FIMCandidate{}
 	for rows.Next() {
 		var c FIMCandidate
 		if err := rows.Scan(&c.AgentID, &c.TotalChanges, &c.DirsHit, &c.CryptoCount); err == nil {
@@ -93,7 +93,7 @@ func GetRecentProcessLogs(tenantID int) ([]ProcessLogRow, error) {
 	}
 	defer rows.Close()
 
-	var out []ProcessLogRow
+	out := []ProcessLogRow{}
 	for rows.Next() {
 		var r ProcessLogRow
 		if err := rows.Scan(&r.AgentID, &r.LogMessage, &r.CmdLine); err == nil {
@@ -128,7 +128,7 @@ func GetRecentServiceStopLogs(tenantID int) ([]ServiceStopLogRow, error) {
 	}
 	defer rows.Close()
 
-	var out []ServiceStopLogRow
+	out := []ServiceStopLogRow{}
 	for rows.Next() {
 		var r ServiceStopLogRow
 		if err := rows.Scan(&r.AgentID, &r.LogMessage); err == nil {

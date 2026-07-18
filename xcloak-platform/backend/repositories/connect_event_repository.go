@@ -65,7 +65,7 @@ func GetConnectEventsByTenant(tenantID int, since time.Time, limit int) ([]model
 	}
 	defer rows.Close()
 
-	var out []models.ConnectEvent
+	out := []models.ConnectEvent{}
 	for rows.Next() {
 		var ev models.ConnectEvent
 		if err := rows.Scan(
@@ -98,7 +98,7 @@ func GetConnectEventsByAgent(agentID int, limit int) ([]models.ConnectEvent, err
 	}
 	defer rows.Close()
 
-	var out []models.ConnectEvent
+	out := []models.ConnectEvent{}
 	for rows.Next() {
 		var ev models.ConnectEvent
 		if err := rows.Scan(

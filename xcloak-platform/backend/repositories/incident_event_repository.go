@@ -50,7 +50,7 @@ func GetIncidentEvents(
 
 	defer rows.Close()
 
-	var events []models.IncidentEvent
+	events := []models.IncidentEvent{}
 
 	for rows.Next() {
 

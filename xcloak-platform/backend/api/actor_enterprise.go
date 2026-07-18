@@ -61,7 +61,7 @@ func GetActorDashboard(c *gin.Context) {
 		Key   string `json:"sector"`
 		Count int    `json:"count"`
 	}
-	var industries []KV
+	industries := []KV{}
 	sectorRows, _ := database.DB.Query(`
 		SELECT s, COUNT(*)::int FROM threat_actors, UNNEST(targeted_sectors) s
 		WHERE tenant_id=$1 GROUP BY s ORDER BY 2 DESC LIMIT 12`, tid)
@@ -82,7 +82,7 @@ func GetActorDashboard(c *gin.Context) {
 		Country string `json:"country"`
 		Count   int    `json:"count"`
 	}
-	var countries []CountryKV
+	countries := []CountryKV{}
 	countryRows, _ := database.DB.Query(`
 		SELECT origin_country, COUNT(*)::int FROM threat_actors
 		WHERE tenant_id=$1 AND origin_country != '' GROUP BY 1 ORDER BY 2 DESC LIMIT 12`, tid)
@@ -103,7 +103,7 @@ func GetActorDashboard(c *gin.Context) {
 		Month string `json:"month"`
 		Count int    `json:"count"`
 	}
-	var timeline []MonthBucket
+	timeline := []MonthBucket{}
 	tlRows, _ := database.DB.Query(`
 		SELECT TO_CHAR(DATE_TRUNC('month', tagged_at),'YYYY-MM'), COUNT(*)::int
 		FROM actor_alert_tags WHERE tenant_id=$1 AND tagged_at > NOW()-INTERVAL'12 months'
@@ -125,7 +125,7 @@ func GetActorDashboard(c *gin.Context) {
 		Motivation string `json:"motivation"`
 		Count      int    `json:"count"`
 	}
-	var motivations []MotivKV
+	motivations := []MotivKV{}
 	motivRows, _ := database.DB.Query(`
 		SELECT motivation, COUNT(*)::int FROM threat_actors WHERE tenant_id=$1 GROUP BY 1 ORDER BY 2 DESC`, tid)
 	if motivRows != nil {
@@ -165,7 +165,7 @@ func GetActorAnalytics(c *gin.Context) {
 		Sophistication string `json:"sophistication"`
 		AlertCount     int    `json:"alert_count"`
 	}
-	var topActors []TopActor
+	topActors := []TopActor{}
 	taRows, _ := database.DB.Query(`
 		SELECT ta.id, ta.name, ta.motivation, ta.sophistication,
 		       COUNT(aat.id)::int as alert_count
@@ -191,7 +191,7 @@ func GetActorAnalytics(c *gin.Context) {
 		Technique string `json:"technique"`
 		Count     int    `json:"count"`
 	}
-	var topTechs []TechKV
+	topTechs := []TechKV{}
 	techRows, _ := database.DB.Query(`
 		SELECT matched_technique, COUNT(*)::int
 		FROM actor_alert_tags WHERE tenant_id=$1 AND matched_technique != ''
@@ -212,7 +212,7 @@ func GetActorAnalytics(c *gin.Context) {
 		Sophistication string `json:"sophistication"`
 		Count          int    `json:"count"`
 	}
-	var sophBreakdown []SophKV
+	sophBreakdown := []SophKV{}
 	sophRows, _ := database.DB.Query(`
 		SELECT sophistication, COUNT(*)::int FROM threat_actors WHERE tenant_id=$1 GROUP BY 1 ORDER BY 2 DESC`, tid)
 	if sophRows != nil {
@@ -231,7 +231,7 @@ func GetActorAnalytics(c *gin.Context) {
 		Week  string `json:"week"`
 		Count int    `json:"count"`
 	}
-	var activityOverTime []WeekBucket
+	activityOverTime := []WeekBucket{}
 	wkRows, _ := database.DB.Query(`
 		SELECT TO_CHAR(DATE_TRUNC('week', tagged_at),'YYYY-MM-DD'), COUNT(*)::int
 		FROM actor_alert_tags WHERE tenant_id=$1 AND tagged_at > NOW()-INTERVAL'8 weeks'
@@ -275,8 +275,8 @@ func PostActorAI(c *gin.Context) {
 	var actorCtx string
 	if body.ActorID > 0 {
 		var name, motivation, sophistication, description, origin string
-		var techniques []string
-		var sectors []string
+		techniques := []string{}
+		sectors := []string{}
 		database.DB.QueryRow(`
 			SELECT name, motivation, sophistication, description, origin_country,
 			       mitre_techniques, targeted_sectors
@@ -309,7 +309,7 @@ func PostActorAI(c *gin.Context) {
 		}
 
 		// Recent alerts
-		var alertLines []string
+		alertLines := []string{}
 		aRows, _ := database.DB.Query(`
 			SELECT a.rule_name, a.severity, aat.matched_technique, aat.confidence
 			FROM actor_alert_tags aat
@@ -508,7 +508,7 @@ func GetActorCampaigns(c *gin.Context) {
 		Status      string `json:"status"`
 	}
 
-	var campaigns []Campaign
+	campaigns := []Campaign{}
 	rows, _ := database.DB.Query(`
 		SELECT aat.matched_technique,
 		       COUNT(aat.id)::int,
@@ -537,7 +537,7 @@ func GetActorCampaigns(c *gin.Context) {
 		Severity string `json:"severity"`
 		Count    int    `json:"count"`
 	}
-	var sevBreakdown []SevCount
+	sevBreakdown := []SevCount{}
 	sevRows, _ := database.DB.Query(`
 		SELECT a.severity, COUNT(*)::int
 		FROM actor_alert_tags aat
@@ -570,7 +570,7 @@ func GetActorMalware(c *gin.Context) {
 
 	// Get actor's techniques
 	techRows, _ := database.DB.Query(`SELECT UNNEST(mitre_techniques) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
-	var techniques []string
+	techniques := []string{}
 	if techRows != nil {
 		defer techRows.Close()
 		for techRows.Next() {
@@ -588,7 +588,7 @@ func GetActorMalware(c *gin.Context) {
 		LastSeen    string `json:"last_seen"`
 	}
 
-	var entries []MalwareEntry
+	entries := []MalwareEntry{}
 	for _, tech := range techniques {
 		mtype := techniqueToMalwareType(tech)
 		cat := "unknown"
@@ -642,7 +642,7 @@ func GetActorInfrastructure(c *gin.Context) {
 
 	// Get actor name for matching IOCs by description
 	var actorName string
-	var aliases []string
+	aliases := []string{}
 	database.DB.QueryRow(`SELECT name FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid).Scan(&actorName)
 	aliasRows, _ := database.DB.Query(`SELECT UNNEST(aliases) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
 	if aliasRows != nil {
@@ -655,7 +655,7 @@ func GetActorInfrastructure(c *gin.Context) {
 	}
 
 	// Build ILIKE conditions for name + aliases
-	var conditions []string
+	conditions := []string{}
 	var args []interface{}
 	args = append(args, tid)
 	argIdx := 2
@@ -681,7 +681,7 @@ func GetActorInfrastructure(c *gin.Context) {
 		LastSeen  string `json:"last_seen"`
 	}
 
-	var infra []InfraIOC
+	infra := []InfraIOC{}
 	query := fmt.Sprintf(`
 		SELECT id, indicator, type, severity, hit_count, COALESCE(last_seen::text,'')
 		FROM iocs WHERE tenant_id=$1 AND (%s)
@@ -719,7 +719,7 @@ func GetActorExposure(c *gin.Context) {
 	actorID, _ := strconv.Atoi(c.Param("id"))
 
 	var actorName string
-	var techniques []string
+	techniques := []string{}
 	database.DB.QueryRow(`SELECT name FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid).Scan(&actorName)
 	techRows, _ := database.DB.Query(`SELECT UNNEST(mitre_techniques) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
 	if techRows != nil {
@@ -786,7 +786,7 @@ func GetActorExposure(c *gin.Context) {
 		AlertCount int   `json:"alert_count"`
 		LastSeen  string `json:"last_seen"`
 	}
-	var assets []AssetEntry
+	assets := []AssetEntry{}
 	assetRows, _ := database.DB.Query(`
 		SELECT COALESCE(ag.hostname, a.agent_id::text) as hostname,
 		       COUNT(aat.id)::int as cnt,
@@ -819,7 +819,7 @@ func GetActorExposure(c *gin.Context) {
 		Confidence       int    `json:"confidence"`
 		TaggedAt         string `json:"tagged_at"`
 	}
-	var recentAlerts []AlertEntry
+	recentAlerts := []AlertEntry{}
 	alertRows, _ := database.DB.Query(`
 		SELECT a.id, a.rule_name, a.severity, COALESCE(ag.hostname,''),
 		       aat.matched_technique, aat.confidence, aat.tagged_at::text
@@ -860,7 +860,7 @@ func GetActorDetectionCoverage(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actorID, _ := strconv.Atoi(c.Param("id"))
 
-	var techniques []string
+	techniques := []string{}
 	techRows, _ := database.DB.Query(`SELECT UNNEST(mitre_techniques) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
 	if techRows != nil {
 		defer techRows.Close()
@@ -879,7 +879,7 @@ func GetActorDetectionCoverage(c *gin.Context) {
 		Covered          bool   `json:"covered"`
 	}
 
-	var coverage []TechCoverage
+	coverage := []TechCoverage{}
 	coveredCount := 0
 	for _, tech := range techniques {
 		var sigTotal, sigEnabled, corrCount int
@@ -950,8 +950,8 @@ func GetActorRelationships(c *gin.Context) {
 		Label  string `json:"label"`
 	}
 
-	var nodes []GraphNode
-	var edges []GraphEdge
+	nodes := []GraphNode{}
+	edges := []GraphEdge{}
 
 	// Actor node
 	nodes = append(nodes, GraphNode{ID: fmt.Sprintf("actor_%d", actorID), Label: actorName, Type: "actor"})
@@ -961,7 +961,7 @@ func GetActorRelationships(c *gin.Context) {
 		Tech  string
 		Count int
 	}
-	var campaigns []CampaignNode
+	campaigns := []CampaignNode{}
 	campRows, _ := database.DB.Query(`
 		SELECT matched_technique, COUNT(*)::int
 		FROM actor_alert_tags WHERE actor_id=$1 AND tenant_id=$2 AND matched_technique != ''
@@ -986,7 +986,7 @@ func GetActorRelationships(c *gin.Context) {
 		Indicator string
 		IocType   string
 	}
-	var iocNodes []IOCNode
+	iocNodes := []IOCNode{}
 	iocRows, _ := database.DB.Query(`
 		SELECT id, indicator, type FROM iocs
 		WHERE tenant_id=$1 AND enabled=true AND description ILIKE '%'||$2||'%'
@@ -1014,7 +1014,7 @@ func GetActorRelationships(c *gin.Context) {
 		ID       int
 		RuleName string
 	}
-	var alertNodes []AlertNode
+	alertNodes := []AlertNode{}
 	alertNodeRows, _ := database.DB.Query(`
 		SELECT DISTINCT ON (a.rule_name) a.id, a.rule_name
 		FROM actor_alert_tags aat
@@ -1048,7 +1048,7 @@ func GetActorRelationships(c *gin.Context) {
 		ID    int
 		Title string
 	}
-	var incNodes []IncNode
+	incNodes := []IncNode{}
 	incRows, _ := database.DB.Query(`
 		SELECT DISTINCT ac.auto_incident_id, COALESCE(i.title,'Incident #'||ac.auto_incident_id::text)
 		FROM alert_clusters ac
@@ -1101,7 +1101,7 @@ func GetActorTimeline(c *gin.Context) {
 		Confidence       int    `json:"confidence"`
 		TaggedAt         string `json:"tagged_at"`
 	}
-	var events []TimelineEntry
+	events := []TimelineEntry{}
 	rows, _ := database.DB.Query(`
 		SELECT aat.id, a.rule_name, a.severity,
 		       COALESCE(ag.hostname,''), aat.matched_technique, aat.confidence,
@@ -1128,7 +1128,7 @@ func GetActorTimeline(c *gin.Context) {
 		Month string `json:"month"`
 		Count int    `json:"count"`
 	}
-	var monthly []MonthBucket
+	monthly := []MonthBucket{}
 	mRows, _ := database.DB.Query(`
 		SELECT TO_CHAR(DATE_TRUNC('month', tagged_at),'YYYY-MM'), COUNT(*)::int
 		FROM actor_alert_tags WHERE actor_id=$1 AND tenant_id=$2 AND tagged_at > NOW()-INTERVAL'12 months'
@@ -1155,7 +1155,7 @@ func GetActorIOCs(c *gin.Context) {
 	actorID, _ := strconv.Atoi(c.Param("id"))
 
 	var actorName string
-	var aliases []string
+	aliases := []string{}
 	database.DB.QueryRow(`SELECT name FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid).Scan(&actorName)
 	alRows, _ := database.DB.Query(`SELECT UNNEST(aliases) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
 	if alRows != nil {
@@ -1167,7 +1167,7 @@ func GetActorIOCs(c *gin.Context) {
 		}
 	}
 
-	var conditions []string
+	conditions := []string{}
 	var args []interface{}
 	args = append(args, tid)
 	argIdx := 2
@@ -1195,7 +1195,7 @@ func GetActorIOCs(c *gin.Context) {
 		Enabled     bool   `json:"enabled"`
 	}
 
-	var iocs []IOCEntry
+	iocs := []IOCEntry{}
 	query := fmt.Sprintf(`
 		SELECT id, indicator, type, severity, hit_count, COALESCE(last_seen::text,''),
 		       COALESCE(description,''), enabled
@@ -1223,7 +1223,7 @@ func GetActorMITRE(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actorID, _ := strconv.Atoi(c.Param("id"))
 
-	var techniques []string
+	techniques := []string{}
 	techRows, _ := database.DB.Query(`SELECT UNNEST(mitre_techniques) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
 	if techRows != nil {
 		defer techRows.Close()
@@ -1264,7 +1264,7 @@ func GetActorMITRE(c *gin.Context) {
 		AlertCount   int    `json:"alert_count"`
 	}
 
-	var entries []TechEntry
+	entries := []TechEntry{}
 	for _, tech := range techniques {
 		var sigEnabled, sigTotal, alertCount int
 		database.DB.QueryRow(`
@@ -1318,7 +1318,7 @@ func PostActorHunt(c *gin.Context) {
 	c.ShouldBindJSON(&body)
 
 	var actorName string
-	var techniques []string
+	techniques := []string{}
 	database.DB.QueryRow(`SELECT name FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid).Scan(&actorName)
 	techRows, _ := database.DB.Query(`SELECT UNNEST(mitre_techniques) FROM threat_actors WHERE id=$1 AND tenant_id=$2`, actorID, tid)
 	if techRows != nil {
@@ -1331,7 +1331,7 @@ func PostActorHunt(c *gin.Context) {
 	}
 
 	// IOCs attributed to this actor
-	var iocList []string
+	iocList := []string{}
 	iocRows, _ := database.DB.Query(`
 		SELECT indicator FROM iocs WHERE tenant_id=$1 AND enabled=true AND description ILIKE '%'||$2||'%'
 		ORDER BY hit_count DESC LIMIT 20`, tid, actorName)

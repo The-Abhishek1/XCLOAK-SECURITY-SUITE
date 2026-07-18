@@ -118,7 +118,7 @@ func GetAgentAuditHistory(c *gin.Context) {
 		return
 	}
 
-	var events []auditEntry
+	events := []auditEntry{}
 
 	// Anchor: agent installation timestamp
 	var installedAt time.Time

@@ -111,7 +111,7 @@ func GetLogSources(tenantID int) ([]models.LogSource, error) {
 	}
 	defer rows.Close()
 
-	var out []models.LogSource
+	out := []models.LogSource{}
 	for rows.Next() {
 		var src models.LogSource
 		var agentID *int

@@ -78,7 +78,7 @@ func SearchLogs(agentID, fieldName, value string, limit int) ([]models.Log, erro
 	}
 	defer rows.Close()
 
-	var out []models.Log
+	out := []models.Log{}
 	for rows.Next() {
 		var l models.Log
 		if err := rows.Scan(&l.ID, &l.AgentID, &l.LogSource, &l.LogMessage, &l.ParsedFields, &l.CollectedAt); err != nil {

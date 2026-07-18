@@ -38,7 +38,7 @@ func GetYaraDashboard(c *gin.Context) {
 		Severity string `json:"severity"`
 		Count    int    `json:"count"`
 	}
-	var sevBreakdown []SevCount
+	sevBreakdown := []SevCount{}
 	srows, err := db.Query(`SELECT severity, COUNT(*) FROM yara_matches WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '7 days' GROUP BY severity ORDER BY 2 DESC`, tid)
 	if err == nil {
 		defer srows.Close()
@@ -59,7 +59,7 @@ func GetYaraDashboard(c *gin.Context) {
 		Matches24h int  `json:"matches_24h"`
 		Severity string `json:"severity"`
 	}
-	var topRules []TopRule
+	topRules := []TopRule{}
 	tr, err := db.Query(`
 		SELECT rule_name, severity, COUNT(*) matches,
 		       COUNT(*) FILTER (WHERE created_at>=NOW()-INTERVAL '24 hours') matches_24h
@@ -82,7 +82,7 @@ func GetYaraDashboard(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var trend []DayMatch
+	trend := []DayMatch{}
 	trows, err := db.Query(`
 		SELECT DATE(created_at AT TIME ZONE 'UTC'), COUNT(*)
 		FROM yara_matches WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '14 days'
@@ -107,7 +107,7 @@ func GetYaraDashboard(c *gin.Context) {
 		AgentID   int    `json:"agent_id"`
 		CreatedAt string `json:"created_at"`
 	}
-	var recent []RecentMatch
+	recent := []RecentMatch{}
 	rrows, err := db.Query(`
 		SELECT rule_name, file_path, severity, agent_id, created_at::TEXT
 		FROM yara_matches WHERE tenant_id=$1 ORDER BY id DESC LIMIT 8`, tid)
@@ -168,7 +168,7 @@ func GetYaraAnalytics(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var stats []RuleStat
+	stats := []RuleStat{}
 	for rows.Next() {
 		var rs RuleStat
 		if rows.Scan(&rs.RuleName, &rs.Total, &rs.Last7d, &rs.Last24h, &rs.LastMatch, &rs.TopSev) == nil {
@@ -183,7 +183,7 @@ func GetYaraAnalytics(c *gin.Context) {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	var daily []DayTotal
+	daily := []DayTotal{}
 	drows, err := database.DB.Query(`
 		SELECT DATE(created_at AT TIME ZONE 'UTC'), COUNT(*)
 		FROM yara_matches WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '30 days'
@@ -206,7 +206,7 @@ func GetYaraAnalytics(c *gin.Context) {
 		AgentName string `json:"agent_name"`
 		Matches   int    `json:"matches"`
 	}
-	var agentStats []AgentStat
+	agentStats := []AgentStat{}
 	arows, err := database.DB.Query(`
 		SELECT m.agent_id, COALESCE(a.hostname, a.name, 'Agent '||m.agent_id::text), COUNT(m.id)
 		FROM yara_matches m
@@ -299,7 +299,7 @@ func GetYaraCategories(c *gin.Context) {
 		Enabled  int       `json:"enabled"`
 		Rules    []CatItem `json:"rules"`
 	}
-	var cats []CatGroup
+	cats := []CatGroup{}
 	for cat, items := range catMap {
 		enabled := 0
 		for _, it := range items {
@@ -328,7 +328,7 @@ func GetYaraPerformance(c *gin.Context) {
 		Hour  string `json:"hour"`
 		Count int    `json:"count"`
 	}
-	var hourly []HourlyBucket
+	hourly := []HourlyBucket{}
 	hrows, err := database.DB.Query(`
 		SELECT DATE_TRUNC('hour', created_at AT TIME ZONE 'UTC'), COUNT(*)
 		FROM yara_matches WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '24 hours'
@@ -351,7 +351,7 @@ func GetYaraPerformance(c *gin.Context) {
 		Matches  int    `json:"matches"`
 		RuleNames string `json:"rule_names"`
 	}
-	var topFiles []FileHit
+	topFiles := []FileHit{}
 	frows, err := database.DB.Query(`
 		SELECT file_path, COUNT(*), STRING_AGG(DISTINCT rule_name, ', ' ORDER BY rule_name) rule_names
 		FROM yara_matches WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '7 days'
@@ -736,7 +736,7 @@ func PostYaraExport(c *gin.Context) {
 		Enabled     bool      `json:"enabled"`
 		CreatedAt   time.Time `json:"created_at"`
 	}
-	var rules []ExportRule
+	rules := []ExportRule{}
 	for rows.Next() {
 		var r ExportRule
 		if rows.Scan(&r.ID, &r.Name, &r.Description, &r.RuleContent, &r.Enabled, &r.CreatedAt) == nil {
@@ -801,7 +801,7 @@ func GetYaraRuleDetail(c *gin.Context) {
 		FileHash  string `json:"file_hash"`
 		CreatedAt string `json:"created_at"`
 	}
-	var recentHits []RecentHit
+	recentHits := []RecentHit{}
 	rrows, err := database.DB.Query(`SELECT file_path, severity, agent_id, file_hash, created_at::TEXT FROM yara_matches WHERE rule_name=$1 AND tenant_id=$2 ORDER BY id DESC LIMIT 15`, name, tid)
 	if err == nil {
 		defer rrows.Close()

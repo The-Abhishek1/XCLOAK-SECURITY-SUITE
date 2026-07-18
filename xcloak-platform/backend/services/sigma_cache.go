@@ -111,7 +111,7 @@ func getRulesForFormat(entry *sigmaCacheEntry, format string) []models.SigmaRule
 }
 
 func mergeRuleBuckets(idx map[string][]models.SigmaRule, keys ...string) []models.SigmaRule {
-	var out []models.SigmaRule
+	out := []models.SigmaRule{}
 	for _, k := range keys {
 		out = append(out, idx[k]...)
 	}

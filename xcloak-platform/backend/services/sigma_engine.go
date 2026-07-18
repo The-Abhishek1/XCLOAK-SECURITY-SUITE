@@ -225,7 +225,7 @@ func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 	modifiers := parts[1:]
 
 	// Separate transform modifiers from the comparison modifier.
-	var transforms []string
+	transforms := []string{}
 	comparison := "exact"
 	for _, mod := range modifiers {
 		switch strings.ToLower(mod) {
@@ -323,7 +323,7 @@ func matchKeyword(keyword, messageLower string, pf ParsedFields) bool {
 func applyTransforms(value string, transforms []string) []string {
 	values := []string{value}
 	for _, t := range transforms {
-		var next []string
+		next := []string{}
 		switch t {
 		case "base64":
 			for _, v := range values {

@@ -70,7 +70,7 @@ func RefreshVulnPriorityScores(tenantID int) {
 	type row struct {
 		id, sla, score int
 	}
-	var updates []row
+	updates := []row{}
 	for rows.Next() {
 		var id int
 		var severity, criticality string
@@ -155,7 +155,7 @@ func QueryVulnPriorityQueue(tenantID int, statuses string, limit, offset int) ([
 	}
 	defer rows.Close()
 
-	var out []VulnQueueItem
+	out := []VulnQueueItem{}
 	for rows.Next() {
 		var item VulnQueueItem
 		rows.Scan(&item.ID, &item.AgentID, &item.Hostname, &item.CVE, &item.PackageName, &item.PackageVersion,
@@ -185,7 +185,7 @@ func UpdateVulnPatchStatus(id, tenantID int, status, notes string) error {
 }
 
 func splitCSVStatuses(s string) []string {
-	var out []string
+	out := []string{}
 	for _, p := range strings.Split(s, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {

@@ -53,12 +53,12 @@ func ListITDRFindings(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var findings []models.ITDRFinding
+	findings := []models.ITDRFinding{}
 	for rows.Next() {
 		var f models.ITDRFinding
 		var agentID sql.NullInt64
 		var resolvedAt sql.NullTime
-		var evidenceRaw []byte
+		evidenceRaw := []byte{}
 		if err := rows.Scan(
 			&f.ID, &f.TenantID, &f.FindingType, &f.Severity,
 			&f.Identity, &f.IdentityType, &f.SourceIP, &f.Description,
@@ -96,7 +96,7 @@ func GetITDRFinding(c *gin.Context) {
 	var f models.ITDRFinding
 	var agentID sql.NullInt64
 	var resolvedAt sql.NullTime
-	var evidenceRaw []byte
+	evidenceRaw := []byte{}
 
 	err = database.RDB().QueryRow(`
 		SELECT id, tenant_id, finding_type, severity, identity, identity_type,
@@ -207,7 +207,7 @@ func GetITDRSummary(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var summary []row
+	summary := []row{}
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.FindingType, &r.Severity, &r.Count); err != nil {

@@ -225,7 +225,7 @@ func queryAgents(query string, args ...interface{}) ([]models.Agent, error) {
 	}
 	defer rows.Close()
 
-	var agents []models.Agent
+	agents := []models.Agent{}
 
 	for rows.Next() {
 		var agent models.Agent

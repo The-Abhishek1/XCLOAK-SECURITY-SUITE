@@ -60,7 +60,7 @@ func FrontendLoginErrorURL(msg string) string {
 // loadSMTPConfig.
 func loadOIDCConfig(tenantID int) (*OIDCConfig, error) {
 	var enabled bool
-	var configJSON []byte
+	configJSON := []byte{}
 
 	err := database.DB.QueryRow(`
 		SELECT enabled, config FROM integrations WHERE name='oidc' AND tenant_id=$1

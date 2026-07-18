@@ -24,7 +24,7 @@ func GetUEBAAnalytics(c *gin.Context) {
 		RiskScore int     `json:"risk_score"`
 		Flags     []string `json:"flags"`
 	}
-	var highRisk []RiskRow
+	highRisk := []RiskRow{}
 	rows, _ := database.DB.Query(`
 		SELECT username, source, risk_score, flags
 		FROM user_risk_profiles WHERE tenant_id=$1 AND risk_score >= 60
@@ -33,7 +33,7 @@ func GetUEBAAnalytics(c *gin.Context) {
 		defer rows.Close()
 		for rows.Next() {
 			var r RiskRow
-			var flags []string
+			flags := []string{}
 			if rows.Scan(&r.Username, &r.Source, &r.RiskScore, &flags) == nil {
 				r.Flags = flags
 			}
@@ -52,7 +52,7 @@ func GetUEBAAnalytics(c *gin.Context) {
 		EventType string `json:"event_type"`
 		Count     int    `json:"count"`
 	}
-	var topAnomalies []AnomalyRow
+	topAnomalies := []AnomalyRow{}
 	rows2, _ := database.DB.Query(`
 		SELECT event_type, COUNT(*) AS cnt
 		FROM ueba_events WHERE tenant_id=$1 AND detected_at > NOW()-INTERVAL '7 days'
@@ -90,7 +90,7 @@ func GetUEBAAnalytics(c *gin.Context) {
 		Day   string `json:"day"`
 		Count int    `json:"count"`
 	}
-	var trend []TrendDay
+	trend := []TrendDay{}
 	rows3, _ := database.DB.Query(`
 		SELECT TO_CHAR(detected_at::date,'YYYY-MM-DD'), COUNT(*)
 		FROM ueba_events WHERE tenant_id=$1 AND detected_at > NOW()-INTERVAL '14 days'
@@ -174,7 +174,7 @@ func GetUEBAUserDetail(c *gin.Context) {
 		Count int       `json:"count"`
 		Last  time.Time `json:"last_seen"`
 	}
-	var ips []IPRow
+	ips := []IPRow{}
 	rows, _ := database.DB.Query(`
 		SELECT source_ip, COUNT(*), MAX(detected_at) FROM ueba_events
 		WHERE tenant_id=$1 AND username=$2 AND source_ip!='' AND detected_at > NOW()-INTERVAL '30 days'
@@ -266,7 +266,7 @@ func GetUEBAPeerComparison(c *gin.Context) {
 		Metric    string `json:"metric"`
 		Value     int    `json:"value"`
 	}
-	var outliers []Outlier
+	outliers := []Outlier{}
 	rows, _ := database.DB.Query(`
 		SELECT username, risk_score, total_events FROM user_risk_profiles
 		WHERE tenant_id=$1 AND username!=$2 ORDER BY total_events DESC LIMIT 5`, tenantID, username)
@@ -298,7 +298,7 @@ func GetUEBAUserAIInsights(c *gin.Context) {
 	// Gather context
 	profiles, _, _ := repositories.GetUserRiskProfiles(tenantID, 500, 0)
 	var riskScore int
-	var flags []string
+	flags := []string{}
 	var totalEvents, failedLogins, offHours, uniqueIPs, privEsc int
 	for _, p := range profiles {
 		if p.Username == username {
@@ -314,7 +314,7 @@ func GetUEBAUserAIInsights(c *gin.Context) {
 	}
 
 	events, _, _ := repositories.GetUEBAEvents(tenantID, username, 10, 0)
-	var recentDesc []string
+	recentDesc := []string{}
 	for _, e := range events {
 		recentDesc = append(recentDesc, fmt.Sprintf("[%s] %s: %s", e.Severity, e.EventType, e.Description))
 	}
@@ -382,7 +382,7 @@ func GetUEBAWatchlist(c *gin.Context) {
 		RiskScore int       `json:"risk_score"`
 	}
 
-	var entries []WatchEntry
+	entries := []WatchEntry{}
 	rows, err := database.DB.Query(`
 		SELECT w.username, w.category, w.added_at, w.added_by,
 		       COALESCE(p.risk_score, 0)

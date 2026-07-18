@@ -237,7 +237,7 @@ func parseNessus(data []byte) ([]ScannerFinding, error) {
 		return nil, fmt.Errorf("nessus parse: %w", err)
 	}
 
-	var findings []ScannerFinding
+	findings := []ScannerFinding{}
 	for _, report := range root.Reports {
 		for _, host := range report.Hosts {
 			ip, hostname := nessusHostIP(host)
@@ -355,7 +355,7 @@ func parseQualys(data []byte) ([]ScannerFinding, error) {
 		return nil, fmt.Errorf("qualys parse: %w", err)
 	}
 
-	var findings []ScannerFinding
+	findings := []ScannerFinding{}
 	for _, host := range root.Hosts {
 		for _, vuln := range host.Vulns {
 			sev := qualysSeverity(vuln.SeverityN)
@@ -457,7 +457,7 @@ func parseTenable(data []byte) ([]ScannerFinding, error) {
 		return nil, fmt.Errorf("tenable parse: %w", err)
 	}
 
-	var findings []ScannerFinding
+	findings := []ScannerFinding{}
 	for _, result := range root.Results {
 		for _, ip := range result.IPs {
 			for _, plugin := range ip.Plugins {

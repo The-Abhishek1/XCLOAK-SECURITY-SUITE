@@ -126,7 +126,7 @@ func GetSuppressionRules(tenantID int) ([]SuppressionRule, error) {
 	}
 	defer rows.Close()
 
-	var rules []SuppressionRule
+	rules := []SuppressionRule{}
 	for rows.Next() {
 		var r SuppressionRule
 		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.RuleName, &r.AgentID,

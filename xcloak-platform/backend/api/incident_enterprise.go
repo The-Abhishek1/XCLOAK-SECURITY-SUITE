@@ -24,7 +24,7 @@ func GetIncidentAnalytics(c *gin.Context) {
 		Severity string `json:"severity"`
 		Count    int    `json:"count"`
 	}
-	var bySev []SevCount
+	bySev := []SevCount{}
 	rows, _ := database.DB.Query(
 		`SELECT severity, COUNT(*) FROM incidents WHERE tenant_id=$1 GROUP BY severity`, tenantID)
 	if rows != nil {
@@ -45,7 +45,7 @@ func GetIncidentAnalytics(c *gin.Context) {
 		Status string `json:"status"`
 		Count  int    `json:"count"`
 	}
-	var byStatus []StatusCount
+	byStatus := []StatusCount{}
 	rows2, _ := database.DB.Query(
 		`SELECT status, COUNT(*) FROM incidents WHERE tenant_id=$1 GROUP BY status`, tenantID)
 	if rows2 != nil {
@@ -84,7 +84,7 @@ func GetIncidentAnalytics(c *gin.Context) {
 		Day   string `json:"day"`
 		Count int    `json:"count"`
 	}
-	var trend []DayCount
+	trend := []DayCount{}
 	rows3, _ := database.DB.Query(`
 		SELECT TO_CHAR(created_at,'YYYY-MM-DD') as day, COUNT(*)
 		FROM incidents WHERE tenant_id=$1 AND created_at > NOW()-INTERVAL '14 days'
@@ -176,7 +176,7 @@ func GetIncidentTaskList(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var tasks []incidentTask
+	tasks := []incidentTask{}
 	for rows.Next() {
 		var ev struct {
 			ID        int
@@ -489,7 +489,7 @@ func GetSimilarIncidents(c *gin.Context) {
 		ORDER BY created_at DESC LIMIT 10
 	`, tenantID, id, incident.Severity)
 
-	var list []Similar
+	list := []Similar{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

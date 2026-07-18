@@ -36,7 +36,7 @@ func ClusterAlerts(tenantID int) error {
 		createdAt             time.Time
 	}
 
-	var alerts []alertRow
+	alerts := []alertRow{}
 	for rows.Next() {
 		var a alertRow
 		rows.Scan(&a.id, &a.ruleName, &a.severity, &a.mitreTech, &a.mitreTact, &a.agentID, &a.createdAt)
@@ -195,7 +195,7 @@ func GetAlertClusters(tenantID, limit int) ([]models.AlertCluster, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.AlertCluster
+	out := []models.AlertCluster{}
 	for rows.Next() {
 		var c models.AlertCluster
 		rows.Scan(&c.ID, &c.TenantID, &c.ClusterKey, &c.MitreTechnique, &c.RuleName,
@@ -219,7 +219,7 @@ func GetClusterAlerts(clusterID, tenantID int) ([]map[string]any, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []map[string]any
+	out := []map[string]any{}
 	for rows.Next() {
 		var id int
 		var ruleName, severity, status, hostname string

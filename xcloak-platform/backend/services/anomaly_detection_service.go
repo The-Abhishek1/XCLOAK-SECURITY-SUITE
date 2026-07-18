@@ -80,7 +80,7 @@ func GetAnomalies(agentID string, tenantID int) ([]models.AnomalyFinding, error)
 	}
 	defer rows.Close()
 
-	var findings []models.AnomalyFinding
+	findings := []models.AnomalyFinding{}
 	for rows.Next() {
 		var f models.AnomalyFinding
 		if err := rows.Scan(&f.ID, &f.AgentID, &f.FindingType, &f.Description, &f.Severity,
@@ -192,7 +192,7 @@ func parseAnomalyJSON(agentID int, raw string) []models.AnomalyFinding {
 		return nil
 	}
 
-	var findings []models.AnomalyFinding
+	findings := []models.AnomalyFinding{}
 	for _, f := range result.Findings {
 		ctx, _ := json.Marshal(map[string]string{"indicator": f.Indicator})
 		findings = append(findings, models.AnomalyFinding{

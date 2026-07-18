@@ -236,7 +236,7 @@ func queryLDAP(cfg ldapConfig, username string) (IdentityRecord, error) {
 }
 
 func loadLDAPConfig(tenantID int) (ldapConfig, bool) {
-	var configJSON []byte
+	configJSON := []byte{}
 	var enabled bool
 	err := database.DB.QueryRow(`
 		SELECT enabled, config FROM integrations
@@ -301,7 +301,7 @@ func managerCN(dn string) string {
 }
 
 func memberOfCNs(dns []string) []string {
-	var out []string
+	out := []string{}
 	for _, dn := range dns {
 		out = append(out, managerCN(dn))
 	}
@@ -330,7 +330,7 @@ func parseLDAPGroups(s string) []string {
 	if s == "" {
 		return []string{}
 	}
-	var parts []string
+	parts := []string{}
 	for _, p := range strings.Split(s, ",") {
 		p = strings.TrimSpace(p)
 		p = strings.Trim(p, `"`)

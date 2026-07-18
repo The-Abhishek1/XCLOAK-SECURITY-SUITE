@@ -55,7 +55,7 @@ func GetAgentCISFindings(c *gin.Context) {
 		Remediation string    `json:"remediation"`
 		CheckedAt   time.Time `json:"checked_at"`
 	}
-	var findings []row
+	findings := []row{}
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.ControlID, &r.Platform, &r.Profile, &r.Category,
@@ -123,7 +123,7 @@ func GetCISSummary(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var controls []controlRow
+	controls := []controlRow{}
 	for rows.Next() {
 		var r controlRow
 		if err := rows.Scan(&r.ControlID, &r.Title, &r.Category, &r.Platform, &r.Severity,

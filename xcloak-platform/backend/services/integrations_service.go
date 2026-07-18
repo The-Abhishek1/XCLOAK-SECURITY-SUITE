@@ -493,7 +493,7 @@ func deliverSplunkHEC(alert models.Alert) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func loadIntegrationConfig(name string, tenantID int) (map[string]any, bool) {
-	var configRaw []byte
+	configRaw := []byte{}
 	var enabled bool
 	err := database.DB.QueryRow(
 		`SELECT enabled, config FROM integrations WHERE name=$1 AND tenant_id=$2`, name, tenantID,

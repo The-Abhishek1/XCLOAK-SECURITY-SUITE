@@ -16,7 +16,7 @@ import (
 // Receives Windows registry persistence key snapshots from the agent.
 func ReceiveRegistry(c *gin.Context) {
 
-	var entries []models.RegistryEntry
+	entries := []models.RegistryEntry{}
 	if err := c.ShouldBindJSON(&entries); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -76,7 +76,7 @@ func GetRegistryEntries(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var entries []models.RegistryEntry
+	entries := []models.RegistryEntry{}
 	for rows.Next() {
 		var e models.RegistryEntry
 		rows.Scan(&e.ID, &e.AgentID, &e.Hive, &e.KeyPath, &e.Name, &e.Type, &e.Data, &e.ThreatTag, &e.CreatedAt)

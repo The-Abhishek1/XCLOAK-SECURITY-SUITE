@@ -191,7 +191,7 @@ func deliverWebhook(eventType string, payload WebhookPayload, tenantID int) {
 		Events []string `json:"events"`
 	}
 
-	var configRaw []byte
+	configRaw := []byte{}
 	var enabled bool
 
 	err := database.DB.QueryRow(
@@ -243,7 +243,7 @@ func deliverSlack(payload WebhookPayload, tenantID int) {
 		MentionOnCritical   bool   `json:"mention_on_critical"`
 	}
 
-	var configRaw []byte
+	configRaw := []byte{}
 	var enabled bool
 
 	err := database.DB.QueryRow(
@@ -394,7 +394,7 @@ func GetIntegrations(tenantID int) ([]map[string]any, error) {
 	for rows.Next() {
 		var name, updatedAt string
 		var enabled bool
-		var config []byte
+		config := []byte{}
 		if err := rows.Scan(&name, &enabled, &config, &updatedAt); err == nil {
 			var cfg map[string]any
 			json.Unmarshal(config, &cfg)
@@ -474,7 +474,7 @@ func GetWebhookDeliveries(tenantID int) ([]map[string]any, error) {
 	}
 	defer rows.Close()
 
-	var result []map[string]any
+	result := []map[string]any{}
 	for rows.Next() {
 		var id, code int
 		var integration, eventType, errMsg, deliveredAt string

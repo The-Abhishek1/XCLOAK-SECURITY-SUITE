@@ -61,7 +61,7 @@ func GetEmailRules(c *gin.Context) {
 		Enabled   bool   `json:"enabled"`
 		CreatedAt string `json:"created_at"`
 	}
-	var rules []Rule
+	rules := []Rule{}
 	for rows.Next() {
 		var r Rule
 		if rows.Scan(&r.ID, &r.Name, &r.Severity, &r.Recipient, &r.Enabled, &r.CreatedAt) == nil {

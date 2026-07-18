@@ -61,7 +61,7 @@ func GetReports(tenantID int) ([]models.ComplianceReport, error) {
 	}
 	defer rows.Close()
 
-	var reports []models.ComplianceReport
+	reports := []models.ComplianceReport{}
 	for rows.Next() {
 		var r models.ComplianceReport
 		if err := rows.Scan(&r.ID, &r.Title, &r.ReportType, &r.GeneratedBy, &r.Summary, &r.CreatedAt); err == nil {

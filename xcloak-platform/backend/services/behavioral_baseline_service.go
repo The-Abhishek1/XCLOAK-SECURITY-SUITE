@@ -69,7 +69,7 @@ func runBehavioralScoring() {
 	}
 	defer rows.Close()
 
-	var metrics []agentWindowMetrics
+	metrics := []agentWindowMetrics{}
 	for rows.Next() {
 		var m agentWindowMetrics
 		if err := rows.Scan(&m.AgentID, &m.TenantID,
@@ -222,7 +222,7 @@ func computeScore(m agentWindowMetrics, b *models.AgentBaseline, now time.Time) 
 		c.ProcScore + c.PrivEscScore + c.OffHoursScore
 
 	// Build human-readable detail string.
-	var parts []string
+	parts := []string{}
 	if c.LogRateScore >= 15 {
 		parts = append(parts, fmt.Sprintf("log rate spike (%d events/5 min)", m.LogCount))
 	}
@@ -429,7 +429,7 @@ func GetAnomalyScores(agentID, tenantID int, hours int) ([]models.AgentAnomalySc
 	}
 	defer rows.Close()
 
-	var scores []models.AgentAnomalyScore
+	scores := []models.AgentAnomalyScore{}
 	for rows.Next() {
 		var s models.AgentAnomalyScore
 		if err := rows.Scan(&s.ID, &s.AgentID, &s.TenantID, &s.Score, &s.Components, &s.ScoredAt); err == nil {
@@ -458,7 +458,7 @@ func GetAgentBaselines(agentID, tenantID int) ([]models.AgentBaseline, error) {
 	}
 	defer rows.Close()
 
-	var baselines []models.AgentBaseline
+	baselines := []models.AgentBaseline{}
 	for rows.Next() {
 		var b models.AgentBaseline
 		if err := rows.Scan(

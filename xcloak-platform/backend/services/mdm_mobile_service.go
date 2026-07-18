@@ -69,7 +69,7 @@ func ListEnrollmentTokens(tenantID int) ([]EnrollmentToken, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []EnrollmentToken
+	out := []EnrollmentToken{}
 	for rows.Next() {
 		var t EnrollmentToken
 		if err := rows.Scan(&t.ID, &t.TenantID, &t.Token, &t.Label, &t.Platform,
@@ -249,10 +249,10 @@ func GetPendingMobileCommands(deviceID, tenantID int) ([]MDMCommand, error) {
 	}
 	defer rows.Close()
 
-	var cmds []MDMCommand
+	cmds := []MDMCommand{}
 	for rows.Next() {
 		var c MDMCommand
-		var payloadJSON []byte
+		payloadJSON := []byte{}
 		if err := rows.Scan(&c.ID, &c.TenantID, &c.DeviceID, &c.CommandType,
 			&payloadJSON, &c.Status, &c.QueuedBy, &c.QueuedAt,
 			&c.SentAt, &c.AcknowledgedAt, &c.ErrorMsg); err != nil {

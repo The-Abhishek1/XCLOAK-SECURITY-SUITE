@@ -42,7 +42,7 @@ func GetAgentReleases() ([]models.AgentRelease, error) {
 	}
 	defer rows.Close()
 
-	var out []models.AgentRelease
+	out := []models.AgentRelease{}
 	for rows.Next() {
 		var r models.AgentRelease
 		if err := rows.Scan(&r.ID, &r.Platform, &r.Version, &r.SHA256,

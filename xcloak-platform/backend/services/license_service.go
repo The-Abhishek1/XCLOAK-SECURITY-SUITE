@@ -252,7 +252,7 @@ func ListLicenseKeys() ([]LicenseKeyRecord, error) {
 	}
 	defer rows.Close()
 
-	var out []LicenseKeyRecord
+	out := []LicenseKeyRecord{}
 	for rows.Next() {
 		var r LicenseKeyRecord
 		if err := rows.Scan(&r.ID, &r.KeyID, &r.CustomerName, &r.CustomerEmail,
