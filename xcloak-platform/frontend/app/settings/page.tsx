@@ -270,15 +270,11 @@ export default function SettingsEnterprise() {
   const d = data;
 
   return (
-    <RootLayout>
+    <RootLayout title="Settings" subtitle="Platform configuration and administration">
       <div style={{ minHeight: '100vh', background: 'var(--bg-1)' }}>
         {/* ── top tabs ──────────────────────────────────────────────────── */}
         <div style={{ background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', padding: '0 32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 20, paddingBottom: 0 }}>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Settings</h1>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Platform configuration and administration</p>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingTop: 20, paddingBottom: 0 }}>
             {msg && (
               <div style={{ background: '#16a34a22', color: '#16a34a', border: '1px solid #16a34a55', borderRadius: 6, padding: '8px 16px', fontSize: 13 }}>
                 {msg}

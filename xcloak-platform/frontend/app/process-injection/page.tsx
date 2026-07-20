@@ -829,15 +829,8 @@ export default function ProcessInjectionPage() {
   const tabs = Object.keys(TAB_LABELS) as Tab[];
 
   return (
-    <RootLayout>
+    <RootLayout title="Process Injection Detection" subtitle="Memory forensics, API monitoring, and injection technique detection — MITRE T1055">
       <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Process Injection Detection</h1>
-          <p style={{ color: 'var(--text-3)', margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
-            Memory forensics, API monitoring, and injection technique detection — MITRE T1055
-          </p>
-        </div>
-
         <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
           {tabs.map(t => (
             <button key={t}

@@ -1102,7 +1102,7 @@ export default function PlatformPage() {
   const sidebarGroups = SIDEBAR[tab] ?? [];
 
   return (
-    <RootLayout>
+    <RootLayout title="Platform" subtitle="Multi-tenant administration">
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
         {/* Top tab bar */}

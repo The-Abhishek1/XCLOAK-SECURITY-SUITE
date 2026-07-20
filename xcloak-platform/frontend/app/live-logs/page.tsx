@@ -1103,6 +1103,9 @@ export default function LiveLogsPage() {
 
   const FILTERABLE_FIELDS = ['src_ip', 'hostname', 'user', 'process', 'event_id', 'auth_result', 'severity', 'domain', 'dst_ip', 'pid'];
 
+  const selectedAgent = agents.find(a => a.id === agentId);
+  const agentOnline = selectedAgent?.status === 'online';
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -1127,11 +1130,19 @@ export default function LiveLogsPage() {
 
           {/* Connection pill */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg ml-auto"
+            title={connected && !agentOnline && !isDemo ? 'Connected to server, but this agent is offline — no new logs will arrive' : undefined}
             style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
             <span className="h-2 w-2 rounded-full shrink-0 transition-all"
-              style={{ background: connected ? 'var(--green)' : 'var(--red)', boxShadow: connected && !paused ? '0 0 5px var(--green)' : 'none' }} />
+              style={{
+                background: !connected ? 'var(--red)' : (!isDemo && !agentOnline) ? 'var(--yellow)' : 'var(--green)',
+                boxShadow: connected && !paused && (isDemo || agentOnline) ? '0 0 5px var(--green)' : 'none',
+              }} />
             <span className="text-[10px]" style={{ color: 'var(--text-2)' }}>
-              {connected ? (paused ? 'Paused' : (replaying ? 'Replay' : 'Live')) : 'Offline'}
+              {!connected ? 'Offline'
+                : paused ? 'Paused'
+                : replaying ? 'Replay'
+                : (!isDemo && !agentOnline) ? 'Agent Offline'
+                : 'Live'}
             </span>
             {isDemo && <span className="text-[9px] px-1 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>DEMO</span>}
           </div>

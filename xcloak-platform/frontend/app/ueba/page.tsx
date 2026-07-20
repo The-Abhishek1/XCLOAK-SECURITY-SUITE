@@ -1037,7 +1037,8 @@ export default function UEBAPage() {
   // Split panel if user selected
   if (selected) {
     return (
-      <div className="h-screen flex overflow-hidden" style={{ background:'var(--bg-0)' }}>
+      <RootLayout title="UEBA" subtitle="User & Entity Behavior Analytics">
+      <div className="flex overflow-hidden rounded-2xl border" style={{ background:'var(--bg-0)', borderColor:'var(--border)', height: 'calc(100vh - 130px)' }}>
         {/* Left: compact list */}
         <div className="w-72 shrink-0 flex flex-col border-r" style={{ borderColor:'var(--border)' }}>
           <div className="px-3 py-3 space-y-2 shrink-0" style={{ borderBottom:'1px solid var(--border)', background:'var(--bg-1)' }}>
@@ -1075,6 +1076,7 @@ export default function UEBAPage() {
           <UserDetailPanel profile={selected} onClose={() => setSelected(null)} />
         </div>
       </div>
+      </RootLayout>
     );
   }
 

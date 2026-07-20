@@ -433,7 +433,11 @@ type LogStats struct {
 }
 
 func GetLogStats(tenantID int) (*LogStats, error) {
-	stats := &LogStats{}
+	stats := &LogStats{
+		ByAgent:      []map[string]interface{}{},
+		BySource:     []map[string]interface{}{},
+		HourlyVolume: []map[string]interface{}{},
+	}
 
 	// Total count.
 	database.DB.QueryRow(`

@@ -616,14 +616,14 @@ export default function AgentDetailPage() {
               <StatusPill ok={true} label="EDR Agent" />
               <StatusPill ok={agent.tamper_protection ?? null} label="Tamper Protection" unknown={agent.tamper_protection == null} />
               <StatusPill ok={agent.is_isolated ? false : true} label="Network Access" />
+              <StatusPill ok={secStatus?.firewall_enabled ?? null} label="Firewall" unknown={secStatus?.firewall_enabled == null} />
               {isMobile && <>
                 <StatusPill ok={agent.is_rooted === false ? true : agent.is_rooted === true ? false : null} label="Root Status" unknown={agent.is_rooted == null} />
                 <StatusPill ok={agent.vpn_active ?? null} label="VPN Active" unknown={agent.vpn_active == null} />
               </>}
               {[
-                { label: 'Firewall', val: critAlerts === 0 },
-                { label: 'Open Alerts', val: openAlerts === 0 },
-                { label: 'Critical Vulns', val: critVulns === 0 },
+                { label: 'No Open Alerts', val: openAlerts === 0 },
+                { label: 'No Critical Vulns', val: critVulns === 0 },
               ].map(({ label, val }) => (
                 <StatusPill key={label} ok={val} label={label} />
               ))}

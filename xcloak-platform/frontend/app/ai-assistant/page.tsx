@@ -245,23 +245,15 @@ export default function AIAssistantEnterprise() {
   const d = data.dashboard;
 
   return (
-    <RootLayout>
-      <div style={{ padding: '24px 32px', minHeight: '100vh', background: 'var(--bg-1)' }}>
-        {/* header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>AI Security Assistant</h1>
-            <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '4px 0 0' }}>
-              Agentic AI copilot — investigation · detection · automation · executive intelligence
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="g-btn-ghost" onClick={() => startNewChat('chat')}>+ New Chat</button>
-            <button className="g-btn-ghost" onClick={() => startNewChat('investigate')}>+ Investigate</button>
-            <button className="g-btn" onClick={loadAll}>Refresh</button>
-          </div>
+    <RootLayout title="AI Security Assistant" subtitle="Agentic AI copilot — investigation · detection · automation · executive intelligence"
+      actions={
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="g-btn-ghost" onClick={() => startNewChat('chat')}>+ New Chat</button>
+          <button className="g-btn-ghost" onClick={() => startNewChat('investigate')}>+ Investigate</button>
+          <button className="g-btn" onClick={loadAll}>Refresh</button>
         </div>
-
+      }>
+      <div style={{ padding: '24px 32px', minHeight: '100vh', background: 'var(--bg-1)' }}>
         {/* tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
           {TABS.map(t => (

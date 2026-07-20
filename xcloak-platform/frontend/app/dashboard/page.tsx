@@ -328,14 +328,11 @@ function SocFeedPanel({ events }: { events: SocEvent[] }) {
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>Listening for events…</p>
           </div>
         ) : events.map(ev => {
-          const { Icon, color, label } = getSocConfig(ev.type);
+          const { color, label } = getSocConfig(ev.type);
           const sevColor = ev.severity ? SEV_COLORS[ev.severity] : color;
           return (
             <div key={ev.id} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg shrink-0"
-                style={{ background: `color-mix(in srgb, ${color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 30%, transparent)` }}>
-                <Icon className="h-3.5 w-3.5" style={{ color }} />
-              </div>
+              <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: color }} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-semibold" style={{ color }}>{label}</span>
@@ -1569,10 +1566,7 @@ export default function DashboardPage() {
                   (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
                   (e.currentTarget as HTMLElement).style.background = 'var(--bg-0)';
                 }}>
-                <div className="h-8 w-8 flex items-center justify-center rounded-lg"
-                  style={{ background: 'var(--glass)', border: '1px solid var(--border)' }}>
-                  <action.icon className="h-4 w-4" style={{ color: action.color }} />
-                </div>
+                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: action.color }} />
                 <span className="text-[9px] text-center font-medium leading-tight" style={{ color: 'var(--text-2)' }}>
                   {action.label}
                 </span>

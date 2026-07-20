@@ -470,6 +470,7 @@ export default function TimelinePage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showFilters, setShowFilters]     = useState(false);
   const liveTimer                         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loadRequestId                     = useRef(0);
 
   // Debounce search
   useEffect(() => {
@@ -485,6 +486,7 @@ export default function TimelinePage() {
   }, [rangeHours]);
 
   const load = useCallback(async (spin = false) => {
+    const requestId = ++loadRequestId.current;
     if (spin) setRefreshing(true);
     else setLoading(true);
     try {
@@ -492,8 +494,6 @@ export default function TimelinePage() {
         agentsAPI.getAll(),
         timelineAPI.stats(),
       ]);
-      setAgents(agRes.data || []);
-      setStats(statsRes.data || {});
 
       const params: Parameters<typeof timelineAPI.get>[0] = {
         limit: 500,
@@ -512,12 +512,22 @@ export default function TimelinePage() {
         res = (await timelineAPI.get(params)) as { data: TimelineEvent[] | null };
       }
 
+      // A newer load() started while this one was in flight — discard this
+      // stale response so it can't overwrite fresher state (was causing the
+      // timeline to flash empty/wrong data when filters changed quickly).
+      if (requestId !== loadRequestId.current) return;
+
+      setAgents(agRes.data || []);
+      setStats(statsRes.data || {});
+
       const all: TimelineEvent[] = (res?.data || []);
       all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setEvents(all);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === loadRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [catFilter, severityFilter, agentId, debouncedSearch, buildTimeParams]);
 

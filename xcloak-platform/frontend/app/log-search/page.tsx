@@ -558,12 +558,13 @@ function JsonView({ logs, selected, onSelect }: { logs: LogEntry[]; selected: Lo
 // ─────────────────────────────────────────────────────────────────────────────
 
 function Histogram({ volume, drillIdx, onDrill }: {
-  volume: { hour: string; count: number }[]; drillIdx: number | null; onDrill: (i: number | null) => void;
+  volume: { hour: string; count: number }[] | null | undefined; drillIdx: number | null; onDrill: (i: number | null) => void;
 }) {
-  const max = Math.max(...volume.map(h => h.count), 1);
+  const safeVolume = volume ?? [];
+  const max = Math.max(...safeVolume.map(h => h.count), 1);
   return (
     <div className="flex items-end gap-0.5 h-12 px-1">
-      {volume.map((h, i) => (
+      {safeVolume.map((h, i) => (
         <button key={i} title={`${new Date(h.hour).toLocaleTimeString()} — ${h.count} events`}
           onClick={() => onDrill(drillIdx === i ? null : i)}
           className="flex-1 rounded-t-sm transition-all hover:opacity-100"
