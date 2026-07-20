@@ -484,7 +484,7 @@ export default function AgentsPage() {
                           </span>
                         </div>
                       )}
-                      {agent.battery_level != null && (
+                      {agent.battery_level != null && agent.battery_level >= 0 && (
                         <div className="flex justify-between items-center">
                           <span style={{ color: 'var(--text-3)' }}>Battery</span>
                           <span className="tabular-nums" style={{

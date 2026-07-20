@@ -1123,14 +1123,47 @@ export default function DashboardPage() {
 
   // ── Chart data ────────────────────────────────────────────────────────────────
 
-  const trendData = metrics?.alert_trend?.length
-    ? metrics.alert_trend
-    : Array.from({ length: 12 }, (_, i) => ({ label: `${i * 2}:00`, critical: 0, high: 0, medium: 0, low: 0 }));
+  const trendData = useMemo(() => {
+    if (metrics?.alert_trend?.length) return metrics.alert_trend;
+    if (displayAlerts.length === 0) return [];
+    // Backend trend query is time-windowed (e.g. last 24h) and can come back
+    // empty even when real alerts exist outside that window — derive a
+    // day-by-day fallback spanning the actual alerts we have client-side
+    // (not a fixed trailing 7 real-world days, which would still miss older
+    // seed/demo data) so the chart never silently disagrees with the
+    // severity legend below it.
+    const times = displayAlerts.map(a => new Date(a.created_at).getTime());
+    const oldestDay = new Date(Math.min(...times)); oldestDay.setHours(0, 0, 0, 0);
+    const newestDay = new Date(Math.max(...times)); newestDay.setHours(0, 0, 0, 0);
+    const dayCount = Math.min(14, Math.round((newestDay.getTime() - oldestDay.getTime()) / 86400000) + 1);
+    const startDay = new Date(newestDay.getTime() - (dayCount - 1) * 86400000);
+    return Array.from({ length: dayCount }, (_, i) => {
+      const d = new Date(startDay.getTime() + i * 86400000);
+      const dEnd = new Date(d); dEnd.setHours(23, 59, 59, 999);
+      const slice = displayAlerts.filter(a => {
+        const t = new Date(a.created_at).getTime();
+        return t >= d.getTime() && t <= dEnd.getTime();
+      });
+      return {
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        critical: slice.filter(a => a.severity === 'critical').length,
+        high:     slice.filter(a => a.severity === 'high').length,
+        medium:   slice.filter(a => a.severity === 'medium').length,
+        low:      slice.filter(a => a.severity === 'low').length,
+      };
+    });
+  }, [metrics, displayAlerts]);
 
   const incidentTrendData = useMemo(() => {
-    const now = Date.now();
+    // Anchor the trailing 7-day window to the newest incident rather than
+    // real-world "now" — otherwise a window that's genuinely 7 days wide
+    // can still show all-zero if every incident is older than that (e.g.
+    // stale demo/seed data), silently disagreeing with the work queue
+    // counts shown elsewhere on the page.
+    const incidentTimes = displayIncidents.map(i => new Date(i.created_at).getTime());
+    const anchor = incidentTimes.length ? Math.max(...incidentTimes) : Date.now();
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(now - (6 - i) * 86400000); d.setHours(0, 0, 0, 0);
+      const d = new Date(anchor - (6 - i) * 86400000); d.setHours(0, 0, 0, 0);
       const dEnd = new Date(d); dEnd.setHours(23, 59, 59, 999);
       const slice = displayIncidents.filter(inc => {
         const t = new Date(inc.created_at).getTime();
@@ -1148,6 +1181,21 @@ export default function DashboardPage() {
   const sevData = ['critical','high','medium','low']
     .map(s => ({ name: s, value: displayAlerts.filter(a => a.severity === s).length }))
     .filter(d => d.value > 0);
+
+  const mitreTacticsData = useMemo(() => {
+    const fromBackend = metrics?.mitre_tactics ?? [];
+    if (fromBackend.some(t => t.alert_count > 0)) return fromBackend;
+    // Same time-window mismatch as trendData: the backend heatmap query is
+    // windowed to the selected range and can come back all-zero even when
+    // MITRE-tagged alerts exist — derive counts from the alerts already
+    // loaded client-side so the heatmap isn't silently flat.
+    const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+    return MITRE_ORDER.map(tactic => {
+      const matches = displayAlerts.filter(a => a.mitre_tactic === tactic);
+      const bestSev = matches.reduce((best, a) => (rank[a.severity] > rank[best] ? a.severity : best), 'low');
+      return { tactic, alert_count: matches.length, severity: matches.length ? bestSev : 'low' };
+    });
+  }, [metrics, displayAlerts]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -1347,7 +1395,7 @@ export default function DashboardPage() {
 
         {/* ── MITRE Heatmap + Attack Map ────────────────────────── */}
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-          {metrics?.mitre_tactics && <MitreHeatmap tactics={metrics.mitre_tactics} />}
+          <MitreHeatmap tactics={mitreTacticsData} />
           <AttackMapPanel alertCount={displayAlerts.length} />
         </div>
 

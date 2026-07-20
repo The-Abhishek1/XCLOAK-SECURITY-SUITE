@@ -299,10 +299,10 @@ export default function AlertsPage() {
               </div>
               <span className="mono text-[10px] rounded px-1.5 py-0.5 w-fit"
                 style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-                {a.mitre_technique || '—'}
+                {a.mitre_technique && a.mitre_technique !== 'T0000' ? a.mitre_technique : '—'}
               </span>
               <span className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
-                {a.mitre_tactic || '—'}
+                {a.mitre_tactic && a.mitre_tactic !== 'Unknown' ? a.mitre_tactic : '—'}
               </span>
               <span className={sevClass(a.severity)}>{a.severity}</span>
               <span className="flex items-center gap-1 text-[11px]" style={{ color: isSlaBreach(a) ? 'var(--red)' : 'var(--text-3)' }}>

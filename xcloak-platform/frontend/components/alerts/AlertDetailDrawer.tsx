@@ -236,7 +236,13 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
   // Derived / generated data
   const timeline = useMemo(() => genTimeline(a), [a]);
   const history  = useMemo(() => genHistory(a), [a]);
-  const mitreInfo = useMemo(() => getMitreInfo(a.mitre_technique), [a.mitre_technique]);
+  // "T0000" / "Unknown" are the backend's internal placeholder for alerts it
+  // couldn't classify — not real MITRE identifiers, so treat them as absent
+  // rather than rendering them like a real technique/tactic.
+  const mitreTechnique = a.mitre_technique && a.mitre_technique !== 'T0000' ? a.mitre_technique : undefined;
+  const mitreTactic    = a.mitre_tactic    && a.mitre_tactic    !== 'Unknown' ? a.mitre_tactic    : undefined;
+  const mitreName      = a.mitre_name      && a.mitre_name      !== 'Uncategorized' ? a.mitre_name : undefined;
+  const mitreInfo = useMemo(() => getMitreInfo(mitreTechnique), [mitreTechnique]);
 
   // Computed scores from severity
   const severityScore: Record<string,number> = { critical:95, high:75, medium:50, low:25 };
@@ -244,7 +250,7 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
   const confidenceScore = Math.min(99, 60 + Math.floor(Math.random()*35));
   const priorityScore   = Math.round((riskScore * 0.6) + (confidenceScore * 0.4));
 
-  const kcIdx = a.mitre_tactic ? KILL_CHAIN.findIndex(k => k.toLowerCase() === a.mitre_tactic?.toLowerCase()) : -1;
+  const kcIdx = mitreTactic ? KILL_CHAIN.findIndex(k => k.toLowerCase() === mitreTactic.toLowerCase()) : -1;
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -397,11 +403,11 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
               <span style={{ color:'var(--text-3)' }}>Priority</span>
               <span className="font-bold" style={{ color:'var(--text-1)' }}>{priorityScore}</span>
             </div>
-            {a.mitre_technique && (
+            {mitreTechnique && (
               <div className="flex items-center gap-1.5 text-[11px]">
                 <Shield className="h-3 w-3" style={{ color:'var(--accent)' }} />
-                <span className="font-mono" style={{ color:'var(--accent)' }}>{a.mitre_technique}</span>
-                <span style={{ color:'var(--text-3)' }}>{a.mitre_name || a.mitre_tactic || ''}</span>
+                <span className="font-mono" style={{ color:'var(--accent)' }}>{mitreTechnique}</span>
+                <span style={{ color:'var(--text-3)' }}>{mitreName || mitreTactic || ''}</span>
               </div>
             )}
             <div className="flex-1" />
@@ -492,14 +498,14 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
                 </Section>
 
                 {/* MITRE full mapping */}
-                {(a.mitre_technique || a.mitre_tactic) && (
+                {(mitreTechnique || mitreTactic) && (
                   <Section title="MITRE ATT&CK Mapping" icon={<Swords className="h-3.5 w-3.5" />}>
                     <div className="space-y-3">
                       <div className="grid grid-cols-3 gap-3">
                         {[
-                          { label:'Tactic',     val:a.mitre_tactic     || '—' },
-                          { label:'Technique',  val:a.mitre_technique  || '—' },
-                          { label:'Name',       val:a.mitre_name       || mitreInfo?.name || '—' },
+                          { label:'Tactic',     val:mitreTactic     || '—' },
+                          { label:'Technique',  val:mitreTechnique  || '—' },
+                          { label:'Name',       val:mitreName       || mitreInfo?.name || '—' },
                         ].map(({label,val}) => (
                           <div key={label} className="rounded-xl p-3" style={{ background:'var(--accent-glow)', border:'1px solid var(--accent-border)' }}>
                             <p className="text-[10px] mb-1" style={{ color:'var(--text-3)' }}>{label}</p>
@@ -524,7 +530,7 @@ export function AlertDetailDrawer({ alert: a, onClose, onToast, onReload }: Prop
                         </div>
                       )}
                       {/* Kill chain strip */}
-                      {a.mitre_tactic && (
+                      {mitreTactic && (
                         <div>
                           <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color:'var(--text-3)' }}>Kill Chain Position</p>
                           <div className="flex gap-0.5 overflow-x-auto pb-1">

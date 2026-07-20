@@ -42,6 +42,15 @@ interface Analytics {
   total: number; total_open: number;
 }
 
+// MTTR/MTTC are AVG()s over resolved/closed incidents only — the backend
+// COALESCEs a null average (no resolved incidents yet) down to "0.0", which
+// reads as "resolving instantly" rather than "no data". Gate display on
+// whether anything has actually been resolved/closed.
+function hasResolvedIncidents(a: Analytics | null): boolean {
+  if (!a) return false;
+  return a.by_status.some(s => (s.status === 'resolved' || s.status === 'closed') && s.count > 0);
+}
+
 // ── SLA helpers ───────────────────────────────────────────────────────────────
 
 const INCIDENT_SLA: Record<string, number> = { critical: 4, high: 8, medium: 48, low: 120 };
@@ -1017,8 +1026,8 @@ function IncidentDetail({
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label:'MTTD', val:`${analytics.mttd_hours}h`, desc:'Mean detect time' },
-                        { label:'MTTR', val:`${analytics.mttr_hours}h`, desc:'Mean resolve time' },
-                        { label:'MTTC', val:`${analytics.mttc_hours}h`, desc:'Mean contain time' },
+                        { label:'MTTR', val: hasResolvedIncidents(analytics) ? `${analytics.mttr_hours}h` : '—', desc:'Mean resolve time' },
+                        { label:'MTTC', val: hasResolvedIncidents(analytics) ? `${analytics.mttc_hours}h` : '—', desc:'Mean contain time' },
                       ].map(m => (
                         <div key={m.label} className="rounded-xl px-3 py-2.5 text-center"
                           style={{ background:'var(--glass-bg)', border:'1px solid var(--border)' }}>
@@ -1227,7 +1236,7 @@ export default function IncidentsPage() {
               { label:'Open',          val:statusCounts.open        ?? 0,     color:'var(--red)',     Icon:Flame },
               { label:'Investigating', val:statusCounts.investigating ?? 0,   color:'var(--orange)',  Icon:ShieldAlert },
               { label:'SLA Breached',  val:slaBreached,                        color:slaBreached>0?'var(--red)':'var(--green)', Icon:Clock },
-              { label:'MTTR',          val:`${analytics?.mttr_hours ?? '—'}h`, color:'var(--text-2)', Icon:BarChart2 },
+              { label:'MTTR',          val: hasResolvedIncidents(analytics) ? `${analytics!.mttr_hours}h` : '—', color:'var(--text-2)', Icon:BarChart2 },
               { label:'MTTD',          val:`${analytics?.mttd_hours ?? '—'}h`, color:'var(--text-2)', Icon:BarChart2 },
             ].map(({ label, val, color, Icon }) => (
               <div key={label} className="g-card p-3 flex items-center gap-2.5">

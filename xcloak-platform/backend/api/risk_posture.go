@@ -26,7 +26,12 @@ func GetRiskPosture(c *gin.Context) {
 		c.JSON(http.StatusOK, snap)
 		return
 	}
-	c.JSON(http.StatusOK, history[0])
+	// Cached snapshot only has the persisted score columns — the drill-down
+	// detail (identities, exposure, patches, etc) reflects current state and
+	// is never persisted, so it must be filled in on every read.
+	snap := history[0]
+	services.EnrichRiskPostureLiveData(&snap, tenantID)
+	c.JSON(http.StatusOK, snap)
 }
 
 // GetRiskPostureHistory — GET /api/risk-posture/history
