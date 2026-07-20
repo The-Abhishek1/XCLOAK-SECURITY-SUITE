@@ -106,6 +106,11 @@ func fimScanPath(path string) ([]fimFileEntry, error) {
 		if err != nil || fi.IsDir() {
 			return nil
 		}
+		// Skip symlinks, sockets, FIFOs, and device files — opening one of
+		// these (e.g. a FIFO with no writer) can block the read indefinitely.
+		if !fi.Mode().IsRegular() {
+			return nil
+		}
 		if fi.Size() > 100*1024*1024 {
 			return nil
 		}

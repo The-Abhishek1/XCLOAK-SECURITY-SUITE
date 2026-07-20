@@ -429,7 +429,7 @@ func PostSRAI(c *gin.Context) {
 	case "explain":
 		prompt = fmt.Sprintf(`Analyze this %s script and explain it clearly: %s. Output JSON with: summary (what the script does), step_by_step (array of {line_range, description}), risks (array of potential risks), dependencies (external tools or permissions needed), suggestions (improvements).`, b.Language, b.Content)
 	case "optimize":
-		prompt = fmt.Sprintf(`Optimize this %s script for performance, readability and security: %s. Output JSON with: optimized_script (improved code), changes (array of {description, reason}), performance_improvement (estimated %), security_improvements (array of strings).`, b.Language, b.Content)
+		prompt = fmt.Sprintf(`Optimize this %s script for performance, readability and security: %s. Output JSON with: optimized_script (improved code), changes (array of {description, reason}), performance_improvement (estimated %%), security_improvements (array of strings).`, b.Language, b.Content)
 	case "detect_unsafe":
 		prompt = fmt.Sprintf(`Security audit this %s script for dangerous or unsafe commands: %s. Output JSON with: risk_level (low/medium/high/critical), unsafe_commands (array of {command, line, reason, severity}), overall_assessment (string), allow_execution (boolean), remediation (string).`, b.Language, b.Content)
 	case "convert":
