@@ -36,7 +36,7 @@ If you're new to the codebase, these areas are well-scoped and documented:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.21+ | Backend + agent |
+| Go | 1.25+ | Backend + agent |
 | Node.js | 18+ | Frontend |
 | PostgreSQL | 16 | Primary database |
 | Redis | 7+ | Rate limiting + sessions |
@@ -120,9 +120,9 @@ Types: `Feature`, `Fix`, `Harden`, `Docs`, `Refactor`, `Test`, `Chore`
 
 ## Adding a Sigma Rule
 
-Detection rules live in the database seed migration. To add a rule:
+Detection rules live in the database seed migrations. To add a rule:
 
-1. Open `xcloak-platform/backend/database/migrations/000056_seed_sigma_rules.up.sql`
+1. Open `xcloak-platform/backend/database/migrations/000059_sigma_rule_pack_v2.up.sql` (or add a new migration — don't edit `000056_sigma_rule_library.up.sql` once it's shipped, since existing installs have already applied it)
 2. Add a row in the `INSERT INTO sigma_rules` block
 3. Map to a MITRE ATT&CK technique if possible
 4. Test by running the backend against a log that should match

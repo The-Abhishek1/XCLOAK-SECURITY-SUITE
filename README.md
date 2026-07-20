@@ -137,11 +137,11 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Backend API | ✅ Production-grade | Go/Gin, 70 migrations, RLS, httpOnly cookies, refresh rotation |
-| Detection engines | ✅ Working | 17 behavioral detectors (incl. DPI: DGA, TLS anomaly, HTTP inspection, protocol anomaly), 43 Sigma rules, YARA, IOC |
+| Backend API | ✅ Production-grade | Go/Gin, 71 migrations, RLS, httpOnly cookies, refresh rotation |
+| Detection engines | ✅ Working | 23 behavioral detectors (incl. DPI: DGA, TLS anomaly, HTTP inspection, protocol anomaly), 102 Sigma rules, YARA, IOC |
 | Go agent (Linux) | ✅ Production-grade | 15 autonomous collectors, slog, eBPF (optional) |
 | Go agent (Windows) | ✅ Working | Same collectors, Windows-native telemetry |
-| Mobile agent (Android) | ✅ Working | Posture, MDM, 10 commands, retry backoff, 53-section admin console |
+| Mobile agent (Android) | ✅ Working | Posture, MDM, 11 commands, retry backoff, 53-section admin console |
 | SOAR / Playbooks | ✅ Working | AI-recommended, human-approval gate, FIM/YARA auto-quarantine |
 | Kafka event bus | ✅ Working | 7 consumer groups wired end-to-end |
 | Helm chart | ✅ Working | v0.2.0, tested on kind and GKE |
@@ -205,7 +205,7 @@ docker exec xcloak-demo-backend ./seed-demo
 # Frontend: http://localhost:3000 — visit /demo to start a session
 ```
 
-200 synthetic alerts, 30 agents, incidents, playbook executions — all queryable through the real backend.
+4 agents, 25 synthetic alerts, incidents, playbook executions — all queryable through the real backend.
 
 ### Static demo — no backend required
 
@@ -258,7 +258,7 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elastic
 
 | Engine | Details |
 |--------|---------|
-| **Sigma Rules** | 43 production-ready rules seeded automatically; custom rules via UI import or direct migration |
+| **Sigma Rules** | 102 production-ready rules seeded automatically; custom rules via UI import or direct migration |
 | **YARA Rules** | Malware signature scanning on endpoints; YARA matches auto-create quarantine tasks |
 | **IOC Engine** | IP, domain, hash, URL, email; async Kafka matching off the request path |
 | **Threat Intel** | STIX/TAXII, MISP, AlienVault OTX, flat-file feeds |
@@ -269,11 +269,11 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elastic
 | **Protocol Anomaly** | Protocol-on-wrong-port (SSH/SMB/RDP/FTP); DNS tunnel (long labels + TCP volume); ICMP tunnel; HTTP CONNECT lateral movement; SMTP exfil (T1571, T1095, T1572) |
 | **Port Scan / LM** | Vertical, horizontal, SYN sweep; SMB spray (T1046, T1021.002) |
 | **Exfiltration** | Volume flood, cloud storage drain (S3/Drive/OneDrive/Dropbox/Box/Mega) (T1048, T1567.002) |
-| **TLS/JA3** | 13+ known C2 tool fingerprints (Cobalt Strike, Sliver, Havoc, BruteRatel, etc.) (T1071.001) |
+| **TLS/JA3** | 10 known C2/malware TLS fingerprints (Cobalt Strike, Metasploit Meterpreter, TrickBot, Emotet, Dridex, QakBot, AsyncRAT, NjRAT, Tor Browser, etc.) (T1071.001) |
 | **Credential Attacks** | SSH/RDP brute force, password spray, credential stuffing (T1110.x) |
 | **Privilege Escalation** | Windows EventID 4728/4732/4720/4672; Linux sudo/SUID/sudoers (T1098, T1548) |
 | **Ransomware** | FIM mass-modify + crypto extensions; kill-chain commands; AV/EDR kill detection (T1486, T1490) |
-| **LotL** | Office→PowerShell chains; 10 LOLBins; encoded PowerShell detection (T1059, T1218, T1027) |
+| **LotL** | Office→PowerShell chains; 8 LOLBins (certutil, regsvr32, mshta, bitsadmin, wmic, rundll32, odbcconf, powershell); encoded PowerShell detection (T1059, T1218, T1027) |
 | **Impossible Travel** | Haversine distance >900 km/h (T1078) |
 | **UEBA** | Behavioral baseline, risk scoring across auth + file access + network |
 | **Enterprise Firewall** | Direction-aware rules (in/out/both), port ranges, tags, expiry, per-tenant policy, 12 built-in templates, CIDR conflict detection, atomic agent sync |
@@ -304,10 +304,10 @@ See [docs/deployment-guide.md](docs/deployment-guide.md) for TLS, Kafka, Elastic
 
 ### Mobile Agent (Android)
 
-**Device Posture (24 fields sent on every check-in):**
+**Device Posture (23 fields, several sent only when set):**
 Root detection · Developer options · USB debugging · Unknown sources · Disk encryption · Battery level/charging · Storage total/free · RAM · Network type · WiFi SSID · VPN active · Security patch level · Manufacturer · Hardware · Android SDK · Build fingerprint
 
-**MDM Commands:** `collect_posture` · `collect_apps` · `scan_threats` · `collect_logs` · `sync` · `message` · `rotate_token` · `update_agent` · `lock_screen` (Device Owner) · `wipe` (Device Owner)
+**MDM Commands:** `collect_posture` · `collect_apps` · `scan_threats` · `collect_logs` · `sync` · `message` · `rotate_token` · `update_agent` · `lock_screen` (Device Owner) · `clear_passcode` (Device Owner) · `wipe` (Device Owner)
 
 **Background timers (all with ≤30 s jitter):** check-in 5 min · command poll 2 min · log forward 10 min · app inventory 30 min · threat scan 15 min
 
@@ -366,7 +366,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.25, Gin, golang-migrate (70 migrations) |
+| Backend | Go 1.25, Gin, golang-migrate (71 migrations) |
 | Database | PostgreSQL 16 with Row-Level Security (tenant isolation) |
 | Cache / State | Redis 7 (rate limiting, session revocation, Lua atomic scripts) |
 | Event bus | Apache Kafka (optional; 7 consumer groups) |

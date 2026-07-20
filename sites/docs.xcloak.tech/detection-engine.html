@@ -190,7 +190,7 @@ tags:
 
 <p><strong>Data Exfiltration</strong> — Triggers on: single session &gt;100 MB, burst of &gt;10 large transfers, outbound connections to known cloud storage domains (S3, GDrive, OneDrive, Dropbox, Box, Mega, iCloud), large off-hours transfers.</p>
 
-<p><strong>TLS/JA3 Fingerprinting</strong> — Matches TLS ClientHello JA3 hashes against a blocklist of 13+ known-malicious fingerprints. Current list includes: Cobalt Strike, Sliver, Havoc, BruteRatel, TrickBot, Emotet, Dridex, Ursnif, AsyncRAT, NjRAT.</p>
+<p><strong>TLS/JA3 Fingerprinting</strong> — Matches TLS ClientHello JA3 hashes against a blocklist of 10 known-malicious fingerprints. Current list includes: Cobalt Strike, Metasploit Meterpreter, Dridex, TrickBot, Emotet, Tor Browser, AsyncRAT, NjRAT, QakBot, and a generic malware TLS heuristic.</p>
 
 <p><strong>Credential Attacks</strong> — Four detection modes: brute force (≥10 failures in 5 min from same src_ip + username); password spray (same src_ip targeting ≥5 different usernames); credential stuffing (same username from ≥5 different src_ips); successful brute force (success preceded by ≥5 failures in 10 min).</p>
 

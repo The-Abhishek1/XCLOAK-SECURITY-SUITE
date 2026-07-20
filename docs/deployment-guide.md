@@ -366,7 +366,7 @@ The agent reads `.env` from its working directory on startup (same precedence ru
 
 ### Migrations
 
-Migrations run automatically on backend startup via `golang-migrate`. The migration files are in `backend/database/migrations/`. There are 70 migrations as of the latest release.
+Migrations run automatically on backend startup via `golang-migrate`. The migration files are in `backend/database/migrations/`. There are 71 migrations as of the latest release.
 
 To run migrations manually:
 

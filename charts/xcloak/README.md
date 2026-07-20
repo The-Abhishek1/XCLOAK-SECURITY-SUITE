@@ -75,9 +75,12 @@ scale.
 
 ## Known limitations
 
-- `/api/health` is a liveness check only (no DB ping) — it won't detect
-  Postgres dying mid-run after the backend has already started serving
-  traffic. A real `/api/health/ready` endpoint is a good follow-up.
+- `/api/health` is a liveness check only — it reflects cached circuit-
+  breaker state, not a live DB ping, so it won't immediately detect
+  Postgres dying mid-run. `/api/health/deep` does run a real `SELECT 1`
+  against primary + replica with latency and pool stats; point a
+  Kubernetes readiness probe there if you need that signal (it's not
+  wired up as the chart's default readinessProbe today).
 - `/metrics` is protected only by a static bearer token, not mTLS or a
   NetworkPolicy — it's deliberately not exposed on the public Ingress, but
   is reachable by anything else in-cluster. Restrict with a NetworkPolicy

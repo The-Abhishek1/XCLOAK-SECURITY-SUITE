@@ -21,7 +21,7 @@ This is a living document. Items are not promises — they represent current pri
 
 ✅ Backend security hardening (Phases 4–6)  
 ✅ Go agent enterprise upgrade — 15 collectors, slog, connection enrichment  
-✅ Mobile agent enterprise upgrade — enriched posture, retry backoff, 10 MDM commands  
+✅ Mobile agent enterprise upgrade — enriched posture, retry backoff, 11 MDM commands  
 ✅ Kafka event bus wired end-to-end (7 consumer groups)  
 ✅ FIM + YARA auto-quarantine with approval queue  
 ✅ Splunk HEC real-time streaming  
@@ -80,8 +80,7 @@ This is a living document. Items are not promises — they represent current pri
 
 ## Longer Term / Ideas
 
-💡 **Open-source the Next.js frontend** — currently open-core (backend + agents open, frontend proprietary)  
-💡 **SaaS offering** — hosted XCloak for teams that don't want to self-host  
+💡 **Hosted SaaS launch** — SaaS/self-hosted mode toggle, subscription management, and license-authority detection already ship in the platform admin console; a publicly-signed-up hosted offering is the remaining step  
 💡 **Agent for network devices** — SNMP + syslog collector on routers/switches with VLAN visibility  
 💡 **Container/Kubernetes agent** — eBPF-based runtime threat detection in Kubernetes pods  
 💡 **AI rule generation** — describe an attack, Claude generates a Sigma rule  
@@ -94,7 +93,6 @@ This is a living document. Items are not promises — they represent current pri
 These are the current honest limitations of the platform:
 
 - **Single maintainer** — response times and release cadence reflect a one-person project
-- **Frontend not open-sourced** — the Next.js dashboard source is not currently in this repo (open-core model)
 - **Android-only mobile** — iOS agent does not exist yet
 - **No official production SLA** — this is not a commercial product; use at your own risk
 - **Screen lock detection requires Device Owner (DPC)** — BYOD Android mode cannot programmatically detect screen lock status
@@ -105,5 +103,5 @@ These are the current honest limitations of the platform:
 
 ---
 
-*Last updated: 2026-07-08*  
+*Last updated: 2026-07-20*  
 *Maintainer: Abhishek N — abhishekn1003@gmail.com · [xcloak.tech](https://xcloak.tech)*

@@ -512,7 +512,7 @@ XCloak includes a built-in MDM layer for Android devices via the **XCloak Agent*
 
 ### Enrolling a device
 
-1. Go to **MDM → Enrollment Tokens** and click **Generate Token**. Set an expiry (default 24 h) and optional owner email.
+1. Go to **MDM → Enrollment Tokens** and click **Generate Token**. Set an expiry (default 48 h) and optional owner email.
 2. On the target Android device, install the XCloak Agent APK and tap **Enroll Device**.
 3. Enter the server URL and the enrollment token. Tap **Enroll**.
 

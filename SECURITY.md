@@ -64,7 +64,7 @@ We credit reporters in the release notes unless you prefer to remain anonymous.
 | Asset | Sensitivity | Protection |
 |-------|-------------|------------|
 | JWT secret | Critical | Env var / Vault; never logged |
-| User passwords | Critical | bcrypt (cost 12); never stored plaintext |
+| User passwords | Critical | bcrypt (cost 14); never stored plaintext |
 | Agent tokens | High | SHA-256 hashed in DB; rotatable via API |
 | Audit logs | High | MinIO Object Lock (WORM) — can't be deleted even by admin |
 | Tenant data (alerts, rules, logs) | High | PostgreSQL Row-Level Security (RLS) per tenant |

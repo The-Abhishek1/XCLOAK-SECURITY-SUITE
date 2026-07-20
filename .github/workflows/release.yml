@@ -126,11 +126,11 @@ jobs:
             ```bash
             docker pull ghcr.io/the-abhishek1/xcloak-backend:${{ github.ref_name }}
             docker pull ghcr.io/the-abhishek1/xcloak-frontend:${{ github.ref_name }}
-            docker pull ghcr.io/the-abhishek1/xcloak-agent-desktop:${{ github.ref_name }}
+            docker pull ghcr.io/the-abhishek1/xcloak-agent:${{ github.ref_name }}
             ```
 
             > The agent container requires elevated privileges for eBPF:
-            > `docker run --privileged ghcr.io/the-abhishek1/xcloak-agent-desktop:${{ github.ref_name }}`
+            > `docker run --privileged ghcr.io/the-abhishek1/xcloak-agent:${{ github.ref_name }}`
 
             ---
 
