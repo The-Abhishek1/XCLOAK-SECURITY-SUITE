@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { tneAPI } from '@/lib/api';
+import { tneAPI, platformAPI } from '@/lib/api';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ const TABS = [
 const SIDEBAR: Record<string, { id: string; label: string }[][]> = {
   dashboard: [[{ id: 'overview',     label: 'Tenant Dashboard' }]],
   tenants:   [[{ id: 'directory',    label: 'Tenant Directory' }, { id: 'config', label: 'Tenant Configuration' }],
-              [{ id: 'isolation',    label: 'Data Isolation' }]],
+              [{ id: 'isolation',    label: 'Data Isolation' }, { id: 'deployment', label: 'Deployment Mode' }]],
   licenses:  [[{ id: 'rbac',         label: 'Users & RBAC' }],
               [{ id: 'modules',      label: 'Module Management' }]],
   usage:     [[{ id: 'resources',    label: 'Resource Allocation' }],
@@ -146,14 +146,18 @@ export default function PlatformPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg]       = useState('');
 
+  const [capabilities, setCapabilities] = useState<any>(null);
+  const [modeToggling, setModeToggling] = useState<'saas' | 'license' | null>(null);
+
   const loadAll = useCallback(async () => {
-    const [dash, tList, anal, ph, aud, rpts] = await Promise.all([
+    const [dash, tList, anal, ph, aud, rpts, caps] = await Promise.all([
       tneAPI.getDashboard(),
       tneAPI.getTenants(),
       tneAPI.getAnalytics(),
       tneAPI.getPlatformHealth(),
       tneAPI.getAudit(),
       tneAPI.getReports(),
+      platformAPI.getCapabilities().catch(() => ({ data: null })),
     ]);
     setDashboard(dash.data);
     setTenants(Array.isArray(tList.data) ? tList.data : []);
@@ -161,6 +165,7 @@ export default function PlatformPage() {
     setPlatformHealth(ph.data);
     setAudit(Array.isArray(aud.data) ? aud.data : []);
     setReports(rpts.data);
+    setCapabilities(caps.data);
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -221,6 +226,26 @@ export default function PlatformPage() {
     await tneAPI.updateModule(selectedTenant.tenant_ref, { module: moduleId, enabled });
     const mods = await tneAPI.getModules(selectedTenant.tenant_ref);
     setTenantModules(Array.isArray(mods.data) ? mods.data : []);
+  };
+
+  const toggleSaasMode = async () => {
+    if (!capabilities) return;
+    setModeToggling('saas');
+    try {
+      const r = await platformAPI.setSaasMode(!capabilities.saas_mode);
+      setCapabilities((p: any) => ({ ...p, saas_mode: r.data?.saas_mode ?? !p.saas_mode }));
+      setMsg(r.data?.message ?? 'SaaS mode updated.');
+    } finally { setModeToggling(null); setTimeout(() => setMsg(''), 3000); }
+  };
+
+  const toggleLicenseMode = async () => {
+    if (!capabilities) return;
+    setModeToggling('license');
+    try {
+      const r = await platformAPI.setLicenseMode(!capabilities.license_mode);
+      setCapabilities((p: any) => ({ ...p, license_mode: r.data?.license_mode ?? !p.license_mode }));
+      setMsg(r.data?.message ?? 'License mode updated.');
+    } finally { setModeToggling(null); setTimeout(() => setMsg(''), 3000); }
   };
 
   const changeStatus = async (ref: string, status: string) => {
@@ -588,6 +613,79 @@ export default function PlatformPage() {
           <div style={{ marginTop: 20, padding: 14, background: '#16a34a11', borderRadius: 6, color: '#16a34a', fontSize: 13 }}>
             All data isolation controls active. No cross-tenant leakage detected in last 30 days.
           </div>
+        </div>
+      );
+
+      // ── DEPLOYMENT MODE ────────────────────────────────────────────────────
+      case 'deployment': return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Deployment Mode</h2>
+            {msg && <span style={{ color: '#16a34a', fontSize: 13 }}>{msg}</span>}
+          </div>
+
+          {!capabilities ? (
+            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
+          ) : !capabilities.is_authority ? (
+            <div className="g-card" style={{ padding: 24 }}>
+              <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 13, lineHeight: 1.6 }}>
+                This is a self-hosted customer instance. Deployment mode — SaaS billing enforcement and
+                license enforcement — is controlled centrally by the platform authority and can&apos;t be
+                changed from here.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
+                This instance holds the license signing key — it is the platform authority. These switches
+                affect every tenant on this deployment.
+              </p>
+
+              <div className="g-card" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px', color: 'var(--text-1)', fontSize: 14 }}>SaaS Mode</h3>
+                    <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 12, maxWidth: 460 }}>
+                      When on, subscription billing is enforced on hosted tenants (plan limits, unpaid suspension).
+                      When off, all tenants get full free access.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                    {capabilities.saas_mode ? pill('enabled', '#16a34a') : pill('disabled', '#6b7280')}
+                    <button
+                      className={capabilities.saas_mode ? 'g-btn' : 'g-btn-ghost'}
+                      style={{ fontSize: 12, padding: '4px 14px', minWidth: 90 }}
+                      disabled={modeToggling === 'saas'}
+                      onClick={toggleSaasMode}>
+                      {modeToggling === 'saas' ? '…' : capabilities.saas_mode ? 'Turn Off' : 'Turn On'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="g-card" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px', color: 'var(--text-1)', fontSize: 14 }}>Self-Hosted License Mode</h3>
+                    <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 12, maxWidth: 460 }}>
+                      When on, self-hosted instances must present a valid license key to keep full functionality
+                      (checked every 24h, 30-day grace period on failure). When off, self-hosted is fully open.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                    {capabilities.license_mode ? pill('enabled', '#16a34a') : pill('disabled', '#6b7280')}
+                    <button
+                      className={capabilities.license_mode ? 'g-btn' : 'g-btn-ghost'}
+                      style={{ fontSize: 12, padding: '4px 14px', minWidth: 90 }}
+                      disabled={modeToggling === 'license'}
+                      onClick={toggleLicenseMode}>
+                      {modeToggling === 'license' ? '…' : capabilities.license_mode ? 'Turn Off' : 'Turn On'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       );
 

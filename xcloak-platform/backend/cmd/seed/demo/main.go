@@ -114,6 +114,8 @@ func main() {
 	seedRiskPosture(db)
 	log.Println("Seeding ITDR findings…")
 	seedITDR(db, agentIDs)
+	log.Println("Seeding DFIR investigations…")
+	seedDFIRInvestigations(db, incidentIDs)
 	log.Println("Seeding DFIR collections…")
 	seedDFIR(db, agentIDs, incidentIDs)
 	log.Println("Seeding MDM devices…")
@@ -1779,6 +1781,46 @@ func seedITDR(db *sql.DB, agentIDs []int) {
 			f.findingType, f.severity, f.identity, f.idType, f.srcIP, f.desc,
 			evidence, f.technique, f.status, agentID, dedup,
 			now.Add(-time.Duration(f.minsAgo)*time.Minute),
+		)
+	}
+}
+
+func seedDFIRInvestigations(db *sql.DB, incidentIDs []int) {
+	now := time.Now()
+	type inv struct {
+		invID, caseID, title, analyst, priority, status, classification, tags, targetHosts, targetUsers, mitreTechs, rootCause, summary string
+		incidentIdx                                                                                                                       int
+		hoursAgo                                                                                                                          int
+	}
+	items := []inv{
+		{"INV-2026-001", "CASE-2026-042", "APT29 Cozy Bear Intrusion — web-prod-01", "alice.zhang@corp.com", "critical", "in_progress", "apt", "apt29,cozy-bear,credential-theft", "web-prod-01,db-server-02", "jdoe,svc_account", "T1078,T1003,T1021", "", "Active APT29 intrusion via stolen credentials. Lateral movement to DB server confirmed.", 0, 3},
+		{"INV-2026-002", "CASE-2026-038", "Ransomware Pre-Staging — win-workstation-05", "bob.patel@corp.com", "high", "open", "ransomware", "ransomware,lateral-movement", "win-workstation-05", "jsmith", "T1486,T1055,T1070", "", "Potential ransomware staging detected. Suspicious encrypted archive created.", 1, 12},
+		{"INV-2026-003", "CASE-2026-031", "Supply Chain Compromise Investigation", "alice.zhang@corp.com", "high", "completed", "supply-chain", "supply-chain,software", "all", "", "T1195,T1566", "Compromised npm package in CI pipeline — package removed and pipeline hardened.", "Closed: malicious npm package introduced via dependency confusion. Pipeline secured.", 2, 96},
+		{"INV-2026-004", "CASE-2026-025", "Insider Data Exfiltration — contractor", "carol.kim@corp.com", "critical", "open", "insider", "insider-threat,exfiltration", "db-server-02", "contractor01", "T1041,T1048", "", "Contractor account exfiltrating customer PII via HTTPS to personal cloud storage.", 0, 6},
+		{"INV-2026-005", "CASE-2026-019", "C2 Beacon — python3 process", "bob.patel@corp.com", "medium", "completed", "c2", "c2,beacon,malware", "web-prod-01", "", "T1071,T1095", "Malicious python3 process spawned by web app. Process killed, artifact preserved.", "Closed: web shell via CVE-2024-1234. Patched and hardened.", 3, 200},
+	}
+	for _, item := range items {
+		incidentID := 0
+		if item.incidentIdx < len(incidentIDs) {
+			incidentID = incidentIDs[item.incidentIdx]
+		}
+		var closedAt interface{} = nil
+		if item.status == "completed" {
+			closedAt = now.Add(-time.Duration(item.hoursAgo/2) * time.Hour)
+		}
+		db.Exec(`
+			INSERT INTO dfir_investigations
+				(tenant_id, investigation_id, case_id, title, incident_id, analyst, priority, status,
+				 classification, tags, target_hosts, target_users, mitre_techniques,
+				 root_cause, executive_summary, created_at, updated_at, closed_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			ON CONFLICT DO NOTHING`,
+			item.invID, item.caseID, item.title, incidentID, item.analyst, item.priority, item.status,
+			item.classification, item.tags, item.targetHosts, item.targetUsers, item.mitreTechs,
+			item.rootCause, item.summary,
+			now.Add(-time.Duration(item.hoursAgo)*time.Hour),
+			now.Add(-time.Duration(item.hoursAgo/2)*time.Hour),
+			closedAt,
 		)
 	}
 }

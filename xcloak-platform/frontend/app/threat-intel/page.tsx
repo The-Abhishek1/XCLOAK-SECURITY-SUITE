@@ -789,7 +789,7 @@ function Modal({ title, children, onClose, wide }: { title: string; children: Re
       <div className="g-modal" style={{ maxWidth: wide ? 560 : 480 }}>
         <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</h2>
-          <button type="button" onClick={onClose} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} style={{ color: 'var(--text-2)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
         </div>
         <div className="p-5">{children}</div>
       </div>

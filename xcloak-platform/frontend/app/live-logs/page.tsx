@@ -594,7 +594,7 @@ function ContextPanel({ log, logs, tab, onTabChange, bookmarked, onBookmark, aiR
               <div className="flex items-center gap-1.5">
                 <input value={tagInput} onChange={e => setTagInput(e.target.value)}
                   placeholder="Add tag…" className="g-input text-[10px] h-6 flex-1" />
-                <button className="g-btn g-btn-ghost text-[10px] h-6"><Plus className="h-3 w-3" /></button>
+                <button className="g-btn g-btn-ghost text-[10px] h-6" title="Add tag">+</button>
               </div>
               {log.tags && log.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
@@ -1189,7 +1189,7 @@ export default function LiveLogsPage() {
               <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
                 <div className="h-full rounded-full" style={{ width: `${(replayIdx/DEMO_TEMPLATES.length)*100}%`, background: 'var(--accent)' }} />
               </div>
-              <button onClick={stopReplay} className="g-btn g-btn-ghost text-xs"><X className="h-3.5 w-3.5" /></button>
+              <button onClick={stopReplay} className="g-btn g-btn-ghost text-xs" title="Stop replay">×</button>
             </div>
           )}
         </div>

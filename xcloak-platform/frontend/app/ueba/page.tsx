@@ -803,7 +803,7 @@ function UserDetailPanel({
           <p className="text-[11px]" style={{ color:'var(--text-3)' }}>{profile.source} · Last seen {profile.last_event_at ? timeAgo(profile.last_event_at) : 'never'}</p>
         </div>
         <RiskBadge score={profile.risk_score} />
-        <button onClick={onClose} className="g-btn g-btn-ghost text-xs"><X className="h-4 w-4"/></button>
+        <button onClick={onClose} className="g-btn g-btn-ghost text-xs" title="Close">×</button>
       </div>
 
       <div className="p-4 space-y-3 max-w-[1400px] mx-auto w-full">

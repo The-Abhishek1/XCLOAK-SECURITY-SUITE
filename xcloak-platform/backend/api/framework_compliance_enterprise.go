@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── table creation ──────────────────────────────────────────────────────────
@@ -1000,6 +1001,7 @@ func GetFCEAudit(c *gin.Context) {
 // ── AI ─────────────────────────────────────────────────────────────────────────
 
 func PostFCEAI(c *gin.Context) {
+	tid := tenantIDFromContext(c)
 	var body struct {
 		Action    string `json:"action"`
 		Framework string `json:"framework"`
@@ -1007,17 +1009,97 @@ func PostFCEAI(c *gin.Context) {
 	}
 	c.ShouldBindJSON(&body)
 
-	responses := map[string]string{
-		"compliance_summary": "Compliance posture summary across all active frameworks:\n\n• ISO 27001: 78% (↑4% this month) — Access control and incident management controls are strong; physical security controls need attention\n• NIST CSF: 74% — Respond and Recover functions below target; detection coverage strong\n• PCI DSS: 71% — 3 critical controls in cardholder data environment failing; urgent attention required\n• CIS Controls: 82% — Top-tier performance; 4 sub-controls in IG3 not yet implemented\n• SOC 2: 69% — Availability and Confidentiality trust service criteria at risk\n\nOverall weighted average: 74.8% — MODERATE compliance posture. Priority: PCI DSS remediation before Q3 audit.",
-		"explain_failures": "Analysis of top failing controls:\n\n1. PCI DSS 6.4.3 (Payment page scripts) — No script integrity validation implemented on 3 checkout pages. CVSS impact: 9.8 if exploited.\n\n2. ISO 27001 A.12.6.1 (Patch management) — 23 servers >90 days unpatched. Current patch compliance: 67%.\n\n3. NIST CSF RS.CO-3 (Communication) — Incident communication plan exists but hasn't been tested in 14 months. Last tabletop: May 2024.\n\n4. CIS Control 13.6 (Network monitoring) — East-west traffic monitoring coverage at 43%; gaps in server farm segments.\n\n5. SOC 2 CC6.6 (Logical access) — 12 service accounts with no MFA; 3 have not been reviewed in >180 days.",
-		"recommend_remediation": "Prioritized remediation roadmap:\n\nWEEK 1-2 (Critical — before audit):\n• Enable script integrity validation (PCI DSS 6.4.3) — assign: dev-team, 8h effort\n• Apply critical patches to 23 unpatched servers (ISO 27001 A.12.6.1) — assign: ops-team, 16h effort\n• Disable/rotate 12 MFA-exempt service accounts (SOC 2 CC6.6)\n\nWEEK 3-4 (High):\n• Schedule incident communication tabletop exercise (NIST RS.CO-3)\n• Deploy network monitoring sensors to server farm segments (CIS 13.6)\n\nMONTH 2 (Medium):\n• Complete CIS IG3 sub-controls 13-16\n• Implement certificate auto-renewal for 4 expiring certs",
-		"suggest_evidence": "Required evidence for upcoming audit:\n\n📋 ISO 27001:\n• Asset inventory export (CMDB) — last updated within 90 days\n• Vulnerability scan reports — Q2 and Q3\n• Patch compliance report — current month\n• Access review sign-offs — quarterly\n• Incident log — last 12 months\n\n💳 PCI DSS:\n• Network diagram showing CDE scope\n• Penetration test report (must be <12 months)\n• Log retention certificates (12 months)\n• MFA enrollment proof for all CDE access\n• Firewall ruleset review (quarterly)\n\n🔐 SOC 2:\n• System description document\n• Risk assessment — current year\n• Vendor assessment records\n• Change management tickets linked to production changes",
-		"predict_audit_readiness": "Audit readiness assessment — Target: Q3 2025 PCI DSS QSA audit\n\nCURRENT READINESS: 67% — HIGH RISK OF FINDINGS\n\nCritical gaps (will result in audit failure if not remediated):\n1. Script integrity validation (PCI 6.4.3) — 0% complete\n2. Penetration test overdue by 47 days\n3. Cardholder data flow diagram not updated since 2023\n\nModerate gaps (likely findings, possible compensating controls):\n4. Log retention for 2 systems only 10 months (need 12)\n5. MFA exceptions for 3 legacy systems not documented\n\nIf critical items resolved by 2026-08-01: projected readiness 91%\nRecommend scheduling internal pre-audit 2 weeks before QSA engagement.",
-		"executive_summary": "COMPLIANCE EXECUTIVE BRIEFING — " + time.Now().Format("January 2006") + "\n\nOVERALL COMPLIANCE POSTURE: MODERATE (74.8%)\n\nKey Achievements This Month:\n• ISO 27001 improved 4% following patch campaign\n• CIS Controls reached 82% — best performing framework\n• 47 remediation tasks closed (vs. 31 opened)\n\nTop Business Risks:\n1. PCI DSS at 71% with Q3 QSA audit in 45 days\n2. SOC 2 Availability criteria at risk — impacts customer contractual commitments\n3. 12 service accounts without MFA — material weakness if disclosed\n\nBudget Impact:\n• Estimated cost of non-compliance (PCI fines): $50K-$500K\n• Remediation investment needed: ~$35K (2 FTE-weeks + tooling)\n• ROI: 14:1 minimum\n\nRecommended Board Decision: Authorize emergency patch and MFA project with 30-day completion mandate.",
+	db := database.DB
+
+	// ── Gather real compliance context for this tenant ──────────────────────
+	var ctx strings.Builder
+	frows, _ := db.Query(`SELECT name, overall_score, failed_controls, passed_controls, compliance_status
+		FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC`, tid)
+	if frows != nil {
+		ctx.WriteString("Active frameworks:\n")
+		for frows.Next() {
+			var name, status string
+			var score, failed, passed int
+			frows.Scan(&name, &score, &failed, &passed, &status)
+			fmt.Fprintf(&ctx, "- %s: %d%% (%s), %d failed / %d passed controls\n", name, score, status, failed, passed)
+		}
+		frows.Close()
 	}
-	resp, ok := responses[body.Action]
-	if !ok {
-		resp = "AI analysis in progress. Based on your current compliance data, I recommend focusing on the highest-risk framework gaps first, prioritizing controls with upcoming audit deadlines. Run a gap analysis to identify the specific controls requiring immediate attention."
+
+	crows, _ := db.Query(`SELECT c.control_id, c.name, f.name, c.risk_level, c.category
+		FROM fce_controls c JOIN fce_frameworks f ON f.id=c.framework_id
+		WHERE c.tenant_id=$1 AND c.assessment_status='failed'
+		ORDER BY CASE c.risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 10`, tid)
+	if crows != nil {
+		ctx.WriteString("\nTop failing controls:\n")
+		for crows.Next() {
+			var cid, cname, fname, risk, cat string
+			crows.Scan(&cid, &cname, &fname, &risk, &cat)
+			fmt.Fprintf(&ctx, "- [%s] %s %s (%s) — risk:%s category:%s\n", fname, cid, cname, "failed", risk, cat)
+		}
+		crows.Close()
 	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": body.Action})
+
+	rrows, _ := db.Query(`SELECT title, status, due_date FROM fce_remediations
+		WHERE tenant_id=$1 AND status NOT IN ('closed','cancelled') ORDER BY due_date ASC NULLS LAST LIMIT 10`, tid)
+	if rrows != nil {
+		ctx.WriteString("\nOpen remediations:\n")
+		for rrows.Next() {
+			var title, status string
+			var due *time.Time
+			rrows.Scan(&title, &status, &due)
+			dueStr := "no due date"
+			if due != nil {
+				dueStr = due.Format("2006-01-02")
+			}
+			fmt.Fprintf(&ctx, "- %s (%s, due %s)\n", title, status, dueStr)
+		}
+		rrows.Close()
+	}
+
+	var overdueCount int
+	db.QueryRow(`SELECT COUNT(*) FROM fce_remediations WHERE tenant_id=$1 AND status NOT IN ('closed','cancelled') AND due_date < NOW()`, tid).Scan(&overdueCount)
+	fmt.Fprintf(&ctx, "\nOverdue remediations: %d\n", overdueCount)
+
+	if body.Framework != "" {
+		fmt.Fprintf(&ctx, "\nFocus framework: %s\n", body.Framework)
+	}
+	if body.Context != "" {
+		fmt.Fprintf(&ctx, "\nAdditional context: %s\n", body.Context)
+	}
+	compliancectx := ctx.String()
+
+	var task string
+	switch body.Action {
+	case "compliance_summary":
+		task = "Write a concise compliance posture summary across all active frameworks, framework by framework, ending with an overall weighted assessment and top priority."
+	case "explain_failures":
+		task = "Analyze the top failing controls and explain, for each, what the gap likely means and its potential impact if exploited or found in an audit."
+	case "recommend_remediation":
+		task = "Produce a prioritized remediation roadmap (immediate/short-term/long-term) for the failing controls and open remediations, with rough effort estimates."
+	case "suggest_evidence":
+		task = "List the audit evidence that should be gathered for the active frameworks, grouped by framework."
+	case "predict_audit_readiness":
+		task = "Assess current audit readiness given the framework scores and open remediations, call out critical gaps that would cause audit failure, and project readiness once open items are resolved."
+	case "executive_summary":
+		task = "Write a compliance executive briefing for leadership: overall posture, key risks, and a recommended decision, in a business (not technical) tone."
+	default:
+		c.JSON(400, gin.H{"error": "unknown action"})
+		return
+	}
+
+	prompt := fmt.Sprintf(`You are a compliance analyst reviewing this organization's real framework compliance data.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above. If data is sparse, say so rather than inventing specifics. Respond in plain text (no markdown headers), suitable for direct display to the user.`, compliancectx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action})
 }

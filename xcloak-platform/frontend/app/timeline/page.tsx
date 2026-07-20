@@ -137,8 +137,8 @@ function EvidencePanel({ ev, onClose, bookmarked, onBookmark }: {
             ? <Check className="h-4 w-4" style={{ color: 'var(--green)' }} />
             : <Copy className="h-4 w-4" style={{ color: 'var(--text-3)' }} />}
         </button>
-        <button onClick={onClose}>
-          <X className="h-4 w-4" style={{ color: 'var(--text-3)' }} />
+        <button onClick={onClose} style={{ color: 'var(--text-3)', fontSize: 18, lineHeight: 1 }} title="Close">
+          ×
         </button>
       </div>
 

@@ -6,7 +6,7 @@ import { elasticAPI } from '@/lib/api';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Activity, AlertCircle, ArrowUpDown, BookOpen, Bot, Braces, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Database, DatabaseZap, Download, FileJson, Filter, Hash, Layers, Lightbulb, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, StarOff, Table2, Terminal, Trash2, Wand2, X } from '@/lib/icon-stubs';
+import { Activity, AlertCircle, ArrowUpDown, BookOpen, Bot, Braces, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Database, DatabaseZap, Download, FileJson, Filter, Hash, Layers, Lightbulb, Play, RefreshCw, RotateCcw, Save, Server, Star, StarOff, Table2, Terminal, Trash2, Wand2, X } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -624,7 +624,9 @@ export default function ElasticQueryPage() {
       : ECS_FIELDS,
   [fieldSearch]);
 
-  const statusColor = (clusterStatus?.status === 'green') ? 'var(--green)'
+  const esNotConfigured = clusterStatus?.enabled === false || clusterStatus?.status === 'not_configured';
+  const statusColor = esNotConfigured ? 'var(--text-3)'
+    : (clusterStatus?.status === 'green') ? 'var(--green)'
     : (clusterStatus?.status === 'yellow') ? 'var(--yellow)'
     : clusterStatus ? 'var(--red)' : 'var(--text-3)';
 
@@ -638,7 +640,9 @@ export default function ElasticQueryPage() {
           <div className="flex items-center gap-1.5 text-[11px] shrink-0">
             <span className="h-2 w-2 rounded-full" style={{ background: statusColor }} />
             <span style={{ color: statusColor }}>
-              {clusterStatus
+              {esNotConfigured
+                ? 'Elasticsearch not configured'
+                : clusterStatus
                 ? `${String(clusterStatus.cluster_name)} · ${String(clusterStatus.status)} · ${String(clusterStatus.number_of_nodes)}N`
                 : 'Connecting…'}
             </span>
@@ -699,8 +703,8 @@ export default function ElasticQueryPage() {
               )}
             </div>
           ))}
-          <button onClick={addTab} className="px-3 py-2 hover:opacity-70" style={{ color:'var(--text-3)' }}>
-            <Plus className="h-3.5 w-3.5" />
+          <button onClick={addTab} className="px-3 py-2 hover:opacity-70" style={{ color:'var(--text-3)', fontSize: 16 }} title="New query tab">
+            +
           </button>
         </div>
 

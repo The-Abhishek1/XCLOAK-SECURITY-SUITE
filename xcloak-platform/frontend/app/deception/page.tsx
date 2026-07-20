@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { deceptionAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, BarChart2, Brain, Bug, CheckCircle, Cloud, Database, FileText, GitBranch, Globe, Key, Play, Plus, RefreshCw, Server, Shield, Trash2, XCircle, Zap, Lock } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, BarChart2, Brain, Bug, CheckCircle, Cloud, Database, FileText, GitBranch, Globe, Key, Play, Plus, Server, Shield, Trash2, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 const TABS = [
   { id: 'dashboard',    label: 'Dashboard',    icon: Activity },
@@ -178,7 +178,7 @@ function DecoysTab() {
             <option value="container">Container</option>
             <option value="cloud">Cloud</option>
           </select>
-          <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+          <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
         </div>
         <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={() => setShowDeploy(true)}>
           <Plus className="h-3.5 w-3.5" /> Deploy Decoys
@@ -324,7 +324,7 @@ function HoneytokensTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
         <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={() => setShowCreate(true)}>
           <Plus className="h-3.5 w-3.5" /> Create Honeytoken
         </button>
@@ -504,7 +504,7 @@ function TriggersTab() {
           <option value="high">High</option>
           <option value="medium">Medium</option>
         </select>
-        <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

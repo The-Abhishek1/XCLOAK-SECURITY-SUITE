@@ -743,7 +743,7 @@ function UserDetailPanel({ score, onClose }: { score: InsiderScore; onClose: () 
             <ShieldAlert className="h-3 w-3" /> Alert Fired
           </span>
         )}
-        <button onClick={onClose} className="g-btn g-btn-ghost text-xs"><X className="h-4 w-4" /></button>
+        <button onClick={onClose} className="g-btn g-btn-ghost text-xs" title="Close">×</button>
       </div>
 
       <div className="p-4 space-y-3 max-w-[1400px] mx-auto w-full">

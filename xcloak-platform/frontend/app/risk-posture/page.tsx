@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { riskPostureAPI } from '@/lib/api';
 import { sevClass } from '@/lib/utils';
@@ -176,19 +176,14 @@ function ScoreRing({ score, color, size = 64, strokeW = 7 }: { score: number; co
 }
 
 // ── KPI card ─────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color, icon: Icon, trend, sparkData }: {
+function KpiCard({ label, value, sub, color, trend, sparkData }: {
   label: string; value: string | number; sub?: string; color: string;
-  icon: any; trend?: number | null; sparkData?: number[];
+  icon?: any; trend?: number | null; sparkData?: number[];
 }) {
   return (
     <div className="g-card p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl" style={{ background: `${color}18` }}>
-            <Icon className="h-4 w-4" style={{ color }} />
-          </div>
-          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</span>
-        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</span>
         {sparkData && <Sparkline data={sparkData} color={color} />}
       </div>
       <div>
@@ -221,8 +216,8 @@ function RiskHeatmap({ data }: {
             style={{ color: sevColor(l) }}>{l}</div>
         ))}
         {domains.map(domain => (
-          <>
-            <div key={domain + '-label'} className="text-[10px] font-semibold capitalize flex items-center pr-2"
+          <Fragment key={domain}>
+            <div className="text-[10px] font-semibold capitalize flex items-center pr-2"
               style={{ color: 'var(--text-2)' }}>{domain}</div>
             {levels.map(level => {
               const count = data[domain]?.[level] ?? 0;
@@ -233,7 +228,7 @@ function RiskHeatmap({ data }: {
                 </div>
               );
             })}
-          </>
+          </Fragment>
         ))}
       </div>
     </div>
@@ -241,20 +236,15 @@ function RiskHeatmap({ data }: {
 }
 
 // ── Domain card ───────────────────────────────────────────────────────────────
-function DomainCard({ icon: Icon, label, score, items, color }: {
-  icon: any; label: string; score: number; color: string;
+function DomainCard({ label, score, items, color }: {
+  icon?: any; label: string; score: number; color: string;
   items: { text: string; value: string | number; bad?: boolean }[];
 }) {
   const rc = riskColor(score);
   return (
     <div className="g-card p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-xl" style={{ background: `${color}18` }}>
-            <Icon className="h-4 w-4" style={{ color }} />
-          </div>
-          <span className="text-xs font-bold" style={{ color: 'var(--text-1)' }}>{label}</span>
-        </div>
+        <span className="text-xs font-bold" style={{ color: 'var(--text-1)' }}>{label}</span>
         <div className="relative" style={{ width: 48, height: 48 }}>
           <ScoreRing score={score} color={rc} size={48} strokeW={5} />
           <div className="absolute inset-0 flex items-center justify-center">

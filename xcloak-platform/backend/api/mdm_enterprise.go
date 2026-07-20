@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -949,183 +950,111 @@ func GetMDMEAnalytics(c *gin.Context) {
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 func PostMDMEAI(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	tidStr := fmt.Sprintf("%d", tid)
 	var body struct {
 		Action   string `json:"action"`
 		DeviceID string `json:"device_id"`
 	}
 	c.BindJSON(&body)
 
-	responses := map[string]string{
-		"device_health_summary": `## Device Health Summary
+	db := database.DB
+	var ctx strings.Builder
 
-**Fleet Overview — 427 Managed Devices**
+	var total, enrolled, compliant, nonCompliant, rooted, lost, quarantined int
+	var encEnabled, screenLock, bio int
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1`, tidStr).Scan(&total)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND enrollment_status='enrolled'`, tidStr).Scan(&enrolled)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND compliance_status='compliant'`, tidStr).Scan(&compliant)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND compliance_status='non_compliant'`, tidStr).Scan(&nonCompliant)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND (rooted=TRUE OR jailbroken=TRUE)`, tidStr).Scan(&rooted)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND is_lost=TRUE`, tidStr).Scan(&lost)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND is_quarantined=TRUE`, tidStr).Scan(&quarantined)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND encryption_enabled=TRUE`, tidStr).Scan(&encEnabled)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND screen_lock_enabled=TRUE`, tidStr).Scan(&screenLock)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND biometric_enabled=TRUE`, tidStr).Scan(&bio)
+	var avgRisk float64
+	db.QueryRow(`SELECT COALESCE(AVG(risk_score),0) FROM mdme_devices WHERE tenant_id=$1`, tidStr).Scan(&avgRisk)
 
-**Health Score: 91/100 — GOOD**
+	fmt.Fprintf(&ctx, "Fleet: %d devices total, %d enrolled, avg risk score %.0f/100\n", total, enrolled, avgRisk)
+	fmt.Fprintf(&ctx, "Compliance: %d compliant, %d non-compliant\n", compliant, nonCompliant)
+	fmt.Fprintf(&ctx, "Security posture: %d rooted/jailbroken, %d lost, %d quarantined\n", rooted, lost, quarantined)
+	fmt.Fprintf(&ctx, "Policy coverage: %d encrypted, %d with screen lock, %d with biometric enabled\n", encEnabled, screenLock, bio)
 
-**Platform Breakdown:**
-- iOS (iPhone/iPad): 218 devices — Avg risk: 21
-- Android (Corporate): 156 devices — Avg risk: 34
-- Android (BYOD): 53 devices — Avg risk: 58
-
-**Current Concerns:**
-⚠️  2 devices with root/jailbreak detected (quarantined)
-⚠️  3 devices running OS versions below policy minimum
-⚠️  5 devices offline for >7 days (may be lost or decommissioned)
-✅ 94.4% compliance rate (403/427 compliant)
-✅ 97.2% encryption coverage (415/427 encrypted)
-✅ Agent coverage: 98.1% (419/427 with active MDM agent)
-
-**Recommended Actions:**
-1. Investigate 5 offline devices — verify ownership
-2. Push OS update policy to 3 non-compliant devices
-3. Review BYOD risk — BYOD avg risk (58) is 2.7x corporate (21)`,
-
-		"risk_assessment": `## MDM Fleet Risk Assessment
-
-**Overall Fleet Risk: MEDIUM-LOW (Score: 28/100)**
-
-**High-Risk Segments:**
-
-**BYOD Devices (53) — Risk: HIGH**
-- Personal apps co-mingled with corporate data
-- Personal iCloud/Google Drive may sync corporate documents
-- Less policy enforcement capability vs. corporate-owned
-- Recommendation: Enforce containerization (Samsung Knox / iOS Managed Open-In)
-
-**Android Corporate (156) — Risk: MEDIUM**
-- 3 devices running Android 12 below minimum Android 13 policy
-- 1 device with suspicious app (Kali NetHunter detected)
-- Recommendation: Enforce Android Enterprise Work Profile on all
-
-**iOS Corporate (218) — Risk: LOW**
-- 2 devices with certificate expiring in <30 days
-- All devices on iOS 17.x — patch compliance strong
-- Recommendation: Enable Declarative Device Management (DDM) for faster policy push
-
-**Top Risk Factors:**
-1. BYOD program — 53 devices with partial policy enforcement
-2. Stale offline devices — 5 devices not seen in >7 days
-3. Blocked app still installed on 5 devices (30-day grace expired)`,
-
-		"compliance_recommendations": `## Compliance Improvement Recommendations
-
-**Current Score: 94.4% — Target: 99%**
-
-**Gap Analysis — 24 Non-Compliant Devices:**
-
-**Critical Gaps (act within 24h):**
-1. 2 rooted/jailbroken devices — already quarantined, initiate wipe if not resolved within 48h
-2. 3 devices with encryption disabled — push immediate remediation command, escalate if no response
-
-**High Priority (act within 1 week):**
-3. 5 blocked apps still present (grace period expired) — trigger silent removal via MDM command
-4. 3 devices below minimum OS version — push update enforcement policy
-5. 8 devices with screen lock timeout > 5 min policy — update via configuration profile
-
-**Medium Priority (act within 30 days):**
-6. 6 BYOD devices — not enrolled in full MDM, only email profile — enroll in Intune MAM
-7. 2 devices with certificate expiring in 28 days — push renewal via SCEP profile
-8. 4 devices with biometric not enabled — communicate policy change to users
-
-**Policy Recommendations:**
-- Set automatic quarantine for rooted devices (currently manual)
-- Enable conditional access integration with Azure AD
-- Set compliance grace period to 7 days (currently 30 days)`,
-
-		"security_policy_suggestions": `## Security Policy Recommendations
-
-**Password Policy:**
-- Current: 8 chars, alphanumeric
-- Recommended: 12 chars, upper+lower+number+special, no dictionary words
-- Rationale: NIST SP 800-63B requirement for enterprise authentication
-
-**Screen Lock:**
-- Current: 5 minute timeout
-- Recommended: 2 minutes (MDM policy) + immediate lock on power button
-- Rationale: Finance and HR devices have PII — 5 min is high exposure window
-
-**iOS-Specific:**
-- Enable Supervised Mode on all corporate iOS devices (unlocks deeper policy control)
-- Enable App Store restrictions — allow only approved apps from VPP
-- Deploy Always-On VPN (IKEv2) for all traffic, not just split-tunnel
-- Enable Rapid Security Response — push patches within hours of Apple release
-
-**Android-Specific:**
-- Enforce Work Profile (Android Enterprise) on all BYOD devices
-- Block USB debugging — prevents sideloading and data extraction
-- Enable SafetyNet/Play Integrity API attestation in compliance policy
-- Deploy Always-On VPN via Zscaler or similar
-
-**Certificate Policy:**
-- Deploy SCEP auto-renewal — certificates should renew 30 days before expiry
-- Enable certificate-based Wi-Fi authentication (802.1X) — remove password-based SSID
-
-**New Policy Suggestions:**
-1. Zero Trust access — require device compliance + MFA for all corporate app access
-2. Geofencing — alert when corporate device leaves approved regions
-3. Application reputation scoring — block apps with >3 CVEs or bad reputation score`,
-
-		"application_risk_analysis": `## Application Risk Analysis
-
-**Total Unique Apps Across Fleet: 847**
-**Approved: 398 | Blocked: 12 | Risky: 23 | Unclassified: 414**
-
-**High Risk Applications Detected:**
-
-🔴 **CRITICAL:**
-- Kali NetHunter (Android) — 1 device — penetration testing framework, policy violation
-- VirtualXposed (Android) — 2 devices — virtual Xposed framework, used to bypass root detection
-
-🟠 **HIGH:**
-- AppValley (iOS) — 3 devices — sideloading store, bypasses App Store review
-- AltStore (iOS) — 1 device — developer sideloading tool, unverified apps
-- VPN Proxy Master (Android) — 8 devices — unknown VPN with no privacy policy, data harvesting risk
-
-🟡 **MEDIUM:**
-- TikTok — 41 devices (BYOD) — flagged by CISA, China-linked data collection concerns
-- AnyDesk — 6 devices — remote access tool, not in approved list
-- NordVPN — 12 devices — personal VPN bypasses corporate DLP
-
-**Recommended Actions:**
-1. Immediately remove Kali NetHunter and VirtualXposed (silent uninstall via MDM)
-2. Quarantine affected devices pending security review
-3. Add AppValley and AltStore to blocked app list
-4. Evaluate TikTok policy for BYOD devices — consider MAM-level block for corporate data access`,
-
-		"lost_device_guidance": `## Lost Device Response Guide
-
-**Recommended Response Steps:**
-
-**Immediate (0-1 hour):**
-1. Locate Device — use MDM GPS location (if enabled and device has battery)
-2. Lock Device — push immediate lock with custom message + recovery contact
-3. Play Sound — helps locate if device is nearby
-4. Notify IT Security — escalate to incident response if device has sensitive data
-
-**Short-Term (1-24 hours):**
-4. Reset Passcode — prevent unauthorized access if screen lock is bypassed
-5. Suspend Active Sessions — revoke device tokens in Azure AD / Entra ID
-6. Notify User's Manager — document incident for HR and legal records
-7. Check DLP Logs — review what data was accessed/synced in last 24h before loss
-
-**If Not Recovered (>24 hours):**
-8. Wipe Corporate Data (Selective Wipe) — removes corporate apps, email, VPN profiles
-   - For BYOD: Only corporate container is wiped, personal data preserved
-   - For Corporate-owned: Full factory reset if device is not recovered
-9. Revoke Certificates — push CRL update, expire SCEP cert for device
-10. Update Inventory — mark as Lost in CMDB, close enrollment record
-
-**If Device is Recovered:**
-11. Run Compliance Check — verify device wasn't tampered with
-12. Re-enroll if wiped — issue new enrollment token to user
-13. Review access logs for unauthorized activity during loss period`,
+	pr, _ := db.Query(`SELECT platform, COUNT(*), COALESCE(AVG(risk_score),0) FROM mdme_devices WHERE tenant_id=$1 GROUP BY platform ORDER BY COUNT(*) DESC`, tidStr)
+	if pr != nil {
+		ctx.WriteString("By platform:\n")
+		for pr.Next() {
+			var p string
+			var cnt int
+			var risk float64
+			pr.Scan(&p, &cnt, &risk)
+			fmt.Fprintf(&ctx, "- %s: %d devices, avg risk %.0f\n", p, cnt, risk)
+		}
+		pr.Close()
 	}
 
-	resp, ok := responses[body.Action]
-	if !ok {
-		resp = responses["device_health_summary"]
+	ar, _ := db.Query(`SELECT app_name, status, COUNT(DISTINCT device_id) FROM mdme_apps
+		WHERE tenant_id=$1 AND status IN ('blocked','risky') GROUP BY app_name, status ORDER BY COUNT(DISTINCT device_id) DESC LIMIT 10`, tidStr)
+	if ar != nil {
+		ctx.WriteString("Flagged applications:\n")
+		for ar.Next() {
+			var app, status string
+			var cnt int
+			ar.Scan(&app, &status, &cnt)
+			fmt.Fprintf(&ctx, "- %s (%s) on %d device(s)\n", app, status, cnt)
+		}
+		ar.Close()
 	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": body.Action})
+
+	if body.DeviceID != "" {
+		var devName, devPlatform, devCompliance string
+		var devRisk int
+		var devRooted, devLost bool
+		err := db.QueryRow(`SELECT device_name, platform, compliance_status, risk_score, rooted, is_lost
+			FROM mdme_devices WHERE tenant_id=$1 AND device_id=$2`, tidStr, body.DeviceID).
+			Scan(&devName, &devPlatform, &devCompliance, &devRisk, &devRooted, &devLost)
+		if err == nil {
+			fmt.Fprintf(&ctx, "\nFocus device: %s (%s), compliance=%s, risk=%d, rooted=%v, lost=%v\n",
+				devName, devPlatform, devCompliance, devRisk, devRooted, devLost)
+		}
+	}
+
+	mdmctx := ctx.String()
+
+	var task string
+	switch body.Action {
+	case "device_health_summary":
+		task = "Write a fleet device health summary: overview, health score assessment, platform breakdown, current concerns, and recommended actions."
+	case "risk_assessment":
+		task = "Write an MDM fleet risk assessment: overall risk level, high-risk segments (by platform/ownership), and top risk factors with recommendations."
+	case "compliance_recommendations":
+		task = "Write compliance improvement recommendations: gap analysis of non-compliant devices, grouped by urgency (critical/high/medium priority), and policy recommendations."
+	case "security_policy_suggestions":
+		task = "Suggest security policy improvements for this fleet (password, screen lock, platform-specific, certificate policy), grounded in the current posture shown."
+	case "application_risk_analysis":
+		task = "Analyze the flagged/blocked/risky applications on the fleet and recommend actions."
+	case "lost_device_guidance":
+		task = "Write a lost/stolen device response guide with immediate, short-term, and if-not-recovered steps. If a focus device is given, tailor it to that device."
+	default:
+		body.Action = "device_health_summary"
+		task = "Write a fleet device health summary: overview, health score assessment, platform breakdown, current concerns, and recommended actions."
+	}
+
+	prompt := fmt.Sprintf(`You are an MDM (mobile device management) analyst reviewing this organization's real fleet data.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent specific device counts, app names, or figures not present in the data. Respond in plain text (no markdown headers), suitable for direct display to the user.`, mdmctx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action})
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

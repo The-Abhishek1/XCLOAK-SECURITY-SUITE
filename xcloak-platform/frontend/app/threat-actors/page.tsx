@@ -642,7 +642,7 @@ function ActorFormModal({
       <div className="g-modal" style={{ maxWidth: 540 }}>
         <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</h2>
-          <button onClick={onClose} style={{ color: 'var(--text-2)' }}><X className="w-4 h-4" /></button>
+          <button onClick={onClose} style={{ color: 'var(--text-2)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
         </div>
         <div className="p-5 space-y-3 max-h-[65vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">

@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { nbaAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import { Activity, AlertTriangle, ArrowRight, ArrowUpRight, Ban, BarChart2, Bot, Cable, CheckCircle2, ChevronRight, Clock, Cpu, Crosshair, Download, Eye, FileText, FlaskConical, GitBranch, Globe, HardDrive, Info, Layers, Loader2, Monitor, Network, Package, Play, Radio, RefreshCw, ScanLine, Search, Server, Shield, ShieldAlert, Terminal, TrendingUp, Wifi, X, XCircle, Zap } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, ArrowRight, ArrowUpRight, Ban, BarChart2, Bot, Cable, CheckCircle2, ChevronRight, Clock, Cpu, Crosshair, Download, Eye, FileText, FlaskConical, GitBranch, Globe, HardDrive, Info, Layers, Loader2, Lock, Map, Monitor, Network, Package, Play, Radio, RefreshCw, ScanLine, Search, Server, Shield, ShieldAlert, Terminal, TrendingUp, Wifi, X, XCircle, Zap } from '@/lib/icon-stubs';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -139,15 +139,15 @@ function Tag({ text, color = 'var(--accent)' }: { text: string; color?: string }
 
 function NetworkGraph({ overview, onClick }: { overview: Overview | null; onClick: (node: string) => void }) {
   const nodes = useMemo(() => [
-    { id: 'internet',   label: 'Internet',      x: 300, y: 40,  icon: '🌐', color: 'var(--text-3)' },
-    { id: 'firewall',   label: 'Firewall',       x: 300, y: 130, icon: '🛡', color: 'var(--green)' },
-    { id: 'dmz',        label: 'DMZ',            x: 160, y: 220, icon: '⚡', color: 'var(--yellow)' },
-    { id: 'corp',       label: 'Corp Network',   x: 300, y: 220, icon: '🏢', color: 'var(--accent)' },
-    { id: 'ot',         label: 'OT/ICS',         x: 440, y: 220, icon: '⚙', color: 'var(--orange)' },
-    { id: 'workstation',label: 'Workstations',   x: 180, y: 320, icon: '💻', color: 'var(--accent)' },
-    { id: 'server',     label: 'File Server',    x: 300, y: 320, icon: '🖥', color: 'var(--blue)' },
-    { id: 'dc',         label: 'Domain Ctrl',    x: 420, y: 320, icon: '🔑', color: 'var(--orange)' },
-    { id: 'db',         label: 'Database',       x: 300, y: 410, icon: '🗄', color: 'var(--red)' },
+    { id: 'internet',   label: 'Internet',      x: 300, y: 40,  icon: '🌐️', color: 'var(--text-3)' },
+    { id: 'firewall',   label: 'Firewall',       x: 300, y: 130, icon: '🛡️', color: 'var(--green)' },
+    { id: 'dmz',        label: 'DMZ',            x: 160, y: 220, icon: '⚡️', color: 'var(--yellow)' },
+    { id: 'corp',       label: 'Corp Network',   x: 300, y: 220, icon: '🏢️', color: 'var(--accent)' },
+    { id: 'ot',         label: 'OT/ICS',         x: 440, y: 220, icon: '⚙️', color: 'var(--orange)' },
+    { id: 'workstation',label: 'Workstations',   x: 180, y: 320, icon: '💻️', color: 'var(--accent)' },
+    { id: 'server',     label: 'File Server',    x: 300, y: 320, icon: '🖥️', color: 'var(--blue)' },
+    { id: 'dc',         label: 'Domain Ctrl',    x: 420, y: 320, icon: '🔑️', color: 'var(--orange)' },
+    { id: 'db',         label: 'Database',       x: 300, y: 410, icon: '🗄️', color: 'var(--red)' },
   ], []);
 
   const edges = [

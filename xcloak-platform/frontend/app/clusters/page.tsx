@@ -7,7 +7,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { clustersAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Copy, Cpu, ExternalLink, GitMerge, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, VolumeX, X, Zap } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Copy, Cpu, ExternalLink, GitMerge, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, VolumeX, Zap } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -327,7 +327,7 @@ function ClusterDetailPanel({ clusterId, onClose }: { clusterId: number; onClose
             </div>
           </div>
           {toast && <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>{toast}</span>}
-          <button onClick={onClose} style={{ color: 'var(--text-3)' }}><X className="w-4 h-4" /></button>
+          <button onClick={onClose} style={{ color: 'var(--text-3)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
         </div>
 
         {/* Inner tabs */}

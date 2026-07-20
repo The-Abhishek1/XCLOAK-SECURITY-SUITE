@@ -7,7 +7,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { correlationAPI, playbooksAPI } from '@/lib/api';
 import { CorrelationMatch } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Cpu, Database, Filter, GitBranch, GitMerge, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, X, Zap, Lock } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Cpu, Database, Filter, GitBranch, GitMerge, Layers, Network, Play, Plus, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -506,8 +506,8 @@ function BlockEditor({ block, onUpdate, onRemove, depth = 0 }: {
             </>
           )}
           {depth > 0 && (
-            <button onClick={onRemove} className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-              <X className="w-3 h-3" />
+            <button onClick={onRemove} className="text-[10px]" style={{ color: 'var(--text-3)' }} title="Remove">
+              ×
             </button>
           )}
         </div>
@@ -791,8 +791,8 @@ function SimulationPanel() {
                 {s}
               </span>
               <button onClick={() => setChain(c => c.filter((_, j) => j !== i))}
-                className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                <X className="w-3.5 h-3.5" />
+                className="text-[10px]" style={{ color: 'var(--text-3)' }} title="Remove">
+                ×
               </button>
             </div>
           ))}
@@ -802,7 +802,7 @@ function SimulationPanel() {
               onKeyDown={e => e.key === 'Enter' && addStage()}
               placeholder="Add stage (e.g. DNS Tunnel)…"
               className="flex-1 g-input text-xs" />
-            <button onClick={addStage} className="g-btn g-btn-ghost text-xs"><Plus className="w-3.5 h-3.5" /></button>
+            <button onClick={addStage} className="g-btn g-btn-ghost text-xs" title="Add stage">+</button>
           </div>
         </div>
 
@@ -1108,7 +1108,7 @@ function CreateRuleModal({ onClose, onCreated }: { onClose: () => void; onCreate
       <div className="g-modal" style={{ maxWidth: 560 }}>
         <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>New Correlation Rule</h2>
-          <button onClick={onClose} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+          <button onClick={onClose} style={{ color: 'var(--text-2)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
         </div>
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
@@ -1358,8 +1358,8 @@ export default function CorrelationPage() {
             className="g-select text-xs py-1">
             {[6, 12, 24, 48, 168].map(h => <option key={h} value={h}>{h < 24 ? `${h}h` : h === 168 ? '7d' : '24h'}</option>)}
           </select>
-          <button onClick={() => { loaded.current = {}; loadTab(tab, true); }} className="g-btn g-btn-ghost text-xs">
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingTab ? 'animate-spin' : ''}`} />
+          <button onClick={() => { loaded.current = {}; loadTab(tab, true); }} className="g-btn g-btn-ghost text-xs" title="Refresh">
+            <span className={loadingTab ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>↻</span>
           </button>
           <button onClick={() => setShowCreate(true)} className="g-btn g-btn-primary text-xs">
             <Plus className="h-3.5 w-3.5" /> New Rule

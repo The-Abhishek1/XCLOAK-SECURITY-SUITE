@@ -6,7 +6,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, tasksAPI, integrationsAPI, agentGroupsAPI } from '@/lib/api';
 import { Agent, AgentGroup } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, ArrowRight, Bug, Check, CheckSquare, ChevronRight, Copy, Cpu, Heart, Key, Layers, Minus, Play, Plus, Power, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, Square, Terminal, Upload, Wifi, WifiOff, X } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, ArrowRight, Bug, Check, CheckSquare, ChevronRight, Copy, Cpu, Heart, Key, Layers, Minus, Play, Plus, Power, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, Square, Terminal, Upload, X } from '@/lib/icon-stubs';
 
 interface AgentHealth {
   agent_id: number;
@@ -431,12 +431,6 @@ export default function AgentsPage() {
                         </button>
                       )}
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0"
-                          style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
-                          {agent.status === 'online'
-                            ? <Wifi className="h-4 w-4" style={{ color: 'var(--accent)' }} />
-                            : <WifiOff className="h-4 w-4" style={{ color: 'var(--text-3)' }} />}
-                        </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{agent.hostname}</p>
                           <p className="text-xs" style={{ color: 'var(--text-3)' }}>{agent.ip_address}</p>

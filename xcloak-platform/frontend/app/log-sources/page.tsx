@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { logSourcesAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, AppWindow, ArrowRight, BarChart2, Bell, Bot, Box, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, Cloud, Code2, Container, Copy, Database, DbIcon, Download, Eye, EyeOff, FileText, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, Mail, MonitorCheck, Network, Package, Play, PlugZap, Plus, Radio, RefreshCw, Router, Search, Server, Settings, Shield, Square, SwitchCamera, Terminal, TestTube2, Trash2, Workflow, X, XCircle, Zap } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, AppWindow, ArrowRight, BarChart2, Bell, Bot, Box, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, Cloud, Code2, Container, Copy, Database, DbIcon, Download, Eye, EyeOff, FileText, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, Lock, Mail, MonitorCheck, Network, Package, Play, PlugZap, Plus, Radio, Router, Search, Server, Settings, Shield, Square, SwitchCamera, Terminal, TestTube2, Trash2, Workflow, XCircle, Zap } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -516,7 +516,7 @@ function ConnectModal({ def, onClose, onCreated, host }: {
             <p className="text-sm font-semibold" style={{ color:'var(--text-1)' }}>Connect {def.label}</p>
             <p className="text-xs" style={{ color:'var(--text-3)' }}>{def.desc}</p>
           </div>
-          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg hover:bg-[var(--glass-hover)]"><X className="h-4 w-4" style={{ color:'var(--text-3)' }} /></button>
+          <button onClick={onClose} className="ml-auto p-1.5 rounded-lg hover:bg-[var(--glass-hover)]" style={{ color:'var(--text-3)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
         </div>
         <div className="flex flex-1 min-h-0 overflow-hidden">
           <div className="w-[55%] border-r overflow-y-auto p-5 space-y-2" style={{ borderColor:'var(--border)' }}>
@@ -660,8 +660,8 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
           <button onClick={onToggle} className="g-btn g-btn-ghost text-[10px] py-1 px-2" title={src.enabled ? 'Disable' : 'Enable'}>
             {src.enabled ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
           </button>
-          <button onClick={onDelete} className="g-btn g-btn-ghost text-[10px] py-1 px-2" style={{ color:'var(--red)' }}><Trash2 className="h-3 w-3" /></button>
-          <button onClick={onClose} className="g-btn g-btn-ghost text-[10px] py-1 px-2"><X className="h-3 w-3" /></button>
+          <button onClick={onDelete} className="g-btn g-btn-ghost text-[10px] py-1 px-2" style={{ color:'var(--red)' }} title="Delete">🗑️</button>
+          <button onClick={onClose} className="g-btn g-btn-ghost text-[10px] py-1 px-2" title="Close">×</button>
         </div>
       </div>
 
@@ -1185,7 +1185,7 @@ export default function LogSourcesPage() {
                 ))}
               </div>
             )}
-            <button onClick={load} className="g-btn g-btn-ghost text-xs"><RefreshCw className="h-3.5 w-3.5" /></button>
+            <button onClick={load} className="g-btn g-btn-ghost text-xs" title="Refresh">↻</button>
             <button onClick={()=>setMainTab('marketplace')} className="g-btn g-btn-ghost text-xs"><Package className="h-3.5 w-3.5" /> Marketplace</button>
             <button onClick={()=>setConnecting(CATALOG[0])} className="g-btn g-btn-primary text-xs px-4"><Plus className="h-3.5 w-3.5" /> Add Source</button>
           </div>

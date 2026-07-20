@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { emailSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from '@/lib/icon-stubs';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, Search, Shield, Trash2, User, XCircle, Zap } from '@/lib/icon-stubs';
 
 const TABS = [
   { id: 'dashboard',    label: 'Dashboard',    icon: Activity },
@@ -173,7 +173,7 @@ function InboxTab() {
       </div>
       <div className="flex gap-2">
         <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={reload}><Search className="h-3.5 w-3.5" />Search</button>
-        <button className="g-btn text-xs" onClick={() => { setSearch({ sender: '', recipient: '', subject: '', status: '', threat_type: '' }); setTimeout(reload, 0); }}><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button className="g-btn text-xs" onClick={() => { setSearch({ sender: '', recipient: '', subject: '', status: '', threat_type: '' }); setTimeout(reload, 0); }} title="Reset filters">↻</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -297,7 +297,7 @@ function ThreatsTab() {
             {s === 'all' ? `All Threats (${threats.length})` : s === 'attachments' ? `Attachments (${attachments.length})` : s === 'urls' ? `URLs (${urls.length})` : s}
           </button>
         ))}
-        <button className="g-btn text-xs ml-auto" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button className="g-btn text-xs ml-auto" onClick={reload} title="Refresh">↻</button>
       </div>
 
       {(subTab === 'phishing' || subTab === 'bec') && (
@@ -677,7 +677,7 @@ function IntelligenceTab() {
         <div className="text-sm font-medium text-[var(--text-1)]">Sender Intelligence Lookup</div>
         <div className="flex gap-2">
           <input className="g-input text-xs flex-1" placeholder="e.g. suspicious-bank.xyz or noreply@example.com" value={senderDomain} onChange={e => setSenderDomain(e.target.value)} onKeyDown={e => e.key === 'Enter' && lookupSender()} />
-          <button className="g-btn-primary text-xs" onClick={lookupSender} disabled={loadingSender}><Search className="h-3.5 w-3.5" /></button>
+          <button className="g-btn-primary text-xs" onClick={lookupSender} disabled={loadingSender}>{loadingSender ? 'Looking up…' : 'Look Up'}</button>
         </div>
         {senderData && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

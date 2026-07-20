@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -821,169 +823,108 @@ func GetSMEInfrastructure(c *gin.Context) {
 // ── AI Insights ───────────────────────────────────────────────────────────────
 
 func PostSMEAI(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	db := database.DB
 	var body struct {
 		Action string `json:"action"`
 	}
 	c.BindJSON(&body)
 
-	responses := map[string]string{
-		"daily_summary": `## Daily SOC Operations Summary
+	var ctx strings.Builder
+	var healthScore, activeAnalysts, autoCoverage int
+	var totalAlerts, critAlerts, alertQueue int
+	var totalInc, openInc, slaComp, pbExec int
+	var mttd, mttr float64
+	db.QueryRow(`SELECT soc_health_score,active_analysts,automation_coverage,
+		total_alerts,critical_alerts,alert_queue_size,total_incidents,open_incidents,
+		sla_compliance,playbook_executions,mttd_mins,mttr_mins
+		FROM sme_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(
+		&healthScore, &activeAnalysts, &autoCoverage, &totalAlerts, &critAlerts, &alertQueue,
+		&totalInc, &openInc, &slaComp, &pbExec, &mttd, &mttr)
+	fmt.Fprintf(&ctx, "SOC health score: %d/100, %d active analysts, automation coverage %d%%\n", healthScore, activeAnalysts, autoCoverage)
+	fmt.Fprintf(&ctx, "Alerts: %d total, %d critical, queue size %d\n", totalAlerts, critAlerts, alertQueue)
+	fmt.Fprintf(&ctx, "Incidents: %d total, %d open. MTTD %.1f min, MTTR %.1f min, SLA compliance %d%%\n", totalInc, openInc, mttd, mttr, slaComp)
+	fmt.Fprintf(&ctx, "Playbook executions: %d\n", pbExec)
 
-**SOC Health Score: 84/100** — Trending upward (+3 from yesterday)
-
-**Alert Volume:** 2,847 alerts processed today (↓12% vs 7-day avg)
-- Critical: 47 | High: 284 | False Positive Rate: 6.2%
-- Alert queue at 89 — within acceptable range
-
-**Incident Activity:** 14 new incidents opened, 18 closed
-- MTTD: 18.4 min | MTTR: 3.2 hrs | SLA compliance: 91%
-- 2 critical incidents under active IR
-
-**Analyst Performance:** 12 analysts on shift, avg workload 72%
-- Top performer: carol.kim (9 incidents resolved, 0 FPs)
-- Burnout watch: eve.okafor (burnout index 74/100)
-
-**Automation:** 284 playbook executions saved ~47 analyst hours
-
-**Recommendation:** Review suppression rules — alert fatigue risk from Firewall source (+38% volume).`,
-
-		"analyst_bottlenecks": `## Analyst Bottleneck Analysis
-
-**Current Bottlenecks Identified:**
-
-1. **Tier 1 Alert Triage** (HIGH IMPACT)
-   - Average triage time: 8.4 min vs 5-min target
-   - Root cause: Excessive false positives from "Suspicious PowerShell" rule
-   - Recommendation: Tune rule threshold, add baseline exclusions
-
-2. **Evidence Collection for Data Exfiltration Cases** (MEDIUM)
-   - Average 2.3x longer than other case types
-   - Missing SIEM search templates for common DLP scenarios
-   - Recommendation: Create saved search playbook for DLP evidence
-
-3. **Shift Handoff Documentation** (MEDIUM)
-   - Night shift (23:00-07:00) missing structured handoff notes
-   - 3 incidents re-investigated due to missing context
-   - Recommendation: Enforce structured handoff template in case system
-
-4. **Analyst eve.okafor** (WATCH)
-   - Burnout index: 74/100 (threshold: 75)
-   - Carrying 6 open cases vs team avg of 3.2
-   - Recommendation: Redistribute 2 cases; consider day off rotation`,
-
-		"detection_gaps": `## Detection Gap Analysis
-
-**Critical Gaps Identified:**
-
-1. **T1048 — Exfiltration Over Alternative Protocol** (NOT COVERED)
-   - No active detection for DNS tunneling exfiltration
-   - Risk: HIGH — seen in 3 recent threat campaigns targeting your sector
-   - Action: Deploy DNS analytics rule from Sigma ruleset
-
-2. **T1562.001 — Disable Security Tools** (PARTIAL)
-   - 2/7 sub-techniques covered
-   - Missing: WMI-based AV kill, EDR agent tampering via LOLbins
-   - Action: Enable CrowdStrike "Sensor Tampering" prevention policy
-
-3. **Cloud Lateral Movement** (LOW COVERAGE — 34%)
-   - AWS AssumeRole chaining not monitored
-   - Azure OAuth token theft not detected
-   - Action: Enable CloudTrail cross-account logging, alert on STS anomalies
-
-4. **Supply Chain IOCs** (MANUAL ONLY)
-   - No automated feed for software supply chain compromise IOCs
-   - Action: Subscribe to CISA KEV webhook; automate IOC enrichment`,
-
-		"alert_noise": `## Alert Noise Analysis
-
-**Noise Sources (30-day data):**
-
-| Source | Volume | FP Rate | Action |
-|--------|--------|---------|--------|
-| Firewall - Port Scan | 18,441 | 94% | Tune threshold to /24 subnet |
-| Defender - PUA | 4,211 | 87% | Create exclusion for approved software |
-| SIEM - Failed Login | 9,847 | 71% | Correlate with source IP reputation |
-| EDR - Script Exec | 3,124 | 58% | Add developer machine exclusion group |
-
-**Suppression Opportunities:**
-- 3 detection rules generating >500 FPs/week with <10% TP rate
-- Estimated savings if tuned: ~42 analyst-hours/week
-
-**Recommendation:** Priority-tune "Firewall Port Scan" rule — highest FP volume, easy exclusion criteria available.`,
-
-		"automation_opportunities": `## Automation Opportunity Analysis
-
-**High-Value Automation Opportunities:**
-
-1. **Phishing Email Triage** — Potential: 340 hrs/month saved
-   - Currently: Manual analyst review of every reported phishing email
-   - Automate: URL detonation → VirusTotal → auto-block + user notification
-   - Estimated: 85% of cases can be fully automated
-
-2. **Account Lockout Investigation** — Potential: 120 hrs/month
-   - Currently: Manual AD query + manager notification
-   - Automate: Geo-check → risky IP block → manager email → case create
-   - ROI: High, low false-positive risk
-
-3. **Vulnerability Patch Verification** — Potential: 80 hrs/month
-   - Currently: Manual re-scan + ticket update
-   - Automate: Trigger rescan on patch ticket close → auto-close if clean
-   - Dependency: ServiceNow API integration required
-
-4. **IOC Enrichment** — Already in progress
-   - Current automation rate: 78% of IOC enrichment automated
-   - Gap: Custom threat actor attribution still manual`,
-
-		"threat_trends": `## SOC Threat Trend Analysis (Last 30 Days)
-
-**Key Trends:**
-
-📈 **Rising Threats:**
-- Ransomware pre-cursor activity +34% (LOLbin execution + volume shadow deletion)
-- OAuth token theft campaigns targeting Microsoft 365 +28%
-- Supply chain probe attempts against CI/CD infrastructure +19%
-
-📉 **Declining Threats:**
-- Traditional phishing volume -22% (shifted to voice phishing / vishing)
-- Automated scanning from known botnets -31% (likely blocked by IP reputation)
-
-🆕 **Emerging:**
-- AI-generated spear phishing increasing bypass rates on email filters
-- QR code phishing in physical mail (out-of-band, bypasses email security)
-- Living-off-the-land techniques using legitimate cloud admin tools (AWS CLI, az CLI)
-
-**Threat Actor Activity:**
-- APT29 (Cozy Bear): Active — targeting VPN infrastructure
-- Lazarus Group: Active — cryptomining / financial systems
-- LockBit 3.0: 2 attempted intrusions blocked in last 7 days`,
-
-		"recommendations": `## SOC Performance Recommendations
-
-**Priority Actions:**
-
-🔴 **Critical (Act within 24 hours):**
-1. Patch CVE-2024-3400 on 47 remaining affected systems — active exploitation in the wild
-2. Investigate eve.okafor workload — burnout threshold nearly reached, SLA risk
-3. Review Email Security degradation — latency 280ms (threshold 100ms)
-
-🟡 **High (Act within 1 week):**
-4. Tune Firewall port scan rule — 94% FP rate consuming Tier 1 capacity
-5. Deploy DNS tunneling detection (T1048 coverage gap)
-6. Enable MFA for all privileged analyst accounts in SOC platform
-
-🟢 **Medium (Act within 30 days):**
-7. Implement automated phishing triage playbook — 340 hrs/month savings
-8. Schedule Sigma rule review — 23 rules not triggered in 90+ days
-9. Update MITRE ATT&CK coverage to v14.1 (12 new sub-techniques missing)
-10. Create cross-shift handoff template and enforce in case system`,
+	arows, _ := db.Query(`SELECT analyst_name, SUM(incidents_resolved), AVG(workload_score), AVG(burnout_index)
+		FROM sme_analyst_perf WHERE tenant_id=$1 AND perf_date >= NOW()-INTERVAL '30 days'
+		GROUP BY analyst_name ORDER BY AVG(burnout_index) DESC LIMIT 10`, tid)
+	if arows != nil {
+		ctx.WriteString("Analyst performance (last 30 days):\n")
+		for arows.Next() {
+			var name string
+			var resolved int
+			var workload, burnout float64
+			arows.Scan(&name, &resolved, &workload, &burnout)
+			fmt.Fprintf(&ctx, "- %s: %d incidents resolved, workload %.0f, burnout index %.0f\n", name, resolved, workload, burnout)
+		}
+		arows.Close()
 	}
 
-	resp, ok := responses[body.Action]
-	if !ok {
-		resp = responses["daily_summary"]
+	drows, _ := db.Query(`SELECT rule_name, mitre_technique, total_hits, true_positives, false_positives, status
+		FROM sme_detection_rules WHERE tenant_id=$1 ORDER BY (false_positives+1)::float / (total_hits+1) DESC LIMIT 10`, tid)
+	if drows != nil {
+		ctx.WriteString("Detection rules (highest false-positive ratio first):\n")
+		for drows.Next() {
+			var name, tech, status string
+			var hits, tp, fp int
+			drows.Scan(&name, &tech, &hits, &tp, &fp, &status)
+			fmt.Fprintf(&ctx, "- %s (%s): %d hits, %d TP, %d FP, status=%s\n", name, tech, hits, tp, fp, status)
+		}
+		drows.Close()
 	}
 
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": body.Action})
+	prows, _ := db.Query(`SELECT playbook_name, category, total_executions, successful, failed, analyst_hours_saved
+		FROM sme_playbook_stats WHERE tenant_id=$1 ORDER BY total_executions DESC LIMIT 10`, tid)
+	if prows != nil {
+		ctx.WriteString("Playbooks:\n")
+		for prows.Next() {
+			var name, cat string
+			var total, succ, fail int
+			var hrs float64
+			prows.Scan(&name, &cat, &total, &succ, &fail, &hrs)
+			fmt.Fprintf(&ctx, "- %s (%s): %d executions (%d success/%d fail), %.0fh saved\n", name, cat, total, succ, fail, hrs)
+		}
+		prows.Close()
+	}
+
+	smectx := ctx.String()
+
+	var task string
+	switch body.Action {
+	case "daily_summary":
+		task = "Write a daily SOC operations summary: health score, alert volume, incident activity, analyst performance highlights, automation impact, and one recommendation."
+	case "analyst_bottlenecks":
+		task = "Identify analyst workflow bottlenecks from the performance and burnout data, each with a recommendation."
+	case "detection_gaps":
+		task = "Identify detection coverage gaps or weak rules from the detection rule data (e.g. high false-positive rules, low true-positive rules), each with a recommendation. Do not invent MITRE technique coverage not present in the data."
+	case "alert_noise":
+		task = "Analyze alert noise sources from the detection rule false-positive data and suggest tuning opportunities."
+	case "automation_opportunities":
+		task = "Identify automation opportunities based on the playbook execution data — which playbooks are underperforming or where manual work could be automated further."
+	case "threat_trends":
+		task = "Summarize what the incident and alert volume trend suggests about the current threat landscape for this SOC. If there isn't enough trend data, say so rather than inventing threat actor names or campaigns."
+	case "recommendations":
+		task = "Write prioritized SOC performance recommendations (critical/high/medium) grounded in the data above."
+	default:
+		body.Action = "daily_summary"
+		task = "Write a daily SOC operations summary: health score, alert volume, incident activity, analyst performance highlights, automation impact, and one recommendation."
+	}
+
+	prompt := fmt.Sprintf(`You are a SOC operations analyst reviewing this organization's real SOC metrics.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent specific CVE numbers, threat actor names, or figures not present in the data. Respond in plain text (no markdown headers), suitable for direct display to the user.`, smectx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action})
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

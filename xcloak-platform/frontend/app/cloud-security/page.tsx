@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { cloudSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, Cloud, Database, Eye, FileText, GitBranch, Globe, Key, Plus, RefreshCw, Server, Shield, XCircle, Zap, Lock } from '@/lib/icon-stubs';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, Cloud, Database, Eye, FileText, GitBranch, Globe, Key, Plus, Server, Shield, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 const TABS = [
   { id: 'overview',     label: 'Overview',     icon: Activity },
@@ -234,7 +234,7 @@ function InventoryTab() {
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
-        <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
       </div>
 
       {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
@@ -353,7 +353,7 @@ function PostureTab() {
               <option value="high">High</option>
               <option value="medium">Medium</option>
             </select>
-            <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+            <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
           </div>
 
           {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
@@ -473,7 +473,7 @@ function IdentityTab() {
           <option value="service_principal">Service Principal</option>
           <option value="oauth_app">OAuth App</option>
         </select>
-        <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
       </div>
 
       {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
@@ -560,7 +560,7 @@ function DetectionTab() {
               <option value="azure">Azure</option>
               <option value="gcp">GCP</option>
             </select>
-            <button className="g-btn text-xs" onClick={reload}><RefreshCw className="h-3.5 w-3.5" /></button>
+            <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

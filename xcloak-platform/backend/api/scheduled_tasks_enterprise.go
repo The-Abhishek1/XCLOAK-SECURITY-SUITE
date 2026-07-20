@@ -5,10 +5,12 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 func InitSTETables() { createSTETables() }
@@ -887,24 +889,96 @@ func GetSTEAudit(c *gin.Context) {
 
 // POST /api/ste/ai
 func PostSTEAI(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	db := database.DB
 	var b struct {
 		Action  string `json:"action"`
 		Context string `json:"context"`
 		TaskID  string `json:"task_id"`
 	}
 	c.ShouldBindJSON(&b)
-	responses := map[string]string{
-		"generate_schedule": "Based on your security requirements, I recommend running Threat Hunt daily at 02:00 AM UTC (0 2 * * *), IOC Search every 4 hours (0 */4 * * *), and Vulnerability Scans weekly on Sunday at 03:00 (0 3 * * 0). These windows avoid peak business hours and align with threat intelligence refresh cycles.",
-		"optimize_schedule": "Analysis detected 3 scheduling conflicts: your Compliance Scan and Database Cleanup overlap on Sunday at 02:00. Recommend shifting Compliance Scan to Saturday 22:00. Also, Threat Hunt runs too frequently for your current alert volume — downgrading to every 6 hours saves 40% compute time with minimal detection gap.",
-		"detect_conflicts":  "Detected conflicts: (1) FullVulnScan and AssetDiscovery both scheduled Sunday 02:00 — high resource contention risk. (2) LogCleanup scheduled during BusinessHoursCheck window. (3) BackupTask and DBCleanup share the same target group with no sequencing dependency defined.",
-		"recommend_windows": "Optimal execution windows for your environment: Maintenance (02:00–04:00 UTC), Security Scans (22:00–02:00 UTC), Reporting (05:00–07:00 UTC), Heavy Tasks (Saturday/Sunday 01:00–06:00 UTC). Avoid 08:00–18:00 UTC Monday–Friday (peak hours).",
-		"explain_purpose":   "This task performs automated threat intelligence correlation across endpoint telemetry, checking process names, network connections, and file hashes against your subscribed IOC feeds. It reduces analyst workload by auto-tagging alerts with threat context before human review.",
+
+	var ctx strings.Builder
+	trows, _ := db.Query(`SELECT task_id, name, task_type, cron_expr, schedule_type, next_run_at, enabled,
+		run_count, success_count, failure_count, avg_duration
+		FROM ste_tasks WHERE tenant_id=$1 ORDER BY enabled DESC, next_run_at ASC NULLS LAST LIMIT 25`, tid)
+	if trows != nil {
+		ctx.WriteString("Scheduled tasks:\n")
+		for trows.Next() {
+			var taskID, name, taskType, cron, schedType string
+			var nextRun *time.Time
+			var enabled bool
+			var runCount, successCount, failureCount int
+			var avgDuration float64
+			trows.Scan(&taskID, &name, &taskType, &cron, &schedType, &nextRun, &enabled,
+				&runCount, &successCount, &failureCount, &avgDuration)
+			nextRunStr := "not scheduled"
+			if nextRun != nil {
+				nextRunStr = nextRun.Format("Mon 15:04 UTC")
+			}
+			fmt.Fprintf(&ctx, "- [%s] %s (%s), cron=%q, next_run=%s, enabled=%v, runs=%d (fail=%d), avg_duration=%.0fs\n",
+				taskID, name, taskType, cron, nextRunStr, enabled, runCount, failureCount, avgDuration)
+		}
+		trows.Close()
 	}
-	resp := responses[b.Action]
-	if resp == "" {
-		resp = "I can help you generate schedules, detect conflicts, optimize execution windows, and explain task purposes. Please specify an action: generate_schedule, optimize_schedule, detect_conflicts, recommend_windows, or explain_purpose."
+
+	frows, _ := db.Query(`SELECT task_name, status, start_time FROM ste_executions
+		WHERE tenant_id=$1 AND status='failed' ORDER BY start_time DESC LIMIT 8`, tid)
+	if frows != nil {
+		ctx.WriteString("Recent failed executions:\n")
+		for frows.Next() {
+			var name, status string
+			var start time.Time
+			frows.Scan(&name, &status, &start)
+			fmt.Fprintf(&ctx, "- %s failed at %s\n", name, start.Format("2006-01-02 15:04"))
+		}
+		frows.Close()
 	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": b.Action})
+
+	if b.TaskID != "" {
+		var name, desc, taskType, cron string
+		err := db.QueryRow(`SELECT name, COALESCE(description,''), task_type, cron_expr FROM ste_tasks
+			WHERE tenant_id=$1 AND task_id=$2`, tid, b.TaskID).Scan(&name, &desc, &taskType, &cron)
+		if err == nil {
+			fmt.Fprintf(&ctx, "\nFocus task: %s (%s), cron=%q, description=%q\n", name, taskType, cron, desc)
+		}
+	}
+	if b.Context != "" {
+		fmt.Fprintf(&ctx, "\nAdditional context: %s\n", b.Context)
+	}
+	stectx := ctx.String()
+
+	var task string
+	switch b.Action {
+	case "generate_schedule":
+		task = "Recommend cron schedules for security tasks that would complement the existing schedule shown, avoiding overlap and peak business hours."
+	case "optimize_schedule":
+		task = "Analyze the current schedules for inefficiency (tasks running more often than needed, redundant overlap) and recommend optimizations."
+	case "detect_conflicts":
+		task = "Detect scheduling conflicts among the tasks shown (same/overlapping run times, resource contention) and describe each conflict found."
+	case "recommend_windows":
+		task = "Recommend optimal execution time windows for different task categories (maintenance, security scans, reporting, heavy tasks), based on the current schedule."
+	case "explain_purpose":
+		task = "Explain what the focus task does and why it's likely scheduled the way it is. If no focus task was given, explain the overall scheduled task setup shown."
+	default:
+		c.JSON(400, gin.H{"error": "unknown action"})
+		return
+	}
+
+	prompt := fmt.Sprintf(`You are a SOC automation engineer reviewing this organization's real scheduled task configuration.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent task names or schedules not present in the data. If there isn't enough data to detect a conflict or issue, say so. Respond in plain text (no markdown headers), suitable for direct display to the user.`, stectx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": b.Action})
 }
 
 // POST /api/ste/report

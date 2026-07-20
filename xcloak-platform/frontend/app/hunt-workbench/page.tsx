@@ -502,8 +502,8 @@ export default function HuntWorkbenchPage() {
                 </button>
               </div>
             ))}
-            <button onClick={addSession} className="g-btn g-btn-ghost text-xs px-2 py-1.5">
-              <Plus className="h-3 w-3" />
+            <button onClick={addSession} className="g-btn g-btn-ghost text-xs px-2 py-1.5" title="New session">
+              +
             </button>
           </div>
 

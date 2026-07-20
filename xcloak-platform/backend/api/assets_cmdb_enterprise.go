@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -986,174 +987,99 @@ func PostACEAI(c *gin.Context) {
 	}
 	c.BindJSON(&body)
 
-	// try to get asset name for context
-	assetName := "selected asset"
+	var ctx strings.Builder
 	if body.AssetID != "" {
-		db.QueryRow(`SELECT name FROM ace_assets WHERE tenant_id=$1 AND asset_id=$2`, tidStr, body.AssetID).Scan(&assetName)
+		var name, host, at, cat, st, crit, agentSt, patchSt, avSt, fwSt, bkSt string
+		var owner2, bu2, osn, osv, ips string
+		var riskScore, intFacing, managed, certDays, swCount int
+		var openPorts string
+		err := db.QueryRow(`SELECT name,hostname,asset_type,category,status,owner,business_unit,
+			criticality,risk_score,ip_addresses,internet_facing,managed,os_name,os_version,
+			agent_status,patch_status,antivirus_status,firewall_status,backup_status,
+			cert_expiry_days,open_ports,installed_software_count
+			FROM ace_assets WHERE tenant_id=$1 AND asset_id=$2`, tidStr, body.AssetID).Scan(
+			&name, &host, &at, &cat, &st, &owner2, &bu2, &crit, &riskScore, &ips, &intFacing, &managed,
+			&osn, &osv, &agentSt, &patchSt, &avSt, &fwSt, &bkSt, &certDays, &openPorts, &swCount)
+		if err == nil {
+			fmt.Fprintf(&ctx, "Asset: %s (%s), hostname=%s, type=%s/%s\n", name, body.AssetID, host, at, cat)
+			fmt.Fprintf(&ctx, "Status: %s, criticality=%s, risk_score=%d/100, owner=%s, business_unit=%s\n", st, crit, riskScore, owner2, bu2)
+			fmt.Fprintf(&ctx, "Network: IPs=%s, internet_facing=%v, open_ports=%s\n", ips, intFacing == 1, openPorts)
+			fmt.Fprintf(&ctx, "OS: %s %s, managed=%v\n", osn, osv, managed == 1)
+			fmt.Fprintf(&ctx, "Controls: agent=%s, patch=%s, antivirus=%s, firewall=%s, backup=%s, cert_expiry_days=%d\n", agentSt, patchSt, avSt, fwSt, bkSt, certDays)
+			fmt.Fprintf(&ctx, "Installed software packages: %d\n", swCount)
+
+			trows, _ := db.Query(`SELECT event_type,summary,severity FROM ace_timeline
+				WHERE tenant_id=$1 AND asset_id=$2 ORDER BY created_at DESC LIMIT 10`, tidStr, body.AssetID)
+			if trows != nil {
+				ctx.WriteString("Recent timeline:\n")
+				for trows.Next() {
+					var etype, summ, sev string
+					trows.Scan(&etype, &summ, &sev)
+					fmt.Fprintf(&ctx, "- [%s/%s] %s\n", etype, sev, summ)
+				}
+				trows.Close()
+			}
+
+			rrows, _ := db.Query(`SELECT r.relationship_type, a.name, a.asset_type FROM ace_relationships r
+				JOIN ace_assets a ON a.asset_id=r.target_id AND a.tenant_id=r.tenant_id
+				WHERE r.tenant_id=$1 AND r.source_id=$2 LIMIT 15`, tidStr, body.AssetID)
+			if rrows != nil {
+				ctx.WriteString("Relationships:\n")
+				for rrows.Next() {
+					var rtype, rname, rat string
+					rrows.Scan(&rtype, &rname, &rat)
+					fmt.Fprintf(&ctx, "- %s -> %s (%s)\n", rtype, rname, rat)
+				}
+				rrows.Close()
+			}
+		} else {
+			fmt.Fprintf(&ctx, "Asset ID %s was requested but not found in inventory.\n", body.AssetID)
+		}
+	} else {
+		var total, critical, internetFacing, unmanaged int
+		var avgRisk float64
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1`, tidStr).Scan(&total)
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND criticality='critical'`, tidStr).Scan(&critical)
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND internet_facing=TRUE`, tidStr).Scan(&internetFacing)
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND managed=FALSE`, tidStr).Scan(&unmanaged)
+		db.QueryRow(`SELECT COALESCE(AVG(risk_score),0) FROM ace_assets WHERE tenant_id=$1 AND status!='retired'`, tidStr).Scan(&avgRisk)
+		fmt.Fprintf(&ctx, "No specific asset selected. Fleet overview: %d assets total, %d critical, %d internet-facing, %d unmanaged, avg risk %.0f/100.\n", total, critical, internetFacing, unmanaged, avgRisk)
+	}
+	assetctx := ctx.String()
+
+	var task string
+	switch body.Action {
+	case "asset_summary":
+		task = "Write an asset summary: classification, current status, risk profile, security controls, and recent activity."
+	case "risk_assessment":
+		task = "Write an asset risk assessment breaking down what's driving the risk score, and recommended immediate actions."
+	case "configuration_analysis":
+		task = "Write a configuration analysis: OS/patch status, security configuration assessment (what's enabled vs missing), and a hardening recommendation."
+	case "relationship_insights":
+		task = "Write a relationship/dependency analysis: what this asset depends on and what depends on it, and the security impact if this asset were compromised."
+	case "missing_controls":
+		task = "Identify missing security controls for this asset based on its current control status, each with risk rationale and remediation effort."
+	case "remediation_recommendations":
+		task = "Write prioritized remediation recommendations (emergency/urgent/high/medium) based on the asset's current gaps."
+	default:
+		body.Action = "asset_summary"
+		task = "Write an asset summary: classification, current status, risk profile, security controls, and recent activity."
 	}
 
-	responses := map[string]string{
-		"asset_summary": fmt.Sprintf(`## Asset Summary: %s
+	prompt := fmt.Sprintf(`You are a CMDB/asset security analyst reviewing this organization's real asset inventory data.
 
-**Asset Classification:** Windows Workstation — High Criticality — Business Unit: Finance
+%s
 
-**Current Status:** Online · EDR Active · Last Seen: 2 minutes ago
+Task: %s
 
-**Risk Profile:** Risk Score 78/100 (HIGH)
-- 3 critical CVEs unpatched (CVE-2024-3400, CVE-2024-21762, CVE-2023-46805)
-- Internet-facing via VPN gateway
-- Member of Finance OU with access to payment processing systems
+Base your answer strictly on the data above — do not invent specific CVE numbers, software versions, or details not present in the data. If a field is unknown, say so rather than fabricating it. Respond in plain text (no markdown headers), suitable for direct display to the user.`, assetctx, task)
 
-**Security Controls:**
-✅ EDR Agent (CrowdStrike Falcon) — active
-✅ Antivirus — current definitions
-⚠️  Firewall — configured but 3 unreviewed inbound rules
-❌ Disk encryption — NOT enabled (compliance violation)
-❌ MFA — not enrolled (policy violation)
-
-**Recent Activity:**
-- 2 alerts in last 7 days (1 cleared, 1 under investigation)
-- User logged in from unusual location (Chicago) 3 days ago
-- PowerShell execution detected (Sigma rule: Low severity)`, assetName),
-
-		"risk_assessment": `## Asset Risk Assessment
-
-**Overall Risk Score: 78/100 — HIGH**
-
-**Vulnerability Risk (Score contribution: 35/100)**
-- CVE-2024-3400 (CVSS 10.0) — PAN-OS command injection — actively exploited in wild
-- CVE-2024-21762 (CVSS 9.8) — Fortinet SSL-VPN — unauthenticated RCE
-- 7 high-severity CVEs (CVSS 7.0+) unpatched > 30 days
-
-**Exposure Risk (Score contribution: 25/100)**
-- Internet-facing via VPN: attacker can reach this asset directly
-- RDP port 3389 open — brute force surface
-- SMB port 445 open — lateral movement risk (EternalBlue-class)
-
-**Configuration Risk (Score contribution: 18/100)**
-- Disk not encrypted — sensitive data at risk if device stolen
-- No MFA on local admin account
-- 3 unreviewed firewall rules (potential backdoor)
-
-**Recommended Immediate Actions:**
-1. Apply CVE-2024-3400 patch (ETA: Emergency, within 24h)
-2. Enable BitLocker encryption (ETA: 48h, requires IT change ticket)
-3. Enroll device in MFA (ETA: 1 week)
-4. Review and remove unneeded firewall rules`,
-
-		"configuration_analysis": `## Configuration Analysis
-
-**OS:** Windows 11 Pro (22H2) — Build 22621.3155
-**Status:** Supported — End of Support: 2025-10-14 (13 months remaining)
-
-**Security Configuration Assessment:**
-
-✅ **Windows Defender:** Active, definitions current (updated 6h ago)
-✅ **Windows Firewall:** Enabled (Domain/Private/Public profiles)
-✅ **UAC:** Enabled (Level 3 — Notify)
-✅ **Windows Update:** Auto-update enabled
-⚠️  **BitLocker:** NOT enabled — immediate action required
-⚠️  **Credential Guard:** Not enabled
-⚠️  **Attack Surface Reduction (ASR):** 4/16 rules enabled only
-❌ **LAPS:** Not configured — local admin password not managed
-❌ **PowerShell Logging:** ScriptBlock logging not enabled
-❌ **Audit Policy:** Incomplete — logon/logoff events not forwarded
-
-**Installed Software of Concern:**
-- TeamViewer 15.x — remote access tool, should be on approved list
-- 7-Zip (old version 19.0) — CVE known, update to 23.x
-- Python 3.9 — developer tool on non-developer machine?
-
-**Recommendation:** Apply CIS Level 1 Windows 11 hardening baseline. Estimated effort: 2h.`,
-
-		"relationship_insights": `## Asset Relationship Insights
-
-**Dependency Map for this Asset:**
-
-**Upstream Dependencies** (what this asset depends on):
-- Active Directory: CORP.LOCAL → auth & group policy
-- DNS Server: 10.0.0.53 (primary), 10.0.0.54 (secondary)
-- WSUS Server: WSUS-PROD-01 → patch delivery
-- File Server: FS-FINANCE-01 → mapped drives F: G:
-
-**Downstream Dependencies** (what depends on this asset):
-- Finance Database: SQLDB-FIN-01 → direct write access
-- Payment Gateway API: api.payment.corp → service account usage
-- 4 finance team users have this as primary workstation
-
-**Security Impact Analysis:**
-If this asset is compromised:
-- Finance database accessible via service account (read/write)
-- Payment gateway credentials may be cached
-- Lateral movement possible to 14 other Finance workstations (same subnet)
-- Domain privilege escalation possible (user has Domain Users group + Finance OU admin)
-
-**High-Risk Relationship:** Direct path to payment processing infrastructure. Classify as Tier 1 critical asset.`,
-
-		"missing_controls": `## Missing Security Controls Analysis
-
-**Critical Missing Controls:**
-
-❌ **Disk Encryption (CRITICAL)**
-- Risk: Physical theft or offline access to sensitive finance data
-- Control: Enable BitLocker with TPM + PIN
-- Effort: 2 hours | Ticket: Create IT change request
-
-❌ **Multi-Factor Authentication (HIGH)**
-- Risk: Credential theft gives full account access
-- Control: Enroll in Azure MFA / FIDO2 key
-- Effort: 15 minutes per user | Dependency: Azure AD Premium
-
-❌ **Local Admin Password Solution — LAPS (HIGH)**
-- Risk: Pass-the-hash lateral movement using shared local admin
-- Control: Deploy Microsoft LAPS or Azure LAPS
-- Effort: 1 day (domain-wide deployment)
-
-⚠️ **PowerShell Script Block Logging (MEDIUM)**
-- Risk: Malicious PowerShell runs undetected
-- Control: Enable via Group Policy: HKLM\Software\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging
-- Effort: 30 minutes (GPO update)
-
-⚠️ **Attack Surface Reduction — Full Ruleset (MEDIUM)**
-- 12 of 16 ASR rules not enabled
-- Key missing: Block Office macros from child processes, Block credential stealing from LSASS
-- Effort: 1 hour (test in audit mode first)`,
-
-		"remediation_recommendations": `## Remediation Recommendations
-
-**Priority 1 — Emergency (24 hours):**
-1. Patch CVE-2024-3400 (PAN-OS) — CISA KEV listed, active exploitation
-   - Action: Apply vendor patch via WSUS or manual download
-   - Risk if delayed: Remote code execution without authentication
-
-**Priority 2 — Urgent (72 hours):**
-2. Enable BitLocker disk encryption
-   - Action: Run: manage-bde -on C: -RecoveryKey D:\
-   - Store recovery key in AD or Azure AD
-3. Review 3 unreviewed firewall rules
-   - Action: Security team review via Windows Firewall with Advanced Security
-   - Suspected: TeamViewer inbound rule may be legacy
-
-**Priority 3 — High (1 week):**
-4. Enroll device in MFA (Azure MFA / Authenticator)
-5. Disable unused services: Remote Registry, Print Spooler (if not needed)
-6. Update 7-Zip to v23.x (CVE remediation)
-
-**Priority 4 — Medium (30 days):**
-7. Deploy LAPS for local admin management
-8. Enable full PowerShell logging (ScriptBlock + Module logging)
-9. Enable remaining 12 ASR rules (test in audit mode first)
-10. Evaluate TeamViewer — replace with approved remote access solution
-
-**Estimated total remediation effort:** 8 hours
-**Risk reduction after remediation:** 78 → estimated 31/100`,
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
 	}
-
-	resp, ok := responses[body.Action]
-	if !ok {
-		resp = responses["asset_summary"]
-	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": body.Action, "asset_id": body.AssetID})
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action, "asset_id": body.AssetID})
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

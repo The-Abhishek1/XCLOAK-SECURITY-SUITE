@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── table creation ──────────────────────────────────────────────────────────
@@ -968,23 +969,94 @@ func GetRPEAudit(c *gin.Context) {
 // ── AI ───────────────────────────────────────────────────────────────────────
 
 func PostRPEAI(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	db := database.DB
 	var body struct {
 		Action  string `json:"action"`
 		Context string `json:"context"`
 	}
 	c.ShouldBindJSON(&body)
 
-	responses := map[string]string{
-		"generate_report": "Based on current threat data, I recommend generating an Executive Security Summary covering: (1) Alert volume trends showing a 23% increase in brute-force attempts, (2) Top 5 vulnerable assets requiring immediate patching, (3) MITRE ATT&CK coverage gaps in T1078 (Valid Accounts) and T1190 (Exploit Public-Facing Application), and (4) Compliance posture across ISO 27001 (82%) and NIST CSF (76%). Estimated report generation time: 45 seconds.",
-		"summarize_findings": "Security posture summary: 142 open alerts (12 critical, 38 high), 3 active incidents, 67 unpatched critical CVEs across 24 assets. Threat activity elevated 18% vs. last 30 days, driven by brute-force campaigns targeting RDP and SSH. Compliance scores: ISO 27001 82%, NIST CSF 76%, PCI DSS 71%. Top risk assets: db-prod-01 (risk score 94), webserver-02 (88), vpn-gateway-01 (82). Recommend immediate action on CVE-2024-3400 affecting 3 production systems.",
-		"highlight_risks": "Critical risks requiring executive attention:\n\n1. CRITICAL: 3 unpatched systems vulnerable to CVE-2024-3400 (CVSS 10.0) — exploit code publicly available\n2. CRITICAL: Active brute-force campaign targeting VPN (91.108.4.200) — 3,200 attempts in 24h\n3. HIGH: PCI DSS compliance dropped to 71% — cardholder data environment scan failed 4 controls\n4. HIGH: Endpoint EDR coverage gap — 12 servers missing agent coverage\n5. MEDIUM: 45 alerts suppressed for >72h — suppression rules may be masking real threats",
-		"explain_trends": "Security trends over last 30 days:\n\n📈 Increasing: Brute-force (+34%), Port scan activity (+21%), Phishing emails detected (+18%)\n📉 Decreasing: Malware detections (-12%), False positive rate (-8%), Mean time to detect (-15%)\n\nNotable patterns: (1) Attack activity peaks Tuesday-Thursday 02:00-06:00 UTC, likely correlating with threat actor time zones. (2) C2 traffic shifted to port 443 HTTPS — evading legacy detection. (3) Lateral movement increasing post-initial access, suggesting improved threat actor TTPs.",
-		"recommend_actions": "Recommended actions based on current security data:\n\n1. Patch CVE-2024-3400 on db-prod-01, webserver-02, vpn-gateway-01 (CRITICAL — 48h SLA)\n2. Enable MFA on all VPN accounts — brute force campaign in progress\n3. Deploy EDR agent to 12 uncovered servers in server farm\n4. Review and tighten 23 overly-permissive firewall rules identified in last validation\n5. Update Sigma rules for T1190 — 3 recent incidents bypassed existing detection\n6. Escalate PCI DSS gap remediation — quarterly audit due in 45 days",
-		"executive_summary": "EXECUTIVE SECURITY BRIEFING — " + time.Now().Format("January 2006") + "\n\nOVERALL POSTURE: ELEVATED RISK\n\nKey Metrics:\n• Security Score: 71/100 (↓3 from last month)\n• Active Threats: 3 incidents, 12 critical alerts\n• Compliance: ISO 27001 82%, NIST CSF 76%, PCI DSS 71%\n• SLA Adherence: 94% (P1: 100%, P2: 91%, P3: 89%)\n\nTop Business Risks:\n1. Active nation-state scanning campaign targeting financial services sector\n2. Critical patch gap creating exploitation window for 3 production systems\n3. PCI DSS non-compliance risk ahead of Q3 audit\n\nRecommended Board Actions:\n• Approve emergency patching window for Q3 critical systems\n• Review cybersecurity insurance coverage given elevated threat landscape\n• Authorize additional SOC headcount for night-shift coverage gap",
+	// ── Gather real cross-cutting security data for this tenant ─────────────
+	var ctx strings.Builder
+	var totalAlerts, critAlerts, highAlerts int
+	db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '30 days'`, tid).Scan(&totalAlerts)
+	db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '30 days' AND severity='critical'`, tid).Scan(&critAlerts)
+	db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND created_at>=NOW()-INTERVAL '30 days' AND severity='high'`, tid).Scan(&highAlerts)
+	fmt.Fprintf(&ctx, "Alerts (last 30 days): %d total, %d critical, %d high\n", totalAlerts, critAlerts, highAlerts)
+
+	var openIncidents, closedIncidents int
+	db.QueryRow(`SELECT COUNT(*) FROM incidents WHERE tenant_id=$1 AND status='open'`, tid).Scan(&openIncidents)
+	db.QueryRow(`SELECT COUNT(*) FROM incidents WHERE tenant_id=$1 AND status='closed' AND updated_at>=NOW()-INTERVAL '30 days'`, tid).Scan(&closedIncidents)
+	fmt.Fprintf(&ctx, "Incidents: %d open, %d closed in last 30 days\n", openIncidents, closedIncidents)
+
+	var openVulns, criticalVulns int
+	db.QueryRow(`SELECT COUNT(*) FROM vulnerabilities WHERE tenant_id=$1 AND patch_status IN ('open','in_progress')`, tid).Scan(&openVulns)
+	db.QueryRow(`SELECT COUNT(*) FROM vulnerabilities WHERE tenant_id=$1 AND patch_status IN ('open','in_progress') AND severity='critical'`, tid).Scan(&criticalVulns)
+	fmt.Fprintf(&ctx, "Vulnerabilities: %d open (%d critical)\n", openVulns, criticalVulns)
+
+	frows, _ := db.Query(`SELECT name, overall_score, compliance_status FROM fce_frameworks
+		WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 6`, tid)
+	if frows != nil {
+		ctx.WriteString("Compliance frameworks:\n")
+		for frows.Next() {
+			var name, status string
+			var score int
+			frows.Scan(&name, &score, &status)
+			fmt.Fprintf(&ctx, "- %s: %d%% (%s)\n", name, score, status)
+		}
+		frows.Close()
 	}
-	resp, ok := responses[body.Action]
-	if !ok {
-		resp = "AI analysis complete. Review the current security data across all integrated sources to identify patterns and generate targeted recommendations. Consider running a full platform scan to baseline current posture before generating the report."
+
+	arows, _ := db.Query(`SELECT rule_name, severity, COUNT(*) FROM alerts WHERE tenant_id=$1
+		AND created_at>=NOW()-INTERVAL '7 days' GROUP BY rule_name, severity ORDER BY COUNT(*) DESC LIMIT 8`, tid)
+	if arows != nil {
+		ctx.WriteString("Top alert rules (last 7 days):\n")
+		for arows.Next() {
+			var rule, sev string
+			var cnt int
+			arows.Scan(&rule, &sev, &cnt)
+			fmt.Fprintf(&ctx, "- %s (%s): %d occurrences\n", rule, sev, cnt)
+		}
+		arows.Close()
 	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": body.Action})
+
+	if body.Context != "" {
+		fmt.Fprintf(&ctx, "\nAdditional context: %s\n", body.Context)
+	}
+	reportctx := ctx.String()
+
+	var task string
+	switch body.Action {
+	case "generate_report":
+		task = "Recommend what security report to generate right now, based on what the data shows is most notable, and what sections it should cover."
+	case "summarize_findings":
+		task = "Write a concise security posture summary covering alerts, incidents, vulnerabilities, and compliance."
+	case "highlight_risks":
+		task = "List the risks requiring executive attention, ranked by severity, based on the data."
+	case "explain_trends":
+		task = "Explain what the alert/incident/vulnerability data suggests about trends and notable patterns. If there isn't enough data for a trend, say so."
+	case "recommend_actions":
+		task = "Write prioritized recommended actions based on the current data."
+	case "executive_summary":
+		task = "Write an executive security briefing: overall posture, key metrics, top business risks, and recommended board actions."
+	default:
+		c.JSON(400, gin.H{"error": "unknown action"})
+		return
+	}
+
+	prompt := fmt.Sprintf(`You are a SOC reporting analyst reviewing this organization's real security data.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent specific CVE numbers, IP addresses, or asset names not present in the data. If a metric is zero, treat that as a genuinely quiet period rather than fabricating an issue. Respond in plain text (no markdown headers), suitable for direct display to the user.`, reportctx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action})
 }

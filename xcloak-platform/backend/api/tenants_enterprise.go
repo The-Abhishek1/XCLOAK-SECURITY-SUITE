@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -793,91 +794,118 @@ func GetTNEBilling(c *gin.Context) {
 // ── AI Assistant ──────────────────────────────────────────────────────────────
 
 func PostTNEAI(c *gin.Context) {
+	db := database.DB
 	var body struct {
 		Action    string `json:"action"`
 		TenantRef string `json:"tenant_ref"`
 	}
 	c.BindJSON(&body)
 
-	responses := map[string]string{
-		"health_summary": `## Platform Health Summary
+	var ctx strings.Builder
+	if body.TenantRef != "" {
+		var name, org, plan, status string
+		err := db.QueryRow(`SELECT tenant_name, org_name, plan, status FROM tne_tenants WHERE tenant_ref=$1`, body.TenantRef).
+			Scan(&name, &org, &plan, &status)
+		if err == nil {
+			fmt.Fprintf(&ctx, "Focus tenant: %s (%s), plan=%s, status=%s\n", name, org, plan, status)
 
-**Overall Score: 94/100 — Excellent**
+			var mU, mA, mSt, mAi int
+			rr := db.QueryRow(`SELECT max_users,max_agents,max_storage_gb,max_ai_sessions_concurrent FROM tne_resources WHERE tenant_ref=$1`, body.TenantRef)
+			if rr.Scan(&mU, &mA, &mSt, &mAi) == nil {
+				var actU, actA, aiR int
+				var stoGb float64
+				ur := db.QueryRow(`SELECT active_users,active_agents,ai_requests,storage_used_gb FROM tne_usage WHERE tenant_ref=$1 AND period='current'`, body.TenantRef)
+				if ur.Scan(&actU, &actA, &aiR, &stoGb) == nil {
+					fmt.Fprintf(&ctx, "Usage vs limits: users %d/%d, agents %d/%d, storage %.1f/%dGB, ai_requests(period)=%d (limit=%d concurrent)\n",
+						actU, mU, actA, mA, stoGb, mSt, aiR, mAi)
+				}
+			}
 
-### By Tenant
-| Tenant | Score | Issues |
-|--------|-------|--------|
-| Acme Corp | 98/100 | None |
-| TechStart Inc | 91/100 | Log ingestion lag (12s) |
-| FinSecure Ltd | 87/100 | 3 agents offline >2hr |
-| MedGuard Health | 94/100 | Storage 78% capacity |
+			hrows, _ := db.Query(`SELECT check_type, status, score, details FROM tne_health WHERE tenant_ref=$1 ORDER BY score ASC`, body.TenantRef)
+			if hrows != nil {
+				ctx.WriteString("Health checks:\n")
+				for hrows.Next() {
+					var ctype, hstat, details string
+					var score int
+					hrows.Scan(&ctype, &hstat, &score, &details)
+					fmt.Fprintf(&ctx, "- %s: %s (score %d) — %s\n", ctype, hstat, score, details)
+				}
+				hrows.Close()
+			}
+		}
+	} else {
+		var total, active, suspended, trial, enterprise int
+		db.QueryRow(`SELECT COUNT(*) FROM tne_tenants`).Scan(&total)
+		db.QueryRow(`SELECT COUNT(*) FROM tne_tenants WHERE status='active'`).Scan(&active)
+		db.QueryRow(`SELECT COUNT(*) FROM tne_tenants WHERE status='suspended'`).Scan(&suspended)
+		db.QueryRow(`SELECT COUNT(*) FROM tne_tenants WHERE status='trial'`).Scan(&trial)
+		db.QueryRow(`SELECT COUNT(*) FROM tne_tenants WHERE plan='enterprise'`).Scan(&enterprise)
+		fmt.Fprintf(&ctx, "Platform-wide: %d tenants (%d active, %d suspended, %d trial, %d enterprise plan)\n", total, active, suspended, trial, enterprise)
 
-**Immediate Action Required:**
-1. FinSecure Ltd — 3 agents disconnected on VLAN-CORP. Investigate network path.
-2. TechStart Inc — Elasticsearch ingestion lag. Consider indexing optimization.
+		hrows, _ := db.Query(`SELECT tenant_ref, MIN(score) FROM tne_health GROUP BY tenant_ref ORDER BY MIN(score) ASC LIMIT 8`)
+		if hrows != nil {
+			ctx.WriteString("Lowest-health tenants:\n")
+			for hrows.Next() {
+				var ref string
+				var score int
+				hrows.Scan(&ref, &score)
+				fmt.Fprintf(&ctx, "- %s: min health score %d\n", ref, score)
+			}
+			hrows.Close()
+		}
 
-**All other tenants operating normally.**`,
+		urows, _ := db.Query(`SELECT t.tenant_ref, t.tenant_name, u.active_agents, r.max_agents
+			FROM tne_usage u JOIN tne_tenants t ON t.tenant_ref=u.tenant_ref
+			JOIN tne_resources r ON r.tenant_ref=u.tenant_ref
+			WHERE u.period='current' AND r.max_agents > 0 ORDER BY (u.active_agents::float / r.max_agents) DESC LIMIT 8`)
+		if urows != nil {
+			ctx.WriteString("Tenants nearest their resource limits (by agent usage):\n")
+			for urows.Next() {
+				var ref, name string
+				var used, limit int
+				urows.Scan(&ref, &name, &used, &limit)
+				pct := 0
+				if limit > 0 {
+					pct = used * 100 / limit
+				}
+				fmt.Fprintf(&ctx, "- %s (%s): %d/%d agents (%d%%)\n", name, ref, used, limit, pct)
+			}
+			urows.Close()
+		}
+	}
+	tnectx := ctx.String()
 
-		"license_recommendations": `## License Recommendations
-
-**Based on current usage patterns:**
-
-1. **TechStart Inc** — Currently on Professional ($1,200/mo). Usage at 94% of agent limit. **Recommend Enterprise upgrade** before next billing cycle to avoid overage charges.
-
-2. **FinSecure Ltd** — AI Assistant usage is 340% above Professional tier limit. **Recommend Enterprise Plus** for unlimited AI sessions.
-
-3. **Acme Corp** — Using only 42% of allocated resources. Consider **downgrade to Professional** to save $3,300/month.
-
-4. **MedGuard Health** — Trial expires in 12 days. **High conversion probability** — schedule upgrade call this week.
-
-**Estimated revenue impact of recommended changes: +$2,100/month.**`,
-
-		"resource_optimization": `## Resource Optimization Recommendations
-
-**Storage:** 3 tenants have >70% storage utilization. Enable log compression (est. 60% reduction).
-
-**Agent Limits:** TechStart Inc at 94% capacity. Pre-allocate 50 additional agent slots now.
-
-**AI Sessions:** FinSecure exceeding concurrent session limits during business hours (09:00-17:00 EST). Set burst limit to 25 during peak hours.
-
-**API Rate Limits:** 2 tenants hitting rate limits intermittently. Implement request queue to smooth traffic.`,
-
-		"security_recommendations": `## Security Recommendations
-
-**Critical:**
-1. FinSecure Ltd — 3 users have not enabled MFA. Enforce MFA within 24 hours (PCI DSS requirement).
-2. TechStart Inc — Admin user "svc_legacy" last active 94 days ago. Deactivate or rotate credentials.
-
-**High:**
-1. MedGuard Health — SSO certificate expires in 14 days. Renew immediately.
-2. Acme Corp — 12 API keys with no expiration date. Enforce 90-day rotation policy.
-
-**Medium:**
-1. All tenants — Consider enabling IP allowlisting for admin console access.`,
-
-		"capacity_planning": `## Capacity Planning — 6-Month Projection
-
-**Based on current growth rate (+18% MoM):**
-
-| Metric | Current | 3 Months | 6 Months |
-|--------|---------|----------|----------|
-| Total Agents | 4,127 | 4,869 | 5,746 |
-| Storage | 2.4 TB | 3.8 TB | 6.1 TB |
-| EPS | 24,750 | 29,205 | 34,462 |
-| Tenants | 18 | 22 | 27 |
-
-**Recommendations:**
-- Add 2 Elasticsearch nodes before month 3 (storage)
-- Upgrade database tier at month 4 (write throughput)
-- Add CDN for report delivery at month 2 (bandwidth)`,
+	var task string
+	switch body.Action {
+	case "health_summary":
+		task = "Write a platform health summary across tenants: overall assessment and any tenants needing immediate attention, based on the health check data."
+	case "license_recommendations":
+		task = "Recommend plan/license changes for tenants based on their usage vs. resource limits shown (upgrade candidates near limits, downgrade candidates with low utilization)."
+	case "resource_optimization":
+		task = "Recommend resource optimizations based on the usage/limit data shown (storage, agents, AI sessions, API rate limits)."
+	case "security_recommendations":
+		task = "Give security recommendations based on the health check data shown. Do not invent specific users, certificates, or API keys not present in the data — if the health data doesn't cover a security area, say so."
+	case "capacity_planning":
+		task = "Give a capacity planning assessment based on current tenant counts and resource usage shown. If there isn't enough historical data for a trend projection, say so rather than inventing growth percentages."
+	default:
+		c.JSON(400, gin.H{"error": "unknown action"})
+		return
 	}
 
-	response, ok := responses[body.Action]
-	if !ok {
-		response = fmt.Sprintf("Analysis for action '%s' on tenant '%s': All metrics within normal range. Platform operating at 94%% efficiency.", body.Action, body.TenantRef)
-	}
+	prompt := fmt.Sprintf(`You are a platform operations analyst reviewing this SaaS platform's real tenant data.
 
-	c.JSON(http.StatusOK, gin.H{"response": response, "action": body.Action})
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent tenant names, dollar figures, or specifics not present in the data. Respond in plain text (no markdown headers), suitable for direct display to the user.`, tnectx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action})
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

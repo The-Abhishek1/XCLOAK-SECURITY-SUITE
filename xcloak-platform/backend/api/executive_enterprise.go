@@ -3,10 +3,12 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── tables ────────────────────────────────────────────────────────────────────
@@ -804,28 +806,109 @@ func GetEXEAudit(c *gin.Context) {
 // ── AI assistant ──────────────────────────────────────────────────────────────
 
 func PostEXEAI(c *gin.Context) {
-	var body struct{ Action string `json:"action"` }
+	tid := tenantIDFromContext(c)
+	var body struct {
+		Action  string `json:"action"`
+		Context string `json:"context"`
+	}
 	c.ShouldBindJSON(&body)
 
-	responses := map[string]string{
-		"executive_summary": "EXECUTIVE SECURITY BRIEFING — " + time.Now().Format("January 2006") + "\n\nOVERALL SECURITY POSTURE: ELEVATED RISK\nSecurity Score: 73/100 (↓2 from last month)\n\nKEY METRICS:\n• Active Incidents: 9 open (4 critical)\n• Critical Vulnerabilities: 47 (3 CISA KEV)\n• Compliance: 74% average across 12 frameworks\n• MTTD: 3.2h | MTTR: 14.8h | SLA Compliance: 91%\n• Financial Risk Exposure: $4.93M\n\nTOP 3 EXECUTIVE PRIORITIES:\n1. Emergency patch for CVE-2024-3400 (CISA KEV, CVSS 10.0) — PAN-OS VPN gateway\n2. PCI DSS remediation: 62 failing controls, QSA audit in 60 days\n3. Ransomware campaign (LockBit 3.0) — financial sector targeting active\n\nBUSINESS IMPACT: 3 business units at elevated risk. Finance & Treasury has 3 active incidents with $2.4M revenue exposure.\n\nRECOMMENDED BOARD ACTIONS:\n• Authorize emergency patch window (est. 4h downtime)\n• Review cybersecurity insurance adequacy ($50K-$500K PCI fine exposure)\n• Approve SOC headcount expansion (current utilization: 87%)",
+	db := database.DB
 
-		"weekly_briefing": "WEEKLY SECURITY BRIEFING — Week of " + time.Now().Format("January 2, 2006") + "\n\nSUMMARY: Moderate security week with 1 significant new threat campaign identified.\n\nNEW THIS WEEK:\n• APT29 campaign targeting financial services sector — 7 IOCs matched in your environment\n• LockBit 3.0 variant detected in threat feeds — 3 IOC matches\n• 12 new critical CVEs published; 4 affect your asset inventory\n• SOC closed 23 incidents, escalated 3 to P1\n\nMETRICS VS LAST WEEK:\n• Alert Volume: 14,203 (+8%) — increased scanning activity\n• Incidents: 9 open (was 7) — 2 new high-severity\n• MTTD: 3.2h (was 3.8h) — ↑improvement\n• MTTR: 14.8h (was 16.2h) — ↑improvement\n• Patches Applied: 47 (was 31)\n\nFOCUS AREAS FOR NEXT WEEK:\n• Complete CVE-2024-3400 patching on VPN gateway\n• Resolve 2 PCI DSS failing controls before monthly review\n• Schedule tabletop exercise for ransomware scenario",
+	// ── Gather real executive metrics for this tenant ───────────────────────
+	var secScore, riskScore, compScore, totalInc, critInc int
+	var totalVulns, critVulns, totalAssets, critAssets int
+	var mttd, mttr float64
+	var slaComp, patchComp, detCov, autoRate int
+	var falsePos float64
+	var financialRisk int64
+	db.QueryRow(`SELECT security_score, risk_score, compliance_score, total_incidents, critical_incidents,
+		total_vulns, critical_vulns, total_assets, critical_assets, mttd_hours, mttr_hours,
+		sla_compliance, patch_compliance, detection_coverage, automation_rate, false_positive_rate, financial_risk_usd
+		FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(
+		&secScore, &riskScore, &compScore, &totalInc, &critInc,
+		&totalVulns, &critVulns, &totalAssets, &critAssets, &mttd, &mttr,
+		&slaComp, &patchComp, &detCov, &autoRate, &falsePos, &financialRisk,
+	)
 
-		"board_summary": "BOARD SECURITY REPORT — Q3 2025\n\nEXECUTIVE SUMMARY\nThe organization maintains a security score of 73/100. While operational metrics have improved (MTTD down 16% QoQ), the elevated threat landscape and compliance gaps require board attention and investment.\n\nKEY RISKS FOR BOARD AWARENESS:\n1. COMPLIANCE RISK: PCI DSS audit in 60 days at 71% readiness. Fine exposure: $50K–$500K. Estimated remediation cost: $35K.\n2. THREAT RISK: Active nation-state campaign (APT29) targeting financial services. 7 IOCs have matched our environment.\n3. OPERATIONAL RISK: SOC capacity at 87% utilization. Incident response SLA at risk without additional headcount.\n\nINVESTMENT REQUEST:\n• Emergency patch cycle: $15K (covered by existing budget)\n• Additional SOC analyst (×2): $180K annually\n• DLP tool deployment: $45K\nExpected ROI: 14:1 based on risk reduction modeling.\n\nCOMPLIANCE POSTURE: 12 frameworks active. Average score 74%. SOC 2 and PCI DSS are lowest performers.\n\nRECOMMENDATION: Approve security investment package. Defer non-critical technology projects until compliance gaps resolved.",
+	var secScorePrev, riskScorePrev, totalIncPrev int
+	db.QueryRow(`SELECT security_score, risk_score, total_incidents FROM exe_snapshots
+		WHERE tenant_id=$1 ORDER BY snapshot_date DESC OFFSET 7 LIMIT 1`, tid).Scan(&secScorePrev, &riskScorePrev, &totalIncPrev)
 
-		"risk_analysis": "BUSINESS RISK ANALYSIS — " + time.Now().Format("January 2006") + "\n\nENTERPRISE RISK SCORE: 68/100 (High)\n\nTOP BUSINESS RISKS:\n\n1. CRITICAL — Exploitation of Unpatched Systems\n   CVE-2024-3400 affects internet-facing VPN gateway. Exploit code publicly available. Probability of exploitation in 14 days: 73%. Business impact: potential remote code execution, data exfiltration.\n   Mitigation: Emergency patch (4h maintenance window required)\n\n2. CRITICAL — PCI DSS Non-Compliance Penalty\n   Current readiness: 71%. 62 failing controls. QSA audit: Sept 15. Fine range: $50K–$500K/month post-audit. Customer/partner contract exposure if certification lapsed.\n   Mitigation: Prioritized remediation sprint — 8 engineers, 3 weeks\n\n3. HIGH — Ransomware Exposure\n   LockBit 3.0 campaign active in sector. 3 IOC matches. 1 unresolved phishing attempt in past 7 days. Estimated ransom demand if compromised: $2–5M. Recovery time: 5–14 days.\n   Mitigation: Validate backup integrity, test recovery playbook, deploy email security improvements\n\n4. HIGH — Insider Threat\n   3 users flagged by behavioral analytics for anomalous data access. 2 on HR notice. Estimated data at risk: 45,000 customer records.\n   Mitigation: Enhanced monitoring, access review, HR coordination",
+	var ctx strings.Builder
+	fmt.Fprintf(&ctx, "Security score: %d/100 (was %d 7 snapshots ago)\n", secScore, secScorePrev)
+	fmt.Fprintf(&ctx, "Risk score: %d/100 (was %d)\n", riskScore, riskScorePrev)
+	fmt.Fprintf(&ctx, "Compliance score: %d%%\n", compScore)
+	fmt.Fprintf(&ctx, "Incidents: %d open (%d critical), was %d\n", totalInc, critInc, totalIncPrev)
+	fmt.Fprintf(&ctx, "Vulnerabilities: %d total (%d critical)\n", totalVulns, critVulns)
+	fmt.Fprintf(&ctx, "Assets: %d total (%d critical)\n", totalAssets, critAssets)
+	fmt.Fprintf(&ctx, "MTTD: %.1fh | MTTR: %.1fh | SLA compliance: %d%%\n", mttd, mttr, slaComp)
+	fmt.Fprintf(&ctx, "Patch compliance: %d%% | Detection coverage: %d%% | Automation rate: %d%% | False positive rate: %.1f%%\n", patchComp, detCov, autoRate, falsePos)
+	fmt.Fprintf(&ctx, "Estimated financial risk exposure: $%d\n", financialRisk)
 
-		"trend_analysis": "SECURITY TREND ANALYSIS — Last 90 Days\n\nSECURITY SCORE TREND: 68 → 71 → 73 (↑5 over 90 days)\nPositive trajectory driven by:\n• Successful EDR rollout (+340 endpoints covered)\n• Patch compliance improvement: 71% → 82%\n• MTTD improvement: 6.1h → 3.2h (↓47%)\n\nRISK SCORE TREND: 81 → 74 → 68 (↓13 — improving)\nRisk reduction from:\n• 3 critical vulnerabilities remediated\n• 2 high-risk firewall rules reviewed\n• Phishing simulation + training cycle completed\n\nCOMPLIANCE TREND: 69% → 72% → 74%\nSlowing improvement. PCI DSS dragging average down.\n\nINCIDENT TREND: 24 → 19 → 9 per week (↓63%)\nSignificant reduction attributable to:\n• Automated playbook handling of tier-1 alerts\n• Improved email security catching phishing earlier\n\nCONCERNS:\n• Vulnerability backlog growing despite remediation effort (new CVEs outpacing patches)\n• Cloud asset expansion outpacing security tooling\n• SOC analyst overtime increasing — sustainability risk\n\nFORECAST: If current trajectory maintained, security score will reach 78+ by Q4. PCI compliance requires external intervention to remain on track.",
-
-		"recommendations": "STRATEGIC SECURITY RECOMMENDATIONS — Q3 2025\n\nIMMEDIATE (0-30 days):\n1. Emergency patch CVE-2024-3400 (PAN-OS VPN) — assign ops team, 4h window\n   Owner: CISO | Effort: 8h | Risk reduction: -12 risk points\n2. Remediate 8 critical PCI DSS controls — dedicated sprint\n   Owner: Engineering + Compliance | Effort: 3 weeks | Reduces fine exposure by 70%\n3. Initiate third-party pen test (overdue 47 days)\n   Owner: CISO | Budget: $25K | Required for PCI re-certification\n\nSHORT-TERM (30-90 days):\n4. Deploy DLP solution — email + endpoint channels\n   Owner: Security Architecture | Budget: $45K | Addresses ISO 27001 A.8.12 gap\n5. Hire 2 additional SOC analysts — current utilization 87%\n   Owner: CISO + HR | Budget: $180K/yr | Prevents SLA degradation\n6. Complete insider threat program — formal policy + monitoring\n   Owner: CISO + Legal | Effort: 4 weeks | 3 users currently at risk\n\nLONG-TERM (90+ days):\n7. Cloud security posture consolidation — single CSPM platform\n   Owner: Cloud Platform + Security | Budget: $85K | Addresses 3 audit findings\n8. Zero Trust network architecture roadmap\n   Owner: CTO + CISO | Timeline: 18 months | Strategic risk reduction\n9. Security awareness maturity program — quarterly cadence\n   Owner: Security + HR | Budget: $20K/yr | Reduces phishing success rate",
-
-		"predictive_insights": "PREDICTIVE RISK INSIGHTS — 90-Day Forecast\n\nMODEL: Linear regression + threat intelligence weighting\nCONFIDENCE: 74% (medium)\n\nRISK TRAJECTORY: ↑Increasing (68 → 74 predicted over 90 days)\nPrimary driver: Cloud expansion (+12% new assets) outpacing security controls\n\nINCIDENT VOLUME FORECAST:\n• 30 days: 11-14 incidents/week (+15-22%)\n• 60 days: 13-18 incidents/week\n• 90 days: 10-15 incidents/week (seasonal reduction August)\n\nCOMPLIANCE READINESS AT AUDIT:\n• PCI DSS (Sept 15): 65-69% — HIGH RISK of findings without intervention\n• ISO 27001 (Oct 20): 80-83% — MODERATE — manageable with current trajectory\n• SOC 2 (Nov 1): 72-75% — MODERATE\n\nVULNERABILITY BACKLOG FORECAST:\n• Without additional resources: 354 → 487 items (+37%) in 30 days\n• With 1 additional engineer: 354 → 291 (-18%)\n\nTHREAT EVOLUTION:\n• APT29 campaign expected to intensify through August (historical pattern)\n• Ransomware activity forecast: 23% sector increase in Q3\n• AI-generated phishing attacks projected to increase 40% YoY\n\nRECOMMENDED INTERVENTIONS to change trajectory:\n1. Accelerate patching velocity (prevent backlog growth)\n2. Increase automation (reduce MTTR, improve analyst capacity)\n3. Pre-audit remediation sprint (prevent compliance findings)",
+	frows, _ := db.Query(`SELECT name, overall_score, compliance_status FROM fce_frameworks
+		WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 5`, tid)
+	if frows != nil {
+		ctx.WriteString("Lowest-scoring compliance frameworks:\n")
+		for frows.Next() {
+			var name, status string
+			var score int
+			frows.Scan(&name, &score, &status)
+			fmt.Fprintf(&ctx, "- %s: %d%% (%s)\n", name, score, status)
+		}
+		frows.Close()
 	}
 
-	resp, ok := responses[body.Action]
-	if !ok {
-		resp = "AI analysis in progress. Reviewing current security metrics, threat intelligence, and compliance posture to provide tailored executive insights."
+	irows, _ := db.Query(`SELECT title, severity, status FROM incidents WHERE tenant_id=$1
+		AND status NOT IN ('closed','resolved') ORDER BY severity DESC LIMIT 5`, tid)
+	if irows != nil {
+		ctx.WriteString("Open incidents:\n")
+		for irows.Next() {
+			var title, sev, status string
+			irows.Scan(&title, &sev, &status)
+			fmt.Fprintf(&ctx, "- [%s] %s (%s)\n", sev, title, status)
+		}
+		irows.Close()
 	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": body.Action})
+
+	if body.Context != "" {
+		fmt.Fprintf(&ctx, "\nAdditional context: %s\n", body.Context)
+	}
+	execctx := ctx.String()
+
+	var task string
+	switch body.Action {
+	case "executive_summary":
+		task = "Write a concise executive security briefing: overall posture, key metrics, top 3 priorities, business impact, and recommended board actions."
+	case "weekly_briefing":
+		task = "Write this week's security briefing: summary, notable items, metrics vs. the prior period, and focus areas for next week."
+	case "board_summary":
+		task = "Write a board-level security report: executive summary, key risks for board awareness, any investment requests implied by the data, and a recommendation."
+	case "risk_analysis":
+		task = "Write a business risk analysis: enterprise risk score and the top business risks implied by the metrics, each with business impact and a mitigation."
+	case "trend_analysis":
+		task = "Write a trend analysis comparing current metrics to the prior snapshot, calling out what's improving, what's degrading, and a forecast."
+	case "recommendations":
+		task = "Write prioritized strategic security recommendations grouped into immediate/short-term/long-term, each with an owner and rationale grounded in the data."
+	case "predictive_insights":
+		task = "Write a predictive risk outlook: likely trajectory of the key metrics if current trends continue, and what would change that trajectory."
+	default:
+		c.JSON(400, gin.H{"error": "unknown action"})
+		return
+	}
+
+	prompt := fmt.Sprintf(`You are a CISO's analyst preparing material from this organization's real security metrics.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent specific CVE numbers, campaign names, or figures not present in the data. If a metric is zero or missing, say the posture is stable/no data rather than fabricating an issue. Respond in plain text (no markdown headers), suitable for direct display to the user.`, execctx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": body.Action})
 }

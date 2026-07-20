@@ -91,6 +91,7 @@ export {
   _I as LogIn,
   _I as LogOut,
   _I as Mail,
+  _I as Map,
   _I as MapPin,
   _I as MemoryStick,
   _I as MessageSquare,

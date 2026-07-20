@@ -159,20 +159,19 @@ function DeltaBadge({ delta, pct }: { delta: number; pct: number }) {
   );
 }
 
-function StatCard({ label, value, sub, icon: Icon, accent, pulse, delta, deltaPct, link }: {
+function StatCard({ label, value, sub, accent, pulse, delta, deltaPct, link }: {
   label: string; value: string | number; sub?: string;
-  icon: any; accent?: string; pulse?: boolean;
+  icon?: any; accent?: string; pulse?: boolean;
   delta?: number; deltaPct?: number; link?: string;
 }) {
   const content = (
     <div className="g-card p-4 h-full flex flex-col gap-2 relative overflow-hidden transition-all hover:border-accent">
       {pulse && <span className="absolute top-3 right-3 h-2 w-2 rounded-full animate-pulse" style={{ background: accent || 'var(--accent)' }} />}
-      <div className="flex items-start justify-between">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
-          <Icon className="h-4 w-4" style={{ color: accent || 'var(--accent)' }} />
+      {delta !== undefined && deltaPct !== undefined && (
+        <div className="flex items-start justify-end">
+          <DeltaBadge delta={delta} pct={deltaPct} />
         </div>
-        {delta !== undefined && deltaPct !== undefined && <DeltaBadge delta={delta} pct={deltaPct} />}
-      </div>
+      )}
       <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{value ?? '—'}</p>
       <p className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>{label}</p>
       {sub && <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{sub}</p>}

@@ -451,7 +451,7 @@ export default function ThreatHuntPage() {
               <option value="active">Active</option><option value="draft">Draft</option>
               <option value="completed">Completed</option><option value="archived">Archived</option>
             </select>
-            <button onClick={loadLibrary} className="g-btn g-btn-ghost text-xs"><RefreshCw className="h-3 w-3" /></button>
+            <button onClick={loadLibrary} className="g-btn g-btn-ghost text-xs" title="Refresh">↻</button>
           </div>
 
           <div className="g-card overflow-hidden">

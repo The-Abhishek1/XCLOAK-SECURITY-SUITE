@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { integrationsAPI, agentsAPI } from '@/lib/api';
 import { ArrowLeft, Check, CheckCircle, ChevronRight, Copy, Cpu, FileText, Key, Play, RefreshCw, Shield, Terminal } from '@/lib/icon-stubs';
@@ -17,6 +17,11 @@ export default function OnboardPage() {
   const [token, setToken]           = useState('');
   const [label, setLabel]           = useState('');
   const [serverURL, setServerURL]   = useState('http://localhost:8080');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setServerURL(`${window.location.protocol}//${window.location.hostname}:8080`);
+  }, []);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied]         = useState<string | null>(null);
   const [checking, setChecking]     = useState(false);

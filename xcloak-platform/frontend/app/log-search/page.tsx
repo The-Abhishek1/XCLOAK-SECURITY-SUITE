@@ -699,7 +699,7 @@ function DetectionModal({ query, samples, onClose }: { query: string; samples: s
       <div className="g-modal" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Detection Builder</span>
-          <button onClick={onClose}><X className="h-4 w-4" style={{ color: 'var(--text-3)' }} /></button>
+          <button onClick={onClose} style={{ color: 'var(--text-3)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
         </div>
         <div className="p-4 space-y-3">
           <div className="flex gap-2">
@@ -1427,8 +1427,8 @@ export default function LogSearchPage() {
                     )}
                     {filteredLogs.length > 0 && (
                       <button onClick={handleAIExplain} disabled={aiLoading}
-                        className="g-btn g-btn-ghost text-[11px] flex items-center gap-1 disabled:opacity-40">
-                        <Sparkles className="h-3 w-3" />
+                        className="g-btn g-btn-ghost text-[11px] flex items-center gap-1 disabled:opacity-40" title="AI explain">
+                        ✨️ {aiLoading ? 'Explaining…' : 'Explain'}
                       </button>
                     )}
                     <div className="relative">
