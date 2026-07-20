@@ -171,7 +171,7 @@ body { background:#fff; color:var(--ink); }
   <li>The normalized log is evaluated against the tenant's cached Sigma ruleset synchronously, on the ingest path.</li>
   <li>A match creates an alert, triggers cross-source correlation into incidents, and publishes to Kafka for fan-out.</li>
   <li>Connected dashboard sessions receive the alert over WebSocket in real time, via Redis pub/sub — so it doesn't matter which backend replica originally handled the ingest request.</li>
-  <li>Independently, 24 scheduled behavioral detectors evaluate recent telemetry windows per tenant on their own timers, producing alerts through the same path.</li>
+  <li>Independently, 23 scheduled behavioral detectors evaluate recent telemetry windows per tenant on their own timers, producing alerts through the same path.</li>
 </ol>
 
 <h2>Multi-tenancy</h2>

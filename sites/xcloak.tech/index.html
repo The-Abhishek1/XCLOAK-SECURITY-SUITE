@@ -332,8 +332,8 @@
         </div>
         <h3 class="font-semibold text-ink mb-2.5">Detect</h3>
         <ul class="text-sm text-sub space-y-1.5 leading-relaxed">
-          <li>43 production-ready Sigma rules</li>
-          <li>17 behavioral detection engines incl. DPI (MITRE ATT&amp;CK mapped)</li>
+          <li>102 production-ready Sigma rules</li>
+          <li>23 behavioral detection engines incl. DPI (MITRE ATT&amp;CK mapped)</li>
           <li>YARA malware scanning + JA3/TLS fingerprinting</li>
           <li>IOC matching via Kafka async pipeline</li>
         </ul>
@@ -563,9 +563,9 @@
             <span class="px-3 py-1.5 rounded-full bg-blue-50 text-brand">Database</span>
           </div>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-            <div><div class="text-xl font-semibold text-ink font-mono">107</div><div class="text-xs text-faint mt-1">API handlers</div></div>
-            <div><div class="text-xl font-semibold text-ink font-mono">174</div><div class="text-xs text-faint mt-1">services</div></div>
-            <div><div class="text-xl font-semibold text-ink font-mono">58</div><div class="text-xs text-faint mt-1">repositories</div></div>
+            <div><div class="text-xl font-semibold text-ink font-mono">165</div><div class="text-xs text-faint mt-1">API handlers</div></div>
+            <div><div class="text-xl font-semibold text-ink font-mono">167</div><div class="text-xs text-faint mt-1">services</div></div>
+            <div><div class="text-xl font-semibold text-ink font-mono">56</div><div class="text-xs text-faint mt-1">repositories</div></div>
             <div><div class="text-xl font-semibold text-ink font-mono">60</div><div class="text-xs text-faint mt-1">data models</div></div>
           </div>
           <p class="text-xs text-faint mt-4">No ORM — every database query is written and reviewed by hand.</p>
@@ -585,8 +585,8 @@
         </summary>
         <div class="pt-6 mt-6 border-t border-line">
           <div class="grid sm:grid-cols-2 gap-3 mb-4">
-            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Rule engine</p><p class="text-xs text-sub mt-1">43 detection rules, checked against every log</p></div>
-            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Behavioral detectors</p><p class="text-xs text-sub mt-1">17 engines watching for attack patterns over time</p></div>
+            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Rule engine</p><p class="text-xs text-sub mt-1">102 Sigma rules, checked against every log</p></div>
+            <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Behavioral detectors</p><p class="text-xs text-sub mt-1">23 engines watching for attack patterns over time</p></div>
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Malware scanning</p><p class="text-xs text-sub mt-1">Signature matching on the endpoint itself</p></div>
             <div class="rounded-xl border border-line bg-slate-50 p-4"><p class="text-sm font-medium text-ink">Threat intel feeds</p><p class="text-xs text-sub mt-1">Known-bad IPs, domains, and file hashes</p></div>
           </div>
@@ -626,8 +626,8 @@
         </summary>
         <div class="pt-6 mt-6 border-t border-line">
           <div class="grid grid-cols-3 gap-4 text-center mb-4">
-            <div><div class="text-xl font-semibold text-ink font-mono">127</div><div class="text-xs text-faint mt-1">tables</div></div>
-            <div><div class="text-xl font-semibold text-ink font-mono">70</div><div class="text-xs text-faint mt-1">migrations</div></div>
+            <div><div class="text-xl font-semibold text-ink font-mono">311</div><div class="text-xs text-faint mt-1">tables</div></div>
+            <div><div class="text-xl font-semibold text-ink font-mono">71</div><div class="text-xs text-faint mt-1">migrations</div></div>
             <div><div class="text-xl font-semibold text-ink font-mono">100%</div><div class="text-xs text-faint mt-1">tenant-scoped</div></div>
           </div>
           <p class="text-xs text-faint">PostgreSQL, with every table checked against the current tenant on every query, plus database-level isolation rules as an extra safeguard still being rolled out.</p>
@@ -748,7 +748,7 @@ docker compose -f docker-compose.quickstart.yml up -d --build
     <div class="reveal max-w-2xl mb-14">
       <span class="text-xs font-mono text-brand">DETECTION ENGINE</span>
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">Detection you can read.</h2>
-      <p class="text-sub leading-relaxed">17 behavioral detection engines (incl. DGA domain scoring, TLS anomaly detection, HTTP inspection, and protocol anomaly detection) + 43 Sigma rules, all mapped to MITRE ATT&amp;CK — not a black box.</p>
+      <p class="text-sub leading-relaxed">23 behavioral detection engines (incl. DGA domain scoring, TLS anomaly detection, HTTP inspection, and protocol anomaly detection) + 102 Sigma rules, all mapped to MITRE ATT&amp;CK — not a black box.</p>
     </div>
 
     <div class="grid lg:grid-cols-2 gap-5 mb-8">

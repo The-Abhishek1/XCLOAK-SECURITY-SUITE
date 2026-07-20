@@ -149,7 +149,7 @@ body { background:#fff; color:var(--ink); }
 <p class="lead">Detection in XCloak comes from four independent, parallel sources — a rules engine, scheduled behavioral detectors, endpoint malware scanning, and threat intelligence matching.</p>
 
 <h2>Sigma-compatible rules engine</h2>
-<p>Rules are plain YAML, following the <a href="https://github.com/SigmaHQ/sigma" class="text-brand hover:underline">Sigma</a> format. On first run, 43 rules across 12 MITRE ATT&CK tactics (Initial Access through Impact, plus cloud/container/supply-chain coverage) are seeded automatically into every new tenant.</p>
+<p>Rules are plain YAML, following the <a href="https://github.com/SigmaHQ/sigma" class="text-brand hover:underline">Sigma</a> format. On first run, 102 rules across 12 MITRE ATT&CK tactics (Initial Access through Impact, plus cloud/container/supply-chain coverage) are seeded automatically into every new tenant.</p>
 <p>The engine parses Sigma-style boolean conditions, filters by <code>logsource</code> product/service/category before evaluating field conditions — so a Windows-only rule never runs against a Linux syslog line — and caches the per-tenant ruleset bucketed by log format for fast pre-filtering on the ingest path.</p>
 
 <h3>Example rule</h3>
@@ -196,7 +196,7 @@ tags:
 
 <p><strong>Privilege Escalation</strong> — Windows: Event IDs 4728/4732/4756 (group add), 4720 (new user), 4672 (special privileges). Linux: sudo commands, su invocations, SUID file execution, sudoers file modifications.</p>
 
-<p><strong>Ransomware Behavior</strong> — Three kill-chain stages monitored simultaneously: FIM (≥20 file modifications with crypto extensions within 5 min); kill-chain commands (<code>vssadmin delete shadows</code>, <code>bcdedit /set recoveryenabled no</code>, <code>wmic shadowcopy delete</code>); security service kill (termination of 17 AV/EDR process names).</p>
+<p><strong>Ransomware Behavior</strong> — Three kill-chain stages monitored simultaneously: FIM (≥20 file modifications with crypto extensions within 5 min); kill-chain commands (<code>vssadmin delete shadows</code>, <code>bcdedit /set recoveryenabled no</code>, <code>wmic shadowcopy delete</code>); security service kill (termination of 25 AV/EDR process names).</p>
 
 <p><strong>Living-off-the-Land</strong> — Suspicious parent→child chains (Word/Excel/Outlook spawning PowerShell/cmd) and 10 LOLBin abuses: <code>certutil -decode</code>, <code>regsvr32 /s /u /i</code>, <code>mshta vbscript:</code>, <code>bitsadmin /transfer</code>, and others. Also detects encoded PowerShell (<code>-enc</code>, <code>IEX</code>, <code>Invoke-Expression</code>, <code>DownloadString</code>).</p>
 
