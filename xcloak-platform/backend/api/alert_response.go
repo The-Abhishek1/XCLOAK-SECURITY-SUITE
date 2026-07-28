@@ -140,9 +140,9 @@ func GetAlertWithTriage(c *gin.Context) {
 	var alert models.Alert
 	var aiSummary, aiAction string
 	err := database.DB.QueryRow(`
-		SELECT id, agent_id, severity, rule_name, fingerprint,
-		       mitre_tactic, mitre_technique, mitre_name,
-		       log_message, created_at,
+		SELECT id, COALESCE(agent_id,0), COALESCE(severity,''), COALESCE(rule_name,''), COALESCE(fingerprint,''),
+		       COALESCE(mitre_tactic,''), COALESCE(mitre_technique,''), COALESCE(mitre_name,''),
+		       COALESCE(log_message,''), created_at,
 		       COALESCE(ai_summary,''), COALESCE(ai_action,'')
 		FROM alerts WHERE id=$1 AND tenant_id=$2
 	`, id, tenantIDFromContext(c)).Scan(

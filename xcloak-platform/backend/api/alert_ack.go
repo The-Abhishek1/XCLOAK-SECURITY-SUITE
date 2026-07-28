@@ -187,10 +187,10 @@ func GetAlertsPaginated(c *gin.Context) {
 
 	dataArgs := append(args, perPage, (page-1)*perPage)
 	rows, err := database.DB.Query(fmt.Sprintf(`
-		SELECT alerts.id, alerts.agent_id, COALESCE(agents.hostname,'')::text,
-		       alerts.severity, alerts.rule_name, alerts.fingerprint,
-		       alerts.mitre_tactic, alerts.mitre_technique, alerts.mitre_name,
-		       alerts.log_message, alerts.created_at,
+		SELECT alerts.id, COALESCE(alerts.agent_id,0), COALESCE(agents.hostname,'')::text,
+		       COALESCE(alerts.severity,''), COALESCE(alerts.rule_name,''), COALESCE(alerts.fingerprint,''),
+		       COALESCE(alerts.mitre_tactic,''), COALESCE(alerts.mitre_technique,''), COALESCE(alerts.mitre_name,''),
+		       COALESCE(alerts.log_message,''), alerts.created_at,
 		       COALESCE(alerts.status,'open'),
 		       COALESCE(alerts.acknowledged_by,''),
 		       COALESCE(alerts.note,'')

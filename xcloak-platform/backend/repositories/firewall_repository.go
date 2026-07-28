@@ -9,8 +9,8 @@ import (
 	"xcloak-platform/models"
 )
 
-const firewallCols = `id, name, description, group_name,
-       source_ip, destination_ip, protocol, port,
+const firewallCols = `id, name, COALESCE(description,''), COALESCE(group_name,'default'),
+       COALESCE(source_ip,''), COALESCE(destination_ip,''), COALESCE(protocol,''), COALESCE(port,0),
        COALESCE(port_range,''), COALESCE(direction,'both'),
        COALESCE(log_enabled,false), COALESCE(log_prefix,''),
        action, enabled, COALESCE(priority, 100), hit_count,

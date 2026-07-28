@@ -55,14 +55,29 @@ func ComputeVulnPriorityScore(cvss, epss float64, isKEV, isKEVRansomware bool, a
 // RefreshVulnPriorityScores recomputes and persists priority_score + patch_sla_days
 // for every open vulnerability in the given tenant. Run on demand and on schedule.
 func RefreshVulnPriorityScores(tenantID int) {
+	// Real per-agent risk scores live in asset_risk_scores (populated by
+	// CalculateRiskScore), not a column on agents — agents.risk_score has
+	// never existed. This query previously joined against it directly and
+	// errored on every call (both the on-startup run and every 6h tick),
+	// silently returning zero rows forever: priority_score/patch_sla_days
+	// were never computed for ANY tenant, which in turn kept Risk Posture's
+	// VulnScore permanently at 0 (its formula depends entirely on
+	// priority_score) and silently degraded the Vuln Priority Queue's
+	// "ORDER BY priority_score DESC, cvss_score DESC" to a plain CVSS sort.
 	rows, err := database.DB.Query(`
 		SELECT v.id, v.severity, v.cvss_score, v.epss_score, v.is_kev, v.kev_ransomware,
-		       COALESCE(a.criticality, 'medium'), COALESCE(ag.risk_score, 0)
+		       COALESCE(a.criticality, 'medium'), COALESCE(rs.risk_score, 0)
 		FROM vulnerabilities v
-		LEFT JOIN agents ag ON ag.id = v.agent_id
+		LEFT JOIN asset_risk_scores rs ON rs.agent_id = v.agent_id
 		LEFT JOIN assets a  ON a.agent_id = v.agent_id AND a.tenant_id = v.tenant_id
 		WHERE v.tenant_id = $1 AND v.patch_status IN ('open','in_progress')`, tenantID)
 	if err != nil {
+		// This exact class of bug (a broken query silently returning zero
+		// rows via this early return) is how the agents.risk_score column
+		// bug above went unnoticed since this scheduler's introduction —
+		// log it so a future schema/query break is visible instead of
+		// silently degrading every downstream consumer.
+		log.Printf("[VulnPriority] tenant %d: query failed: %v", tenantID, err)
 		return
 	}
 	defer rows.Close()

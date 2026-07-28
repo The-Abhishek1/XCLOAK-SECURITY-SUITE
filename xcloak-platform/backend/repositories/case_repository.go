@@ -135,7 +135,7 @@ func UnlinkAlertFromCase(caseID, alertID int) error {
 
 func GetCaseAlerts(caseID, tenantID int) ([]models.Alert, error) {
 	rows, err := database.DB.Query(`
-		SELECT a.id, a.agent_id, a.severity, a.rule_name, a.log_message,
+		SELECT a.id, COALESCE(a.agent_id,0), COALESCE(a.severity,''), COALESCE(a.rule_name,''), COALESCE(a.log_message,''),
 		       COALESCE(a.mitre_tactic,''), COALESCE(a.mitre_technique,''),
 		       a.created_at
 		FROM case_alerts ca

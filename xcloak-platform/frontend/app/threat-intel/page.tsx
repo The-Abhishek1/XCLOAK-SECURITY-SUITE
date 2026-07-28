@@ -10,7 +10,8 @@ import {
 } from '@/lib/api';
 import { IOC, SigmaRule, ThreatFeed } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, BarChart3, Brain, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, Database, Edit2, Eye, FileCode, Layers, Network, Plus, RefreshCw, Rss, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, Upload, Users, X, Lock } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertTriangle, BarChart3, Brain, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, Database, Edit2, Eye, FileCode, Layers, Network, Plus, RefreshCw, Rss, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, Upload, Users, X, Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -167,23 +168,6 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
-function KPICard({ label, value, sub, color, icon: Icon }: {
-  label: string; value: number | string; sub?: string; color: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="g-card p-4 flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider mb-0.5 font-medium" style={{ color: 'var(--text-3)' }}>{label}</p>
-        <p className="text-2xl font-bold leading-none" style={{ color }}>{value}</p>
-        {sub && <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
 
 function SparkBar({ data, label }: { data: Array<{ day?: string; week?: string; count: number }>; label?: string }) {
   const max = Math.max(...data.map(d => d.count), 1);
@@ -1192,7 +1176,9 @@ export default function ThreatIntelPage() {
 
   return (
     <RootLayout title="Threat Intelligence"
-      subtitle={`${iocTotal.toLocaleString()} IOCs · ${feeds.filter(f => f.enabled).length} active feeds · ${sigma.length} Sigma rules`}
+      subtitle={overview
+        ? `${overview.total_iocs.toLocaleString()} IOCs · ${overview.enabled_feeds} active feeds · ${overview.sigma_rules} Sigma rules`
+        : 'Loading…'}
       actions={
         <div className="flex items-center gap-2">
           <select value={hours} onChange={e => { setHours(Number(e.target.value)); loaded.current = {}; }}
@@ -1224,15 +1210,15 @@ export default function ThreatIntelPage() {
           {overview ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <KPICard label="Total IOCs"       value={overview.total_iocs.toLocaleString()} color="var(--accent)"  icon={Shield} />
-                <KPICard label="New Today"        value={overview.new_today}                   color="#fbbf24"        icon={Plus} />
-                <KPICard label="IOC Matches"      value={overview.ioc_matches}                 color="var(--red)"     icon={AlertTriangle} />
-                <KPICard label="High Confidence"  value={overview.high_confidence}             color="var(--green)"   icon={CheckCircle2} />
-                <KPICard label="Active Feeds"     value={overview.enabled_feeds}               color="#a78bfa"        icon={Rss}
+                <MetricCard layout="icon-chip" label="Total IOCs"       value={overview.total_iocs.toLocaleString()} color="var(--accent)"  icon={Shield} />
+                <MetricCard layout="icon-chip" label="New Today"        value={overview.new_today}                   color="#fbbf24"        icon={Plus} />
+                <MetricCard layout="icon-chip" label="IOC Matches"      value={overview.ioc_matches}                 color="var(--red)"     icon={AlertTriangle} />
+                <MetricCard layout="icon-chip" label="High Confidence"  value={overview.high_confidence}             color="var(--green)"   icon={CheckCircle2} />
+                <MetricCard layout="icon-chip" label="Active Feeds"     value={overview.enabled_feeds}               color="#a78bfa"        icon={Rss}
                   sub={`${overview.healthy_feeds} healthy`} />
-                <KPICard label="Threat Actors"    value={overview.total_actors}                color="var(--red)"     icon={Users} />
-                <KPICard label="Sigma Rules"      value={overview.sigma_rules}                 color="var(--accent)"  icon={FileCode} />
-                <KPICard label="YARA Rules"       value={overview.yara_rules}                  color="#fb923c"        icon={Lock} />
+                <MetricCard layout="icon-chip" label="Threat Actors"    value={overview.total_actors}                color="var(--red)"     icon={Users} />
+                <MetricCard layout="icon-chip" label="Sigma Rules"      value={overview.sigma_rules}                 color="var(--accent)"  icon={FileCode} />
+                <MetricCard layout="icon-chip" label="YARA Rules"       value={overview.yara_rules}                  color="#fb923c"        icon={Lock} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1476,9 +1462,9 @@ export default function ThreatIntelPage() {
           {mitreData ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <KPICard label="Techniques Covered" value={mitreData.total}          color="var(--accent)"  icon={Shield} />
-                <KPICard label="Tactics Mapped"      value={mitreData.covered_tactics} color="var(--green)" icon={Layers} />
-                <KPICard label="Coverage Sources"    value="Sigma + Actors"          color="#a78bfa"        icon={Database} />
+                <MetricCard layout="icon-chip" label="Techniques Covered" value={mitreData.total}          color="var(--accent)"  icon={Shield} />
+                <MetricCard layout="icon-chip" label="Tactics Mapped"      value={mitreData.covered_tactics} color="var(--green)" icon={Layers} />
+                <MetricCard layout="icon-chip" label="Coverage Sources"    value="Sigma + Actors"          color="#a78bfa"        icon={Database} />
               </div>
               <div className="g-card overflow-hidden">
                 <table className="w-full text-xs">

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { networkMapAPI, iocsAPI, agentsAPI, alertsAPI } from '@/lib/api';
+import { networkMapAPI, iocsAPI, agentsAPI, alertsAPI, tasksAPI, dpiAPI } from '@/lib/api';
 import { NetworkMapGraph, NetworkMapNode, NetworkMapEdge, IPEnrichment } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import {
@@ -18,10 +18,10 @@ import {
   Flame, HardDrive, Activity, Filter, Download,
   Eye, Zap, Database, Monitor, Sliders, Play,
   ArrowRight, TrendingUp, Fingerprint, ShieldCheck,
-  ScanLine, Wrench, Power, Send, Gauge, Share2,
-  FileJson, FileText, Image, Crosshair, Hash,
+  Wrench, Send, Gauge, Share2,
+  FileJson, FileText, Image, Hash,
   MemoryStick, Container, Boxes, GitFork, SkipBack,
-  Target, Workflow, UserCheck,
+  Workflow, UserCheck,
 } from 'lucide-react';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
@@ -104,6 +104,13 @@ const INFRA_LABELS: Record<string, string> = {
   sdwan:            'SD-WAN',
   vpn_site:         'Site-to-Site VPN',
 };
+
+// Backend's models.NetworkMapNode.Type is hard-limited to these 7 non-agent
+// infra values (plus 'agent'/'external_ip', shown in their own legend
+// sections) — the rest of INFRA_FILL/INFRA_LABELS is kept for forward-compat
+// canvas-drawing code that never currently triggers, but must not appear in
+// the legend since the backend can never actually produce them.
+const REAL_INFRA_TYPES = ['firewall', 'router', 'switch', 'vpn', 'wireless', 'cloud', 'wan'];
 
 const VIEW_MODES = ['Physical', 'Logical', 'Security', 'Cloud', 'Identity', 'Application'] as const;
 type ViewMode = typeof VIEW_MODES[number];
@@ -196,7 +203,7 @@ function Legend() {
 
           <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>Infrastructure (fill)</p>
           <div className="grid grid-cols-2 gap-1 mb-3">
-            {Object.entries(INFRA_FILL).map(([k, v]) => (
+            {Object.entries(INFRA_FILL).filter(([k]) => REAL_INFRA_TYPES.includes(k)).map(([k, v]) => (
               <div key={k} className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-2)' }}>
                 <span className="h-3 w-3 rounded shrink-0" style={{ background: v }} />{INFRA_LABELS[k]}
               </div>
@@ -863,22 +870,69 @@ function TrafficTab({ edges, nodeId }: { edges: NetworkMapEdge[]; nodeId: string
 }
 
 function ActionsTab({ node, onToast }: { node: NetworkMapNode; onToast: (m: string) => void }) {
+  // Every action here dispatches a real backend call (agent_tasks row or the
+  // shared /api/dpi/response-action dispatcher, same one NBA/DPI's response
+  // actions use) — this used to be 8+3 buttons that all just called
+  // onToast() with canned text and touched no API at all (the same
+  // fake-action pattern found and fixed on UEBA/Insider Threat). Buttons with
+  // no real backend capability behind them anywhere in the codebase (Ping,
+  // Port Scan, ad-hoc Scan Host, Restart Agent — the agent executor has no
+  // case for "restart_host", it would just log "unknown task type", and
+  // Whois Lookup — no whois service exists anywhere) were removed rather
+  // than wired to something that silently does nothing.
+  const dispatchTask = async (taskType: string, label: string) => {
+    if (!node.agent_id) return;
+    try {
+      await tasksAPI.create({ agent_id: node.agent_id as number, task_type: taskType, payload: {} });
+      onToast(`${label} dispatched`);
+    } catch {
+      onToast(`Failed to dispatch ${label.toLowerCase()}`);
+    }
+  };
   const agentActions = [
-    { label: 'Isolate Endpoint',  icon: Shield,     color: 'var(--red)',    action: () => onToast('Isolation request sent') },
-    { label: 'Scan Host',         icon: ScanLine,   color: 'var(--accent)', action: () => onToast('Scan initiated') },
-    { label: 'Ping',              icon: Crosshair,  color: 'var(--accent)', action: () => onToast('Ping sent') },
-    { label: 'Port Scan',         icon: Target,     color: 'var(--orange)', action: () => onToast('Port scan queued') },
-    { label: 'Vulnerability Scan',icon: Bug,        color: 'var(--orange)', action: () => onToast('Vuln scan queued') },
-    { label: 'Collect Logs',      icon: FileText,   color: 'var(--accent)', action: () => onToast('Log collection started') },
-    { label: 'Restart Agent',     icon: Power,      color: 'var(--orange)', action: () => onToast('Restart command sent') },
-    { label: 'Create Incident',   icon: AlertCircle,color: 'var(--red)',    action: () => onToast('Incident created') },
+    { label: 'Isolate Endpoint',    icon: Shield,   color: 'var(--red)',    action: () => dispatchTask('isolate_host', 'Isolation') },
+    { label: 'Vulnerability Scan',  icon: Bug,      color: 'var(--orange)', action: () => dispatchTask('vulnerability_scan', 'Vulnerability scan') },
+    { label: 'Collect Processes',   icon: Activity, color: 'var(--accent)', action: () => dispatchTask('collect_processes', 'Process collection') },
+    { label: 'Collect Auth Logs',   icon: FileText, color: 'var(--accent)', action: () => dispatchTask('collect_auth_logs', 'Auth log collection') },
+    {
+      label: 'Create Incident', icon: AlertCircle, color: 'var(--red)',
+      action: async () => {
+        try {
+          const res = await dpiAPI.responseAction('create_incident', { reason: `Manual escalation from Network Map: ${node.hostname || node.ip || node.id}` });
+          onToast(res.data?.result || 'Incident created');
+        } catch {
+          onToast('Failed to create incident');
+        }
+      },
+    },
   ];
   const ipActions = [
-    { label: 'Block IP',     icon: Shield,      color: 'var(--red)',    action: () => onToast('Block rule pushed') },
-    { label: 'Add to IOC',   icon: AlertTriangle,color:'var(--orange)', action: () => onToast('Added to IOC list') },
-    { label: 'Whois Lookup', icon: Globe,       color: 'var(--accent)', action: () => onToast('Whois lookup sent') },
+    {
+      label: 'Block IP', icon: Shield, color: 'var(--red)',
+      action: async () => {
+        if (!node.ip) return;
+        try {
+          const res = await dpiAPI.responseAction('block_ip', { ip: node.ip, reason: 'Blocked from Network Map' });
+          onToast(res.data?.result || 'IP blocked');
+        } catch {
+          onToast('Failed to block IP');
+        }
+      },
+    },
+    {
+      label: 'Add to IOC', icon: AlertTriangle, color: 'var(--orange)',
+      action: async () => {
+        if (!node.ip) return;
+        try {
+          await iocsAPI.create({ indicator: node.ip, type: 'ip', severity: 'medium', enabled: true, description: 'Added from Network Map' });
+          onToast('Added to IOC list');
+        } catch {
+          onToast('Failed to add to IOC list');
+        }
+      },
+    },
   ];
-  const actions = node.type === 'agent' ? agentActions : node.type === 'external_ip' ? ipActions : agentActions.slice(0, 4);
+  const actions = node.type === 'agent' ? agentActions : ipActions;
   return (
     <div className="grid grid-cols-2 gap-2">
       {actions.map(({ label, icon: Icon, color, action }) => (
@@ -1639,8 +1693,11 @@ export default function NetworkMapPage() {
         }
       }
 
-      // Label for all infra types
-      const lbl      = n.hostname ? (n.hostname.length > 14 ? n.hostname.slice(0, 12) + '…' : n.hostname) : n.type;
+      // Label for all infra types — fall back to the node's IP before its
+      // generic type, otherwise every unnamed cloud/external node renders
+      // the identical literal text "cloud" with no way to tell them apart.
+      const rawLbl   = n.hostname || n.ip || n.type;
+      const lbl      = rawLbl.length > 14 ? rawLbl.slice(0, 12) + '…' : rawLbl;
       const fontSize = 7;
       ctx.font       = `500 ${fontSize}px sans-serif`;
       ctx.textAlign    = 'center';
@@ -2102,13 +2159,20 @@ export default function NetworkMapPage() {
               </button>
             </div>
 
-            {/* Agent tabs */}
-            {(selected.type === 'agent' || selected.type === 'external_ip' || !!INFRA_LABELS[selected.type]) && (
+            {/* Agent / external-IP tabs — infra nodes (firewall/router/switch/
+                vpn/wireless/cloud/wan) have no agent_id to dispatch actions
+                against, so they skip the tab bar entirely and fall straight
+                through to the always-rendered InfraPanel below instead of
+                showing an "Actions" tab whose buttons would silently no-op. */}
+            {(selected.type === 'agent' || selected.type === 'external_ip') && (
               <div className="flex border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
                 {(selected.type === 'agent' ? AGENT_TABS : [
+                  // external_ip's "Overview" content (EnrichPanel + connections
+                  // list) is always rendered below regardless of nodeTab — a
+                  // separate "Traffic" tab here would be dead (no distinct
+                  // content ever renders for it), so only Overview/Actions exist.
                   { id: 'overview', label: 'Overview', icon: Activity },
                   { id: 'actions',  label: 'Actions',  icon: Zap      },
-                  ...(selected.type === 'external_ip' ? [{ id: 'traffic', label: 'Traffic', icon: TrendingUp }] : []),
                 ]).map(tab => (
                   <button key={tab.id} type="button"
                     onClick={() => setNodeTab(tab.id)}
@@ -2258,7 +2322,7 @@ export default function NetworkMapPage() {
               )}
 
               {/* ── Agent: Actions tab ───────────────────────────────────── */}
-              {(selected.type === 'agent' || selected.type === 'external_ip' || INFRA_LABELS[selected.type]) && nodeTab === 'actions' && (
+              {(selected.type === 'agent' || selected.type === 'external_ip') && nodeTab === 'actions' && (
                 <ActionsTab node={selected} onToast={notify} />
               )}
 

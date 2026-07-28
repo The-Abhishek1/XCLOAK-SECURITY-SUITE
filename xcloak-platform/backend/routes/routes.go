@@ -327,6 +327,7 @@ func SetupRoutes(router *gin.Engine) {
 	// ── Compliance ────────────────────────────────────────────────
 	router.POST("/api/compliance/reports", middleware.RequireAuth(), middleware.RequirePermission("manage_compliance"), api.GenerateReport)
 	router.GET("/api/compliance/reports", middleware.RequireAuth(), api.GetReports)
+	router.GET("/api/compliance/scores/latest", middleware.RequireAuth(), api.GetLatestComplianceScores)
 	router.GET("/api/compliance/reports/:id", middleware.RequireAuth(), api.GetReport)
 	router.GET("/api/compliance/reports/:id/pdf", middleware.RequireAuth(), api.GetReportPDF)
 	router.DELETE("/api/compliance/reports/:id", middleware.RequireAuth(), middleware.RequirePermission("manage_compliance"), api.DeleteReport)

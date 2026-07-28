@@ -420,42 +420,27 @@ func InsiderThreatResponseAction(c *gin.Context) {
 	analyst := usernameFromContext(c)
 
 	var body struct {
-		Action string            `json:"action"`
-		Params map[string]string `json:"params"`
+		Action string `json:"action"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
 		c.JSON(400, gin.H{"error": "action required"})
 		return
 	}
 
-	var result string
-	switch body.Action {
-	case "disable_user":
-		result = fmt.Sprintf("Account disabled for %s", username)
-	case "lock_account":
-		result = fmt.Sprintf("Account locked for %s — login blocked pending investigation", username)
-	case "force_logout":
-		database.DB.Exec(`UPDATE sessions SET revoked=true WHERE tenant_id=$1 AND username=$2`, tenantID, username)
-		result = fmt.Sprintf("All active sessions revoked for %s", username)
-	case "require_mfa":
-		result = fmt.Sprintf("MFA enforcement set for %s", username)
-	case "block_usb":
-		result = fmt.Sprintf("USB policy applied — removable storage blocked for %s", username)
-	case "block_cloud":
-		result = fmt.Sprintf("Cloud storage proxy block applied for %s", username)
-	case "isolate_endpoint":
-		result = fmt.Sprintf("Network isolation initiated for %s's endpoint", username)
-	case "kill_process":
-		result = fmt.Sprintf("Kill signal sent to PID %s on %s's device", body.Params["pid"], username)
-	case "remove_privileges":
-		result = fmt.Sprintf("Elevated privileges removed for %s", username)
-	case "legal_hold":
-		result = fmt.Sprintf("Legal hold placed — all data for %s preserved for investigation", username)
-	case "run_playbook":
-		result = fmt.Sprintf("SOAR insider threat playbook triggered for %s", username)
-	default:
-		result = fmt.Sprintf("Action '%s' dispatched for %s", body.Action, username)
+	// Same fix as UEBAResponseAction (api/ueba_enterprise.go): disable_user/
+	// lock_account/require_mfa/block_usb/block_cloud/isolate_endpoint/
+	// kill_process/remove_privileges/legal_hold/run_playbook used to return a
+	// canned success string with zero backend effect — no IdP call, no agent
+	// task, no legal-hold record, no playbook run — while logging a fake
+	// "completed" entry into the user's own timeline. force_logout is the
+	// only one with a real effect.
+	if body.Action != "force_logout" {
+		c.JSON(400, gin.H{"error": "action not permitted: " + body.Action})
+		return
 	}
+
+	database.DB.Exec(`UPDATE sessions SET revoked=true WHERE tenant_id=$1 AND username=$2`, tenantID, username)
+	result := fmt.Sprintf("All active sessions revoked for %s", username)
 
 	database.DB.Exec(`INSERT INTO ueba_events (tenant_id,username,event_type,severity,description,source_ip,detected_at) VALUES ($1,$2,'analyst_action','info',$3,'',$4)`,
 		tenantID, username, fmt.Sprintf("[%s] %s: %s", analyst, body.Action, result), time.Now())

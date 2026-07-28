@@ -2,6 +2,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { mdmeAPI } from '@/lib/api';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Smartphone, AppWindow, FileText, ShieldCheck, Radio, ShieldAlert,
+  BarChart3, Sparkles, FileBarChart2, ScrollText, X, Lock, Unlock, MapPin, Volume2,
+  RotateCw, RefreshCw, CheckCircle2, KeyRound, Trash2, Eraser, ShieldOff, Bell, Search, FilePlus2,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'inventory' | 'apps' | 'policies' | 'compliance' | 'remote' | 'threats' | 'analytics' | 'ai' | 'reports' | 'audit';
 
@@ -28,16 +34,6 @@ function pill(label: string, color?: string) {
       borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600,
       display: 'inline-block', whiteSpace: 'nowrap',
     }}>{label}</span>
-  );
-}
-
-function StatCard({ label, value, sub, color }: { label: string; value: any; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '16px 20px', minWidth: 130 }}>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color ?? 'var(--text-1)' }}>{value}</div>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 2 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{sub}</div>}
-    </div>
   );
 }
 
@@ -96,18 +92,18 @@ const AI_ACTIONS = [
 ];
 
 const REMOTE_ACTIONS = [
-  { type: 'lock',            label: 'Lock Device',        icon: '🔒', color: '#f97316' },
-  { type: 'unlock',          label: 'Unlock Device',      icon: '🔓', color: '#22c55e' },
-  { type: 'locate',          label: 'Locate Device',      icon: '📍', color: '#3b82f6' },
-  { type: 'play_sound',      label: 'Play Sound',         icon: '🔊', color: '#8b5cf6' },
-  { type: 'restart',         label: 'Restart Device',     icon: '🔄', color: '#6366f1' },
-  { type: 'sync_policies',   label: 'Sync Policies',      icon: '⚡', color: '#14b8a6' },
-  { type: 'compliance_check', label: 'Run Compliance',    icon: '✅', color: '#22c55e' },
-  { type: 'collect_logs',    label: 'Collect Logs',       icon: '📋', color: '#6b7280' },
-  { type: 'reset_passcode',  label: 'Reset Passcode',     icon: '🔑', color: '#eab308' },
-  { type: 'wipe_corporate',  label: 'Wipe Corporate Data', icon: '🗑', color: '#ef4444' },
-  { type: 'factory_reset',   label: 'Factory Reset',      icon: '💣', color: '#ef4444' },
-  { type: 'quarantine',      label: 'Quarantine Device',  icon: '🛑', color: '#8b5cf6' },
+  { type: 'lock',            label: 'Lock Device',        icon: Lock,        color: '#f97316' },
+  { type: 'unlock',          label: 'Unlock Device',      icon: Unlock,      color: '#22c55e' },
+  { type: 'locate',          label: 'Locate Device',      icon: MapPin,      color: '#3b82f6' },
+  { type: 'play_sound',      label: 'Play Sound',         icon: Volume2,     color: '#8b5cf6' },
+  { type: 'restart',         label: 'Restart Device',     icon: RotateCw,    color: '#6366f1' },
+  { type: 'sync_policies',   label: 'Sync Policies',      icon: RefreshCw,   color: '#14b8a6' },
+  { type: 'compliance_check', label: 'Run Compliance',    icon: CheckCircle2, color: '#22c55e' },
+  { type: 'collect_logs',    label: 'Collect Logs',       icon: FileText,    color: '#6b7280' },
+  { type: 'reset_passcode',  label: 'Reset Passcode',     icon: KeyRound,    color: '#eab308' },
+  { type: 'wipe_corporate',  label: 'Wipe Corporate Data', icon: Trash2,     color: '#ef4444' },
+  { type: 'factory_reset',   label: 'Factory Reset',      icon: Eraser,      color: '#ef4444' },
+  { type: 'quarantine',      label: 'Quarantine Device',  icon: ShieldOff,   color: '#8b5cf6' },
 ];
 
 // ── AI Panel ──────────────────────────────────────────────────────────────────
@@ -131,16 +127,19 @@ function AIPanel({ onClose, device }: { onClose: () => void; device: any }) {
   return (
     <div style={{ position: 'fixed', inset: '0 0 0 auto', width: 420, background: 'var(--bg-1)', borderLeft: '1px solid var(--border)', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>✦ AI MDM Advisor</div>
-          {device && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{device.device_name}</div>}
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>AI MDM Advisor</div>
+            {device && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{device.device_name}</div>}
+          </div>
         </div>
-        <button className="g-btn-ghost" onClick={onClose} style={{ fontSize: 18, padding: '4px 8px' }}>✕</button>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '4px 8px' }} />
       </div>
       <div style={{ padding: '14px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {AI_ACTIONS.map(a => (
-          <button key={a.id} className={action === a.id ? 'g-btn' : 'g-btn-ghost'}
-            onClick={() => run(a.id)} style={{ fontSize: 12, padding: '5px 10px' }}>{a.label}</button>
+          <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'}
+            onClick={() => run(a.id)} style={{ fontSize: 12, padding: '5px 10px' }}>{a.label}</ActionButton>
         ))}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
@@ -182,7 +181,7 @@ function DevicePanel({ deviceId, onClose, onRemoteAction }: { deviceId: string; 
           <div style={{ fontWeight: 700, fontSize: 15 }}>{loading ? '…' : data?.device_name}</div>
           {data && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{data.manufacturer} {data.model} · {data.platform}</div>}
         </div>
-        <button className="g-btn-ghost" onClick={onClose} style={{ fontSize: 18, padding: '4px 8px' }}>✕</button>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '4px 8px' }} />
       </div>
 
       {loading && <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-2)' }}>Loading…</div>}
@@ -239,8 +238,7 @@ function DevicePanel({ deviceId, onClose, onRemoteAction }: { deviceId: string; 
           {/* overview */}
           {tlTab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="g-card" style={{ padding: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Device Info</div>
+              <SectionCard title="Device Info">
                 {[
                   ['Device ID', data.device_id],
                   ['Serial', data.serial_number],
@@ -259,10 +257,9 @@ function DevicePanel({ deviceId, onClose, onRemoteAction }: { deviceId: string; 
                     <span style={{ color: 'var(--text-1)', maxWidth: 220, textAlign: 'right' }}>{v}</span>
                   </div>
                 ) : null)}
-              </div>
+              </SectionCard>
 
-              <div className="g-card" style={{ padding: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Connectivity & Security</div>
+              <SectionCard title="Connectivity & Security">
                 {[
                   ['Wi-Fi', data.wifi_ssid ? `${data.wifi_ssid} (${data.wifi_signal_pct}%)` : '—'],
                   ['Cellular', data.cellular_carrier ? `${data.cellular_carrier} (${data.cellular_signal_pct}%)` : '—'],
@@ -277,21 +274,20 @@ function DevicePanel({ deviceId, onClose, onRemoteAction }: { deviceId: string; 
                     <span style={{ color: 'var(--text-1)' }}>{v}</span>
                   </div>
                 ))}
-              </div>
+              </SectionCard>
 
               {/* Remote Actions */}
-              <div className="g-card" style={{ padding: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Remote Actions</div>
+              <SectionCard title="Remote Actions">
                 {actionDone && <div style={{ color: '#22c55e', fontSize: 12, marginBottom: 8 }}>{actionDone}</div>}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {REMOTE_ACTIONS.map(a => (
-                    <button key={a.type} className="g-btn-ghost" onClick={() => sendAction(a.type, a.label)}
+                    <ActionButton key={a.type} variant="ghost" icon={a.icon} onClick={() => sendAction(a.type, a.label)}
                       style={{ fontSize: 11, padding: '5px 10px', borderColor: a.color + '44', color: a.color }}>
-                      {a.icon} {a.label}
-                    </button>
+                      {a.label}
+                    </ActionButton>
                   ))}
                 </div>
-              </div>
+              </SectionCard>
             </div>
           )}
 
@@ -343,51 +339,49 @@ function DashboardTab({ d }: { d: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-        <StatCard label="Total Devices" value={d.total ?? 0} />
-        <StatCard label="Enrolled" value={d.enrolled ?? 0} color="#22c55e" />
-        <StatCard label="Unmanaged" value={d.unmanaged ?? 0} color="#6b7280" />
-        <StatCard label="Compliant" value={d.compliant ?? 0} color="#22c55e" />
-        <StatCard label="Non-Compliant" value={d.non_compliant ?? 0} color="#ef4444" />
-        <StatCard label="Rooted/Jailbroken" value={d.rooted_jailbroken ?? 0} color="#ef4444" />
-        <StatCard label="Lost" value={d.lost ?? 0} color="#ef4444" />
-        <StatCard label="Quarantined" value={d.quarantined ?? 0} color="#8b5cf6" />
+        <MetricCard label="Total Devices" value={d.total ?? 0} />
+        <MetricCard label="Enrolled" value={d.enrolled ?? 0} color="#22c55e" />
+        <MetricCard label="Unmanaged" value={d.unmanaged ?? 0} color="#6b7280" />
+        <MetricCard label="Compliant" value={d.compliant ?? 0} color="#22c55e" />
+        <MetricCard label="Non-Compliant" value={d.non_compliant ?? 0} color="#ef4444" />
+        <MetricCard label="Rooted/Jailbroken" value={d.rooted_jailbroken ?? 0} color="#ef4444" />
+        <MetricCard label="Lost" value={d.lost ?? 0} color="#ef4444" />
+        <MetricCard label="Quarantined" value={d.quarantined ?? 0} color="#8b5cf6" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14 }}>
-        <div className="g-card" style={{ padding: 20 }}>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Enrollment Rate</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: '#22c55e' }}>{d.enrollment_rate ?? 0}%</div>
           <ProgressBar pct={d.enrollment_rate ?? 0} color="#22c55e" />
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
+        </SectionCard>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Compliance Rate</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: '#6366f1' }}>
             {d.total > 0 ? Math.round(d.compliant / d.total * 100) : 0}%
           </div>
           <ProgressBar pct={d.total > 0 ? Math.round(d.compliant / d.total * 100) : 0} color="#6366f1" />
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
+        </SectionCard>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Health Score</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: '#14b8a6' }}>{d.health_score ?? 0}</div>
           <ProgressBar pct={d.health_score ?? 0} color="#14b8a6" />
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
+        </SectionCard>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Open Threats</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: d.open_threats > 0 ? '#ef4444' : '#22c55e' }}>{d.open_threats ?? 0}</div>
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>require attention</div>
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>By Platform</div>
+        <SectionCard title="By Platform">
           {(d.by_platform ?? []).map((p: any) => (
             <HorizBar key={p.platform} label={p.platform} value={p.count} max={d.total}
               color={PLATFORM_COLOR[p.platform] ?? '#6b7280'} />
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Recent Check-ins</div>
+        </SectionCard>
+        <SectionCard title="Recent Check-ins">
           {(d.recent_checkins ?? []).map((r: any) => (
             <div key={r.device_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
               <div>
@@ -402,7 +396,7 @@ function DashboardTab({ d }: { d: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -447,61 +441,58 @@ function InventoryTab({ devices, onSelect }: { devices: any[]; onSelect: (d: any
         <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 'auto' }}>{filtered.length} devices</span>
       </div>
 
-      <div className="g-card" style={{ padding: 0, overflow: 'auto', maxHeight: '64vh' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr>
-            <th>Device</th><th>Platform</th><th>OS</th><th>Owner</th><th>Dept</th>
-            <th>Enrollment</th><th>Compliance</th><th>Risk</th><th>Battery</th><th>Last Check-in</th>
-          </tr></thead>
-          <tbody>
-            {filtered.map(d => (
-              <tr key={d.device_id} onClick={() => onSelect(d)} style={{ cursor: 'pointer' }}>
-                <td>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{d.device_name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{d.manufacturer} {d.model}</div>
-                  <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-                    {d.rooted && pill('Rooted', '#ef4444')}
-                    {d.jailbroken && pill('Jailbroken', '#ef4444')}
-                    {d.is_lost && pill('Lost', '#ef4444')}
-                    {d.is_quarantined && pill('Quarantined', '#8b5cf6')}
-                  </div>
-                </td>
-                <td>{pill(d.platform)}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{d.os_version}</td>
-                <td>
-                  <div style={{ fontSize: 13 }}>{d.owner}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{d.owner_email}</div>
-                </td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{d.department}</td>
-                <td>{pill(d.enrollment_status)}</td>
-                <td>{pill(d.compliance_status)}</td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 36, height: 6, background: 'var(--border)', borderRadius: 3 }}>
-                      <div style={{ width: `${d.risk_score}%`, height: '100%', borderRadius: 3, background: d.risk_score >= 70 ? '#ef4444' : d.risk_score >= 40 ? '#f97316' : '#22c55e' }} />
-                    </div>
-                    <span style={{ fontSize: 12 }}>{d.risk_score}</span>
-                  </div>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                    <span>{d.battery_level}%</span>
-                    <div style={{ width: 20, height: 8, border: '1px solid var(--border)', borderRadius: 2, position: 'relative' }}>
-                      <div style={{ position: 'absolute', inset: 1, right: 'auto', width: `${d.battery_level * 18 / 100}px`, background: d.battery_level < 20 ? '#ef4444' : '#22c55e', borderRadius: 1 }} />
-                    </div>
-                  </div>
-                </td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                  {d.last_checkin_at ? new Date(d.last_checkin_at).toLocaleString() : '—'}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>No devices match filters</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={filtered}
+        rowKey={(d: any) => d.device_id}
+        onRowClick={d => onSelect(d)}
+        emptyState={<EmptyState title="No devices match filters" />}
+        columns={[
+          { key: 'device_name', header: 'Device', render: (d: any) => (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{d.device_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{d.manufacturer} {d.model}</div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                {d.rooted && pill('Rooted', '#ef4444')}
+                {d.jailbroken && pill('Jailbroken', '#ef4444')}
+                {d.is_lost && pill('Lost', '#ef4444')}
+                {d.is_quarantined && pill('Quarantined', '#8b5cf6')}
+              </div>
+            </div>
+          ) },
+          { key: 'platform', header: 'Platform', render: (d: any) => pill(d.platform) },
+          { key: 'os_version', header: 'OS', render: (d: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{d.os_version}</span> },
+          { key: 'owner', header: 'Owner', render: (d: any) => (
+            <div>
+              <div style={{ fontSize: 13 }}>{d.owner}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{d.owner_email}</div>
+            </div>
+          ) },
+          { key: 'department', header: 'Dept', render: (d: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{d.department}</span> },
+          { key: 'enrollment_status', header: 'Enrollment', render: (d: any) => pill(d.enrollment_status) },
+          { key: 'compliance_status', header: 'Compliance', render: (d: any) => pill(d.compliance_status) },
+          { key: 'risk_score', header: 'Risk', render: (d: any) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 36, height: 6, background: 'var(--border)', borderRadius: 3 }}>
+                <div style={{ width: `${d.risk_score}%`, height: '100%', borderRadius: 3, background: d.risk_score >= 70 ? '#ef4444' : d.risk_score >= 40 ? '#f97316' : '#22c55e' }} />
+              </div>
+              <span style={{ fontSize: 12 }}>{d.risk_score}</span>
+            </div>
+          ) },
+          { key: 'battery_level', header: 'Battery', render: (d: any) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+              <span>{d.battery_level}%</span>
+              <div style={{ width: 20, height: 8, border: '1px solid var(--border)', borderRadius: 2, position: 'relative' }}>
+                <div style={{ position: 'absolute', inset: 1, right: 'auto', width: `${d.battery_level * 18 / 100}px`, background: d.battery_level < 20 ? '#ef4444' : '#22c55e', borderRadius: 1 }} />
+              </div>
+            </div>
+          ) },
+          { key: 'last_checkin_at', header: 'Last Check-in', render: (d: any) => (
+            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+              {d.last_checkin_at ? new Date(d.last_checkin_at).toLocaleString() : '—'}
+            </span>
+          ) },
+        ]}
+      />
     </div>
   );
 }
@@ -517,39 +508,31 @@ function AppsTab({ d }: { d: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Approved" value={summary.approved ?? 0} color="#22c55e" />
-        <StatCard label="Risky" value={summary.risky ?? 0} color="#f97316" />
-        <StatCard label="Blocked" value={summary.blocked ?? 0} color="#ef4444" />
+        <MetricCard label="Approved" value={summary.approved ?? 0} color="#22c55e" />
+        <MetricCard label="Risky" value={summary.risky ?? 0} color="#f97316" />
+        <MetricCard label="Blocked" value={summary.blocked ?? 0} color="#ef4444" />
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         {['', 'approved', 'risky', 'blocked'].map(f => (
-          <button key={f} className={filter === f ? 'g-btn' : 'g-btn-ghost'} onClick={() => setFilter(f)} style={{ fontSize: 12 }}>
+          <ActionButton key={f} variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)} style={{ fontSize: 12 }}>
             {f === '' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
-          </button>
+          </ActionButton>
         ))}
       </div>
-      <div className="g-card" style={{ padding: 0, overflow: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr>
-            <th>App Name</th><th>Version</th><th>Vendor</th><th>Category</th>
-            <th>Status</th><th>Devices</th><th>Last Seen</th>
-          </tr></thead>
-          <tbody>
-            {shown.map((a: any, i: number) => (
-              <tr key={i}>
-                <td style={{ fontWeight: 500 }}>{a.app_name}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)', fontFamily: 'monospace' }}>{a.version}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.vendor}</td>
-                <td>{pill(a.category)}</td>
-                <td>{pill(a.status)}</td>
-                <td style={{ fontWeight: 600 }}>{a.device_count}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.last_seen ? new Date(a.last_seen).toLocaleDateString() : '—'}</td>
-              </tr>
-            ))}
-            {shown.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 28 }}>No apps</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={shown}
+        rowKey={(a: any, i: number) => i}
+        emptyState={<EmptyState title="No apps" />}
+        columns={[
+          { key: 'app_name', header: 'App Name', render: (a: any) => <span style={{ fontWeight: 500 }}>{a.app_name}</span> },
+          { key: 'version', header: 'Version', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', fontFamily: 'monospace' }}>{a.version}</span> },
+          { key: 'vendor', header: 'Vendor', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.vendor}</span> },
+          { key: 'category', header: 'Category', render: (a: any) => pill(a.category) },
+          { key: 'status', header: 'Status', render: (a: any) => pill(a.status) },
+          { key: 'device_count', header: 'Devices', render: (a: any) => <span style={{ fontWeight: 600 }}>{a.device_count}</span> },
+          { key: 'last_seen', header: 'Last Seen', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.last_seen ? new Date(a.last_seen).toLocaleDateString() : '—'}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -561,25 +544,16 @@ function PoliciesTab({ policies }: { policies: any[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 10 }}>
-        <StatCard label="Total Policies" value={rows.length} />
-        <StatCard label="Enabled" value={rows.filter(p => p.enabled).length} color="#22c55e" />
-        <StatCard label="Disabled" value={rows.filter(p => !p.enabled).length} color="#6b7280" />
+        <MetricCard label="Total Policies" value={rows.length} />
+        <MetricCard label="Enabled" value={rows.filter(p => p.enabled).length} color="#22c55e" />
+        <MetricCard label="Disabled" value={rows.filter(p => !p.enabled).length} color="#6b7280" />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {rows.map(p => (
-          <div key={p.policy_id} className="g-card" style={{ padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3 }}>
-                  {p.policy_type} · {p.platform} · Priority {p.priority} · {p.devices_applied} devices
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                {pill(p.enabled ? 'active' : 'inactive')}
-                {pill(p.platform)}
-              </div>
-            </div>
+          <SectionCard key={p.policy_id}
+            title={p.name}
+            subtitle={`${p.policy_type} · ${p.platform} · Priority ${p.priority} · ${p.devices_applied} devices`}
+            actions={<>{pill(p.enabled ? 'active' : 'inactive')}{pill(p.platform)}</>}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {p.require_encryption && <span style={{ fontSize: 11, background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44', borderRadius: 4, padding: '2px 8px' }}>Encryption Required</span>}
               {p.require_screen_lock && <span style={{ fontSize: 11, background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44', borderRadius: 4, padding: '2px 8px' }}>Screen Lock ({p.screen_lock_timeout}min)</span>}
@@ -591,9 +565,9 @@ function PoliciesTab({ policies }: { policies: any[] }) {
               {p.require_complex_password && <span style={{ fontSize: 11, background: '#6366f122', color: '#6366f1', border: '1px solid #6366f144', borderRadius: 4, padding: '2px 8px' }}>Complex Password ({p.min_password_length}+ chars)</span>}
               {p.min_os_version && <span style={{ fontSize: 11, background: '#14b8a622', color: '#14b8a6', border: '1px solid #14b8a644', borderRadius: 4, padding: '2px 8px' }}>Min OS: {p.min_os_version}</span>}
             </div>
-          </div>
+          </SectionCard>
         ))}
-        {rows.length === 0 && <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No policies configured</div>}
+        {rows.length === 0 && <EmptyState title="No policies configured" />}
       </div>
     </div>
   );
@@ -613,12 +587,11 @@ function ComplianceTab({ d }: { d: any }) {
             <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Compliant Devices</div>
           </div>
         </div>
-        <StatCard label="Non-Compliant" value={d.non_compliant ?? 0} color="#ef4444" />
+        <MetricCard label="Non-Compliant" value={d.non_compliant ?? 0} color="#ef4444" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Control Coverage</div>
+        <SectionCard title="Control Coverage">
           {(d.controls ?? []).map((c: any) => (
             <div key={c.control} style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
@@ -629,11 +602,10 @@ function ComplianceTab({ d }: { d: any }) {
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{c.passed} passed · {c.failed} failed</div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Policy Violations</div>
+          <SectionCard title="Policy Violations">
             {(d.violations ?? []).map((v: any, i: number) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                 <span>{v.violation}</span>
@@ -643,10 +615,9 @@ function ComplianceTab({ d }: { d: any }) {
                 </div>
               </div>
             ))}
-          </div>
+          </SectionCard>
 
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Non-Compliant Devices</div>
+          <SectionCard title="Non-Compliant Devices">
             {(d.non_compliant_devices ?? []).slice(0, 6).map((dev: any) => (
               <div key={dev.device_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                 <div>
@@ -656,7 +627,7 @@ function ComplianceTab({ d }: { d: any }) {
                 <span style={{ fontWeight: 600, color: '#ef4444' }}>{dev.risk_score}</span>
               </div>
             ))}
-          </div>
+          </SectionCard>
         </div>
       </div>
     </div>
@@ -689,8 +660,7 @@ function RemoteActionsTab({ actions, devices, onRefresh }: { actions: any[]; dev
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Send Remote Action</div>
+      <SectionCard title="Send Remote Action">
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <select className="g-input" value={selDevice} onChange={e => setSelDevice(e.target.value)} style={{ minWidth: 280 }}>
             <option value="">Select a device…</option>
@@ -708,36 +678,30 @@ function RemoteActionsTab({ actions, devices, onRefresh }: { actions: any[]; dev
         {actionDone && <div style={{ color: '#22c55e', fontSize: 13, marginBottom: 12 }}>{actionDone}</div>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {REMOTE_ACTIONS.map(a => (
-            <button key={a.type} className="g-btn-ghost"
+            <ActionButton key={a.type} variant="ghost" icon={a.icon}
               disabled={!selDevice || sending === a.type}
+              loading={sending === a.type}
               onClick={() => send(a.type, a.label)}
               style={{ fontSize: 12, padding: '7px 12px', borderColor: a.color + '55', color: a.color, opacity: !selDevice ? 0.4 : 1 }}>
-              {sending === a.type ? '…' : a.icon} {a.label}
-            </button>
+              {a.label}
+            </ActionButton>
           ))}
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: 0, overflow: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr><th>Time</th><th>Device</th><th>Action</th><th>Status</th><th>By</th><th>Result</th></tr></thead>
-          <tbody>
-            {(actions ?? []).map((a, i) => (
-              <tr key={i}>
-                <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                  {a.created_at ? new Date(a.created_at).toLocaleString() : '—'}
-                </td>
-                <td style={{ fontSize: 13, fontWeight: 500 }}>{a.device_name ?? a.device_id}</td>
-                <td><span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-1)' }}>{a.action_type}</span></td>
-                <td><span style={{ fontSize: 12, fontWeight: 600, color: statusColor[a.status] ?? 'var(--text-2)' }}>{a.status}</span></td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.initiated_by}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.result ?? '—'}</td>
-              </tr>
-            ))}
-            {(actions ?? []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 28 }}>No remote actions yet</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={actions ?? []}
+        rowKey={(a: any, i: number) => i}
+        emptyState={<EmptyState title="No remote actions yet" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</span> },
+          { key: 'device_name', header: 'Device', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 500 }}>{a.device_name ?? a.device_id}</span> },
+          { key: 'action_type', header: 'Action', render: (a: any) => <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-1)' }}>{a.action_type}</span> },
+          { key: 'status', header: 'Status', render: (a: any) => <span style={{ fontSize: 12, fontWeight: 600, color: statusColor[a.status] ?? 'var(--text-2)' }}>{a.status}</span> },
+          { key: 'initiated_by', header: 'By', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.initiated_by}</span> },
+          { key: 'result', header: 'Result', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.result ?? '—'}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -760,9 +724,9 @@ function ThreatsTab({ d, onRefresh }: { d: any; onRefresh: () => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 10 }}>
-        <StatCard label="Open" value={summary.open ?? 0} color="#ef4444" />
-        <StatCard label="Investigating" value={summary.investigating ?? 0} color="#f97316" />
-        <StatCard label="Resolved" value={summary.resolved ?? 0} color="#22c55e" />
+        <MetricCard label="Open" value={summary.open ?? 0} color="#ef4444" />
+        <MetricCard label="Investigating" value={summary.investigating ?? 0} color="#f97316" />
+        <MetricCard label="Resolved" value={summary.resolved ?? 0} color="#22c55e" />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {threats.map(t => (
@@ -775,10 +739,10 @@ function ThreatsTab({ d, onRefresh }: { d: any; onRefresh: () => void }) {
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {t.status === 'open' && (
-                  <button className="g-btn-ghost" onClick={() => investigate(t.threat_id)} style={{ fontSize: 11 }}>Investigate</button>
+                  <ActionButton variant="ghost" icon={Search} onClick={() => investigate(t.threat_id)} style={{ fontSize: 11 }}>Investigate</ActionButton>
                 )}
                 {t.status !== 'resolved' && (
-                  <button className="g-btn" onClick={() => resolve(t.threat_id)} style={{ fontSize: 11 }}>Resolve</button>
+                  <ActionButton variant="primary" icon={CheckCircle2} onClick={() => resolve(t.threat_id)} style={{ fontSize: 11 }}>Resolve</ActionButton>
                 )}
               </div>
             </div>
@@ -790,7 +754,12 @@ function ThreatsTab({ d, onRefresh }: { d: any; onRefresh: () => void }) {
             </div>
           </div>
         ))}
-        {threats.length === 0 && <div className="g-card" style={{ padding: 32, textAlign: 'center', color: '#22c55e' }}>No active threats detected</div>}
+        {threats.length === 0 && (
+          <div className="g-card flex items-center justify-center gap-2" style={{ padding: 32, color: '#22c55e' }}>
+            <CheckCircle2 className="h-4 w-4" />
+            No active threats detected
+          </div>
+        )}
       </div>
     </div>
   );
@@ -806,8 +775,7 @@ function AnalyticsTab({ d }: { d: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Platform Distribution</div>
+        <SectionCard title="Platform Distribution">
           {(d.os_distribution ?? []).map((o: any, i: number) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
@@ -818,20 +786,18 @@ function AnalyticsTab({ d }: { d: any }) {
                 color={PLATFORM_COLOR[o.platform] ?? '#6b7280'} />
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Department Distribution</div>
+        <SectionCard title="Department Distribution">
           {(d.dept_distribution ?? []).map((dept: any) => (
             <HorizBar key={dept.department} label={dept.department} value={dept.count}
               max={Math.max(...(d.dept_distribution ?? [{ count: 1 }]).map((x: any) => x.count))} color="#6366f1" />
           ))}
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Enrollment Trend (6 months)</div>
+        <SectionCard title="Enrollment Trend (6 months)">
           <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 80 }}>
             {(d.enrollment_trend ?? []).map((g: any) => (
               <div key={g.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -843,10 +809,9 @@ function AnalyticsTab({ d }: { d: any }) {
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
             Current: {(d.enrollment_trend ?? []).slice(-1)[0]?.enrolled ?? 0} enrolled
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Compliance Trend (6 months)</div>
+        <SectionCard title="Compliance Trend (6 months)">
           <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 80 }}>
             {(d.compliance_trend ?? []).map((g: any) => {
               const total = g.compliant + g.non_compliant;
@@ -867,31 +832,27 @@ function AnalyticsTab({ d }: { d: any }) {
             <span style={{ color: '#22c55e' }}>■ Compliant</span>
             <span style={{ color: '#ef4444' }}>■ Non-Compliant</span>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Top Apps Across Fleet</div>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr><th>App</th><th>Category</th><th>Devices</th></tr></thead>
-          <tbody>
-            {(d.top_apps ?? []).map((a: any, i: number) => (
-              <tr key={i}>
-                <td style={{ fontWeight: 500 }}>{a.app_name}</td>
-                <td>{pill(a.category)}</td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 3 }}>
-                      <div style={{ width: `${a.device_count / 427 * 100}%`, height: '100%', background: '#6366f1', borderRadius: 3 }} />
-                    </div>
-                    <span style={{ fontWeight: 600, minWidth: 30 }}>{a.device_count}</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard title="Top Apps Across Fleet" padded={false}>
+        <DataTable<any>
+          rows={d.top_apps ?? []}
+          rowKey={(a: any, i: number) => i}
+          columns={[
+            { key: 'app_name', header: 'App', render: (a: any) => <span style={{ fontWeight: 500 }}>{a.app_name}</span> },
+            { key: 'category', header: 'Category', render: (a: any) => pill(a.category) },
+            { key: 'device_count', header: 'Devices', render: (a: any) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 3 }}>
+                  <div style={{ width: `${a.device_count / 427 * 100}%`, height: '100%', background: '#6366f1', borderRadius: 3 }} />
+                </div>
+                <span style={{ fontWeight: 600, minWidth: 30 }}>{a.device_count}</span>
+              </div>
+            ) },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -925,8 +886,8 @@ function AIInsightsTab({ device }: { device: any }) {
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {AI_ACTIONS.map(a => (
-          <button key={a.id} className={action === a.id ? 'g-btn' : 'g-btn-ghost'}
-            onClick={() => run(a.id)} style={{ fontSize: 13 }}>{a.label}</button>
+          <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'}
+            onClick={() => run(a.id)} style={{ fontSize: 13 }}>{a.label}</ActionButton>
         ))}
       </div>
       {loading && <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-2)', fontStyle: 'italic' }}>Analyzing…</div>}
@@ -963,8 +924,7 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <input className="g-input" value={title} onChange={e => setTitle(e.target.value)}
             placeholder="Report title…" style={{ minWidth: 240 }} />
@@ -982,30 +942,25 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
             <option value="csv">CSV</option>
             <option value="xlsx">XLSX</option>
           </select>
-          <button className="g-btn" onClick={generate} disabled={!title || gen}>
+          <ActionButton variant="primary" icon={FilePlus2} onClick={generate} disabled={!title || gen}>
             {gen ? 'Generating…' : 'Generate'}
-          </button>
+          </ActionButton>
         </div>
-      </div>
-      <div className="g-card" style={{ padding: 0, overflow: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr><th>Title</th><th>Type</th><th>By</th><th>Devices</th><th>Format</th><th>Size</th><th>Date</th></tr></thead>
-          <tbody>
-            {(reports ?? []).map(r => (
-              <tr key={r.report_id}>
-                <td style={{ fontWeight: 500 }}>{r.title}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.report_type}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.generated_by}</td>
-                <td style={{ fontWeight: 600 }}>{r.device_count}</td>
-                <td>{pill(r.format, '#3b82f6')}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
-              </tr>
-            ))}
-            {(reports ?? []).length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 28 }}>No reports yet</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      </SectionCard>
+      <DataTable<any>
+        rows={reports ?? []}
+        rowKey={(r: any) => r.report_id}
+        emptyState={<EmptyState title="No reports yet" />}
+        columns={[
+          { key: 'title', header: 'Title', render: (r: any) => <span style={{ fontWeight: 500 }}>{r.title}</span> },
+          { key: 'report_type', header: 'Type', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.report_type}</span> },
+          { key: 'generated_by', header: 'By', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.generated_by}</span> },
+          { key: 'device_count', header: 'Devices', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.device_count}</span> },
+          { key: 'format', header: 'Format', render: (r: any) => pill(r.format, '#3b82f6') },
+          { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</span> },
+          { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -1014,43 +969,38 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
 
 function AuditTab({ entries }: { entries: any[] }) {
   return (
-    <div className="g-card" style={{ padding: 0, overflow: 'auto' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead><tr><th>Time</th><th>Action</th><th>Object</th><th>Name</th><th>Actor</th><th>Details</th></tr></thead>
-        <tbody>
-          {(entries ?? []).map((e, i) => (
-            <tr key={i}>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                {e.created_at ? new Date(e.created_at).toLocaleString() : '—'}
-              </td>
-              <td>{pill(e.action?.replace(/_/g, ' '), '#3b82f6')}</td>
-              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.object_type}</td>
-              <td style={{ fontSize: 12 }}>{e.object_name ?? e.object_id ?? '—'}</td>
-              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.details ?? '—'}</td>
-            </tr>
-          ))}
-          {(entries ?? []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 28 }}>No audit entries</td></tr>}
-        </tbody>
-      </table>
-    </div>
+    <SectionCard padded={false}>
+      <DataTable<any>
+        rows={entries ?? []}
+        rowKey={(e: any, i: number) => i}
+        emptyState={<EmptyState title="No audit entries" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '—'}</span> },
+          { key: 'action', header: 'Action', render: (e: any) => pill(e.action?.replace(/_/g, ' '), '#3b82f6') },
+          { key: 'object_type', header: 'Object', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.object_type}</span> },
+          { key: 'object_name', header: 'Name', render: (e: any) => <span style={{ fontSize: 12 }}>{e.object_name ?? e.object_id ?? '—'}</span> },
+          { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</span> },
+          { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.details ?? '—'}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',  label: 'Dashboard' },
-  { id: 'inventory',  label: 'Devices' },
-  { id: 'apps',       label: 'Applications' },
-  { id: 'policies',   label: 'Policies' },
-  { id: 'compliance', label: 'Compliance' },
-  { id: 'remote',     label: 'Remote Actions' },
-  { id: 'threats',    label: 'Threats' },
-  { id: 'analytics',  label: 'Analytics' },
-  { id: 'ai',         label: '✦ AI Assistant' },
-  { id: 'reports',    label: 'Reports' },
-  { id: 'audit',      label: 'Audit Trail' },
+const TABS: { key: Tab; label: string; icon: any }[] = [
+  { key: 'dashboard',  label: 'Dashboard',       icon: LayoutDashboard },
+  { key: 'inventory',  label: 'Devices',         icon: Smartphone },
+  { key: 'apps',       label: 'Applications',    icon: AppWindow },
+  { key: 'policies',   label: 'Policies',        icon: FileText },
+  { key: 'compliance', label: 'Compliance',      icon: ShieldCheck },
+  { key: 'remote',     label: 'Remote Actions',  icon: Radio },
+  { key: 'threats',    label: 'Threats',         icon: ShieldAlert },
+  { key: 'analytics',  label: 'Analytics',       icon: BarChart3 },
+  { key: 'ai',         label: 'AI Assistant',    icon: Sparkles },
+  { key: 'reports',    label: 'Reports',         icon: FileBarChart2 },
+  { key: 'audit',      label: 'Audit Trail',     icon: ScrollText },
 ];
 
 export default function MDMPage() {
@@ -1121,31 +1071,24 @@ export default function MDMPage() {
   return (
     <RootLayout
       title="Mobile Device Management"
+      onRefresh={loadAll}
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="g-btn-ghost" style={{ position: 'relative' }}
-            onClick={() => { setTab('audit'); markRead(); }}>
-            🔔{unread > 0 && (
-              <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <ActionButton variant="ghost" icon={Bell} onClick={() => { setTab('audit'); markRead(); }} />
+            {unread > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                 {unread}
               </span>
             )}
-          </button>
-          <button className="g-btn-ghost" onClick={() => setShowAI(v => !v)}>✦ AI Assistant</button>
-          <button className="g-btn" onClick={loadAll}>Refresh</button>
+          </div>
+          <ActionButton variant="ghost" icon={Sparkles} onClick={() => setShowAI(v => !v)}>AI Assistant</ActionButton>
         </div>
       }
     >
       {/* tab bar */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto', gap: 0 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '10px 16px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400,
-            color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-            background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-            borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-          }}>{t.label}</button>
-        ))}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, marginBottom: 24, overflowX: 'auto' }}>
+        <TabBar tabs={TABS} active={tab} onChange={k => setTab(k as Tab)} />
       </div>
 
       {tab === 'dashboard'  && <DashboardTab d={dashboard} />}

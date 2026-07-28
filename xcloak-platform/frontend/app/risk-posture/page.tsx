@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { riskPostureAPI } from '@/lib/api';
+import { riskPostureAPI, complianceAPI } from '@/lib/api';
 import { sevClass } from '@/lib/utils';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -313,11 +314,15 @@ export default function RiskPosturePage() {
   const [snap,       setSnap]       = useState<RiskSnapshot | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fwScores,   setFwScores]   = useState<Array<{ framework: string; score: number; passed: number; failed: number }>>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const r = await riskPostureAPI.get(); setSnap(r.data); }
-    finally { setLoading(false); }
+    try {
+      const [r, fc] = await Promise.allSettled([riskPostureAPI.get(), complianceAPI.getLatestScores()]);
+      if (r.status === 'fulfilled') setSnap(r.value.data);
+      if (fc.status === 'fulfilled') setFwScores(fc.value.data || []);
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -345,15 +350,23 @@ export default function RiskPosturePage() {
     return Math.max(0, Math.min(100, Math.round(100 - critC * 9 - highC * 4 - medC * 1.5)));
   }, [snap]);
 
-  const frameworks = useMemo(() => {
-    const base = compliance;
-    return [
-      { name: 'CIS Level 1',  score: Math.min(100, base + 3),        controls: '153 controls', color: '#38bdf8' },
-      { name: 'NIST CSF',     score: Math.min(100, Math.round(base * 0.97)), controls: '108 outcomes', color: '#a855f7' },
-      { name: 'ISO 27001',    score: Math.min(100, Math.round(base * 0.94)), controls: '93 controls',  color: '#22c55e' },
-      { name: 'SOC 2 Type II',score: Math.min(100, Math.round(base * 0.91)), controls: '64 criteria',  color: '#fb923c' },
-    ];
-  }, [compliance]);
+  // Real per-framework scores from the same /api/compliance/scores/latest
+  // endpoint the Dashboard's Compliance panel already uses — this card
+  // previously invented its own CIS/NIST/ISO/SOC2 percentages by scaling
+  // the misconfiguration-derived `compliance` heuristic above by arbitrary
+  // decimals (0.97/0.94/0.91) and paired them with hardcoded fake control
+  // counts ("153 controls", "108 outcomes"...) that have no connection to
+  // any real control mapping — the same "Est. impact"-style false-precision
+  // fabrication already found and removed on the Attack Paths page.
+  const fwColor: Record<string, string> = {
+    'ISO27001': '#22c55e', 'NIST': '#a855f7', 'PCI-DSS': '#fb923c', 'SOC2': '#38bdf8',
+  };
+  const frameworks = fwScores.map(f => ({
+    name: f.framework,
+    score: f.score,
+    controls: `${f.passed}/${f.passed + f.failed} controls passed`,
+    color: fwColor[f.framework] || '#38bdf8',
+  }));
 
   const heatmapData = useMemo(() => {
     if (!snap) return {} as Record<string, Record<string, number>>;
@@ -454,31 +467,45 @@ export default function RiskPosturePage() {
     const critAssets = snap.asset_scores?.filter(a => a.score >= 70).length ?? 0;
     const usersAffected = snap.user_risk?.length ?? 0;
     const systemsAtRisk = snap.asset_scores?.filter(a => a.score >= 45).length ?? 0;
-    const financialBase = (critAssets * 2_500_000) + (systemsAtRisk * 750_000) + ((snap.missing_patches?.critical ?? 0) * 500_000);
-    return { critAssets, usersAffected, systemsAtRisk, financialBase };
+    return { critAssets, usersAffected, systemsAtRisk };
   }, [snap]);
 
+  // `href` points each recommendation at the real page that lets someone
+  // actually act on it — this button previously had no onClick/href at all
+  // (a clickable-looking dead end, same "misleading affordance" class
+  // already found on the Behavioral Detection page's Library tab).
+  // "Secure identities" has no href: there's no dedicated identity/ITDR
+  // page in this app yet, so it's left as a plain (non-clickable) label
+  // rather than linking somewhere irrelevant.
   const aiRecs = useMemo(() => {
     if (!snap) return [];
-    const recs: { sev: string; text: string; action: string }[] = [];
+    const recs: { sev: string; text: string; action: string; href?: string }[] = [];
     if ((snap.missing_patches?.critical ?? 0) > 0)
-      recs.push({ sev: 'critical', text: `${snap.missing_patches.critical} critical patches missing — immediate remediation required to close known exploit vectors.`, action: 'Start patching' });
+      recs.push({ sev: 'critical', text: `${snap.missing_patches.critical} critical patches missing — immediate remediation required to close known exploit vectors.`, action: 'Start patching', href: '/vuln-queue' });
     const critAssets = snap.asset_scores?.filter(a => a.score >= 70) ?? [];
     if (critAssets.length > 0)
-      recs.push({ sev: 'critical', text: `${critAssets.length} asset(s) at critical risk: ${critAssets.slice(0, 2).map(a => a.hostname).join(', ')} — isolate or harden immediately.`, action: 'Harden assets' });
+      recs.push({ sev: 'critical', text: `${critAssets.length} asset(s) at critical risk: ${critAssets.slice(0, 2).map(a => a.hostname).join(', ')} — isolate or harden immediately.`, action: 'Harden assets', href: '/assets' });
     if ((snap.internet_exposure?.exposed_count ?? 0) > 0)
-      recs.push({ sev: 'high', text: `${snap.internet_exposure.exposed_count} internet-facing host(s) detected with ${snap.internet_exposure.exposed_hosts?.reduce((s, h) => s + (h.open_ports?.length ?? 0), 0) || 0} open ports — restrict attack surface.`, action: 'Review firewall' });
+      recs.push({ sev: 'high', text: `${snap.internet_exposure.exposed_count} internet-facing host(s) detected with ${snap.internet_exposure.exposed_hosts?.reduce((s, h) => s + (h.open_ports?.length ?? 0), 0) || 0} open ports — restrict attack surface.`, action: 'Review firewall', href: '/firewall' });
     if (snap.high_risk_identities?.filter(i => i.severity === 'critical').length)
       recs.push({ sev: 'high', text: `Critical identity risk detected — enforce MFA, rotate credentials and review privilege assignments.`, action: 'Secure identities' });
     if (compliance < 70)
-      recs.push({ sev: 'medium', text: `Compliance score at ${compliance}% — resolve ${snap.misconfigurations?.filter(m => m.severity === 'critical').length ?? 0} critical misconfigurations to close the gap.`, action: 'Fix configs' });
+      recs.push({ sev: 'medium', text: `Compliance score at ${compliance}% — resolve ${snap.misconfigurations?.filter(m => m.severity === 'critical').length ?? 0} critical misconfigurations to close the gap.`, action: 'Fix configs', href: '/framework-compliance' });
     if (snap.unsupported_os?.length)
-      recs.push({ sev: 'medium', text: `${snap.unsupported_os.length} host(s) running end-of-life OS. No security patches will be issued — upgrade or isolate.`, action: 'Upgrade OS' });
+      recs.push({ sev: 'medium', text: `${snap.unsupported_os.length} host(s) running end-of-life OS. No security patches will be issued — upgrade or isolate.`, action: 'Upgrade OS', href: '/assets' });
     if (recs.length === 0)
       recs.push({ sev: 'low', text: 'No critical gaps detected. Maintain scanning cadence and continue monitoring.', action: 'Keep monitoring' });
     return recs;
   }, [snap, compliance]);
 
+  // status was previously 'in_progress' for high-severity patches and
+  // 'blocked' for EOL-OS upgrades unconditionally — fixed per-category
+  // labels with no real tracked workflow behind them (there's no
+  // remediation-task table for risk-posture findings, unlike incidents'
+  // real remediation_plans/remediation_steps), so every item claimed a
+  // specific progress state regardless of whether anyone had touched it.
+  // Every item here is a real, currently-open finding, so that's the only
+  // honest status to show.
   const remQueue = useMemo(() => {
     if (!snap) return [];
     const q: { rank: number; action: string; effort: string; impact: string; type: string; status: 'open' | 'in_progress' | 'blocked' }[] = [];
@@ -488,12 +515,12 @@ export default function RiskPosturePage() {
     if ((snap.missing_patches?.critical ?? 0) > 0)
       q.push({ rank: q.length + 1, action: `Apply ${snap.missing_patches.critical} critical OS patches`, effort: '2-4 hrs', impact: 'Critical — patch active exploits', type: 'patch', status: 'open' });
     if ((snap.missing_patches?.high ?? 0) > 0)
-      q.push({ rank: q.length + 1, action: `Apply ${snap.missing_patches.high} high-severity patches`, effort: '4-8 hrs', impact: 'High — reduce attack surface', type: 'patch', status: 'in_progress' });
+      q.push({ rank: q.length + 1, action: `Apply ${snap.missing_patches.high} high-severity patches`, effort: '4-8 hrs', impact: 'High — reduce attack surface', type: 'patch', status: 'open' });
     snap.high_risk_identities?.filter(i => i.severity === 'critical').slice(0, 2).forEach((i) => {
       q.push({ rank: q.length + 1, action: `Remediate identity risk: ${i.identity}`, effort: '30 min', impact: 'High — close identity pivot', type: 'identity', status: 'open' });
     });
     if (snap.unsupported_os?.length)
-      q.push({ rank: q.length + 1, action: `Upgrade ${snap.unsupported_os.length} end-of-life systems`, effort: '1-2 days', impact: 'Medium — restore patch coverage', type: 'patch', status: 'blocked' });
+      q.push({ rank: q.length + 1, action: `Upgrade ${snap.unsupported_os.length} end-of-life systems`, effort: '1-2 days', impact: 'Medium — restore patch coverage', type: 'patch', status: 'open' });
     snap.misconfigurations?.filter(m => m.severity === 'high').slice(0, 2).forEach((m) => {
       q.push({ rank: q.length + 1, action: `Resolve: ${m.title}`, effort: '1 hr', impact: 'Medium — improve posture', type: 'config', status: 'open' });
     });
@@ -714,9 +741,11 @@ export default function RiskPosturePage() {
                 </span>
               </div>
               <div className="space-y-3">
-                {frameworks.map(f => (
-                  <ComplianceRow key={f.name} name={f.name} score={f.score} controls={f.controls} color={f.color} />
-                ))}
+                {frameworks.length === 0
+                  ? <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>No compliance reports generated yet.</p>
+                  : frameworks.map(f => (
+                    <ComplianceRow key={f.name} name={f.name} score={f.score} controls={f.controls} color={f.color} />
+                  ))}
               </div>
               <div className="mt-4 space-y-2">
                 {[
@@ -743,38 +772,29 @@ export default function RiskPosturePage() {
                 </div>
                 <p className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Business Impact</p>
               </div>
+              {/* This card previously ended with an "Estimated Financial
+                  Exposure ₹X Cr/L" figure — critAssets×₹2.5M +
+                  systemsAtRisk×₹750K + criticalPatches×₹500K, arbitrary
+                  per-category multipliers with no real breach-cost/actuarial
+                  data behind them anywhere in the schema. Same fabrication
+                  pattern already found and removed on the Attack Paths page
+                  ("Est. impact ₹X.XM"). Removed; the 4 tiles below are all
+                  real counts derived from snap fields. */}
               {businessImpact && (
-                <>
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    {[
-                      { label: 'Users Affected',    value: businessImpact.usersAffected, color: '#a855f7', icon: Users },
-                      { label: 'Systems at Risk',   value: businessImpact.systemsAtRisk,  color: '#fb923c', icon: Server },
-                      { label: 'Critical Assets',   value: businessImpact.critAssets,     color: '#f85149', icon: ShieldAlert },
-                      { label: 'Departments',       value: snap.department_risk?.filter(d => d.score >= 45).length ?? 0, color: '#38bdf8', icon: Building2 },
-                    ].map(({ label, value, color, icon: Icon }) => (
-                      <div key={label} className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
-                        <Icon className="h-4 w-4 mx-auto mb-1" style={{ color }} />
-                        <p className="text-2xl font-black tabular-nums" style={{ color }}>{value}</p>
-                        <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="rounded-xl p-4" style={{ background: '#f8514911', border: '1px solid #f8514933' }}>
-                    <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>
-                      Estimated Financial Exposure
-                    </p>
-                    <p className="text-3xl font-black" style={{ color: '#f85149' }}>
-                      ₹{businessImpact.financialBase >= 10_000_000
-                        ? `${(businessImpact.financialBase / 10_000_000).toFixed(1)}Cr`
-                        : businessImpact.financialBase >= 100_000
-                          ? `${(businessImpact.financialBase / 100_000).toFixed(1)}L`
-                          : businessImpact.financialBase.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
-                      Worst-case estimate based on asset criticality and risk score
-                    </p>
-                  </div>
-                </>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Users Affected',    value: businessImpact.usersAffected, color: '#a855f7', icon: Users },
+                    { label: 'Systems at Risk',   value: businessImpact.systemsAtRisk,  color: '#fb923c', icon: Server },
+                    { label: 'Critical Assets',   value: businessImpact.critAssets,     color: '#f85149', icon: ShieldAlert },
+                    { label: 'Departments',       value: snap.department_risk?.filter(d => d.score >= 45).length ?? 0, color: '#38bdf8', icon: Building2 },
+                  ].map(({ label, value, color, icon: Icon }) => (
+                    <div key={label} className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
+                      <Icon className="h-4 w-4 mx-auto mb-1" style={{ color }} />
+                      <p className="text-2xl font-black tabular-nums" style={{ color }}>{value}</p>
+                      <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-3)' }}>{label}</p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -794,10 +814,14 @@ export default function RiskPosturePage() {
                     <div className="flex items-center gap-2 mb-1.5">
                       <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: sevRec[r.sev] || 'var(--text-3)' }} />
                       <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: sevRec[r.sev] || 'var(--text-3)' }}>{r.sev}</span>
-                      <button className="ml-auto flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg"
-                        style={{ background: 'var(--glass-bg)', color: 'var(--text-3)' }}>
-                        {r.action} <ChevronRight className="h-2.5 w-2.5" />
-                      </button>
+                      {r.href ? (
+                        <Link href={r.href} className="ml-auto flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg"
+                          style={{ background: 'var(--glass-bg)', color: 'var(--text-3)' }}>
+                          {r.action} <ChevronRight className="h-2.5 w-2.5" />
+                        </Link>
+                      ) : (
+                        <span className="ml-auto text-[10px] px-2 py-0.5" style={{ color: 'var(--text-3)' }}>{r.action}</span>
+                      )}
                     </div>
                     <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-1)' }}>{r.text}</p>
                   </div>

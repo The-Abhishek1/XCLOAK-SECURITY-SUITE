@@ -233,9 +233,9 @@ function KV({ label, value, mono }: { label: string; value: string; mono?: boole
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-function ContextMenu({ x, y, ev, onClose, onBookmark, bookmarked }: {
+function ContextMenu({ x, y, ev, onClose, onBookmark, bookmarked, onFilterByHost }: {
   x: number; y: number; ev: TimelineEvent; onClose: () => void;
-  onBookmark: () => void; bookmarked: boolean;
+  onBookmark: () => void; bookmarked: boolean; onFilterByHost: (hostname: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -263,7 +263,11 @@ function ContextMenu({ x, y, ev, onClose, onBookmark, bookmarked }: {
     ...(ev.hostname ? [{
       label: `Filter by Host: ${ev.hostname}`,
       Icon: Filter,
-      action: () => { /* parent handles via onClose + state */ },
+      // Was a no-op (`action: () => {}` with a comment claiming "parent
+      // handles via onClose + state" that nothing actually implemented) —
+      // a menu item that named the specific host in its own label, looked
+      // fully wired up, and did nothing when clicked.
+      action: () => onFilterByHost(ev.hostname!),
     }] : []),
   ];
 
@@ -582,6 +586,11 @@ export default function TimelinePage() {
     setContextMenu({ x: e.clientX, y: e.clientY, ev });
   };
 
+  const filterByHost = (hostname: string) => {
+    const match = agents.find(a => a.hostname === hostname);
+    if (match) setAgentId(match.id);
+  };
+
   const allEventTypes = useMemo(() => {
     const types = new Set(events.map(e => e.event_type));
     return Array.from(types).sort();
@@ -845,6 +854,7 @@ export default function TimelinePage() {
           ev={contextMenu.ev}
           bookmarked={contextMenu.ev.id != null && bookmarks.has(contextMenu.ev.id)}
           onBookmark={() => toggleBookmark(contextMenu.ev)}
+          onFilterByHost={filterByHost}
           onClose={() => setContextMenu(null)}
         />
       )}

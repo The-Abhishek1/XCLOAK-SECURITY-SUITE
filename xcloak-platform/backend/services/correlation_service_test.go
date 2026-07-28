@@ -24,6 +24,13 @@ func TestShouldCreateIncident(t *testing.T) {
 		{"ioc match case insensitive", models.Alert{Severity: "low", RuleName: "Ioc Match"}, true},
 		{"yara match — always create", models.Alert{Severity: "low", RuleName: "YARA Match"}, true},
 		{"yara match case insensitive", models.Alert{Severity: "info", RuleName: "yara match"}, true},
+		// ioc_engine.go/ioc_hash_engine.go's other real rule names — these
+		// used to bypass the heuristic entirely because it was an exact
+		// match against only the literal "ioc match" string.
+		{"ioc domain match — always create", models.Alert{Severity: "low", RuleName: "IOC: Malicious Domain"}, true},
+		{"ioc url match — always create", models.Alert{Severity: "low", RuleName: "IOC: Malicious URL"}, true},
+		{"ioc sha256 hash match — always create", models.Alert{Severity: "low", RuleName: "IOC: Malicious File Hash (SHA256)"}, true},
+		{"ioc md5 hash match — always create", models.Alert{Severity: "low", RuleName: "IOC: Malicious File Hash (MD5)"}, true},
 		{"other low-sev rule — no incident", models.Alert{Severity: "info", RuleName: "Port Scan"}, false},
 	}
 

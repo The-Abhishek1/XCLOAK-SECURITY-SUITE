@@ -13,14 +13,14 @@ func GetAlertsByAgentID(
 		SELECT
 			id,
 			agent_id,
-			severity,
-			rule_name,
-			log_message,
+			COALESCE(severity,''),
+			COALESCE(rule_name,''),
+			COALESCE(log_message,''),
 			created_at,
-			fingerprint,
-			mitre_tactic,
-			mitre_technique,
-			mitre_name
+			COALESCE(fingerprint,''),
+			COALESCE(mitre_tactic,''),
+			COALESCE(mitre_technique,''),
+			COALESCE(mitre_name,'')
 		FROM alerts
 		WHERE agent_id = $1
 		ORDER BY created_at

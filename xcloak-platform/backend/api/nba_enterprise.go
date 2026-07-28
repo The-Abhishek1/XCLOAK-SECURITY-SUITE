@@ -12,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -213,7 +215,8 @@ func GetNBAFlows(c *gin.Context) {
 		SELECT nce.agent_id, COALESCE(a.hostname,'Agent #'||nce.agent_id::text),
 		       nce.local_address, nce.remote_address,
 		       COALESCE(nce.protocol,'tcp'), COALESCE(nce.comm,''),
-		       COALESCE(nce.state,''), '', '', false
+		       COALESCE(nce.state,''), '', '', false,
+		       to_char(nce.created_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM network_connect_events nce
 		LEFT JOIN agents a ON a.id=nce.agent_id
 		WHERE nce.tenant_id=$1 AND nce.created_at>=$2
@@ -242,13 +245,12 @@ func GetNBAFlows(c *gin.Context) {
 		var f Flow
 		var isExt bool
 		rows.Scan(&f.AgentID, &f.Hostname, &f.SrcAddr, &f.DstAddr,
-			&f.Protocol, &f.Process, &f.State, &f.Country, &f.CountryCode, &isExt)
+			&f.Protocol, &f.Process, &f.State, &f.Country, &f.CountryCode, &isExt, &f.DetectedAt)
 		dstIP, _ := extractIP(f.DstAddr)
 		if ip := net.ParseIP(dstIP); ip != nil {
 			f.IsExternal = !ip.IsPrivate() && !ip.IsLoopback()
 		}
 		f.IsSuspicious = suspMap[dstIP]
-		f.DetectedAt = time.Now().UTC().Format(time.RFC3339)
 		flows = append(flows, f)
 	}
 	if flows == nil {
@@ -463,8 +465,8 @@ func GetNBATLSAnalytics(c *gin.Context) {
 	}
 	ja3Entries := []JA3Entry{}
 	jr, _ := database.DB.Query(`
-		SELECT id, fingerprint, label, severity, COALESCE(description,''), (tenant_id=0 OR tenant_id IS NULL)
-		FROM ja3_fingerprints WHERE tenant_id=$1 OR tenant_id=0 OR tenant_id IS NULL
+		SELECT id, hash, threat_name, severity, COALESCE(description,''), (tenant_id IS NULL)
+		FROM ja3_fingerprints WHERE tenant_id=$1 OR tenant_id IS NULL
 		ORDER BY severity DESC LIMIT 50`, tid)
 	if jr != nil {
 		defer jr.Close()
@@ -692,35 +694,39 @@ func GetNBAThreatIntel(c *gin.Context) {
 		IOCType     string `json:"ioc_type"`
 		IOCValue    string `json:"ioc_value"`
 		ThreatType  string `json:"threat_type"`
-		Confidence  int    `json:"confidence"`
+		Severity    string `json:"severity"`
 		FirstSeen   string `json:"first_seen"`
 	}
 
 	hits := []TIHit{}
-	// Join network connections with IOC table
+	// Join network connections with the IOC table. Previously referenced
+	// columns (ioc_type, value, threat_type, confidence, is_shared,
+	// is_enabled) that don't exist on `iocs` (real: type, indicator,
+	// description, severity, shareable, enabled) — the query always errored
+	// and silently returned zero hits regardless of real IOC matches.
 	rows, _ := database.DB.Query(`
 		SELECT nce.agent_id, COALESCE(a.hostname,'Agent #'||nce.agent_id::text),
 		       nce.remote_address, COALESCE(nce.comm,''),
-		       i.ioc_type, i.value, COALESCE(i.threat_type,''), COALESCE(i.confidence,50),
+		       i.type, i.indicator, COALESCE(i.description,''), i.severity,
 		       to_char(MIN(nce.created_at),'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM network_connect_events nce
 		LEFT JOIN agents a ON a.id=nce.agent_id
 		JOIN iocs i ON (
-		  (i.ioc_type='ip' AND split_part(nce.remote_address,':',1)=i.value) OR
-		  (i.ioc_type='domain')
+		  (i.type='ip' AND split_part(nce.remote_address,':',1)=i.indicator) OR
+		  (i.type='domain' AND (nce.sni=i.indicator OR nce.http_host=i.indicator))
 		)
 		WHERE nce.tenant_id=$1 AND nce.created_at>=$2
-		  AND (i.tenant_id=$1 OR i.is_shared=true)
-		  AND i.is_enabled=true
+		  AND (i.tenant_id=$1 OR i.shareable=true)
+		  AND i.enabled=true
 		GROUP BY nce.agent_id, a.hostname, nce.remote_address, nce.comm,
-		         i.ioc_type, i.value, i.threat_type, i.confidence
-		ORDER BY i.confidence DESC LIMIT 50`, tid, since)
+		         i.type, i.indicator, i.description, i.severity
+		ORDER BY CASE i.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 50`, tid, since)
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
 			var h TIHit
 			rows.Scan(&h.AgentID, &h.Hostname, &h.RemoteAddr, &h.Process,
-				&h.IOCType, &h.IOCValue, &h.ThreatType, &h.Confidence, &h.FirstSeen)
+				&h.IOCType, &h.IOCValue, &h.ThreatType, &h.Severity, &h.FirstSeen)
 			hits = append(hits, h)
 		}
 	}
@@ -728,7 +734,9 @@ func GetNBAThreatIntel(c *gin.Context) {
 		hits = []TIHit{}
 	}
 
-	// IOC blocks
+	// IOC blocks. There is no separate `ioc_blocks` table — it doesn't exist
+	// in this schema — so this previously always errored and silently
+	// returned empty. Blocked IPs live in `iocs` itself.
 	type IOCBlock struct {
 		IP         string `json:"ip"`
 		HitCount   int    `json:"hit_count"`
@@ -736,8 +744,9 @@ func GetNBAThreatIntel(c *gin.Context) {
 	}
 	blocks := []IOCBlock{}
 	br, _ := database.DB.Query(`
-		SELECT ip_address, hit_count, to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-		FROM ioc_blocks WHERE tenant_id=$1 ORDER BY hit_count DESC LIMIT 20`, tid)
+		SELECT indicator, hit_count, to_char(created_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM iocs WHERE tenant_id=$1 AND type='ip' AND enabled=true
+		ORDER BY hit_count DESC LIMIT 20`, tid)
 	if br != nil {
 		defer br.Close()
 		for br.Next() {
@@ -833,20 +842,40 @@ Respond with JSON only (no markdown):
 // PostNBAResponseAction — POST /api/nba/response-action
 func PostNBAResponseAction(c *gin.Context) {
 	tid := tenantIDFromContext(c)
-	uid := userIDFromContext(c)
 
 	var body struct {
-		Action   string `json:"action"`
-		IP       string `json:"ip"`
-		Domain   string `json:"domain"`
-		ASN      string `json:"asn"`
-		AgentID  int    `json:"agent_id"`
-		PID      int    `json:"pid"`
-		Reason   string `json:"reason"`
+		Action     string `json:"action"`
+		IP         string `json:"ip"`
+		Domain     string `json:"domain"`
+		ASN        string `json:"asn"`
+		AgentID    int    `json:"agent_id"`
+		PID        int    `json:"pid"`
+		PlaybookID int    `json:"playbook_id"`
+		Reason     string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
+	}
+
+	// Queues a real agent task, routing destructive actions through the same
+	// pending_approval gate as alert_response.go/incident_enterprise.go.
+	dispatchAgentTask := func(taskType string, payload map[string]any) (string, error) {
+		payloadJSON, _ := json.Marshal(payload)
+		task := models.AgentTask{AgentID: body.AgentID, TaskType: taskType, Payload: payloadJSON}
+		var err error
+		if services.IsDestructiveTask(taskType) {
+			err = repositories.CreateTaskPendingApproval(task)
+		} else {
+			err = repositories.CreateTask(task)
+		}
+		if err != nil {
+			return "", err
+		}
+		if services.IsDestructiveTask(taskType) {
+			return fmt.Sprintf("%s queued for agent %d, pending approval", taskType, body.AgentID), nil
+		}
+		return fmt.Sprintf("%s dispatched to agent %d", taskType, body.AgentID), nil
 	}
 
 	result := ""
@@ -855,13 +884,19 @@ func PostNBAResponseAction(c *gin.Context) {
 		if body.IP == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "ip required"}); return
 		}
-		_, err := database.DB.Exec(`
-			INSERT INTO iocs (tenant_id, created_by, ioc_type, value, threat_type, confidence, is_enabled, description)
-			VALUES ($1,$2,'ip',$3,'network_block',100,true,$4)
-			ON CONFLICT (tenant_id, ioc_type, value) DO UPDATE SET is_enabled=true`,
-			tid, uid, body.IP, "Blocked via NBA response action: "+body.Reason)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		// Previously hand-rolled a raw INSERT against columns (ioc_type,
+		// value, created_by, threat_type, confidence, is_enabled) that don't
+		// exist on `iocs` (real columns: indicator, type, severity,
+		// description, enabled) and never went through the transaction that
+		// sets the app.tenant_id GUC iocs' forced row-level-security policy
+		// requires — so it silently inserted nothing on every call while
+		// still reporting success. repositories.CreateIOC is the real,
+		// already-correct path (used by the IOC management page).
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.IP, Type: "ip", Severity: "high", Enabled: true,
+			Description: "Blocked via NBA response action: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ip: " + err.Error()}); return
 		}
 		result = fmt.Sprintf("IP %s blocked via IOC", body.IP)
 
@@ -869,53 +904,100 @@ func PostNBAResponseAction(c *gin.Context) {
 		if body.Domain == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "domain required"}); return
 		}
-		database.DB.Exec(`
-			INSERT INTO iocs (tenant_id, created_by, ioc_type, value, threat_type, confidence, is_enabled, description)
-			VALUES ($1,$2,'domain',$3,'network_block',100,true,$4)
-			ON CONFLICT (tenant_id, ioc_type, value) DO UPDATE SET is_enabled=true`,
-			tid, uid, body.Domain, "Blocked via NBA response action: "+body.Reason)
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Domain, Type: "domain", Severity: "high", Enabled: true,
+			Description: "Blocked via NBA response action: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block domain: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("Domain %s blocked via IOC", body.Domain)
 
 	case "isolate_endpoint":
 		if body.AgentID == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id required"}); return
 		}
-		database.DB.Exec(`UPDATE agents SET isolated=true, isolated_at=NOW(), isolated_by=$1 WHERE id=$2 AND tenant_id=$3`,
-			uid, body.AgentID, tid)
-		result = fmt.Sprintf("Agent #%d isolation requested", body.AgentID)
+		// The old `UPDATE agents SET isolated=true` wrote a column nothing
+		// else in the codebase ever reads — the agent never learns it's
+		// supposed to isolate, and the Agents page derives its own
+		// "Isolated" badge from agent_tasks history, not this column. Real
+		// isolation everywhere else in the app (Alerts/Incidents pages) goes
+		// through a dispatched isolate_host task; do the same here.
+		r, err := dispatchAgentTask("isolate_host", map[string]any{"reason": body.Reason, "source": "nba"})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()}); return
+		}
+		result = r
 
 	case "create_incident":
 		var incidentID int
-		database.DB.QueryRow(`
-			INSERT INTO incidents (tenant_id, title, description, severity, status, created_by)
-			VALUES ($1,$2,$3,'high','open',$4) RETURNING id`,
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
 			tid, fmt.Sprintf("NBA Alert: %s", body.Reason),
 			fmt.Sprintf("Network behavior anomaly detected. IP: %s Domain: %s. %s", body.IP, body.Domain, body.Reason),
-			uid).Scan(&incidentID)
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create incident: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("Incident #%d created", incidentID)
 
 	case "start_pcap":
-		result = fmt.Sprintf("Packet capture requested for agent #%d (requires agent support)", body.AgentID)
+		// No agent task type for packet capture exists anywhere in
+		// xcloak-agent-desktop's executor — honest failure instead of a
+		// 200 that reads like it happened.
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "packet capture is not supported by the agent yet"})
+		return
 
 	case "block_asn":
 		if body.ASN == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "asn required"}); return
 		}
-		database.DB.Exec(`
-			INSERT INTO iocs (tenant_id, created_by, ioc_type, value, threat_type, confidence, is_enabled, description)
-			VALUES ($1,$2,'asn',$3,'network_block',90,true,$4)
-			ON CONFLICT DO NOTHING`,
-			tid, uid, body.ASN, "ASN blocked via NBA: "+body.Reason)
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.ASN, Type: "asn", Severity: "medium", Enabled: true,
+			Description: "ASN blocked via NBA: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block asn: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("ASN %s blocked", body.ASN)
 
 	case "push_firewall_rule":
-		result = fmt.Sprintf("Firewall rule pushed: block %s (requires firewall integration)", body.IP)
+		if body.IP == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ip required"}); return
+		}
+		// Same real firewall_rules table incident_enterprise.go's block_ip
+		// action uses — an actually-enforced rule, not just an IOC entry.
+		if _, err := database.DB.Exec(
+			`INSERT INTO firewall_rules (tenant_id,name,direction,action,source_ip,enabled)
+			 VALUES ($1,$2,'inbound','block',$3,true) ON CONFLICT DO NOTHING`,
+			tid, "NBA block: "+body.IP, body.IP,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create firewall rule: " + err.Error()}); return
+		}
+		result = fmt.Sprintf("Firewall rule created blocking %s", body.IP)
 
 	case "kill_process":
-		result = fmt.Sprintf("Kill process PID=%d requested for agent #%d", body.PID, body.AgentID)
+		if body.AgentID == 0 || body.PID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id and pid required"}); return
+		}
+		r, err := dispatchAgentTask("kill_process", map[string]any{"pid": body.PID, "reason": body.Reason})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()}); return
+		}
+		result = r
 
 	case "run_playbook":
-		result = "SOAR playbook execution queued"
+		if body.PlaybookID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "playbook_id required"}); return
+		}
+		playbook, err := repositories.GetPlaybookByID(body.PlaybookID, tid)
+		if err != nil || playbook == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "playbook not found"}); return
+		}
+		if err := services.ExecutePlaybookByID(body.PlaybookID, tid, models.Alert{
+			TenantID: tid, Severity: "high", RuleName: fmt.Sprintf("NBA: %s", body.Reason),
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "playbook execution failed: " + err.Error()}); return
+		}
+		result = fmt.Sprintf("Playbook %q triggered", playbook.Name)
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"}); return

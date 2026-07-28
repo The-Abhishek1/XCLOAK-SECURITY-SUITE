@@ -23,11 +23,11 @@ export function timeAgo(d: string | null | undefined): string {
 
 export function sevClass(s: string) {
   switch (s?.toLowerCase()) {
-    case 'critical': return 'sev-critical';
-    case 'high':     return 'sev-high';
-    case 'medium':   return 'sev-medium';
-    case 'low':      return 'sev-low';
-    default:         return 'sev-info';
+    case 'critical': return 's-critical';
+    case 'high':     return 's-high';
+    case 'medium':   return 's-medium';
+    case 'low':      return 's-low';
+    default:         return 's-info';
   }
 }
 
@@ -43,7 +43,7 @@ export function sevDot(s: string) {
 // Keep old names for backward compat
 export const getSeverityClass  = sevClass;
 export const getSeverityColor  = sevClass;
-export const getStatusColor    = (s: string) => s === 'online' ? 'sev-low' : 'sev-info';
+export const getStatusColor    = (s: string) => s === 'online' ? 's-low' : 's-info';
 export const getStatusClass    = getStatusColor;
 export const severityDot       = sevDot;
 

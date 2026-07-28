@@ -451,39 +451,27 @@ func UEBAResponseAction(c *gin.Context) {
 	analyst := currentUsername(c)
 
 	var body struct {
-		Action string            `json:"action"`
-		Params map[string]string `json:"params"`
+		Action string `json:"action"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
 		c.JSON(400, gin.H{"error": "action required"})
 		return
 	}
 
-	var result string
-	switch body.Action {
-	case "disable_user":
-		result = fmt.Sprintf("User %s disabled — AD/local account suspended", username)
-	case "force_logout":
-		// Revoke all active sessions for this username
-		database.DB.Exec(
-			`UPDATE sessions SET revoked=true WHERE tenant_id=$1 AND username=$2`, tenantID, username)
-		result = fmt.Sprintf("All sessions for %s revoked", username)
-	case "reset_password":
-		result = fmt.Sprintf("Password reset triggered for %s", username)
-	case "require_mfa":
-		result = fmt.Sprintf("MFA enforcement flag set for %s", username)
-	case "block_vpn":
-		result = fmt.Sprintf("VPN access blocked for %s", username)
-	case "isolate_endpoint":
-		result = fmt.Sprintf("Endpoint isolation initiated for %s's device", username)
-	case "kill_process":
-		pid := body.Params["pid"]
-		result = fmt.Sprintf("Kill signal sent to PID %s on %s's endpoint", pid, username)
-	case "run_playbook":
-		result = fmt.Sprintf("SOAR playbook triggered for user %s", username)
-	default:
-		result = fmt.Sprintf("Action '%s' dispatched for user %s", body.Action, username)
+	// disable_user/reset_password/require_mfa/block_vpn/isolate_endpoint/
+	// kill_process/run_playbook used to return a canned success string with
+	// no real effect whatsoever (no IdP call, no agent task, no playbook
+	// execution) — an analyst acting on a flagged insider threat would
+	// believe the account was disabled or the endpoint isolated when
+	// nothing happened. force_logout is the only one with a real effect.
+	if body.Action != "force_logout" {
+		c.JSON(400, gin.H{"error": "action not permitted: " + body.Action})
+		return
 	}
+
+	database.DB.Exec(
+		`UPDATE sessions SET revoked=true WHERE tenant_id=$1 AND username=$2`, tenantID, username)
+	result := fmt.Sprintf("All sessions for %s revoked", username)
 
 	// Log as UEBA event
 	database.DB.Exec(`

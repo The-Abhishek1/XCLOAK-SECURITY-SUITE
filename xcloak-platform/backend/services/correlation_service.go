@@ -83,8 +83,14 @@ func shouldCreateIncident(alert models.Alert) bool {
 	case "critical", "high":
 		return true
 	}
-	switch strings.ToLower(alert.RuleName) {
-	case "ioc match", "yara match":
+	// Was an exact match against the literal "ioc match"/"yara match" — but
+	// the real detection engines produce several other rule names for
+	// genuine IOC/YARA hits (ioc_engine.go's domain/URL matches, ioc_hash_engine.go's
+	// SHA256/MD5 matches), all of which silently bypassed this "always
+	// escalate" heuristic despite the Correlation page's UI unconditionally
+	// telling users that any IOC/YARA match auto-creates an incident.
+	ruleName := strings.ToLower(alert.RuleName)
+	if strings.Contains(ruleName, "ioc") || strings.Contains(ruleName, "yara") {
 		return true
 	}
 	return false

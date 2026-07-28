@@ -6,7 +6,7 @@ import { uebaAPI } from '@/lib/api';
 import { UserRiskProfile, UEBAEvent } from '@/types';
 import { timeAgo, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { Activity, AlertTriangle, ArrowUpRight, Ban, BarChart2, Bot, Check, CheckCircle2, ChevronRight, Clock, Cpu, Crosshair, Database, FileText, Filter, GitBranch, Globe2, KeyRound, Loader2, LogOut, Network, Package, Play, Plus, RefreshCw, Search, Server, Shield, Star, Target, Terminal, Trash2, TrendingUp, User, Users, Wifi, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, ArrowUpRight, BarChart2, Bot, Check, CheckCircle2, ChevronRight, Clock, Cpu, Crosshair, Database, FileText, Filter, GitBranch, Globe2, Loader2, LogOut, Package, Plus, RefreshCw, Search, Shield, Star, Target, Terminal, Trash2, TrendingUp, User, Users, Wifi, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -132,7 +132,6 @@ function Empty({ icon: Icon, text }: { icon: any; text: string }) {
 
 function BaselineCard({ profile }: { profile: UserRiskProfile }) {
   const items = [
-    { label:'Working Hours',   val:'9AM – 6PM',        icon:Clock },
     { label:'Login Frequency', val:`${profile.total_events} / 7d`, icon:Activity },
     { label:'Known IPs',       val:`${profile.unique_ips}`,        icon:Globe2 },
     { label:'Source',          val:profile.source,                  icon:Database },
@@ -157,13 +156,15 @@ function BaselineCard({ profile }: { profile: UserRiskProfile }) {
 function LoginAnalyticsCard({ profile, events }: { profile: UserRiskProfile; events: UEBAEvent[] }) {
   const loginEvents = events.filter(e =>
     ['failed_login', 'login', 'off_hours_login', 'brute_force'].includes(e.event_type));
+  // "impossible_travel"/"password_spray"/"credential_stuffing" are checked
+  // nowhere in services/ueba_service.go — flags it actually sets are just
+  // high_failure_rate/off_hours_activity/privilege_escalation/multiple_source_ips,
+  // so those three could never fire. "Brute Force" is real, but the analyzer
+  // records it as an event (EventType "brute_force"), not a profile flag.
   const anomalies = [
-    profile.flags.includes('impossible_travel')    && { label:'Impossible Travel',    color:'var(--red)' },
     profile.off_hours_events > 0                   && { label:`Off-Hours Logins (${profile.off_hours_events})`, color:'var(--orange)' },
     profile.failed_logins > 0                      && { label:`Failed Logins (${profile.failed_logins})`, color:'var(--red)' },
-    profile.flags.includes('brute_force')          && { label:'Brute Force Detected', color:'var(--red)' },
-    profile.flags.includes('password_spray')       && { label:'Password Spraying',   color:'var(--red)' },
-    profile.flags.includes('credential_stuffing')  && { label:'Credential Stuffing', color:'var(--red)' },
+    events.some(e => e.event_type === 'brute_force') && { label:'Brute Force Detected', color:'var(--red)' },
     profile.unique_ips > 3                         && { label:`Multiple IPs (${profile.unique_ips})`, color:'var(--yellow)' },
   ].filter(Boolean) as Array<{ label: string; color: string }>;
 
@@ -287,19 +288,17 @@ function PeerCard({ data, loading }: { data: PeerComparison | null; loading: boo
 
 function AnomalyCard({ profile, events }: { profile: UserRiskProfile; events: UEBAEvent[] }) {
   const flaggedTypes = new Set(events.map(e => e.event_type));
+  // Only checks anomaly types the UEBA analyzer (services/ueba_service.go)
+  // can actually produce — it emits event types login/sudo/priv_escalation/
+  // off_hours_login/brute_force/priv_change/failed_login and profile flags
+  // high_failure_rate/off_hours_activity/privilege_escalation/multiple_source_ips.
+  // Rare-process/app/device/network/command-line and mass-file-access have no
+  // detector anywhere in the codebase, so those checks could never fire.
   const anomalies = [
     { label:'First Time Seen',       detected: profile.total_events <= 1 },
-    { label:'Rare Process',          detected: flaggedTypes.has('rare_process') },
-    { label:'Rare Application',      detected: flaggedTypes.has('rare_app') },
-    { label:'Rare Country',          detected: profile.flags.includes('impossible_travel') },
-    { label:'Rare Device',           detected: profile.flags.includes('new_device') },
-    { label:'Rare Network',          detected: profile.flags.includes('rare_network') },
-    { label:'Rare Parent Process',   detected: flaggedTypes.has('rare_parent_process') },
-    { label:'Rare Command Line',     detected: flaggedTypes.has('powershell') || flaggedTypes.has('bash') },
     { label:'Privilege Escalation',  detected: profile.privilege_escalations > 0 },
     { label:'Off-Hours Activity',    detected: profile.off_hours_events > 0 },
-    { label:'Brute Force',           detected: profile.flags.includes('brute_force') },
-    { label:'Mass File Access',      detected: flaggedTypes.has('mass_file_access') },
+    { label:'Brute Force',           detected: flaggedTypes.has('brute_force') },
   ];
   const detected = anomalies.filter(a => a.detected);
   return (
@@ -328,10 +327,8 @@ function EntityGraph({ profile, detail }: { profile: UserRiskProfile; detail: Us
   const nodes = [
     { label: profile.username,          sub:'User',          icon:User,     color:'var(--accent)' },
     { label: profile.last_seen_ip || '—', sub:'Last IP',    icon:Globe2,   color:'var(--blue)' },
-    { label: 'VPN Gateway',             sub:'Network',        icon:Wifi,     color:'var(--yellow)' },
     { label: detail?.alert_count ? `${detail.alert_count} Alerts` : 'No Alerts', sub:'Alerts', icon:AlertTriangle, color: detail?.alert_count ? 'var(--orange)' : 'var(--text-3)' },
     { label: detail?.incident_count ? `${detail.incident_count} Incidents` : 'No Incidents', sub:'Incidents', icon:Shield, color: detail?.incident_count ? 'var(--red)' : 'var(--text-3)' },
-    { label: 'Cloud Account',           sub:'Cloud',          icon:Database, color:'var(--accent)' },
   ];
   return (
     <div className="p-3 space-y-1.5">
@@ -354,17 +351,18 @@ function EntityGraph({ profile, detail }: { profile: UserRiskProfile; detail: Us
 
 // ── Endpoint Behavior ─────────────────────────────────────────────────────────
 
+// Only checks event types the UEBA analyzer (services/ueba_service.go) can
+// actually emit — powershell/bash/new_service/registry/process_injection/
+// persistence have no detector anywhere and could never fire. Network and
+// File behavior cards were removed outright: every check in both (including
+// two — Beaconing/DNS Tunneling — that were hardcoded to always show "No"
+// rather than even checking anything) referenced flags/event-types nothing
+// in the backend ever produces.
 function EndpointBehaviorCard({ events }: { events: UEBAEvent[] }) {
   const eTypes = new Set(events.map(e => e.event_type));
   const tracked = [
-    { label:'PowerShell Usage',    detected: eTypes.has('powershell'),        color:'var(--orange)' },
-    { label:'Bash Activity',       detected: eTypes.has('bash'),               color:'var(--yellow)' },
     { label:'Privilege Escalation',detected: eTypes.has('priv_escalation'),   color:'var(--red)' },
     { label:'Sudo Usage',          detected: eTypes.has('sudo'),               color:'var(--orange)' },
-    { label:'New Service',         detected: eTypes.has('new_service'),        color:'var(--yellow)' },
-    { label:'Registry Change',     detected: eTypes.has('registry'),           color:'var(--yellow)' },
-    { label:'Process Injection',   detected: eTypes.has('process_injection'),  color:'var(--red)' },
-    { label:'Persistence',         detected: eTypes.has('persistence'),        color:'var(--red)' },
   ];
   return (
     <div className="p-3 grid grid-cols-2 gap-1.5">
@@ -374,62 +372,6 @@ function EndpointBehaviorCard({ events }: { events: UEBAEvent[] }) {
             ? <AlertTriangle className="h-3 w-3 shrink-0" style={{ color:t.color }} />
             : <Check className="h-3 w-3 shrink-0" style={{ color:'var(--text-3)' }} />}
           <span style={{ color: t.detected ? t.color : 'var(--text-3)' }}>{t.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Network Behavior ──────────────────────────────────────────────────────────
-
-function NetworkBehaviorCard({ events, detail }: { events: UEBAEvent[]; detail: UserDetail | null }) {
-  const behaviors = [
-    { label:'Beaconing Detected',    icon:Wifi,    val: 'No', color:'var(--text-3)' },
-    { label:'DNS Tunneling',         icon:Globe2,  val: 'No', color:'var(--text-3)' },
-    { label:'Lateral Movement',      icon:Network, val: events.some(e=>e.event_type==='lateral_movement')?'Yes':'No', color: events.some(e=>e.event_type==='lateral_movement')?'var(--red)':'var(--text-3)' },
-    { label:'Data Exfiltration',     icon:ArrowUpRight, val: events.some(e=>e.event_type==='exfiltration')?'Yes':'No', color: events.some(e=>e.event_type==='exfiltration')?'var(--red)':'var(--text-3)' },
-    { label:'Unique IPs',            icon:Globe2,  val:`${detail?.profile.unique_ips ?? 0}`, color:'var(--text-1)' },
-    { label:'VPN Sessions',          icon:Lock,    val: events.filter(e=>e.event_type==='vpn').length.toString(), color:'var(--text-1)' },
-    { label:'RDP Sessions',          icon:Monitor,  val: events.filter(e=>e.event_type==='rdp').length.toString(), color:'var(--text-1)' },
-    { label:'SSH Sessions',          icon:Terminal, val: events.filter(e=>e.event_type==='ssh').length.toString(), color:'var(--text-1)' },
-  ];
-  return (
-    <div className="p-3 space-y-2">
-      {behaviors.map(b => (
-        <div key={b.label} className="flex items-center gap-2.5">
-          <b.icon className="h-3.5 w-3.5 shrink-0" style={{ color:'var(--accent)' }} />
-          <span className="text-[11px] flex-1" style={{ color:'var(--text-3)' }}>{b.label}</span>
-          <span className="text-[11px] font-semibold" style={{ color:b.color }}>{b.val}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Need a Monitor icon substitute
-function Monitor(props: any) { return <Cpu {...props} />; }
-
-// ── File Behavior ─────────────────────────────────────────────────────────────
-
-function FileBehaviorCard({ profile, events }: { profile: UserRiskProfile; events: UEBAEvent[] }) {
-  const fileFlags = [
-    { label:'Mass File Access',      detected: profile.flags.includes('mass_file_access'),    color:'var(--red)' },
-    { label:'Mass File Deletion',    detected: profile.flags.includes('mass_file_deletion'),  color:'var(--red)' },
-    { label:'Sensitive File Access', detected: profile.flags.includes('sensitive_file'),      color:'var(--orange)' },
-    { label:'Encryption Activity',   detected: profile.flags.includes('encryption'),          color:'var(--orange)' },
-    { label:'USB Copy Detected',     detected: profile.flags.includes('usb_copy'),            color:'var(--red)' },
-    { label:'Cloud Upload',          detected: profile.flags.includes('cloud_upload'),        color:'var(--yellow)' },
-    { label:'Source Code Access',    detected: profile.flags.includes('source_code'),         color:'var(--red)' },
-    { label:'File Uploads',          detected: events.some(e=>e.event_type==='file_upload'), color:'var(--yellow)' },
-  ];
-  return (
-    <div className="p-3 grid grid-cols-2 gap-1.5">
-      {fileFlags.map(f => (
-        <div key={f.label} className="flex items-center gap-1.5 text-[11px] py-0.5">
-          {f.detected
-            ? <AlertTriangle className="h-3 w-3 shrink-0" style={{ color:f.color }} />
-            : <Check className="h-3 w-3 shrink-0" style={{ color:'var(--text-3)' }} />}
-          <span style={{ color: f.detected ? f.color : 'var(--text-3)' }}>{f.label}</span>
         </div>
       ))}
     </div>
@@ -557,75 +499,38 @@ function AIInsightsPanel({ username }: { username: string }) {
 }
 
 // ── Response Actions ──────────────────────────────────────────────────────────
-
-const RESPONSE_ACTIONS = [
-  { key:'disable_user',     label:'Disable User',      icon:Ban,      color:'var(--red)',    desc:'Suspend AD / local account' },
-  { key:'force_logout',     label:'Force Logout',      icon:LogOut,   color:'var(--red)',    desc:'Revoke all sessions' },
-  { key:'reset_password',   label:'Reset Password',    icon:KeyRound, color:'var(--yellow)', desc:'Force password change' },
-  { key:'require_mfa',      label:'Require MFA',       icon:Shield,   color:'var(--yellow)', desc:'Enforce MFA on next login' },
-  { key:'block_vpn',        label:'Block VPN',         icon:Lock,     color:'var(--orange)', desc:'Revoke VPN certificates' },
-  { key:'isolate_endpoint', label:'Isolate Endpoint',  icon:Server,   color:'var(--red)',    desc:'Network-isolate device' },
-  { key:'kill_process',     label:'Kill Process',      icon:XCircle,  color:'var(--orange)', desc:'Kill by PID' },
-  { key:'run_playbook',     label:'Run SOAR Playbook', icon:Play,     color:'var(--accent)', desc:'Trigger automated response' },
-];
+// Only "Force Logout" has any real effect (revokes session rows in the DB).
+// Disable User / Reset Password / Require MFA / Block VPN / Isolate Endpoint /
+// Kill Process / Run Playbook used to return a canned success string with no
+// backend effect at all — no IdP call, no agent task, no playbook run — while
+// logging a fake "completed" entry into the user's own timeline. Removed
+// rather than left as a lie an analyst could act on.
 
 function ResponseActionsPanel({ username, onAction }: { username: string; onAction: (msg: string) => void }) {
-  const [running, setRunning] = useState<string | null>(null);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [param, setParam] = useState('');
+  const [running, setRunning] = useState(false);
 
-  const PARAM_LABELS: Record<string, string> = {
-    kill_process: 'PID', run_playbook: 'Playbook ID',
-  };
-  const needsParam = activeKey ? PARAM_LABELS[activeKey] : null;
-
-  const dispatch = async (key: string, p = '') => {
-    setRunning(key);
+  const dispatch = async () => {
+    setRunning(true);
     try {
-      const params: Record<string, string> = {};
-      if (key === 'kill_process') params.pid = p;
-      if (key === 'run_playbook') params.playbook_id = p;
-      const r = await uebaAPI.responseAction(username, key, params);
-      onAction((r.data as any)?.result ?? `${key} dispatched`);
-      setActiveKey(null); setParam('');
+      const r = await uebaAPI.responseAction(username, 'force_logout', {});
+      onAction((r.data as any)?.result ?? 'force_logout dispatched');
     } catch { onAction('Action failed'); }
-    finally { setRunning(null); }
+    finally { setRunning(false); }
   };
 
   return (
-    <div className="p-3 space-y-2">
-      {activeKey && needsParam && (
-        <div className="flex items-center gap-2 rounded-lg px-3 py-2.5"
-          style={{ background:'var(--glass-bg)', border:'1px solid var(--accent-border)' }}>
-          <input value={param} onChange={e=>setParam(e.target.value)}
-            placeholder={needsParam + '…'} className="g-input flex-1 text-xs"
-            onKeyDown={e=>e.key==='Enter'&&param&&dispatch(activeKey,param)} />
-          <button onClick={()=>param&&dispatch(activeKey,param)} disabled={!param||running===activeKey}
-            className="g-btn g-btn-primary text-xs px-3">
-            {running===activeKey?<Loader2 className="h-3 w-3 animate-spin"/>:'Run'}
-          </button>
-          <button onClick={()=>{setActiveKey(null);setParam('');}} className="g-btn g-btn-ghost text-xs px-2">
-            <X className="h-3 w-3"/>
-          </button>
+    <div className="p-3">
+      <button onClick={dispatch} disabled={running}
+        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-hover)] transition-colors"
+        style={{ background:'var(--glass-bg)', border:'1px solid var(--red)33' }}>
+        {running
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color:'var(--red)' }}/>
+          : <LogOut className="h-3.5 w-3.5 shrink-0" style={{ color:'var(--red)' }}/>}
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium truncate" style={{ color:'var(--text-1)' }}>Force Logout</p>
+          <p className="text-[9px]" style={{ color:'var(--text-3)' }}>Revoke all sessions</p>
         </div>
-      )}
-      <div className="grid grid-cols-2 gap-1.5">
-        {RESPONSE_ACTIONS.map(a => (
-          <button key={a.key}
-            onClick={() => PARAM_LABELS[a.key] ? (setActiveKey(a.key), setParam('')) : dispatch(a.key)}
-            disabled={running !== null}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-hover)] transition-colors"
-            style={{ background:'var(--glass-bg)', border:`1px solid ${a.color}33` }}>
-            {running===a.key
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color:a.color }}/>
-              : <a.icon className="h-3.5 w-3.5 shrink-0" style={{ color:a.color }}/>}
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium truncate" style={{ color:'var(--text-1)' }}>{a.label}</p>
-              <p className="text-[9px]" style={{ color:'var(--text-3)' }}>{a.desc}</p>
-            </div>
-          </button>
-        ))}
-      </div>
+      </button>
     </div>
   );
 }
@@ -836,27 +741,15 @@ function UserDetailPanel({
           </div>
         </div>
 
-        {/* Row 3: Login Analytics + File Behavior */}
+        {/* Row 3: Login Analytics + Endpoint Behavior */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div className={CARD}>
             <SectionHeader icon={Lock} title="Login Analytics" />
             <LoginAnalyticsCard profile={profile} events={timeline} />
           </div>
           <div className={CARD}>
-            <SectionHeader icon={FileText} title="File Behavior" />
-            <FileBehaviorCard profile={profile} events={timeline} />
-          </div>
-        </div>
-
-        {/* Row 4: Endpoint Behavior + Network Behavior */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <div className={CARD}>
             <SectionHeader icon={Terminal} title="Endpoint Behavior" />
             <EndpointBehaviorCard events={timeline} />
-          </div>
-          <div className={CARD}>
-            <SectionHeader icon={Network} title="Network Behavior" />
-            <NetworkBehaviorCard events={timeline} detail={detail} />
           </div>
         </div>
 
@@ -888,22 +781,23 @@ function UserDetailPanel({
               <div className="space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:'var(--text-3)' }}>Mapped Techniques</p>
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    { id:'T1078', label:'Valid Accounts',         relevant: profile.flags.includes('impossible_travel') || profile.privilege_escalations > 0 },
-                    { id:'T1059', label:'Command Interpreter',    relevant: timeline.some(e=>e.event_type==='powershell'||e.event_type==='bash') },
-                    { id:'T1003', label:'Credential Dumping',     relevant: profile.privilege_escalations > 0 },
-                    { id:'T1021', label:'Remote Services',        relevant: timeline.some(e=>e.event_type==='rdp'||e.event_type==='ssh') },
-                    { id:'T1041', label:'Exfiltration over C2',   relevant: timeline.some(e=>e.event_type==='exfiltration') },
-                    { id:'T1486', label:'Data Encrypted',         relevant: profile.flags.includes('encryption') },
-                    { id:'T1566', label:'Phishing',               relevant: false },
-                    { id:'T1098', label:'Account Manipulation',   relevant: profile.flags.includes('priv_change') },
-                  ].filter(t => t.relevant).map((t, i) => (
-                    <span key={t.id} className="text-[10px] px-2.5 py-1 rounded-lg font-mono font-medium"
-                      style={{ background:`${MITRE_COLORS[i%MITRE_COLORS.length]}18`, color:MITRE_COLORS[i%MITRE_COLORS.length], border:`1px solid ${MITRE_COLORS[i%MITRE_COLORS.length]}44` }}>
-                      {t.id} · {t.label}
-                    </span>
-                  ))}
-                  {profile.flags.length === 0 && <p className="text-xs" style={{ color:'var(--text-3)' }}>No MITRE techniques mapped — no active flags.</p>}
+                  {/* Only techniques backed by a signal ueba_service.go actually
+                      computes — the analyzer never sets an "impossible_travel"/
+                      "encryption"/"priv_change" flag, and never emits
+                      powershell/bash/rdp/ssh/exfiltration event types, so those
+                      mappings could never be relevant. */}
+                  {([
+                    { id:'T1078', label:'Valid Accounts',     relevant: profile.privilege_escalations > 0 },
+                    { id:'T1003', label:'Credential Dumping', relevant: profile.privilege_escalations > 0 },
+                  ] as Array<{ id: string; label: string; relevant: boolean }>)
+                    .filter(t => t.relevant)
+                    .map((t, i) => (
+                      <span key={t.id} className="text-[10px] px-2.5 py-1 rounded-lg font-mono font-medium"
+                        style={{ background:`${MITRE_COLORS[i%MITRE_COLORS.length]}18`, color:MITRE_COLORS[i%MITRE_COLORS.length], border:`1px solid ${MITRE_COLORS[i%MITRE_COLORS.length]}44` }}>
+                        {t.id} · {t.label}
+                      </span>
+                    ))}
+                  {profile.privilege_escalations === 0 && <p className="text-xs" style={{ color:'var(--text-3)' }}>No MITRE techniques mapped.</p>}
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -1072,7 +966,7 @@ export default function UEBAPage() {
           </div>
         </div>
         {/* Right: detail */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden" data-testid="ueba-user-detail">
           <UserDetailPanel profile={selected} onClose={() => setSelected(null)} />
         </div>
       </div>

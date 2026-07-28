@@ -2,6 +2,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { tneAPI, platformAPI } from '@/lib/api';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Building2, KeyRound, BarChart3, FileBarChart2,
+  Plus, X, CheckCircle2, Ban, Pencil, Blocks, Gauge, CreditCard,
+  Save, RotateCcw, Power, Wand2, Send,
+} from 'lucide-react';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -23,37 +29,37 @@ function pill(label: string, color?: string) {
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function SelectTenantPrompt({ onGo, label = 'to continue' }: { onGo: () => void; label?: string }) {
   return (
-    <div className="g-card" style={{ padding: '16px 20px', minWidth: 140 }}>
-      <div style={{ color: 'var(--text-3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</div>
-      <div style={{ color: 'var(--text-1)', fontSize: 22, fontWeight: 700 }}>{value}</div>
-      {sub && <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>{sub}</div>}
-    </div>
+    <SectionCard>
+      <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-3)', fontSize: 13 }}>
+        Select a tenant from{' '}
+        <ActionButton variant="ghost" icon={Building2} onClick={onGo} style={{ display: 'inline-flex' }}>Tenant Directory</ActionButton>
+        {' '}{label}
+      </div>
+    </SectionCard>
   );
 }
 
 // ── sidebar / tab config ──────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'tenants',   label: 'Tenants' },
-  { id: 'licenses',  label: 'Licenses' },
-  { id: 'usage',     label: 'Usage' },
-  { id: 'reports',   label: 'Reports' },
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { key: 'tenants',   label: 'Tenants',   icon: Building2 },
+  { key: 'licenses',  label: 'Licenses',  icon: KeyRound },
+  { key: 'usage',     label: 'Usage',     icon: BarChart3 },
+  { key: 'reports',   label: 'Reports',   icon: FileBarChart2 },
 ];
 
-const SIDEBAR: Record<string, { id: string; label: string }[][]> = {
-  dashboard: [[{ id: 'overview',     label: 'Tenant Dashboard' }]],
-  tenants:   [[{ id: 'directory',    label: 'Tenant Directory' }, { id: 'config', label: 'Tenant Configuration' }],
-              [{ id: 'isolation',    label: 'Data Isolation' }, { id: 'deployment', label: 'Deployment Mode' }]],
-  licenses:  [[{ id: 'rbac',         label: 'Users & RBAC' }],
-              [{ id: 'modules',      label: 'Module Management' }]],
-  usage:     [[{ id: 'resources',    label: 'Resource Allocation' }],
-              [{ id: 'subscription', label: 'Subscription & Licensing' }, { id: 'billing', label: 'Billing' }]],
-  reports:   [[{ id: 'analytics',   label: 'Usage Analytics' }, { id: 'health', label: 'Tenant Health' }],
-              [{ id: 'ai',           label: 'AI Assistant' }],
-              [{ id: 'audit',        label: 'Audit Trail' }]],
+const SIDEBAR: Record<string, { key: string; label: string }[]> = {
+  dashboard: [{ key: 'overview',     label: 'Tenant Dashboard' }],
+  tenants:   [{ key: 'directory',    label: 'Tenant Directory' }, { key: 'config', label: 'Tenant Configuration' },
+              { key: 'isolation',    label: 'Data Isolation' }, { key: 'deployment', label: 'Deployment Mode' }],
+  licenses:  [{ key: 'rbac',         label: 'Users & RBAC' }, { key: 'modules', label: 'Module Management' }],
+  usage:     [{ key: 'resources',    label: 'Resource Allocation' },
+              { key: 'subscription', label: 'Subscription & Licensing' }, { key: 'billing', label: 'Billing' }],
+  reports:   [{ key: 'analytics',    label: 'Usage Analytics' }, { key: 'health', label: 'Tenant Health' },
+              { key: 'ai',           label: 'AI Assistant' }, { key: 'audit', label: 'Audit Trail' }],
 };
 
 const DEFAULT_SECTION: Record<string, string> = {
@@ -288,68 +294,67 @@ export default function PlatformPage() {
       case 'overview': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <StatCard label="Total Tenants"   value={dashboard?.total_tenants ?? '—'} />
-            <StatCard label="Active"          value={dashboard?.active_tenants ?? '—'} />
-            <StatCard label="Enterprise"      value={dashboard?.enterprise_tenants ?? '—'} />
-            <StatCard label="Trial"           value={dashboard?.trial_tenants ?? '—'} />
-            <StatCard label="Suspended"       value={dashboard?.suspended_tenants ?? '—'} />
-            <StatCard label="Total Agents"    value={(dashboard?.total_agents ?? 0).toLocaleString()} />
-            <StatCard label="Platform EPS"    value={(dashboard?.platform_eps ?? 0).toLocaleString()} />
-            <StatCard label="Monthly Revenue" value={`$${((dashboard?.monthly_revenue_usd ?? 0) / 1000).toFixed(0)}k`} />
+            <MetricCard label="Total Tenants"   value={dashboard?.total_tenants ?? '—'} />
+            <MetricCard label="Active"          value={dashboard?.active_tenants ?? '—'} />
+            <MetricCard label="Enterprise"      value={dashboard?.enterprise_tenants ?? '—'} />
+            <MetricCard label="Trial"           value={dashboard?.trial_tenants ?? '—'} />
+            <MetricCard label="Suspended"       value={dashboard?.suspended_tenants ?? '—'} />
+            <MetricCard label="Total Agents"    value={(dashboard?.total_agents ?? 0).toLocaleString()} />
+            <MetricCard label="Platform EPS"    value={(dashboard?.platform_eps ?? 0).toLocaleString()} />
+            <MetricCard label="Monthly Revenue" value={`$${((dashboard?.monthly_revenue_usd ?? 0) / 1000).toFixed(0)}k`} />
           </div>
 
           <div style={{ display: 'flex', gap: 16 }}>
-            <div className="g-card" style={{ flex: 2, padding: 20 }}>
-              <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 14 }}>Recent Tenants</h3>
-              <table className="g-table" style={{ width: '100%' }}>
-                <thead><tr><th>Tenant</th><th>Plan</th><th>Region</th><th>Status</th><th>Created</th></tr></thead>
-                <tbody>{(dashboard?.recent_tenants ?? []).map((t: any) => (
-                  <tr key={t.tenant_ref} style={{ cursor: 'pointer' }}
-                    onClick={() => { switchTab('tenants'); selectTenant(t); }}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{t.tenant_name}</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.org_name}</div>
-                    </td>
-                    <td>{pill(t.plan, t.plan)}</td>
-                    <td style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.region}</td>
-                    <td>{pill(t.status)}</td>
-                    <td style={{ color: 'var(--text-3)', fontSize: 12 }}>{t.created_at?.slice(0, 10)}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
+            <div style={{ flex: 2 }}>
+              <SectionCard title="Recent Tenants" padded={false}>
+                <DataTable<any>
+                  rows={dashboard?.recent_tenants ?? []}
+                  rowKey={(t: any) => t.tenant_ref}
+                  onRowClick={t => { switchTab('tenants'); selectTenant(t); }}
+                  columns={[
+                    { key: 'tenant_name', header: 'Tenant', render: (t: any) => (
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{t.tenant_name}</div>
+                        <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.org_name}</div>
+                      </div>
+                    ) },
+                    { key: 'plan', header: 'Plan', render: (t: any) => pill(t.plan, t.plan) },
+                    { key: 'region', header: 'Region', render: (t: any) => <span style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.region}</span> },
+                    { key: 'status', header: 'Status', render: (t: any) => pill(t.status) },
+                    { key: 'created_at', header: 'Created', render: (t: any) => <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{t.created_at?.slice(0, 10)}</span> },
+                  ]}
+                />
+              </SectionCard>
             </div>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="g-card" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: 'var(--text-1)', fontSize: 14 }}>Platform Health</h3>
+              <SectionCard title="Platform Health">
                 <div style={{ display: 'flex', gap: 12 }}>
                   {([['Healthy', dashboard?.healthy_tenants ?? 0, '#16a34a'],
                      ['Degraded', dashboard?.degraded_tenants ?? 0, '#d97706'],
                      ['Critical', dashboard?.critical_tenants ?? 0, '#dc2626']] as [string, number, string][]).map(([l, v, c]) => (
-                    <div key={l} style={{ flex: 1, textAlign: 'center', padding: 12, background: c + '11', borderRadius: 6 }}>
+                    <div key={l} style={{ flex: 1, textAlign: 'center', padding: 12, background: c + '11', borderRadius: 'var(--radius-md)' }}>
                       <div style={{ color: c, fontSize: 20, fontWeight: 700 }}>{v}</div>
                       <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{l}</div>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="g-card" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: 'var(--text-1)', fontSize: 14 }}>Plan Breakdown</h3>
+              </SectionCard>
+              <SectionCard title="Plan Breakdown">
                 {(dashboard?.plan_breakdown ?? []).map((p: any) => (
                   <div key={p.plan} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
                     {pill(p.plan, p.plan)}
                     <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>{p.count}</span>
                   </div>
                 ))}
-              </div>
+              </SectionCard>
             </div>
           </div>
 
-          <div className="g-card" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 10px', color: 'var(--text-1)', fontSize: 14 }}>License Utilization</h3>
-            <div style={{ background: 'var(--bg-2)', borderRadius: 6, height: 14, overflow: 'hidden' }}>
+          <SectionCard title="License Utilization">
+            <div style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius-md)', height: 14, overflow: 'hidden' }}>
               <div style={{
-                background: 'var(--accent)', borderRadius: 6,
+                background: 'var(--accent)', borderRadius: 'var(--radius-md)',
                 width: `${dashboard?.license_utilization_pct ?? 0}%`,
                 height: '100%', transition: 'width .4s',
               }} />
@@ -358,7 +363,7 @@ export default function PlatformPage() {
               <span>Used: {dashboard?.license_utilization_pct ?? 0}%</span>
               <span>Remaining: {100 - (dashboard?.license_utilization_pct ?? 0)}%</span>
             </div>
-          </div>
+          </SectionCard>
         </div>
       );
 
@@ -382,12 +387,11 @@ export default function PlatformPage() {
               <option value="enterprise_plus">Enterprise Plus</option>
             </select>
             <div style={{ flex: 1 }} />
-            <button className="g-btn" onClick={() => setShowCreate(true)}>+ New Tenant</button>
+            <ActionButton variant="primary" icon={Plus} onClick={() => setShowCreate(true)}>New Tenant</ActionButton>
           </div>
 
           {showCreate && (
-            <div className="g-card" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 14 }}>Create Tenant</h3>
+            <SectionCard title="Create Tenant">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 {([['tenant_name','Tenant Name'],['org_name','Organization Name'],['domain','Domain'],['admin_email','Admin Email']] as [string,string][]).map(([k, l]) => (
                   <div key={k}>
@@ -421,51 +425,45 @@ export default function PlatformPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                <button className="g-btn" onClick={createTenant}>Create Tenant</button>
-                <button className="g-btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+                <ActionButton variant="primary" icon={Plus} onClick={createTenant}>Create Tenant</ActionButton>
+                <ActionButton variant="ghost" icon={X} onClick={() => setShowCreate(false)}>Cancel</ActionButton>
               </div>
-            </div>
+            </SectionCard>
           )}
 
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead><tr>
-                <th>Tenant</th><th>Domain</th><th>Plan</th><th>Region</th>
-                <th>Status</th><th>Last Active</th><th>Actions</th>
-              </tr></thead>
-              <tbody>{filteredTenants.map(t => (
-                <tr key={t.tenant_ref} onClick={() => selectTenant(t)}
-                  style={{ cursor: 'pointer', background: selectedTenant?.tenant_ref === t.tenant_ref ? 'var(--accent)11' : '' }}>
-                  <td>
-                    <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{t.tenant_name}</div>
-                    <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.org_name}</div>
-                    <div style={{ color: 'var(--text-3)', fontSize: 10, fontFamily: 'monospace' }}>{t.tenant_ref}</div>
-                  </td>
-                  <td style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.domain ?? '—'}</td>
-                  <td>{pill(t.plan, t.plan)}</td>
-                  <td style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.region}</td>
-                  <td>{pill(t.status)}</td>
-                  <td style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.last_activity_at?.slice(0, 10) ?? '—'}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {t.status !== 'active' && (
-                        <button className="g-btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
-                          onClick={() => changeStatus(t.tenant_ref, 'active')}>Activate</button>
-                      )}
-                      {t.status === 'active' && (
-                        <button className="g-btn-ghost" style={{ fontSize: 11, padding: '2px 8px', color: '#dc2626' }}
-                          onClick={() => changeStatus(t.tenant_ref, 'suspended')}>Suspend</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filteredTenants.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>No tenants match filters</td></tr>
-              )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<any>
+            rows={filteredTenants}
+            rowKey={(t: any) => t.tenant_ref}
+            onRowClick={t => selectTenant(t)}
+            rowStyle={(t: any) => selectedTenant?.tenant_ref === t.tenant_ref ? { background: 'var(--accent-glow)' } : undefined}
+            emptyState={<EmptyState title="No tenants match filters" />}
+            columns={[
+              { key: 'tenant_name', header: 'Tenant', render: (t: any) => (
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{t.tenant_name}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.org_name}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 10, fontFamily: 'monospace' }}>{t.tenant_ref}</div>
+                </div>
+              ) },
+              { key: 'domain', header: 'Domain', render: (t: any) => <span style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.domain ?? '—'}</span> },
+              { key: 'plan', header: 'Plan', render: (t: any) => pill(t.plan, t.plan) },
+              { key: 'region', header: 'Region', render: (t: any) => <span style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.region}</span> },
+              { key: 'status', header: 'Status', render: (t: any) => pill(t.status) },
+              { key: 'last_activity_at', header: 'Last Active', render: (t: any) => <span style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.last_activity_at?.slice(0, 10) ?? '—'}</span> },
+              { key: 'actions', header: 'Actions', render: (t: any) => (
+                <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                  {t.status !== 'active' && (
+                    <ActionButton variant="ghost" icon={CheckCircle2} style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={() => changeStatus(t.tenant_ref, 'active')}>Activate</ActionButton>
+                  )}
+                  {t.status === 'active' && (
+                    <ActionButton variant="danger" icon={Ban} style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={() => changeStatus(t.tenant_ref, 'suspended')}>Suspend</ActionButton>
+                  )}
+                </div>
+              ) },
+            ]}
+          />
 
           {selectedTenant && (
             <div className="g-card" style={{ padding: 20, borderLeft: '3px solid var(--accent)' }}>
@@ -494,10 +492,10 @@ export default function PlatformPage() {
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                <button className="g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setSection('config')}>Edit Config</button>
-                <button className="g-btn-ghost" style={{ fontSize: 12 }} onClick={() => { switchTab('licenses'); setSection('modules'); }}>Modules</button>
-                <button className="g-btn-ghost" style={{ fontSize: 12 }} onClick={() => { switchTab('usage'); setSection('resources'); }}>Resources</button>
-                <button className="g-btn-ghost" style={{ fontSize: 12 }} onClick={() => { switchTab('usage'); setSection('billing'); }}>Billing</button>
+                <ActionButton variant="ghost" icon={Pencil} style={{ fontSize: 12 }} onClick={() => setSection('config')}>Edit Config</ActionButton>
+                <ActionButton variant="ghost" icon={Blocks} style={{ fontSize: 12 }} onClick={() => { switchTab('licenses'); setSection('modules'); }}>Modules</ActionButton>
+                <ActionButton variant="ghost" icon={Gauge} style={{ fontSize: 12 }} onClick={() => { switchTab('usage'); setSection('resources'); }}>Resources</ActionButton>
+                <ActionButton variant="ghost" icon={CreditCard} style={{ fontSize: 12 }} onClick={() => { switchTab('usage'); setSection('billing'); }}>Billing</ActionButton>
               </div>
             </div>
           )}
@@ -508,16 +506,12 @@ export default function PlatformPage() {
       case 'config': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selectedTenant ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>
-              Select a tenant from{' '}
-              <button className="g-btn-ghost" style={{ display: 'inline-block' }}
-                onClick={() => setSection('directory')}>Tenant Directory</button>
-            </div>
+            <SelectTenantPrompt onGo={() => setSection('directory')} />
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Configure — {selectedTenant.tenant_name}</h2>
-                {msg && <span style={{ color: '#16a34a', fontSize: 13 }}>{msg}</span>}
+                {msg && <span style={{ color: 'var(--green)', fontSize: 13 }}>{msg}</span>}
               </div>
 
               {([
@@ -526,8 +520,7 @@ export default function PlatformPage() {
                 { title: 'Branding', fields: [['logo_url','Logo URL'],['color_theme','Brand Color (#hex)'],['language','Language'],['date_format','Date Format']] },
                 { title: 'Contract', fields: [['contract_start','Contract Start'],['contract_end','Contract End'],['renewal_date','Renewal Date'],['notes','Notes']] },
               ] as { title: string; fields: [string,string][] }[]).map(sec => (
-                <div key={sec.title} className="g-card" style={{ padding: 20 }}>
-                  <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>{sec.title}</h3>
+                <SectionCard key={sec.title} title={sec.title}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     {sec.fields.map(([k, l]) => (
                       <div key={k}>
@@ -538,11 +531,10 @@ export default function PlatformPage() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </SectionCard>
               ))}
 
-              <div className="g-card" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>Plan & Status</h3>
+              <SectionCard title="Plan & Status">
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={{ color: 'var(--text-2)', fontSize: 12 }}>Plan</label>
@@ -573,13 +565,13 @@ export default function PlatformPage() {
                     </select>
                   </div>
                 </div>
-              </div>
+              </SectionCard>
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="g-btn" onClick={saveConfig} disabled={saving}>
+                <ActionButton variant="primary" icon={Save} onClick={saveConfig} disabled={saving}>
                   {saving ? 'Saving…' : 'Save Configuration'}
-                </button>
-                <button className="g-btn-ghost" onClick={() => setConfigForm(tenantDetail ?? selectedTenant)}>Reset</button>
+                </ActionButton>
+                <ActionButton variant="ghost" icon={RotateCcw} onClick={() => setConfigForm(tenantDetail ?? selectedTenant)}>Reset</ActionButton>
               </div>
             </>
           )}
@@ -588,11 +580,7 @@ export default function PlatformPage() {
 
       // ── DATA ISOLATION ─────────────────────────────────────────────────────
       case 'isolation': return (
-        <div className="g-card" style={{ padding: 24 }}>
-          <h2 style={{ margin: '0 0 6px', color: 'var(--text-1)', fontSize: 16 }}>Data Isolation Policies</h2>
-          <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '0 0 20px' }}>
-            Platform-wide tenant data isolation configuration. These controls apply to all tenants.
-          </p>
+        <SectionCard title="Data Isolation Policies" subtitle="Platform-wide tenant data isolation configuration. These controls apply to all tenants.">
           {[
             ['Database Isolation Mode',    'Row-Level Security (PostgreSQL RLS) — tenant_id enforced on every query'],
             ['Storage Namespace',          'Per-tenant MinIO prefix: /tenants/{ref}/ — cross-prefix access denied'],
@@ -610,10 +598,11 @@ export default function PlatformPage() {
               <div style={{ color: 'var(--text-1)', fontSize: 12, fontFamily: 'monospace', width: '62%', textAlign: 'right', lineHeight: 1.5 }}>{value}</div>
             </div>
           ))}
-          <div style={{ marginTop: 20, padding: 14, background: '#16a34a11', borderRadius: 6, color: '#16a34a', fontSize: 13 }}>
+          <div className="flex items-center gap-2" style={{ marginTop: 20, padding: 14, background: 'var(--green-bg)', borderRadius: 'var(--radius-md)', color: 'var(--green)', fontSize: 13 }}>
+            <CheckCircle2 className="h-3.5 w-3.5" />
             All data isolation controls active. No cross-tenant leakage detected in last 30 days.
           </div>
-        </div>
+        </SectionCard>
       );
 
       // ── DEPLOYMENT MODE ────────────────────────────────────────────────────
@@ -621,19 +610,21 @@ export default function PlatformPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Deployment Mode</h2>
-            {msg && <span style={{ color: '#16a34a', fontSize: 13 }}>{msg}</span>}
+            {msg && <span style={{ color: 'var(--green)', fontSize: 13 }}>{msg}</span>}
           </div>
 
           {!capabilities ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>
+            <SectionCard>
+              <div style={{ textAlign: 'center', padding: 12, color: 'var(--text-3)' }}>Loading…</div>
+            </SectionCard>
           ) : !capabilities.is_authority ? (
-            <div className="g-card" style={{ padding: 24 }}>
+            <SectionCard>
               <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 13, lineHeight: 1.6 }}>
                 This is a self-hosted customer instance. Deployment mode — SaaS billing enforcement and
                 license enforcement — is controlled centrally by the platform authority and can&apos;t be
                 changed from here.
               </p>
-            </div>
+            </SectionCard>
           ) : (
             <>
               <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
@@ -641,7 +632,7 @@ export default function PlatformPage() {
                 affect every tenant on this deployment.
               </p>
 
-              <div className="g-card" style={{ padding: 20 }}>
+              <SectionCard>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
                   <div>
                     <h3 style={{ margin: '0 0 4px', color: 'var(--text-1)', fontSize: 14 }}>SaaS Mode</h3>
@@ -652,18 +643,19 @@ export default function PlatformPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                     {capabilities.saas_mode ? pill('enabled', '#16a34a') : pill('disabled', '#6b7280')}
-                    <button
-                      className={capabilities.saas_mode ? 'g-btn' : 'g-btn-ghost'}
+                    <ActionButton
+                      variant={capabilities.saas_mode ? 'primary' : 'ghost'}
+                      icon={Power}
                       style={{ fontSize: 12, padding: '4px 14px', minWidth: 90 }}
                       disabled={modeToggling === 'saas'}
                       onClick={toggleSaasMode}>
                       {modeToggling === 'saas' ? '…' : capabilities.saas_mode ? 'Turn Off' : 'Turn On'}
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
-              </div>
+              </SectionCard>
 
-              <div className="g-card" style={{ padding: 20 }}>
+              <SectionCard>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
                   <div>
                     <h3 style={{ margin: '0 0 4px', color: 'var(--text-1)', fontSize: 14 }}>Self-Hosted License Mode</h3>
@@ -674,16 +666,17 @@ export default function PlatformPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                     {capabilities.license_mode ? pill('enabled', '#16a34a') : pill('disabled', '#6b7280')}
-                    <button
-                      className={capabilities.license_mode ? 'g-btn' : 'g-btn-ghost'}
+                    <ActionButton
+                      variant={capabilities.license_mode ? 'primary' : 'ghost'}
+                      icon={Power}
                       style={{ fontSize: 12, padding: '4px 14px', minWidth: 90 }}
                       disabled={modeToggling === 'license'}
                       onClick={toggleLicenseMode}>
                       {modeToggling === 'license' ? '…' : capabilities.license_mode ? 'Turn Off' : 'Turn On'}
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
-              </div>
+              </SectionCard>
             </>
           )}
         </div>
@@ -693,11 +686,7 @@ export default function PlatformPage() {
       case 'rbac': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selectedTenant ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>
-              Select a tenant from{' '}
-              <button className="g-btn-ghost" onClick={() => { switchTab('tenants'); setSection('directory'); }}>Tenant Directory</button>{' '}
-              to manage users
-            </div>
+            <SelectTenantPrompt onGo={() => { switchTab('tenants'); setSection('directory'); }} label="to manage users" />
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -706,14 +695,13 @@ export default function PlatformPage() {
               </div>
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <StatCard label="Active Users"   value={tenantUsage?.current?.active_users ?? '—'} />
-                <StatCard label="Max Users"      value={tenantResources?.max_users ?? '—'} sub="license limit" />
-                <StatCard label="MFA Coverage"   value="92%" />
-                <StatCard label="SSO"            value={selectedTenant.plan !== 'community' ? 'Configured' : 'Not Available'} />
+                <MetricCard label="Active Users"   value={tenantUsage?.current?.active_users ?? '—'} />
+                <MetricCard label="Max Users"      value={tenantResources?.max_users ?? '—'} sub="license limit" />
+                <MetricCard label="MFA Coverage"   value="92%" />
+                <MetricCard label="SSO"            value={selectedTenant.plan !== 'community' ? 'Configured' : 'Not Available'} />
               </div>
 
-              <div className="g-card" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>Tenant Administrators</h3>
+              <SectionCard title="Tenant Administrators">
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <div style={{ color: 'var(--text-3)', fontSize: 11, textTransform: 'uppercase' }}>Primary Admin</div>
@@ -724,30 +712,26 @@ export default function PlatformPage() {
                     <div style={{ color: 'var(--text-1)', marginTop: 4 }}>{selectedTenant.admin_email ?? '—'}</div>
                   </div>
                 </div>
-              </div>
+              </SectionCard>
 
-              <div className="g-card" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>RBAC Roles</h3>
-                <table className="g-table" style={{ width: '100%' }}>
-                  <thead><tr><th>Role</th><th>Users</th><th>Permissions</th></tr></thead>
-                  <tbody>
-                    {[
-                      { role: 'Platform Admin', users: 1, perms: 'Full platform access' },
-                      { role: 'SOC Manager', users: 3, perms: 'All SIEM, cases, playbooks, reports' },
-                      { role: 'SOC Analyst', users: 12, perms: 'SIEM, alerts, cases, threat intel' },
-                      { role: 'Threat Hunter', users: 2, perms: 'SIEM, EDR, threat intel, scripts' },
-                      { role: 'Compliance Auditor', users: 2, perms: 'Reports, compliance, read-only' },
-                      { role: 'Read Only', users: 4, perms: 'Dashboards and reports only' },
-                    ].map(r => (
-                      <tr key={r.role}>
-                        <td style={{ fontWeight: 500 }}>{r.role}</td>
-                        <td style={{ color: 'var(--text-2)' }}>{r.users}</td>
-                        <td style={{ color: 'var(--text-3)', fontSize: 12 }}>{r.perms}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <SectionCard title="RBAC Roles" padded={false}>
+                <DataTable<any>
+                  rows={[
+                    { role: 'Platform Admin', users: 1, perms: 'Full platform access' },
+                    { role: 'SOC Manager', users: 3, perms: 'All SIEM, cases, playbooks, reports' },
+                    { role: 'SOC Analyst', users: 12, perms: 'SIEM, alerts, cases, threat intel' },
+                    { role: 'Threat Hunter', users: 2, perms: 'SIEM, EDR, threat intel, scripts' },
+                    { role: 'Compliance Auditor', users: 2, perms: 'Reports, compliance, read-only' },
+                    { role: 'Read Only', users: 4, perms: 'Dashboards and reports only' },
+                  ]}
+                  rowKey={(r: any) => r.role}
+                  columns={[
+                    { key: 'role', header: 'Role', render: (r: any) => <span style={{ fontWeight: 500 }}>{r.role}</span> },
+                    { key: 'users', header: 'Users', render: (r: any) => <span style={{ color: 'var(--text-2)' }}>{r.users}</span> },
+                    { key: 'perms', header: 'Permissions', render: (r: any) => <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{r.perms}</span> },
+                  ]}
+                />
+              </SectionCard>
             </>
           )}
         </div>
@@ -757,41 +741,41 @@ export default function PlatformPage() {
       case 'modules': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selectedTenant ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>
-              Select a tenant from{' '}
-              <button className="g-btn-ghost" onClick={() => { switchTab('tenants'); setSection('directory'); }}>Tenant Directory</button>{' '}
-              to manage modules
-            </div>
+            <SelectTenantPrompt onGo={() => { switchTab('tenants'); setSection('directory'); }} label="to manage modules" />
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Module Management — {selectedTenant.tenant_name}</h2>
                 {pill(selectedTenant.plan, selectedTenant.plan)}
               </div>
-              <div className="g-card" style={{ overflow: 'auto' }}>
-                <table className="g-table" style={{ width: '100%' }}>
-                  <thead><tr><th>Module</th><th>Min Tier</th><th>Status</th><th>Toggle</th></tr></thead>
-                  <tbody>{ALL_MODULES.map(m => {
-                    const state = tenantModules.find((x: any) => x.module === m.id);
-                    const enabled = state?.enabled ?? false;
-                    return (
-                      <tr key={m.id}>
-                        <td style={{ fontWeight: 500 }}>{m.label}</td>
-                        <td>{pill(m.tier, m.tier)}</td>
-                        <td>{enabled ? pill('enabled', '#16a34a') : pill('disabled', '#6b7280')}</td>
-                        <td>
-                          <button
-                            className={enabled ? 'g-btn' : 'g-btn-ghost'}
-                            style={{ fontSize: 11, padding: '3px 12px', minWidth: 70 }}
-                            onClick={() => toggleModule(m.id, !enabled)}>
-                            {enabled ? 'Disable' : 'Enable'}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}</tbody>
-                </table>
-              </div>
+              <SectionCard padded={false}>
+                <DataTable<any>
+                  rows={ALL_MODULES}
+                  rowKey={(m: any) => m.id}
+                  columns={[
+                    { key: 'label', header: 'Module', render: (m: any) => <span style={{ fontWeight: 500 }}>{m.label}</span> },
+                    { key: 'tier', header: 'Min Tier', render: (m: any) => pill(m.tier, m.tier) },
+                    { key: 'status', header: 'Status', render: (m: any) => {
+                      const state = tenantModules.find((x: any) => x.module === m.id);
+                      const enabled = state?.enabled ?? false;
+                      return enabled ? pill('enabled', '#16a34a') : pill('disabled', '#6b7280');
+                    } },
+                    { key: 'toggle', header: 'Toggle', render: (m: any) => {
+                      const state = tenantModules.find((x: any) => x.module === m.id);
+                      const enabled = state?.enabled ?? false;
+                      return (
+                        <ActionButton
+                          variant={enabled ? 'primary' : 'ghost'}
+                          icon={Power}
+                          style={{ fontSize: 11, padding: '3px 12px', minWidth: 70 }}
+                          onClick={() => toggleModule(m.id, !enabled)}>
+                          {enabled ? 'Disable' : 'Enable'}
+                        </ActionButton>
+                      );
+                    } },
+                  ]}
+                />
+              </SectionCard>
             </>
           )}
         </div>
@@ -801,18 +785,14 @@ export default function PlatformPage() {
       case 'resources': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selectedTenant ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>
-              Select a tenant from{' '}
-              <button className="g-btn-ghost" onClick={() => { switchTab('tenants'); setSection('directory'); }}>Tenant Directory</button>{' '}
-              to configure resources
-            </div>
+            <SelectTenantPrompt onGo={() => { switchTab('tenants'); setSection('directory'); }} label="to configure resources" />
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Resource Allocation — {selectedTenant.tenant_name}</h2>
-                {msg && <span style={{ color: '#16a34a', fontSize: 13 }}>{msg}</span>}
+                {msg && <span style={{ color: 'var(--green)', fontSize: 13 }}>{msg}</span>}
               </div>
-              <div className="g-card" style={{ padding: 20 }}>
+              <SectionCard>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   {RESOURCE_FIELDS.map(f => (
                     <div key={f.key}>
@@ -823,12 +803,12 @@ export default function PlatformPage() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </SectionCard>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="g-btn" onClick={saveResources} disabled={saving}>
+                <ActionButton variant="primary" icon={Save} onClick={saveResources} disabled={saving}>
                   {saving ? 'Saving…' : 'Save Resource Limits'}
-                </button>
-                <button className="g-btn-ghost" onClick={() => setResourceForm(tenantResources)}>Reset</button>
+                </ActionButton>
+                <ActionButton variant="ghost" icon={RotateCcw} onClick={() => setResourceForm(tenantResources)}>Reset</ActionButton>
               </div>
             </>
           )}
@@ -839,20 +819,19 @@ export default function PlatformPage() {
       case 'subscription': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selectedTenant ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Select a tenant first</div>
+            <SelectTenantPrompt onGo={() => { switchTab('tenants'); setSection('directory'); }} />
           ) : (
             <>
               <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Subscription & Licensing — {selectedTenant.tenant_name}</h2>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <StatCard label="Plan"            value={selectedTenant.plan?.replace('_', ' ').toUpperCase() ?? '—'} />
-                <StatCard label="License Type"    value={selectedTenant.license_type ?? '—'} />
-                <StatCard label="Contract Start"  value={selectedTenant.contract_start ?? '—'} />
-                <StatCard label="Contract End"    value={selectedTenant.contract_end ?? '—'} />
-                <StatCard label="Renewal Date"    value={selectedTenant.renewal_date ?? '—'} />
-                <StatCard label="Trial Ends"      value={selectedTenant.trial_ends_at?.slice(0, 10) ?? 'N/A'} />
+                <MetricCard label="Plan"            value={selectedTenant.plan?.replace('_', ' ').toUpperCase() ?? '—'} />
+                <MetricCard label="License Type"    value={selectedTenant.license_type ?? '—'} />
+                <MetricCard label="Contract Start"  value={selectedTenant.contract_start ?? '—'} />
+                <MetricCard label="Contract End"    value={selectedTenant.contract_end ?? '—'} />
+                <MetricCard label="Renewal Date"    value={selectedTenant.renewal_date ?? '—'} />
+                <MetricCard label="Trial Ends"      value={selectedTenant.trial_ends_at?.slice(0, 10) ?? 'N/A'} />
               </div>
-              <div className="g-card" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>Change Plan</h3>
+              <SectionCard title="Change Plan">
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ color: 'var(--text-2)', fontSize: 12 }}>New Plan</label>
@@ -865,9 +844,9 @@ export default function PlatformPage() {
                       <option value="enterprise_plus">Enterprise Plus — $9,000/mo</option>
                     </select>
                   </div>
-                  <button className="g-btn" onClick={saveConfig} disabled={saving}>Apply</button>
+                  <ActionButton variant="primary" icon={CheckCircle2} onClick={saveConfig} disabled={saving}>Apply</ActionButton>
                 </div>
-              </div>
+              </SectionCard>
             </>
           )}
         </div>
@@ -877,39 +856,33 @@ export default function PlatformPage() {
       case 'billing': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!selectedTenant ? (
-            <div className="g-card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Select a tenant first</div>
+            <SelectTenantPrompt onGo={() => { switchTab('tenants'); setSection('directory'); }} />
           ) : (
             <>
               <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Billing — {selectedTenant.tenant_name}</h2>
               {tenantBilling && (
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <StatCard label="Monthly Amount"  value={`$${(tenantBilling.monthly_amount_usd ?? 0).toLocaleString()}`} />
-                  <StatCard label="Next Invoice"    value={tenantBilling.next_invoice_date ?? '—'} />
-                  <StatCard label="Payment Method"  value={tenantBilling.payment_method ?? '—'} />
-                  <StatCard label="Auto-Renew"      value={tenantBilling.auto_renew ? 'Enabled' : 'Disabled'} />
+                  <MetricCard label="Monthly Amount"  value={`$${(tenantBilling.monthly_amount_usd ?? 0).toLocaleString()}`} />
+                  <MetricCard label="Next Invoice"    value={tenantBilling.next_invoice_date ?? '—'} />
+                  <MetricCard label="Payment Method"  value={tenantBilling.payment_method ?? '—'} />
+                  <MetricCard label="Auto-Renew"      value={tenantBilling.auto_renew ? 'Enabled' : 'Disabled'} />
                 </div>
               )}
-              <div className="g-card" style={{ overflow: 'auto' }}>
-                <h3 style={{ margin: 0, color: 'var(--text-1)', fontSize: 13, padding: '14px 14px 0' }}>Invoice History</h3>
-                <table className="g-table" style={{ width: '100%' }}>
-                  <thead><tr><th>Invoice ID</th><th>Period</th><th>Amount</th><th>Status</th><th>Due Date</th><th>Paid Date</th></tr></thead>
-                  <tbody>
-                    {(tenantBilling?.invoices ?? []).map((inv: any) => (
-                      <tr key={inv.invoice_id}>
-                        <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{inv.invoice_id}</td>
-                        <td style={{ color: 'var(--text-2)' }}>{inv.period}</td>
-                        <td style={{ fontWeight: 600 }}>${(inv.amount_usd ?? 0).toLocaleString()}</td>
-                        <td>{pill(inv.status)}</td>
-                        <td style={{ color: 'var(--text-3)', fontSize: 12 }}>{inv.due_date ?? '—'}</td>
-                        <td style={{ color: 'var(--text-3)', fontSize: 12 }}>{inv.paid_date ?? '—'}</td>
-                      </tr>
-                    ))}
-                    {(tenantBilling?.invoices ?? []).length === 0 && (
-                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No invoices found</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <SectionCard title="Invoice History" padded={false}>
+                <DataTable<any>
+                  rows={tenantBilling?.invoices ?? []}
+                  rowKey={(inv: any) => inv.invoice_id}
+                  emptyState={<EmptyState title="No invoices found" />}
+                  columns={[
+                    { key: 'invoice_id', header: 'Invoice ID', render: (inv: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{inv.invoice_id}</span> },
+                    { key: 'period', header: 'Period', render: (inv: any) => <span style={{ color: 'var(--text-2)' }}>{inv.period}</span> },
+                    { key: 'amount_usd', header: 'Amount', render: (inv: any) => <span style={{ fontWeight: 600 }}>${(inv.amount_usd ?? 0).toLocaleString()}</span> },
+                    { key: 'status', header: 'Status', render: (inv: any) => pill(inv.status) },
+                    { key: 'due_date', header: 'Due Date', render: (inv: any) => <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{inv.due_date ?? '—'}</span> },
+                    { key: 'paid_date', header: 'Paid Date', render: (inv: any) => <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{inv.paid_date ?? '—'}</span> },
+                  ]}
+                />
+              </SectionCard>
             </>
           )}
         </div>
@@ -920,15 +893,14 @@ export default function PlatformPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Platform Usage Analytics</h2>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <StatCard label="Active Users"       value={(analytics?.totals?.active_users ?? 0).toLocaleString()} />
-            <StatCard label="Active Agents"      value={(analytics?.totals?.active_agents ?? 0).toLocaleString()} />
-            <StatCard label="Platform EPS"       value={(analytics?.totals?.total_eps ?? 0).toLocaleString()} />
-            <StatCard label="Total Storage"      value={`${analytics?.totals?.total_storage_tb ?? '—'} TB`} />
-            <StatCard label="AI Req / Month"     value={(analytics?.totals?.total_ai_requests_month ?? 0).toLocaleString()} />
+            <MetricCard label="Active Users"       value={(analytics?.totals?.active_users ?? 0).toLocaleString()} />
+            <MetricCard label="Active Agents"      value={(analytics?.totals?.active_agents ?? 0).toLocaleString()} />
+            <MetricCard label="Platform EPS"       value={(analytics?.totals?.total_eps ?? 0).toLocaleString()} />
+            <MetricCard label="Total Storage"      value={`${analytics?.totals?.total_storage_tb ?? '—'} TB`} />
+            <MetricCard label="AI Req / Month"     value={(analytics?.totals?.total_ai_requests_month ?? 0).toLocaleString()} />
           </div>
 
-          <div className="g-card" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>Agent Growth (6 months)</h3>
+          <SectionCard title="Agent Growth (6 months)">
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 120 }}>
               {(analytics?.monthly_trend ?? []).map((m: any) => {
                 const maxA = Math.max(...(analytics?.monthly_trend ?? []).map((x: any) => x.agents ?? 0), 1);
@@ -942,30 +914,28 @@ export default function PlatformPage() {
                 );
               })}
             </div>
-          </div>
+          </SectionCard>
 
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <h3 style={{ margin: 0, color: 'var(--text-1)', fontSize: 13, padding: '14px 14px 0' }}>Per-Tenant Usage</h3>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead><tr><th>Tenant</th><th>Plan</th><th>Users</th><th>Agents</th><th>Daily Logs</th><th>EPS</th><th>AI Req</th><th>Storage (GB)</th></tr></thead>
-              <tbody>{(analytics?.tenants ?? []).map((t: any) => (
-                <tr key={t.tenant_ref}>
-                  <td style={{ fontWeight: 600 }}>{t.tenant_name}</td>
-                  <td>{pill(t.plan, t.plan)}</td>
-                  <td>{(t.active_users ?? 0).toLocaleString()}</td>
-                  <td>{(t.active_agents ?? 0).toLocaleString()}</td>
-                  <td style={{ color: 'var(--text-2)' }}>
-                    {t.daily_log_volume ? `${(t.daily_log_volume / 1e6).toFixed(1)}M` : '—'}
-                  </td>
-                  <td style={{ color: 'var(--text-2)' }}>
-                    {t.events_per_second ? t.events_per_second.toFixed(0) : '—'}
-                  </td>
-                  <td>{(t.ai_requests ?? 0).toLocaleString()}</td>
-                  <td>{t.storage_used_gb ? t.storage_used_gb.toFixed(1) : '—'}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
+          <SectionCard title="Per-Tenant Usage" padded={false}>
+            <DataTable<any>
+              rows={analytics?.tenants ?? []}
+              rowKey={(t: any) => t.tenant_ref}
+              columns={[
+                { key: 'tenant_name', header: 'Tenant', render: (t: any) => <span style={{ fontWeight: 600 }}>{t.tenant_name}</span> },
+                { key: 'plan', header: 'Plan', render: (t: any) => pill(t.plan, t.plan) },
+                { key: 'active_users', header: 'Users', render: (t: any) => <span>{(t.active_users ?? 0).toLocaleString()}</span> },
+                { key: 'active_agents', header: 'Agents', render: (t: any) => <span>{(t.active_agents ?? 0).toLocaleString()}</span> },
+                { key: 'daily_log_volume', header: 'Daily Logs', render: (t: any) => (
+                  <span style={{ color: 'var(--text-2)' }}>{t.daily_log_volume ? `${(t.daily_log_volume / 1e6).toFixed(1)}M` : '—'}</span>
+                ) },
+                { key: 'events_per_second', header: 'EPS', render: (t: any) => (
+                  <span style={{ color: 'var(--text-2)' }}>{t.events_per_second ? t.events_per_second.toFixed(0) : '—'}</span>
+                ) },
+                { key: 'ai_requests', header: 'AI Req', render: (t: any) => <span>{(t.ai_requests ?? 0).toLocaleString()}</span> },
+                { key: 'storage_used_gb', header: 'Storage (GB)', render: (t: any) => <span>{t.storage_used_gb ? t.storage_used_gb.toFixed(1) : '—'}</span> },
+              ]}
+            />
+          </SectionCard>
         </div>
       );
 
@@ -974,47 +944,44 @@ export default function PlatformPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Tenant Health Monitoring</h2>
           {platformHealth?.platform && (
-            <div className="g-card" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 14px', color: 'var(--text-1)', fontSize: 13 }}>Platform Infrastructure</h3>
+            <SectionCard title="Platform Infrastructure">
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <StatCard label="Availability"        value={`${platformHealth.platform.availability}%`} />
-                <StatCard label="Database"            value={platformHealth.platform.database_health} />
-                <StatCard label="Log Ingestion"       value={platformHealth.platform.log_ingestion} />
-                <StatCard label="API"                 value={platformHealth.platform.api_health} />
-                <StatCard label="Storage Used"        value={`${platformHealth.platform.storage_capacity_pct}%`} />
-                <StatCard label="Total EPS"           value={(platformHealth.platform.total_eps ?? 0).toLocaleString()} />
-                <StatCard label="Agent Connectivity"  value={`${platformHealth.platform.agent_connectivity_pct}%`} />
+                <MetricCard label="Availability"        value={`${platformHealth.platform.availability}%`} />
+                <MetricCard label="Database"            value={platformHealth.platform.database_health} />
+                <MetricCard label="Log Ingestion"       value={platformHealth.platform.log_ingestion} />
+                <MetricCard label="API"                 value={platformHealth.platform.api_health} />
+                <MetricCard label="Storage Used"        value={`${platformHealth.platform.storage_capacity_pct}%`} />
+                <MetricCard label="Total EPS"           value={(platformHealth.platform.total_eps ?? 0).toLocaleString()} />
+                <MetricCard label="Agent Connectivity"  value={`${platformHealth.platform.agent_connectivity_pct}%`} />
               </div>
-            </div>
+            </SectionCard>
           )}
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <h3 style={{ margin: 0, color: 'var(--text-1)', fontSize: 13, padding: '14px 14px 0' }}>Tenant Health Status</h3>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead><tr><th>Tenant</th><th>Plan</th><th>Health Score</th><th>Critical Checks</th><th>Status</th></tr></thead>
-              <tbody>{(platformHealth?.tenants ?? []).map((t: any) => (
-                <tr key={t.tenant_ref} style={{ cursor: 'pointer' }}
-                  onClick={() => { switchTab('tenants'); setSection('directory'); selectTenant(t); }}>
-                  <td style={{ fontWeight: 600 }}>{t.tenant_name}</td>
-                  <td>{pill(t.plan, t.plan)}</td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', minWidth: 60 }}>
-                        <div style={{
-                          width: `${t.avg_score ?? 0}%`, height: '100%', borderRadius: 3,
-                          background: (t.avg_score ?? 0) >= 90 ? '#16a34a' : (t.avg_score ?? 0) >= 70 ? '#d97706' : '#dc2626',
-                        }} />
-                      </div>
-                      <span style={{ color: 'var(--text-2)', fontSize: 12, minWidth: 40 }}>{t.avg_score ?? 0}/100</span>
+          <SectionCard title="Tenant Health Status" padded={false}>
+            <DataTable<any>
+              rows={platformHealth?.tenants ?? []}
+              rowKey={(t: any) => t.tenant_ref}
+              onRowClick={t => { switchTab('tenants'); setSection('directory'); selectTenant(t); }}
+              columns={[
+                { key: 'tenant_name', header: 'Tenant', render: (t: any) => <span style={{ fontWeight: 600 }}>{t.tenant_name}</span> },
+                { key: 'plan', header: 'Plan', render: (t: any) => pill(t.plan, t.plan) },
+                { key: 'avg_score', header: 'Health Score', render: (t: any) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', minWidth: 60 }}>
+                      <div style={{
+                        width: `${t.avg_score ?? 0}%`, height: '100%', borderRadius: 3,
+                        background: (t.avg_score ?? 0) >= 90 ? '#16a34a' : (t.avg_score ?? 0) >= 70 ? '#d97706' : '#dc2626',
+                      }} />
                     </div>
-                  </td>
-                  <td style={{ color: (t.critical_checks ?? 0) > 0 ? '#dc2626' : 'var(--text-2)' }}>
-                    {t.critical_checks ?? 0}
-                  </td>
-                  <td>{pill(t.status)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
+                    <span style={{ color: 'var(--text-2)', fontSize: 12, minWidth: 40 }}>{t.avg_score ?? 0}/100</span>
+                  </div>
+                ) },
+                { key: 'critical_checks', header: 'Critical Checks', render: (t: any) => (
+                  <span style={{ color: (t.critical_checks ?? 0) > 0 ? 'var(--red)' : 'var(--text-2)' }}>{t.critical_checks ?? 0}</span>
+                ) },
+                { key: 'status', header: 'Status', render: (t: any) => pill(t.status) },
+              ]}
+            />
+          </SectionCard>
         </div>
       );
 
@@ -1022,32 +989,30 @@ export default function PlatformPage() {
       case 'ai': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Platform AI Assistant</h2>
-          <div className="g-card" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: 'var(--text-1)', fontSize: 13 }}>Quick Analysis</h3>
+          <SectionCard title="Quick Analysis">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {AI_PROMPTS.map(p => (
-                <button key={p.action} className="g-btn-ghost" style={{ fontSize: 12 }}
+                <ActionButton key={p.action} variant="ghost" icon={Wand2} style={{ fontSize: 12 }}
                   onClick={() => askAI(p.action)}>
                   {p.label}
-                </button>
+                </ActionButton>
               ))}
             </div>
-          </div>
-          <div className="g-card" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: 'var(--text-1)', fontSize: 13 }}>Ask the Platform AI</h3>
+          </SectionCard>
+          <SectionCard title="Ask the Platform AI">
             <div style={{ display: 'flex', gap: 8 }}>
               <input className="g-input" style={{ flex: 1 }}
                 placeholder="Ask about tenant health, license optimization, capacity planning…"
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') askAI(); }} />
-              <button className="g-btn" onClick={() => askAI()} disabled={aiLoading}>
+              <ActionButton variant="primary" icon={Send} onClick={() => askAI()} disabled={aiLoading}>
                 {aiLoading ? 'Analyzing…' : 'Ask'}
-              </button>
+              </ActionButton>
             </div>
-          </div>
+          </SectionCard>
           {(aiLoading || aiResponse) && (
-            <div className="g-card" style={{ padding: 20 }}>
+            <SectionCard>
               {aiLoading ? (
                 <div style={{ color: 'var(--text-3)', fontSize: 13 }}>Analyzing platform data…</div>
               ) : (
@@ -1055,7 +1020,7 @@ export default function PlatformPage() {
                   {aiResponse}
                 </pre>
               )}
-            </div>
+            </SectionCard>
           )}
         </div>
       );
@@ -1064,32 +1029,23 @@ export default function PlatformPage() {
       case 'audit': return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Platform Audit Trail</h2>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead><tr>
-                <th>Time</th><th>Action</th><th>Tenant</th><th>Actor</th><th>Details</th><th>IP</th>
-              </tr></thead>
-              <tbody>
-                {audit.map((e: any, i) => (
-                  <tr key={i}>
-                    <td style={{ color: 'var(--text-3)', fontSize: 11, whiteSpace: 'nowrap' }}>
-                      {e.created_at?.slice(0, 19)?.replace('T', ' ')}
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)' }}>{e.action}</span>
-                    </td>
-                    <td style={{ color: 'var(--text-2)', fontSize: 12 }}>{e.object_id ?? '—'}</td>
-                    <td style={{ fontWeight: 500, fontSize: 12 }}>{e.actor}</td>
-                    <td style={{ color: 'var(--text-3)', fontSize: 12, maxWidth: 280 }}>{e.details}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-3)' }}>{e.ip_address ?? '—'}</td>
-                  </tr>
-                ))}
-                {audit.length === 0 && (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>No audit entries</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <SectionCard padded={false}>
+            <DataTable<any>
+              rows={audit}
+              rowKey={(e: any, i: number) => i}
+              emptyState={<EmptyState title="No audit entries" />}
+              columns={[
+                { key: 'created_at', header: 'Time', render: (e: any) => (
+                  <span style={{ color: 'var(--text-3)', fontSize: 11, whiteSpace: 'nowrap' }}>{e.created_at?.slice(0, 19)?.replace('T', ' ')}</span>
+                ) },
+                { key: 'action', header: 'Action', render: (e: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)' }}>{e.action}</span> },
+                { key: 'object_id', header: 'Tenant', render: (e: any) => <span style={{ color: 'var(--text-2)', fontSize: 12 }}>{e.object_id ?? '—'}</span> },
+                { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontWeight: 500, fontSize: 12 }}>{e.actor}</span> },
+                { key: 'details', header: 'Details', render: (e: any) => <span style={{ color: 'var(--text-3)', fontSize: 12, maxWidth: 280, display: 'block' }}>{e.details}</span> },
+                { key: 'ip_address', header: 'IP', render: (e: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-3)' }}>{e.ip_address ?? '—'}</span> },
+              ]}
+            />
+          </SectionCard>
         </div>
       );
 
@@ -1099,61 +1055,22 @@ export default function PlatformPage() {
 
   // ── layout ──────────────────────────────────────────────────────────────────
 
-  const sidebarGroups = SIDEBAR[tab] ?? [];
+  const sidebarItems = SIDEBAR[tab] ?? [];
 
   return (
-    <RootLayout title="Platform" subtitle="Multi-tenant administration">
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-        {/* Top tab bar */}
-        <div style={{
-          display: 'flex', borderBottom: '2px solid var(--border)',
-          padding: '0 24px', background: 'var(--bg-1)', flexShrink: 0,
-        }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => switchTab(t.id)} style={{
-              background: 'none', border: 'none', padding: '12px 20px',
-              color: tab === t.id ? 'var(--text-1)' : 'var(--text-3)',
-              fontWeight: tab === t.id ? 600 : 400,
-              fontSize: 14, cursor: 'pointer',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: -2,
-            }}>{t.label}</button>
-          ))}
+    <RootLayout title="Platform" subtitle="Multi-tenant administration" onRefresh={loadAll}>
+      <div className="space-y-4">
+        {/* Top-level tabs */}
+        <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2 }}>
+          <TabBar tabs={TABS} active={tab} onChange={switchTab} />
         </div>
 
-        {/* Content area */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sub-section tabs */}
+        {sidebarItems.length > 1 && (
+          <TabBar tabs={sidebarItems} active={section} onChange={setSection} />
+        )}
 
-          {/* Sidebar */}
-          <div style={{
-            width: 200, background: 'var(--bg-1)', borderRight: '1px solid var(--border)',
-            padding: '16px 0', overflowY: 'auto', flexShrink: 0,
-          }}>
-            {sidebarGroups.map((group, gi) => (
-              <div key={gi}>
-                {gi > 0 && (
-                  <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
-                )}
-                {group.map(item => (
-                  <button key={item.id} onClick={() => setSection(item.id)} style={{
-                    width: '100%', textAlign: 'left', background: section === item.id ? 'var(--accent)11' : 'none',
-                    border: 'none', borderLeft: section === item.id ? '2px solid var(--accent)' : '2px solid transparent',
-                    padding: '7px 20px', cursor: 'pointer', fontSize: 13,
-                    color: section === item.id ? 'var(--accent)' : 'var(--text-2)',
-                    fontWeight: section === item.id ? 600 : 400,
-                  } as React.CSSProperties}>{item.label}</button>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* Main */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-            {renderSection()}
-          </div>
-
-        </div>
+        {renderSection()}
       </div>
     </RootLayout>
   );

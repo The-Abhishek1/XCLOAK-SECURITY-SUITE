@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -202,17 +204,50 @@ func GetAIADashboard(c *gin.Context) {
 		}
 	}
 
+	// connected data sources — real count of enrolled endpoint agents + configured log sources for this tenant
+	var connectedSources int
+	db.QueryRow(`SELECT
+		(SELECT COUNT(*) FROM agents WHERE tenant_id=$1) +
+		(SELECT COUNT(*) FROM log_sources WHERE tenant_id=$1 AND enabled=TRUE)`, tid).Scan(&connectedSources)
+
+	// avg assistant response latency — real, from stored message latencies
+	var avgLatency float64
+	db.QueryRow(`SELECT COALESCE(AVG(latency_ms),0) FROM aia_messages WHERE tenant_id=$1 AND role='assistant'`, tidStr).Scan(&avgLatency)
+
+	// queries today — real count of user messages sent today
+	var queriesToday int
+	db.QueryRow(`SELECT COUNT(*) FROM aia_messages WHERE tenant_id=$1 AND role='user' AND created_at::date=CURRENT_DATE`, tidStr).Scan(&queriesToday)
+
+	// action approval/execution stats — real, from aia_actions
+	var approvedActions, rejectedActions, executedActions int
+	db.QueryRow(`SELECT COUNT(*) FROM aia_actions WHERE tenant_id=$1 AND status='approved'`, tidStr).Scan(&approvedActions)
+	db.QueryRow(`SELECT COUNT(*) FROM aia_actions WHERE tenant_id=$1 AND status='rejected'`, tidStr).Scan(&rejectedActions)
+	db.QueryRow(`SELECT COUNT(*) FROM aia_actions WHERE tenant_id=$1 AND executed_at IS NOT NULL`, tidStr).Scan(&executedActions)
+	successRate := 100
+	if approvedActions+rejectedActions > 0 {
+		successRate = int(100 * float64(approvedActions) / float64(approvedActions+rejectedActions))
+	}
+
+	// health score — real, based on whether the configured LLM provider is reachable/configured
+	healthScore := 0
+	provider := strings.ToLower(os.Getenv("LLM_PROVIDER"))
+	if provider == "ollama" {
+		healthScore = 100 // ollama defaults to localhost:11434, treated as configured
+	} else if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		healthScore = 100
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_sessions": totalSessions, "active_sessions": activeSessions,
 		"completed_sessions": completedSessions, "total_messages": totalMessages,
 		"saved_prompts": savedPrompts, "open_recommendations": openRecs,
 		"pending_actions": openActions,
-		"connected_sources": 14,
-		"health_score": 98,
+		"connected_sources": connectedSources,
+		"health_score": healthScore,
 		"recent_sessions": recent, "by_mode": modes, "top_prompts": topPrompts,
 		"stats": gin.H{
-			"avg_response_ms": 1240, "automation_rate": 34, "analyst_hours_saved": 127,
-			"queries_today": 48, "actions_executed": 89, "success_rate": 97,
+			"avg_response_ms": int(avgLatency), "automation_rate": 0, "analyst_hours_saved": 0,
+			"queries_today": queriesToday, "actions_executed": executedActions, "success_rate": successRate,
 		},
 	})
 }
@@ -384,11 +419,16 @@ func PostAIAChat(c *gin.Context) {
 	db.Exec(`INSERT INTO aia_messages (tenant_id,session_id,role,content,model)
 		VALUES ($1,$2,'user',$3,$4)`, tidStr, sessionID, body.Message, body.Model)
 
-	// generate response based on message content
+	// build a real prompt grounded in this tenant's live security data, then call the LLM
+	prompt := aiaBuildPrompt(tid, body.Message, body.Mode)
 	start := time.Now()
-	response := aiaGenerateResponse(body.Message, body.Mode)
-	latency := int(time.Since(start).Milliseconds()) + 800 + rand.Intn(400)
-	tokens := 200 + rand.Intn(800)
+	response, err := services.CallLLM(prompt)
+	latency := int(time.Since(start).Milliseconds())
+	if err != nil {
+		response = fmt.Sprintf("I couldn't reach the AI model to answer that: %s", err.Error())
+	}
+	// rough token estimate (~4 chars/token) — CallLLM doesn't expose provider usage counts
+	tokens := (len(prompt) + len(response)) / 4
 
 	// store assistant response
 	db.Exec(`INSERT INTO aia_messages (tenant_id,session_id,role,content,model,tokens_used,latency_ms)
@@ -405,373 +445,63 @@ func PostAIAChat(c *gin.Context) {
 	})
 }
 
-func aiaGenerateResponse(msg, mode string) string {
-	lower := strings.ToLower(msg)
+// aiaBuildPrompt gathers real per-tenant security context (open alerts, incidents,
+// cases, agent/coverage counts) and combines it with the analyst's question so the
+// LLM answers grounded in this tenant's actual environment rather than fabricating one.
+func aiaBuildPrompt(tid int, message, mode string) string {
+	db := database.DB
+	var ctx strings.Builder
 
-	// investigation mode
-	if mode == "investigate" || strings.Contains(lower, "incident") || strings.Contains(lower, "why did") || strings.Contains(lower, "root cause") {
-		return `## Incident Investigation Analysis
+	var totalAlerts, openAlerts, criticalAlerts int
+	db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1`, tid).Scan(&totalAlerts)
+	db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status NOT IN ('closed','resolved')`, tid).Scan(&openAlerts)
+	db.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND severity='critical' AND status NOT IN ('closed','resolved')`, tid).Scan(&criticalAlerts)
+	fmt.Fprintf(&ctx, "Alerts: %d total, %d open (%d critical)\n", totalAlerts, openAlerts, criticalAlerts)
 
-**Incident:** Ransomware Execution Attempt — WKSTN-FIN-047
-**Severity:** Critical | **Status:** Contained | **Timeline:** T+0 to T+47min
+	var openIncidents int
+	db.QueryRow(`SELECT COUNT(*) FROM incidents WHERE tenant_id=$1 AND status NOT IN ('closed','resolved')`, tid).Scan(&openIncidents)
+	fmt.Fprintf(&ctx, "Open incidents: %d\n", openIncidents)
 
----
+	var totalAgents int
+	db.QueryRow(`SELECT COUNT(*) FROM agents WHERE tenant_id=$1`, tid).Scan(&totalAgents)
+	fmt.Fprintf(&ctx, "Enrolled endpoint agents: %d\n", totalAgents)
 
-### Root Cause Analysis
-
-The attack originated from a **spear-phishing email** sent to john.smith@corp.local at 09:14 UTC. The email contained a malicious Excel attachment (Invoice_Q2_2025.xlsm) with an embedded macro that executed a multi-stage payload chain:
-
-**Stage 1 — Initial Access (T+0)**
-→ User opened attachment in Microsoft Office 365
-→ Macro executed: ` + "`" + `cmd.exe /c powershell -enc <base64>` + "`" + `
-→ PowerShell downloaded Cobalt Strike stager from hxxp://185.220.101.44/update.exe
-
-**Stage 2 — Persistence (T+3min)**
-→ Registry key created: ` + "`" + `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` + "`" + `
-→ Scheduled task: ` + "`" + `svchost_update` + "`" + ` (daily trigger)
-→ CrowdStrike Falcon detected and blocked
-
-**Stage 3 — Lateral Movement Attempted (T+12min)**
-→ Net discovery: ` + "`" + `net view` + "`" + `, ` + "`" + `net group "Domain Admins"` + "`" + `
-→ Kerberoasting attempt against 3 service accounts — BLOCKED by AD protections
-→ LSASS memory access attempted — BLOCKED by CrowdStrike
-
-**Stage 4 — C2 Beacon (T+15min)**
-→ Outbound HTTPS to 185.220.101.44:443 — BLOCKED by Palo Alto firewall
-→ DNS tunneling attempt to ns1.update-cdn[.]com — BLOCKED by DNS filtering
-
-**Outcome:** Attack fully contained. No data exfiltration. No lateral movement succeeded.
-
-### Recommended Next Steps
-1. ✅ Patch MS Office macro execution policy (block all macros from internet)
-2. ✅ Reset john.smith credentials (in progress)
-3. ⬜ IOC block: 185.220.101.44 — add to firewall deny list
-4. ⬜ Submit attachment hash to VirusTotal, update threat intel
-5. ⬜ Run Defender scan on all Finance workstations
-6. ⬜ Schedule phishing awareness training for Finance team`
+	irows, _ := db.Query(`SELECT title, severity, status FROM incidents WHERE tenant_id=$1
+		AND status NOT IN ('closed','resolved') ORDER BY severity DESC LIMIT 5`, tid)
+	if irows != nil {
+		ctx.WriteString("Open incident details:\n")
+		for irows.Next() {
+			var title, sev, status string
+			irows.Scan(&title, &sev, &status)
+			fmt.Fprintf(&ctx, "- [%s] %s (%s)\n", sev, title, status)
+		}
+		irows.Close()
 	}
 
-	// threat hunting / ransomware
-	if strings.Contains(lower, "ransomware") || strings.Contains(lower, "malware") {
-		return `## Ransomware Detection — Last 30 Days
-
-**Query executed across:** SIEM, EDR, Firewall, Endpoint Telemetry
-
----
-
-### Detected Ransomware Activity (3 incidents)
-
-| Date | Device | Family | Stage | Outcome |
-|------|--------|--------|-------|---------|
-| 2025-06-28 | WKSTN-FIN-047 | Cobalt Strike → Lockbit precursor | Stage 2 | **Blocked** |
-| 2025-06-15 | WKSTN-HR-023 | Emotet → Conti dropper | Stage 1 | **Blocked** |
-| 2025-05-31 | SRV-DMZ-012 | Qakbot | Stage 1 | **Blocked** |
-
-### Common Indicators Found
-
-**File Indicators:**
-- ` + "`" + `Invoice_Q2_2025.xlsm` + "`" + ` — SHA256: a3f9d21b8e4c7f2d1a0b5e3c9f6d4e7a
-- ` + "`" + `update.exe` + "`" + ` — SHA256: c1e5b9a2d7f4c8e3b6a0d2f8e5c1b7a4
-- ` + "`" + `svchost_update` + "`" + ` scheduled task (persistence mechanism)
-
-**Network Indicators:**
-- 185.220.101.44 (Cobalt Strike C2 — Tor exit node)
-- ns1.update-cdn[.]com (DNS tunneling C2)
-- 91.219.29.12 (Emotet epoch5 C2)
-
-**Behavioral Patterns:**
-- PowerShell with base64-encoded commands
-- LSASS memory access attempts
-- Shadow copy deletion: ` + "`" + `vssadmin delete shadows /all` + "`" + `
-- Rapid file encryption signature (>1000 files/min)
-
-### MITRE ATT&CK Coverage
-T1566.001 → T1059.001 → T1055 → T1021 → T1486
-
-All three attacks were detected and blocked before encryption phase. Recommend enabling ransomware honeypot decoys in Finance and HR shares.`
+	arows, _ := db.Query(`SELECT rule_name, severity, log_message FROM alerts WHERE tenant_id=$1
+		AND status NOT IN ('closed','resolved') ORDER BY severity DESC, created_at DESC LIMIT 8`, tid)
+	if arows != nil {
+		ctx.WriteString("Recent open alerts:\n")
+		for arows.Next() {
+			var rule, sev, msg string
+			arows.Scan(&rule, &sev, &msg)
+			fmt.Fprintf(&ctx, "- [%s] %s — %s\n", sev, rule, msg)
+		}
+		arows.Close()
 	}
 
-	// IP lookup / endpoint
-	if strings.Contains(lower, "ip") || strings.Contains(lower, "endpoint") || strings.Contains(lower, "communicating") {
-		return `## Endpoint-IP Communication Analysis
-
-**Query:** Endpoints communicating with 185.220.101.44
-
-**Timeframe:** Last 30 days | **Data sources:** Palo Alto Firewall, Zeek NSM, CrowdStrike EDR
-
----
-
-### Results: 3 Endpoints Contacted This IP
-
-| Endpoint | User | First Seen | Last Seen | Connections | Bytes Out | Blocked? |
-|----------|------|-----------|----------|-------------|-----------|---------|
-| WKSTN-FIN-047 | john.smith | 2025-06-28 09:29 | 2025-06-28 09:31 | 4 | 12.4 KB | ✅ Yes |
-| WKSTN-HR-023 | sarah.jones | 2025-06-15 14:11 | 2025-06-15 14:12 | 2 | 8.1 KB | ✅ Yes |
-| SRV-DMZ-012 | svc_deploy | 2025-05-31 03:22 | 2025-05-31 03:23 | 7 | 34.2 KB | ✅ Yes |
-
-### IP Threat Intelligence
-**185.220.101.44**
-- Type: Tor Exit Node + Cobalt Strike C2
-- Reputation: MALICIOUS (100/100)
-- ASN: AS60729 (Emerald Onion, Seattle)
-- Abuse reports: 847 (last 90 days)
-- First seen: 2023-11-12 | Last seen: 2025-07-01
-- Tags: cobalt-strike, c2, tor-exit, ransomware-staging
-- **CISA Alert AA24-109A** references this IP
-- **Firewall rule already blocking:** CORP-DENY-MALICIOUS-IPS
-
-All connections were blocked at the perimeter. No successful C2 communication established. The Cobalt Strike stager attempted HTTP/S beaconing but received no response due to firewall blocks.
-
-### Recommended Actions
-1. ✅ IP already blocked in firewall
-2. ✅ Block in DNS filtering (done)
-3. ⬜ Add to threat intel watchlist for 90 days
-4. ⬜ Check all 3 endpoints for persistence mechanisms`
+	var task string
+	switch {
+	case mode == "investigate":
+		task = "You are assisting a SOC analyst with an incident investigation. Analyze the environment data below and answer their question with concrete findings, root-cause reasoning where possible, and recommended next steps."
+	case mode == "hunt":
+		task = "You are assisting with proactive threat hunting. Use the environment data below to answer the analyst's question, calling out any indicators worth pursuing."
+	default:
+		task = "You are XCloak's AI security assistant embedded in a SOC platform. Answer the analyst's question using the real environment data below. If the data doesn't contain enough information to answer confidently, say so plainly rather than inventing details."
 	}
 
-	// executive / report / summary
-	if strings.Contains(lower, "executive") || strings.Contains(lower, "board") || strings.Contains(lower, "report") || strings.Contains(lower, "summary") {
-		return `## Executive Security Summary — July 2025
-
-**Prepared for:** Board of Directors | **Classification:** Confidential
-**Period:** June 1 – July 1, 2025
-
----
-
-### Security Posture: GOOD (Score 84/100)
-↑ +6 points from last month
-
-### Key Metrics
-
-| Metric | This Month | Last Month | Trend |
-|--------|-----------|-----------|-------|
-| Critical Incidents | 1 | 3 | ↓ 67% ✅ |
-| Mean Time to Detect | 18 min | 31 min | ↓ 42% ✅ |
-| Mean Time to Respond | 47 min | 89 min | ↓ 47% ✅ |
-| Vulnerabilities (Critical) | 12 | 28 | ↓ 57% ✅ |
-| Compliance Score | 94% | 89% | ↑ 5% ✅ |
-| Phishing Click Rate | 2.1% | 4.8% | ↓ 56% ✅ |
-
-### Notable Events
-- **June 28:** Ransomware attack on Finance workstation — **fully contained in 47 minutes**. No data loss. No business disruption.
-- **June 15:** Emotet infection attempt in HR — **blocked at Stage 1** by email security gateway.
-- **June 3:** Zero-day CVE-2024-3400 patched on all 14 affected firewalls within 72 hours of disclosure.
-
-### Investment ROI
-- Estimated **$2.4M breach cost avoided** (based on IBM Cost of a Data Breach 2024 median)
-- Security automation reduced analyst workload by **34%** (equivalent to 1.2 FTE)
-- SOAR playbooks auto-resolved **847 alerts** without human intervention
-
-### Board Recommendations
-1. Approve $180K budget for BYOD MDM expansion (53 unmanaged devices)
-2. Approve Zero Trust network segmentation project (18-month roadmap)
-3. Note: Cyber insurance renewal — security posture improvement qualifies for premium reduction`
-	}
-
-	// sigma / detection rule generation
-	if strings.Contains(lower, "sigma") || strings.Contains(lower, "detection rule") || strings.Contains(lower, "yara") {
-		return `## Generated Sigma Rule
-
-**Threat:** Cobalt Strike PowerShell Stager via Office Macro
-**MITRE:** T1566.001 (Phishing: Spearphishing Attachment), T1059.001 (PowerShell)
-
-` + "```yaml" + `
-title: Cobalt Strike PowerShell Stager via Office Macro
-id: a9f3d8e2-1b4c-4e7f-8a2d-3c6f9b0e5d1a
-status: experimental
-description: Detects PowerShell execution spawned from Microsoft Office processes
-  with base64-encoded commands, indicative of Cobalt Strike staging.
-author: XCloak AI Detection Engine
-date: 2025-07-01
-references:
-  - https://attack.mitre.org/techniques/T1566/001/
-  - https://attack.mitre.org/techniques/T1059/001/
-tags:
-  - attack.initial_access
-  - attack.t1566.001
-  - attack.execution
-  - attack.t1059.001
-logsource:
-  category: process_creation
-  product: windows
-detection:
-  selection:
-    ParentImage|endswith:
-      - '\WINWORD.EXE'
-      - '\EXCEL.EXE'
-      - '\POWERPNT.EXE'
-      - '\OUTLOOK.EXE'
-    Image|endswith: '\powershell.exe'
-    CommandLine|contains:
-      - '-enc '
-      - '-EncodedCommand'
-      - '-e '
-    CommandLine|re: '.*[A-Za-z0-9+/]{100,}={0,2}.*'
-  condition: selection
-falsepositives:
-  - Legitimate admin scripts run from Office macros (very rare)
-  - IT automation tools (whitelist by ParentCommandLine)
-level: high
-` + "```" + `
-
-### Deployment Notes
-- Tested against 90 days of SIEM data: **0 false positives** in environment
-- Alert threshold: Fire on any match (no minimum count)
-- Tuning: Exclude processes signed by your IT management vendor if needed
-- **Recommended SIEM:** Elastic SIEM, Splunk, Microsoft Sentinel
-
-### Companion YARA Rule (Memory Scan)
-
-` + "```yara" + `
-rule CobaltStrike_PowerShell_Stager {
-    meta:
-        description = "Detects Cobalt Strike PowerShell stager in memory"
-        author = "XCloak AI"
-        date = "2025-07-01"
-    strings:
-        $ps_enc = /powershell.*-[eE]n[cC]/ nocase
-        $b64 = /[A-Za-z0-9+\/]{200,}={0,2}/
-        $iex = "IEX" nocase
-        $download = "DownloadString" nocase
-    condition:
-        $ps_enc and ($b64 or ($iex and $download))
-}
-` + "```"
-	}
-
-	// log analysis
-	if strings.Contains(lower, "log") || strings.Contains(lower, "failed login") || strings.Contains(lower, "auth") {
-		return `## Log Analysis — Failed Authentication Events
-
-**Query:** Failed logins from Finance laptops, last 24 hours
-**Data sources:** Windows Security Event Log (4625), Active Directory, Palo Alto
-
----
-
-### Summary
-- **Total failed logins:** 147
-- **Unique users:** 12
-- **Unique source IPs:** 23
-- **Suspicious patterns:** 2 accounts flagged
-
-### High-Risk Events
-
-**🔴 Credential Stuffing Pattern — WKSTN-FIN-047**
-` + "`" + `2025-07-01 02:14:33 UTC` + "`" + `
-- 89 failed login attempts in 4 minutes
-- Target accounts: john.smith, j.smith.admin, jsmith, john.smith.fin
-- Source IP: 185.220.101.44 (same C2 from ransomware incident!)
-- **Action: Locked source IP, alerted SOC**
-
-**🟠 Password Spray — 3 Finance Accounts**
-` + "`" + `2025-07-01 06:31-06:47 UTC` + "`" + `
-- Accounts: sarah.jones, david.chen, marcus.lee
-- 1 attempt per account (low-and-slow pattern)
-- Source: 104.21.33.91 (Cloudflare-proxied, possible abuse)
-- **Action: MFA challenge sent, monitoring**
-
-### Normal Failed Logins (Noise)
-- 58 failures from locked accounts (users forgot to update cached credentials after password reset)
-- 12 failures from mobile devices after policy push
-- These account for 47% of total failures — **safe to filter**
-
-### Query Used
-` + "```sql" + `
-SELECT EventID, Account, WorkstationName, IpAddress, FailureReason, COUNT(*) as attempts
-FROM SecurityEvents
-WHERE EventID = 4625
-  AND TimeGenerated >= DATEADD(hour, -24, GETUTCDATE())
-  AND WorkstationName LIKE 'WKSTN-FIN-%'
-GROUP BY EventID, Account, WorkstationName, IpAddress, FailureReason
-ORDER BY attempts DESC
-` + "```"
-	}
-
-	// threat intel / IOC
-	if strings.Contains(lower, "ioc") || strings.Contains(lower, "threat intel") || strings.Contains(lower, "threat actor") || strings.Contains(lower, "mitre") {
-		return `## Threat Intelligence Brief
-
-**Query:** Threat Actor — Lockbit 3.0 / ALPHV Profile
-
----
-
-### Threat Actor: LockBit 3.0 (aka LockBit Black)
-
-**Type:** Ransomware-as-a-Service (RaaS)
-**Origin:** Russia-linked (unconfirmed, English-language ransom notes)
-**Active Since:** 2019 (LockBit 1.0) → Current variant since 2022
-**Targets:** Healthcare, Finance, Manufacturing, Government (all sectors)
-**Average Ransom:** $70,000–$1.4M USD
-**Encryption:** AES-128 + RSA-2048
-**Status:** ⚠️ **ACTIVE** — 3 victims claimed week of 2025-06-24
-
-### MITRE ATT&CK Mapping
-
-| Phase | Technique | ID |
-|-------|-----------|-----|
-| Initial Access | Phishing / VPN exploitation | T1566, T1133 |
-| Execution | PowerShell, WMI | T1059.001, T1047 |
-| Persistence | Registry Run Keys, Scheduled Tasks | T1547.001, T1053 |
-| Lateral Movement | SMB/Windows Admin Shares | T1021.002 |
-| Exfiltration | Rclone → Mega.nz / FTP | T1048 |
-| Impact | Data Encrypted + Double Extortion | T1486, T1657 |
-
-### Current IOCs (Updated 2025-06-30)
-
-**Domains:**
-- lockbit3753eqii[.]onion (leak site)
-- update-cdn[.]com (staging C2)
-
-**IPs:** 185.220.101.44, 91.219.29.12, 45.227.254.3
-
-**File Hashes (SHA256):**
-- a3f9d21b8e4c7f2d1a0b5e3c9f6d4e7a (LockBit 3.0 encryptor)
-- c1e5b9a2d7f4c8e3b6a0d2f8e5c1b7a4 (Cobalt Strike stager)
-
-**⚠️ 1 IOC MATCHES ENVIRONMENT:** 185.220.101.44 seen in June 28 incident
-
-### Recommended Mitigations
-1. Block all listed IPs/domains at perimeter
-2. Enable honeypot decoy files in Finance and HR shares
-3. Disable RDP externally or require NLA + MFA
-4. Enable Controlled Folder Access (Windows Defender)
-5. Review Rclone and cloud sync tools on all servers`
-	}
-
-	// generic / default
-	return `## Security Analysis
-
-I've analyzed your query against the connected security data sources.
-
-**Query:** ` + `"` + msg + `"` + `
-**Sources checked:** SIEM (Elastic), EDR (CrowdStrike), Firewall (Palo Alto), Vulnerability Scanner, MDM
-
----
-
-### Findings
-
-Based on current security telemetry:
-
-**Current Platform Status:**
-- 🟢 **Threat Level:** Moderate — 2 active threats under investigation
-- 🟢 **SIEM:** 1,247 events in last hour (within normal range)
-- 🟡 **Open Alerts:** 18 (3 critical, 8 high, 7 medium)
-- 🟢 **EDR Coverage:** 97.2% (419/427 endpoints)
-- 🟡 **Compliance:** 94.4% (24 non-compliant devices)
-- 🔴 **Critical Vulnerabilities:** 12 unpatched (CVE-2024-3400 priority)
-
-### Recent Activity
-- **2 hours ago:** Ransomware stager blocked on WKSTN-FIN-047 (contained)
-- **6 hours ago:** Phishing campaign targeting Finance team (9 emails blocked)
-- **12 hours ago:** Successful patch deployment to 14 firewall devices (CVE-2024-3400)
-- **Yesterday:** New threat actor profile added: LockBit 3.0 IOCs imported
-
-### Recommendations
-1. Investigate the 3 critical alerts in the queue — estimated 45 min effort
-2. Patch 12 critical CVEs — CISA KEV compliance requires action within 24h
-3. Enroll 24 non-compliant devices — focus on Finance and HR endpoints first
-
-> 💡 **Tip:** Try asking "Show all critical alerts" or "Analyze the Finance workstation incident" for deeper analysis.`
+	return fmt.Sprintf("%s\n\nCurrent environment data for this tenant:\n%s\nAnalyst question: %s\n\nRespond in concise markdown.",
+		task, ctx.String(), message)
 }
 
 // ── Recommendations ───────────────────────────────────────────────────────────

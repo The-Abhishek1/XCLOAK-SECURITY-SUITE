@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { dfirAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, BookOpen, Brain, ChevronDown, ChevronRight, Clock, Database, Download, Eye, FileText, GitBranch, Globe, Package, Play, Plus, Save, Search, Shield, Trash2, X, Zap } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, BookOpen, Brain, ChevronDown, ChevronRight, Clock, Database, Download, Eye, FileText, GitBranch, Globe, Package, Play, Plus, Save, Search, Shield, Trash2, X, Zap } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,14 +45,6 @@ function StatusBadge({ s }: { s: string }) {
   const map: Record<string, string> = { open: '#f85149', in_progress: '#fbbf24', closed: '#22c55e', resolved: '#22c55e', analyzed: '#22c55e', collected: '#60a5fa', pending: '#fbbf24', completed: '#22c55e' };
   const c = map[s] || 'var(--text-3)';
   return <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: `${c}22`, color: c }}>{s.replace(/_/g, ' ')}</span>;
-}
-function KPICard({ label, value, color }: { label: string; value: string | number; color?: string }) {
-  return (
-    <div className="g-card p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
-      <p className="text-2xl font-bold" style={{ color: color || 'var(--text-1)' }}>{value}</p>
-    </div>
-  );
 }
 function formatBytes(b: number) {
   if (b > 1e9) return `${(b / 1e9).toFixed(1)} GB`;
@@ -484,16 +477,16 @@ export default function DFIRPage() {
       {tab === 'dashboard' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="Open Cases"       value={dash?.stats?.open_cases ?? '—'}       color="#f85149" />
-            <KPICard label="In Progress"      value={dash?.stats?.in_progress ?? '—'}      color="#fbbf24" />
-            <KPICard label="Evidence Items"   value={dash?.stats?.evidence_items ?? '—'}   color="var(--accent)" />
-            <KPICard label="High Priority"    value={dash?.stats?.high_priority ?? '—'}    color="#fb923c" />
+            <MetricCard label="Open Cases"       value={dash?.stats?.open_cases ?? '—'}       color="#f85149" />
+            <MetricCard label="In Progress"      value={dash?.stats?.in_progress ?? '—'}      color="#fbbf24" />
+            <MetricCard label="Evidence Items"   value={dash?.stats?.evidence_items ?? '—'}   color="var(--accent)" />
+            <MetricCard label="High Priority"    value={dash?.stats?.high_priority ?? '—'}    color="#fb923c" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="Memory Dumps"     value={dash?.stats?.memory_dumps ?? '—'} />
-            <KPICard label="Disk Images"      value={dash?.stats?.disk_images ?? '—'} />
-            <KPICard label="Custody Verified" value={dash?.stats?.custody_ok ?? '—'}       color="#22c55e" />
-            <KPICard label="Custody Pending"  value={dash?.stats?.custody_pending ?? '—'}  color="#fbbf24" />
+            <MetricCard label="Memory Dumps"     value={dash?.stats?.memory_dumps ?? '—'} />
+            <MetricCard label="Disk Images"      value={dash?.stats?.disk_images ?? '—'} />
+            <MetricCard label="Custody Verified" value={dash?.stats?.custody_ok ?? '—'}       color="#22c55e" />
+            <MetricCard label="Custody Pending"  value={dash?.stats?.custody_pending ?? '—'}  color="#fbbf24" />
           </div>
           <div className="g-card p-4">
             <div className="flex items-center justify-between mb-3">
@@ -911,10 +904,10 @@ export default function DFIRPage() {
               {fileAnalysis && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <KPICard label="Verdict"    value={fileAnalysis.verdict}                     color={fileAnalysis.suspicious ? '#f85149' : '#22c55e'} />
-                    <KPICard label="Confidence" value={`${fileAnalysis.confidence}%`} />
-                    <KPICard label="Entropy"    value={fileAnalysis.entropy?.toFixed(2) ?? '—'} />
-                    <KPICard label="Type"       value={fileAnalysis.file_type || '—'} />
+                    <MetricCard label="Verdict"    value={fileAnalysis.verdict}                     color={fileAnalysis.suspicious ? '#f85149' : '#22c55e'} />
+                    <MetricCard label="Confidence" value={`${fileAnalysis.confidence}%`} />
+                    <MetricCard label="Entropy"    value={fileAnalysis.entropy?.toFixed(2) ?? '—'} />
+                    <MetricCard label="Type"       value={fileAnalysis.file_type || '—'} />
                   </div>
                   <div className="rounded-lg p-3 space-y-1" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
                     <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>SHA256: <span className="font-mono">{fileAnalysis.sha256}</span></p>
@@ -1142,8 +1135,8 @@ export default function DFIRPage() {
               <div className="g-card p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>Analytics</p>
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <KPICard label="Avg MTTR"    value={analytics ? `${analytics.avg_mttr_hours?.toFixed(1)}h` : '—'} />
-                  <KPICard label="Total Cases" value={analytics ? analytics.by_status?.reduce((s: number, r: any) => s + r.value, 0) : '—'} />
+                  <MetricCard label="Avg MTTR"    value={analytics ? `${analytics.avg_mttr_hours?.toFixed(1)}h` : '—'} />
+                  <MetricCard label="Total Cases" value={analytics ? analytics.by_status?.reduce((s: number, r: any) => s + r.value, 0) : '—'} />
                 </div>
                 {(analytics?.by_priority || []).map((r: any) => (
                   <div key={r.label} className="flex items-center gap-2 mb-1.5">

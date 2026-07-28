@@ -169,6 +169,29 @@ func enrichAgentCounts(tenantID int, agents []models.Agent) {
 			}
 		}
 	}
+
+	// Isolation status — an agent is currently isolated if its most recent
+	// isolate_host/de_isolate dispatch (by created_at) was an isolate_host.
+	isoRows, err := database.DB.Query(`
+		SELECT DISTINCT ON (agent_id) agent_id, task_type
+		FROM agent_tasks
+		WHERE tenant_id = $1 AND task_type IN ('isolate_host', 'de_isolate')
+		ORDER BY agent_id, created_at DESC
+	`, tenantID)
+	if err == nil {
+		isolated := map[int]bool{}
+		for isoRows.Next() {
+			var id int
+			var taskType string
+			if isoRows.Scan(&id, &taskType) == nil {
+				isolated[id] = taskType == "isolate_host"
+			}
+		}
+		isoRows.Close()
+		for i := range agents {
+			agents[i].IsIsolated = isolated[agents[i].ID]
+		}
+	}
 }
 
 // GetAllAgents returns every agent across every tenant. For internal background

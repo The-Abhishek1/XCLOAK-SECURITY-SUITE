@@ -5,6 +5,10 @@ export default defineConfig({
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? 'github' : 'list',
+  // Logs in once for the whole suite (see global-setup.ts) instead of every
+  // spec file logging in independently — avoids /api/auth/login's 10/min
+  // rate limit being hit across parallel workers as the spec count grows.
+  globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
 
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',

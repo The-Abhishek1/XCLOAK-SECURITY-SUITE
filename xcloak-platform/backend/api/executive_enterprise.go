@@ -160,43 +160,24 @@ func GetEXEDashboard(c *gin.Context) {
 		&slaComp, &patchComp, &detCov, &autoRate, &falsePos, &financialRisk,
 	)
 
-	// 30-day trend series (security score)
+	// 30-day trend series — one row per snapshot, matching what the frontend expects
 	type trendPoint struct {
-		Date  string  `json:"date"`
-		Value float64 `json:"value"`
+		Date            string `json:"date"`
+		SecurityScore   int    `json:"security_score"`
+		RiskScore       int    `json:"risk_score"`
+		TotalIncidents  int    `json:"total_incidents"`
 	}
-	tRows, _ := db.Query(`SELECT snapshot_date, security_score FROM exe_snapshots WHERE tenant_id=$1
-		ORDER BY snapshot_date DESC LIMIT 30`, tid)
-	var secTrend, riskTrend, incTrend []trendPoint
+	tRows, _ := db.Query(`SELECT snapshot_date, security_score, risk_score, total_incidents FROM exe_snapshots
+		WHERE tenant_id=$1 ORDER BY snapshot_date ASC LIMIT 30`, tid)
+	trend := []trendPoint{}
 	if tRows != nil {
 		defer tRows.Close()
 		for tRows.Next() {
 			var d time.Time
-			var v int
-			tRows.Scan(&d, &v)
-			secTrend = append(secTrend, trendPoint{d.Format("Jan 2"), float64(v)})
-		}
-	}
-	rRows, _ := db.Query(`SELECT snapshot_date, risk_score FROM exe_snapshots WHERE tenant_id=$1
-		ORDER BY snapshot_date DESC LIMIT 30`, tid)
-	if rRows != nil {
-		defer rRows.Close()
-		for rRows.Next() {
-			var d time.Time
-			var v int
-			rRows.Scan(&d, &v)
-			riskTrend = append(riskTrend, trendPoint{d.Format("Jan 2"), float64(v)})
-		}
-	}
-	iRows, _ := db.Query(`SELECT snapshot_date, total_incidents FROM exe_snapshots WHERE tenant_id=$1
-		ORDER BY snapshot_date DESC LIMIT 30`, tid)
-	if iRows != nil {
-		defer iRows.Close()
-		for iRows.Next() {
-			var d time.Time
-			var v int
-			iRows.Scan(&d, &v)
-			incTrend = append(incTrend, trendPoint{d.Format("Jan 2"), float64(v)})
+			var p trendPoint
+			tRows.Scan(&d, &p.SecurityScore, &p.RiskScore, &p.TotalIncidents)
+			p.Date = d.Format("Jan 2")
+			trend = append(trend, p)
 		}
 	}
 
@@ -205,27 +186,27 @@ func GetEXEDashboard(c *gin.Context) {
 	db.QueryRow(`SELECT COUNT(*) FROM exe_notifications WHERE tenant_id=$1 AND read=FALSE`, tid).Scan(&unreadNotifs)
 
 	c.JSON(http.StatusOK, gin.H{
-		"security_score":      secScore,
-		"risk_score":          riskScore,
-		"compliance_score":    compScore,
-		"total_incidents":     totalInc,
-		"critical_incidents":  critInc,
-		"total_vulns":         totalVulns,
-		"critical_vulns":      critVulns,
-		"total_assets":        totalAssets,
-		"critical_assets":     critAssets,
-		"mttd_hours":          mttd,
-		"mttr_hours":          mttr,
-		"sla_compliance":      slaComp,
-		"patch_compliance":    patchComp,
-		"detection_coverage":  detCov,
-		"automation_rate":     autoRate,
-		"false_positive_rate": falsePos,
-		"financial_risk_usd":  financialRisk,
+		"latest": gin.H{
+			"security_score":      secScore,
+			"risk_score":          riskScore,
+			"compliance_score":    compScore,
+			"total_incidents":     totalInc,
+			"critical_incidents":  critInc,
+			"total_vulns":         totalVulns,
+			"critical_vulns":      critVulns,
+			"total_assets":        totalAssets,
+			"critical_assets":     critAssets,
+			"mttd_hours":          mttd,
+			"mttr_hours":          mttr,
+			"sla_compliance":      slaComp,
+			"patch_compliance":    patchComp,
+			"detection_coverage":  detCov,
+			"automation_rate":     autoRate,
+			"false_positive_rate": falsePos,
+			"financial_risk_usd":  financialRisk,
+		},
 		"unread_notifications": unreadNotifs,
-		"security_trend":      secTrend,
-		"risk_trend":          riskTrend,
-		"incident_trend":      incTrend,
+		"trend":                trend,
 	})
 }
 
@@ -239,8 +220,9 @@ func GetEXERisk(c *gin.Context) {
 	db.QueryRow(`SELECT risk_score, critical_vulns FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&riskScore, &critVulns)
 
 	// high-risk assets proxy
-	db.QueryRow(`SELECT COUNT(*) FROM assets WHERE tenant_id=$1 AND criticality IN ('critical','high')`, fmt.Sprintf("%d", tid)).Scan(&highRiskAssets)
-	db.QueryRow(`SELECT COUNT(*) FROM assets WHERE tenant_id=$1 AND network_zone='external'`, fmt.Sprintf("%d", tid)).Scan(&internetExposed)
+	db.QueryRow(`SELECT COUNT(*) FROM assets WHERE tenant_id=$1 AND criticality IN ('critical','high')`, tid).Scan(&highRiskAssets)
+	db.QueryRow(`SELECT COUNT(*) FROM cloud_assets WHERE tenant_id=$1 AND internet_exposed=true`, tid).Scan(&internetExposed)
+	db.QueryRow(`SELECT COUNT(*) FROM user_risk_profiles WHERE tenant_id=$1 AND risk_score>=60`, tid).Scan(&highRiskUsers)
 
 	// 30-day risk trend
 	type dp struct {
@@ -257,25 +239,75 @@ func GetEXERisk(c *gin.Context) {
 			trend = append(trend, dp{d.Format("Jan 2"), v})
 		}
 	}
+	riskTrendDelta := 0
+	if len(trend) >= 2 {
+		riskTrendDelta = trend[len(trend)-1].Value - trend[0].Value
+	}
 
-	// Hardcoded business risk table for demo richness
-	topRisks := []gin.H{
-		{"title": "Nation-State Threat Campaign", "impact": "high", "likelihood": "medium", "category": "Threat Intelligence", "score": 82},
-		{"title": "Critical Patch Gap (3 systems)", "impact": "critical", "likelihood": "high", "category": "Vulnerability", "score": 91},
-		{"title": "PCI DSS Non-Compliance", "impact": "high", "likelihood": "high", "category": "Compliance", "score": 78},
-		{"title": "Insider Threat Risk (3 flagged users)", "impact": "high", "likelihood": "low", "category": "Identity", "score": 62},
-		{"title": "Cloud Misconfiguration Exposure", "impact": "medium", "likelihood": "medium", "category": "Cloud Security", "score": 55},
+	// Business risk table — derived from real per-tenant metrics, only
+	// including a category when there's actually something to report.
+	var compScore, compFailed int
+	db.QueryRow(`SELECT ROUND(overall_score)::int, failed_controls FROM fce_frameworks
+		WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 1`, tid).Scan(&compScore, &compFailed)
+	var activeActorCampaigns int
+	db.QueryRow(`SELECT COUNT(*) FROM threat_actors WHERE tenant_id=$1 AND sophistication IN ('nation-state','high') AND created_at > NOW()-INTERVAL'90 days'`, tid).Scan(&activeActorCampaigns)
+	var cloudCritFindings int
+	db.QueryRow(`SELECT COUNT(*) FROM cloud_findings WHERE tenant_id=$1 AND severity='critical' AND status='open'`, tid).Scan(&cloudCritFindings)
+
+	topRisks := []gin.H{}
+	if activeActorCampaigns > 0 {
+		topRisks = append(topRisks, gin.H{"name": fmt.Sprintf("%d Active Nation-State/High-Sophistication Threat Actor(s) Tracked", activeActorCampaigns), "severity": "high", "business_unit": "", "category": "Threat Intelligence", "risk_score": 60 + min(activeActorCampaigns*5, 35)})
+	}
+	if critVulns > 0 {
+		topRisks = append(topRisks, gin.H{"name": fmt.Sprintf("%d Critical Vulnerabilities Open", critVulns), "severity": "critical", "business_unit": "", "category": "Vulnerability", "risk_score": 70 + min(critVulns*3, 29)})
+	}
+	if compFailed > 0 {
+		topRisks = append(topRisks, gin.H{"name": fmt.Sprintf("%d Failed Compliance Controls (lowest-scoring framework at %d%%)", compFailed, compScore), "severity": "high", "business_unit": "", "category": "Compliance", "risk_score": 100 - compScore})
+	}
+	if highRiskUsers > 0 {
+		topRisks = append(topRisks, gin.H{"name": fmt.Sprintf("%d High-Risk Users Flagged", highRiskUsers), "severity": "high", "business_unit": "", "category": "Identity", "risk_score": 50 + min(highRiskUsers*5, 40)})
+	}
+	if cloudCritFindings > 0 {
+		topRisks = append(topRisks, gin.H{"name": fmt.Sprintf("%d Critical Cloud Misconfigurations Open", cloudCritFindings), "severity": "medium", "business_unit": "", "category": "Cloud Security", "risk_score": 45 + min(cloudCritFindings*5, 40)})
+	}
+
+	criticalCount, highCount := 0, 0
+	for _, r := range topRisks {
+		switch r["severity"] {
+		case "critical":
+			criticalCount++
+		case "high":
+			highCount++
+		}
+	}
+
+	type geoRow struct {
+		Country     string `json:"country"`
+		ThreatCount int    `json:"threat_count"`
+	}
+	geoThreats := []geoRow{}
+	geoRows, _ := db.Query(`SELECT country, COUNT(*) FROM fwe_threats WHERE tenant_id=$1 AND country IS NOT NULL AND country != '' GROUP BY country ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if geoRows != nil {
+		defer geoRows.Close()
+		for geoRows.Next() {
+			var g geoRow
+			geoRows.Scan(&g.Country, &g.ThreatCount)
+			geoThreats = append(geoThreats, g)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"risk_score":          riskScore,
-		"critical_vulns":      critVulns,
-		"high_risk_assets":    highRiskAssets,
-		"high_risk_users":     highRiskUsers,
-		"internet_exposed":    internetExposed,
-		"risk_trend":          trend,
-		"top_risks":           topRisks,
-		"business_critical":   12,
+		"risk_score":       riskScore,
+		"critical_vulns":   critVulns,
+		"high_risk_assets": highRiskAssets,
+		"high_risk_users":  highRiskUsers,
+		"internet_exposed": internetExposed,
+		"risk_trend":       riskTrendDelta,
+		"trend":            trend,
+		"top_risks":        topRisks,
+		"critical_count":   criticalCount,
+		"high_count":       highCount,
+		"geo_threats":      geoThreats,
 	})
 }
 
@@ -305,24 +337,21 @@ func GetEXEKPIs(c *gin.Context) {
 		&prev.Incidents, &prev.Compliance, &prev.DetCov, &prev.MTTD, &prev.MTTR,
 	)
 
+	kpis := []gin.H{
+		{"name": "Total Incidents", "value": totalInc, "display_value": fmt.Sprintf("%d", totalInc), "lower_is_better": true, "change": totalInc - prev.Incidents},
+		{"name": "Critical Incidents", "value": critInc, "display_value": fmt.Sprintf("%d", critInc), "lower_is_better": true},
+		{"name": "Resolved Incidents", "value": resolvedInc, "display_value": fmt.Sprintf("%d", resolvedInc), "lower_is_better": false},
+		{"name": "Open Cases", "value": openCases, "display_value": fmt.Sprintf("%d", openCases), "lower_is_better": true},
+		{"name": "MTTD", "value": mttd, "display_value": fmt.Sprintf("%.1fh", mttd), "unit": "h", "lower_is_better": true, "change": mttd - prev.MTTD},
+		{"name": "MTTR", "value": mttr, "display_value": fmt.Sprintf("%.1fh", mttr), "unit": "h", "lower_is_better": true, "change": mttr - prev.MTTR},
+		{"name": "Detection Coverage", "value": detCov, "display_value": fmt.Sprintf("%d%%", detCov), "unit": "%", "lower_is_better": false, "change": detCov - prev.DetCov},
+		{"name": "Automation Rate", "value": autoRate, "display_value": fmt.Sprintf("%d%%", autoRate), "unit": "%", "lower_is_better": false},
+		{"name": "Compliance", "value": compScore, "display_value": fmt.Sprintf("%d%%", compScore), "unit": "%", "lower_is_better": false, "change": compScore - prev.Compliance},
+		{"name": "False Positive Rate", "value": falsePos, "display_value": fmt.Sprintf("%.1f%%", falsePos), "unit": "%", "lower_is_better": true},
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"total_incidents":      totalInc,
-		"critical_incidents":   critInc,
-		"resolved_incidents":   resolvedInc,
-		"open_cases":           openCases,
-		"false_positive_rate":  falsePos,
-		"detection_coverage":   detCov,
-		"mitre_coverage":       74,
-		"automation_rate":      autoRate,
-		"analyst_productivity": 87,
-		"compliance_pct":       compScore,
-		"mttd_hours":           mttd,
-		"mttr_hours":           mttr,
-		"prev_incidents":       prev.Incidents,
-		"prev_compliance":      prev.Compliance,
-		"prev_det_cov":         prev.DetCov,
-		"prev_mttd":            prev.MTTD,
-		"prev_mttr":            prev.MTTR,
+		"kpis": kpis,
 	})
 }
 
@@ -330,66 +359,147 @@ func GetEXEKPIs(c *gin.Context) {
 
 func GetEXEBusinessImpact(c *gin.Context) {
 	tid := tenantIDFromContext(c)
+	db := database.DB
 	var financialRisk int64
-	database.DB.QueryRow(`SELECT financial_risk_usd FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&financialRisk)
+	db.QueryRow(`SELECT financial_risk_usd FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&financialRisk)
 
-	businessUnits := []gin.H{
-		{"name": "Finance & Treasury",       "risk": "critical", "incidents": 3, "impact_score": 91, "revenue_at_risk_usd": 2400000},
-		{"name": "Engineering",              "risk": "high",     "incidents": 5, "impact_score": 74, "revenue_at_risk_usd": 850000},
-		{"name": "Customer Operations",      "risk": "high",     "incidents": 2, "impact_score": 68, "revenue_at_risk_usd": 1200000},
-		{"name": "Human Resources",          "risk": "medium",   "incidents": 1, "impact_score": 42, "revenue_at_risk_usd": 150000},
-		{"name": "Marketing",                "risk": "medium",   "incidents": 2, "impact_score": 38, "revenue_at_risk_usd": 280000},
-		{"name": "Legal & Compliance",       "risk": "low",      "incidents": 0, "impact_score": 22, "revenue_at_risk_usd": 50000},
+	rows, _ := db.Query(`
+		SELECT COALESCE(NULLIF(a.business_unit,''),'Unassigned') AS bu,
+		       COUNT(DISTINCT i.id) FILTER (WHERE i.severity='critical' AND i.status NOT IN ('resolved','closed')) AS crit_inc,
+		       COUNT(DISTINCT i.id) FILTER (WHERE i.status NOT IN ('resolved','closed')) AS open_inc
+		FROM assets a
+		LEFT JOIN agents ag ON ag.id = a.agent_id
+		LEFT JOIN incidents i ON i.agent_id = ag.id AND i.tenant_id = a.tenant_id
+		WHERE a.tenant_id=$1
+		GROUP BY bu
+		ORDER BY crit_inc DESC, open_inc DESC
+		LIMIT 8`, tid)
+
+	type buRaw struct {
+		Name     string
+		CritInc  int
+		OpenInc  int
+	}
+	var raws []buRaw
+	totalOpen := 0
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var r buRaw
+			rows.Scan(&r.Name, &r.CritInc, &r.OpenInc)
+			raws = append(raws, r)
+			totalOpen += r.OpenInc
+		}
+	}
+
+	businessUnits := []gin.H{}
+	affectedBUs := 0
+	for _, r := range raws {
+		riskScore := 20 + min(r.OpenInc*10+r.CritInc*15, 80)
+		if r.OpenInc > 0 {
+			affectedBUs++
+		}
+		var financialExposure int64
+		if totalOpen > 0 {
+			financialExposure = financialRisk * int64(r.OpenInc) / int64(totalOpen)
+		}
+		topRisk := ""
+		if r.CritInc > 0 {
+			topRisk = fmt.Sprintf("%d critical incident(s) open", r.CritInc)
+		}
+		businessUnits = append(businessUnits, gin.H{
+			"name":               r.Name,
+			"risk_score":         riskScore,
+			"critical_incidents": r.CritInc,
+			"financial_exposure": financialExposure,
+			"top_risk":           topRisk,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"financial_risk_usd":        financialRisk,
-		"operational_impact":        "High — 2 critical services degraded",
-		"estimated_downtime_mins":   45,
-		"revenue_impact_usd":        4930000,
-		"critical_service_avail":    98.7,
-		"regulatory_impact":         "PCI DSS audit risk — potential fines $50K-$500K",
-		"customer_impact":           "~3,200 customers potentially affected by data exposure risk",
-		"affected_business_units":   3,
-		"business_units":            businessUnits,
+		"financial_risk_usd":      financialRisk,
+		"max_potential_loss":      0,
+		"avg_recovery_cost":       0,
+		"cyber_insurance_coverage": "",
+		"revenue_impact_usd":      financialRisk,
+		"affected_business_units": affectedBUs,
+		"business_units":          businessUnits,
 	})
 }
 
 // ── threat landscape ──────────────────────────────────────────────────────────
 
 func GetEXEThreatLandscape(c *gin.Context) {
-	campaigns := []gin.H{
-		{"name": "APT29 — Cozy Bear Financial Sector", "actor": "APT29", "type": "espionage", "severity": "critical", "active_since": "2025-05-12", "ttps": 14, "iocs_matched": 7},
-		{"name": "Ransomware Campaign — LockBit 3.0",  "actor": "LockBit", "type": "ransomware", "severity": "critical", "active_since": "2025-06-01", "ttps": 9, "iocs_matched": 3},
-		{"name": "Supply Chain Attack — npm Packages",  "actor": "Unknown",  "type": "supply_chain", "severity": "high", "active_since": "2025-07-02", "ttps": 5, "iocs_matched": 2},
-		{"name": "Phishing Campaign — HR Credential Harvest", "actor": "TA505", "type": "phishing", "severity": "high", "active_since": "2025-07-10", "ttps": 4, "iocs_matched": 5},
+	tid := tenantIDFromContext(c)
+	db := database.DB
+
+	type actorRow struct {
+		ID             int
+		Name           string
+		Motivation     string
+		Sophistication string
 	}
-	malware := []gin.H{
-		{"name": "LockBit 3.0",    "type": "ransomware", "trend": "rising",  "industry_hits": 142, "your_iocs": 3},
-		{"name": "Emotet v6",      "type": "loader",     "trend": "stable",  "industry_hits": 89,  "your_iocs": 1},
-		{"name": "Cobalt Strike",  "type": "c2",         "trend": "stable",  "industry_hits": 203, "your_iocs": 4},
-		{"name": "BlackCat/ALPHV", "type": "ransomware", "trend": "falling", "industry_hits": 67,  "your_iocs": 0},
-		{"name": "QakBot",         "type": "banking",    "trend": "rising",  "industry_hits": 55,  "your_iocs": 2},
+	var actors []actorRow
+	arows, _ := db.Query(`SELECT id, name, motivation, sophistication FROM threat_actors WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 10`, tid)
+	if arows != nil {
+		defer arows.Close()
+		for arows.Next() {
+			var a actorRow
+			arows.Scan(&a.ID, &a.Name, &a.Motivation, &a.Sophistication)
+			actors = append(actors, a)
+		}
 	}
-	geoThreats := []gin.H{
-		{"country": "Russian Federation", "threat_count": 847, "category": "apt"},
-		{"country": "China",              "threat_count": 523, "category": "apt"},
-		{"country": "North Korea",        "threat_count": 201, "category": "financial"},
-		{"country": "Iran",               "threat_count": 178, "category": "destructive"},
-		{"country": "Brazil",             "threat_count": 312, "category": "cybercrime"},
-		{"country": "United States",      "threat_count": 445, "category": "cybercrime"},
+
+	campaigns := []gin.H{}
+	for _, a := range actors {
+		var affected int
+		db.QueryRow(`SELECT COUNT(DISTINCT alert_id) FROM actor_alert_tags WHERE actor_id=$1`, a.ID).Scan(&affected)
+		severity := "medium"
+		switch a.Sophistication {
+		case "nation-state":
+			severity = "critical"
+		case "high":
+			severity = "high"
+		case "low":
+			severity = "low"
+		}
+		campaigns = append(campaigns, gin.H{
+			"name":             a.Name,
+			"actor":            a.Name,
+			"category":         a.Motivation,
+			"severity":         severity,
+			"affected_systems": affected,
+		})
 	}
+
+	var threatActorCount int
+	db.QueryRow(`SELECT COUNT(*) FROM threat_actors WHERE tenant_id=$1`, tid).Scan(&threatActorCount)
+	var iocCount int
+	db.QueryRow(`SELECT COUNT(*) FROM feed_iocs WHERE tenant_id=$1`, tid).Scan(&iocCount)
+
+	type geoRow struct {
+		Country string `json:"country"`
+		Count   int    `json:"count"`
+	}
+	geoThreats := []geoRow{}
+	geoRows, _ := db.Query(`SELECT country, COUNT(*) FROM fwe_threats WHERE tenant_id=$1 AND country IS NOT NULL AND country != '' GROUP BY country ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if geoRows != nil {
+		defer geoRows.Close()
+		for geoRows.Next() {
+			var g geoRow
+			geoRows.Scan(&g.Country, &g.Count)
+			geoThreats = append(geoThreats, g)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"active_campaigns":    len(campaigns),
-		"threat_actors":       24,
-		"ransomware_active":   true,
-		"emerging_threats":    3,
-		"intel_feeds":         7,
-		"campaigns":           campaigns,
-		"trending_malware":    malware,
-		"geo_distribution":    geoThreats,
-		"industry_sector":     "Financial Services",
-		"sector_threat_level": "Elevated",
+		"active_campaign_count": len(campaigns),
+		"ioc_count":             iocCount,
+		"threat_actor_count":    threatActorCount,
+		"industry_targeting":    "",
+		"active_campaigns":      campaigns,
+		"top_malware":           []gin.H{},
+		"geo_distribution":      geoThreats,
 	})
 }
 
@@ -404,37 +514,39 @@ func GetEXECompliance(c *gin.Context) {
 
 	// Pull from fce_frameworks if available
 	type fwRow struct {
-		Name   string `json:"name"`
-		Score  int    `json:"score"`
-		Status string `json:"status"`
+		Name           string `json:"name"`
+		ComplianceScore int   `json:"compliance_score"`
+		ControlsPassed int    `json:"controls_passed"`
+		TotalControls  int    `json:"total_controls"`
+		Category       string `json:"category"`
+		Status         string `json:"status"`
 	}
-	frows, _ := db.Query(`SELECT name, overall_score, compliance_status FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 8`, tid)
+	frows, _ := db.Query(`SELECT name, overall_score, passed_controls, total_controls, category, compliance_status
+		FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 8`, tid)
 	frameworks := []fwRow{}
 	if frows != nil {
 		defer frows.Close()
 		for frows.Next() {
-			var r fwRow; frows.Scan(&r.Name, &r.Score, &r.Status); frameworks = append(frameworks, r)
+			var r fwRow
+			frows.Scan(&r.Name, &r.ComplianceScore, &r.ControlsPassed, &r.TotalControls, &r.Category, &r.Status)
+			frameworks = append(frameworks, r)
 		}
 	}
 
-	var failedControls, openRemediations int
-	db.QueryRow(`SELECT COUNT(*) FROM fce_controls WHERE tenant_id=$1 AND assessment_status='failed'`, tid).Scan(&failedControls)
+	var activeFrameworks int
+	db.QueryRow(`SELECT COUNT(*) FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE`, tid).Scan(&activeFrameworks)
+	var passedControls, failedControls, openRemediations int
+	db.QueryRow(`SELECT COUNT(*) FILTER (WHERE assessment_status='passed'), COUNT(*) FILTER (WHERE assessment_status='failed')
+		FROM fce_controls WHERE tenant_id=$1`, tid).Scan(&passedControls, &failedControls)
 	db.QueryRow(`SELECT COUNT(*) FROM fce_remediations WHERE tenant_id=$1 AND status NOT IN ('closed','cancelled')`, tid).Scan(&openRemediations)
 
-	upcomingAudits := []gin.H{
-		{"framework": "PCI DSS v4.0", "auditor": "External QSA", "date": "2025-09-15", "days_until": 60, "readiness": 71},
-		{"framework": "ISO 27001",    "auditor": "BSI",           "date": "2025-10-20", "days_until": 95, "readiness": 78},
-		{"framework": "SOC 2 Type II","auditor": "Deloitte",      "date": "2025-11-01", "days_until": 107,"readiness": 69},
-	}
 	c.JSON(http.StatusOK, gin.H{
-		"compliance_score":   compScore,
-		"audit_readiness":    75,
-		"failed_controls":    failedControls,
-		"open_remediations":  openRemediations,
-		"remediation_pct":    63,
-		"frameworks":         frameworks,
-		"upcoming_audits":    upcomingAudits,
-		"regulatory_risks":   []string{"PCI DSS QSA audit in 60 days — current score 71%", "GDPR DPA inquiry pending — data mapping gaps identified"},
+		"overall_score":     compScore,
+		"active_frameworks": activeFrameworks,
+		"passed_controls":   passedControls,
+		"failed_controls":   failedControls,
+		"open_remediations": openRemediations,
+		"frameworks":        frameworks,
 	})
 }
 
@@ -442,33 +554,67 @@ func GetEXECompliance(c *gin.Context) {
 
 func GetEXEVulns(c *gin.Context) {
 	tid := tenantIDFromContext(c)
-	var critVulns, totalVulns, patchComp int
-	database.DB.QueryRow(`SELECT critical_vulns, total_vulns, patch_compliance FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&critVulns, &totalVulns, &patchComp)
+	db := database.DB
 
-	affectedBUs := []gin.H{
-		{"name": "Engineering",    "vuln_count": 89,  "critical": 12, "sla_breach": 3},
-		{"name": "Finance",        "vuln_count": 23,  "critical": 8,  "sla_breach": 2},
-		{"name": "Customer Ops",   "vuln_count": 41,  "critical": 5,  "sla_breach": 1},
-		{"name": "IT Infra",       "vuln_count": 134, "critical": 18, "sla_breach": 4},
-		{"name": "Cloud Platform", "vuln_count": 67,  "critical": 9,  "sla_breach": 2},
+	var totalVulns, critVulns, highVulns int
+	var avgCvss float64
+	db.QueryRow(`SELECT COUNT(*), COUNT(*) FILTER (WHERE severity='critical'), COUNT(*) FILTER (WHERE severity='high'), COALESCE(AVG(cvss_score),0)
+		FROM vulnerabilities WHERE tenant_id=$1`, tid).Scan(&totalVulns, &critVulns, &highVulns, &avgCvss)
+
+	var patchComp int
+	db.QueryRow(`SELECT patch_compliance FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&patchComp)
+
+	type topVulnRow struct {
+		Severity        string  `json:"severity"`
+		CveID           string  `json:"cve_id"`
+		Cvss            float64 `json:"cvss"`
+		Title           string  `json:"title"`
+		AffectedSystems int     `json:"affected_systems"`
 	}
-	topVulns := []gin.H{
-		{"cve": "CVE-2024-3400", "cvss": 10.0, "asset": "Palo Alto VPN", "status": "open",     "kev": true,  "days_open": 12},
-		{"cve": "CVE-2024-21887","cvss": 9.1,  "asset": "Ivanti Connect","status": "open",     "kev": true,  "days_open": 8},
-		{"cve": "CVE-2024-1709", "cvss": 10.0, "asset": "ConnectWise",   "status": "patching", "kev": true,  "days_open": 5},
-		{"cve": "CVE-2023-44487","cvss": 7.5,  "asset": "Web Servers (3)","status": "open",    "kev": false, "days_open": 31},
-		{"cve": "CVE-2024-0519", "cvss": 8.8,  "asset": "Chrome Fleet",  "status": "patching", "kev": false, "days_open": 4},
+	topVulns := []topVulnRow{}
+	trows, _ := db.Query(`SELECT cve_id, severity, COALESCE(cvss_score,0), COALESCE(NULLIF(name,''), package_name), COUNT(DISTINCT agent_id)
+		FROM vulnerabilities WHERE tenant_id=$1 AND severity IN ('critical','high')
+		GROUP BY cve_id, severity, cvss_score, COALESCE(NULLIF(name,''), package_name)
+		ORDER BY COALESCE(cvss_score,0) DESC LIMIT 5`, tid)
+	if trows != nil {
+		defer trows.Close()
+		for trows.Next() {
+			var r topVulnRow
+			trows.Scan(&r.CveID, &r.Severity, &r.Cvss, &r.Title, &r.AffectedSystems)
+			topVulns = append(topVulns, r)
+		}
 	}
+
+	type buVulnRow struct {
+		Name         string `json:"name"`
+		CriticalVulns int   `json:"critical_vulns"`
+	}
+	byBU := []buVulnRow{}
+	brows, _ := db.Query(`
+		SELECT COALESCE(NULLIF(a.business_unit,''),'Unassigned'), COUNT(*) FILTER (WHERE v.severity='critical')
+		FROM vulnerabilities v
+		JOIN agents ag ON ag.id = v.agent_id
+		LEFT JOIN assets a ON a.agent_id = ag.id
+		WHERE v.tenant_id=$1
+		GROUP BY 1 ORDER BY 2 DESC LIMIT 8`, tid)
+	if brows != nil {
+		defer brows.Close()
+		for brows.Next() {
+			var r buVulnRow
+			brows.Scan(&r.Name, &r.CriticalVulns)
+			byBU = append(byBU, r)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"critical_vulns":    critVulns,
-		"total_vulns":       totalVulns,
-		"internet_exposed":  23,
-		"patch_compliance":  patchComp,
-		"mttr_days":         14,
-		"kev_count":         3,
-		"remediation_pct":   67,
-		"affected_bus":      affectedBUs,
-		"top_vulns":         topVulns,
+		"total_vulns":      totalVulns,
+		"critical":         critVulns,
+		"high":             highVulns,
+		"exploitable":      0,
+		"patch_coverage":   patchComp,
+		"avg_cvss":         avgCvss,
+		"top_vulns":        topVulns,
+		"by_business_unit": byBU,
 	})
 }
 
@@ -476,45 +622,49 @@ func GetEXEVulns(c *gin.Context) {
 
 func GetEXEIncidents(c *gin.Context) {
 	tid := tenantIDFromContext(c)
+	db := database.DB
 	var totalInc, critInc int
-	database.DB.QueryRow(`SELECT total_incidents, critical_incidents FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&totalInc, &critInc)
+	var mttd, mttr float64
+	var slaComp int
+	db.QueryRow(`SELECT total_incidents, critical_incidents, mttd_hours, mttr_hours, sla_compliance
+		FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&totalInc, &critInc, &mttd, &mttr, &slaComp)
 
-	sevDist := []gin.H{
-		{"severity": "critical", "count": 4,  "resolved": 1, "sla_breach": 1},
-		{"severity": "high",     "count": 14, "resolved": 9, "sla_breach": 2},
-		{"severity": "medium",   "count": 31, "resolved": 24,"sla_breach": 0},
-		{"severity": "low",      "count": 56, "resolved": 52,"sla_breach": 0},
+	var open int
+	db.QueryRow(`SELECT COUNT(*) FROM incidents WHERE tenant_id=$1 AND status NOT IN ('closed','resolved')`, tid).Scan(&open)
+
+	var repeatIncidents int
+	db.QueryRow(`SELECT COUNT(*) FROM (
+		SELECT fingerprint FROM incidents WHERE tenant_id=$1 AND fingerprint IS NOT NULL AND fingerprint != ''
+		GROUP BY fingerprint HAVING COUNT(*) > 1
+	) x`, tid).Scan(&repeatIncidents)
+
+	type sevRow struct {
+		Severity string `json:"severity"`
+		Count    int    `json:"count"`
 	}
-	categories := []gin.H{
-		{"category": "Malware/Ransomware",       "count": 8,  "pct": 22},
-		{"category": "Phishing/BEC",             "count": 19, "pct": 31},
-		{"category": "Unauthorized Access",      "count": 11, "pct": 18},
-		{"category": "Data Exfiltration",        "count": 5,  "pct": 8},
-		{"category": "Denial of Service",        "count": 3,  "pct": 5},
-		{"category": "Insider Threat",           "count": 4,  "pct": 6},
-		{"category": "Supply Chain",             "count": 2,  "pct": 4},
-		{"category": "Other",                    "count": 4,  "pct": 6},
+	bySev := []sevRow{}
+	srows, _ := db.Query(`SELECT severity, COUNT(*) FROM incidents WHERE tenant_id=$1 GROUP BY severity ORDER BY COUNT(*) DESC`, tid)
+	if srows != nil {
+		defer srows.Close()
+		for srows.Next() {
+			var r sevRow
+			srows.Scan(&r.Severity, &r.Count)
+			bySev = append(bySev, r)
+		}
 	}
-	rootCauses := []gin.H{
-		{"cause": "Phishing Email",         "count": 18, "pct": 29},
-		{"cause": "Unpatched Software",     "count": 14, "pct": 23},
-		{"cause": "Misconfiguration",       "count": 11, "pct": 18},
-		{"cause": "Credential Compromise",  "count": 9,  "pct": 14},
-		{"cause": "Insider Action",         "count": 5,  "pct": 8},
-		{"cause": "Third-Party/Supply Chain","count": 4, "pct": 6},
-	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_incidents":  totalInc,
-		"critical":         critInc,
-		"open":             9,
-		"repeat_incidents": 7,
-		"avg_mttd_hours":   3.2,
-		"avg_mttr_hours":   14.8,
-		"sla_breach_count": 3,
-		"sev_distribution": sevDist,
-		"categories":       categories,
-		"root_causes":      rootCauses,
-		"business_impact":  "3 incidents with direct revenue impact totaling $1.2M estimated exposure",
+		"critical_incidents": critInc,
+		"open":              open,
+		"repeat_incidents":  repeatIncidents,
+		"mttd_hours":        mttd,
+		"mttr_hours":        mttr,
+		"sla_compliance":    slaComp,
+		"sla_breach_count":  0,
+		"by_severity":       bySev,
+		"by_category":       []gin.H{},
+		"root_causes":       []gin.H{},
 	})
 }
 
@@ -527,69 +677,77 @@ func GetEXEAssets(c *gin.Context) {
 	var totalAssets, critAssets int
 	db.QueryRow(`SELECT total_assets, critical_assets FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&totalAssets, &critAssets)
 
-	var managedEndpoints, cloudAssets, mobileDevices int
-	db.QueryRow(`SELECT COUNT(*) FROM assets WHERE tenant_id=$1 AND asset_type IN ('workstation','laptop','server')`, fmt.Sprintf("%d", tid)).Scan(&managedEndpoints)
-	db.QueryRow(`SELECT COUNT(*) FROM assets WHERE tenant_id=$1 AND asset_type IN ('cloud_instance','container')`, fmt.Sprintf("%d", tid)).Scan(&cloudAssets)
-
-	assetCategories := []gin.H{
-		{"category": "Servers",         "total": 284,  "managed": 271, "critical": 48, "health": 92},
-		{"category": "Workstations",    "total": 1847, "managed": 1803,"critical": 0,  "health": 96},
-		{"category": "Network Devices", "total": 193,  "managed": 188, "critical": 22, "health": 88},
-		{"category": "Cloud Instances", "total": 412,  "managed": 398, "critical": 67, "health": 94},
-		{"category": "Mobile Devices",  "total": 634,  "managed": 591, "critical": 0,  "health": 89},
-		{"category": "IoT/OT",          "total": 78,   "managed": 61,  "critical": 12, "health": 72},
+	type catRow struct {
+		Name        string `json:"name"`
+		Count       int    `json:"count"`
+		HealthScore int    `json:"health_score"`
 	}
+	cats := []catRow{}
+	crows, _ := db.Query(`SELECT asset_type, COUNT(*) FROM assets WHERE tenant_id=$1 GROUP BY asset_type ORDER BY COUNT(*) DESC`, tid)
+	if crows != nil {
+		defer crows.Close()
+		for crows.Next() {
+			var r catRow
+			crows.Scan(&r.Name, &r.Count)
+			cats = append(cats, r)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"total_assets":        totalAssets,
-		"critical_assets":     critAssets,
-		"managed_endpoints":   managedEndpoints,
-		"cloud_assets":        cloudAssets,
-		"mobile_devices":      mobileDevices,
-		"unsupported_systems": 23,
-		"asset_health_score":  91,
-		"coverage_pct":        96,
-		"asset_categories":    assetCategories,
+		"total_assets":    totalAssets,
+		"critical_assets": critAssets,
+		"managed_pct":     0,
+		"unmanaged_count": 0,
+		"avg_health":      0,
+		"categories":      cats,
 	})
 }
 
 // ── forecasting ───────────────────────────────────────────────────────────────
 
+var exeLowerIsBetterMetrics = map[string]bool{
+	"risk_score": true, "mttr_hours": true, "mttd_hours": true,
+	"total_incidents": true, "total_vulns": true, "false_positive_rate": true,
+}
+
 func GetEXEForecasting(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	db := database.DB
 
-	type fcRow struct {
-		Date       string  `json:"date"`
-		Metric     string  `json:"metric"`
-		Value      float64 `json:"value"`
-		ConfLow    float64 `json:"confidence_low"`
-		ConfHigh   float64 `json:"confidence_high"`
+	rows, _ := db.Query(`SELECT forecast_date, metric, predicted_value
+		FROM exe_forecasts WHERE tenant_id=$1 ORDER BY metric, forecast_date ASC`, tid)
+
+	type point struct {
+		Value float64 `json:"value"`
 	}
-	rows, _ := db.Query(`SELECT forecast_date, metric, predicted_value, confidence_low, confidence_high
-		FROM exe_forecasts WHERE tenant_id=$1 ORDER BY forecast_date ASC, metric`, tid)
-	forecasts := []fcRow{}
+	order := []string{}
+	byMetric := map[string][]point{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var r fcRow; var d time.Time
-			rows.Scan(&d, &r.Metric, &r.Value, &r.ConfLow, &r.ConfHigh)
-			r.Date = d.Format("Jan 2")
-			forecasts = append(forecasts, r)
+			var metric string
+			var val float64
+			var d time.Time
+			rows.Scan(&d, &metric, &val)
+			if _, ok := byMetric[metric]; !ok {
+				order = append(order, metric)
+			}
+			byMetric[metric] = append(byMetric[metric], point{val})
 		}
 	}
 
-	// narrative insights
-	insights := []gin.H{
-		{"title": "Incident Growth Projected", "text": "Based on current trends, incident volume is projected to increase 18% over the next 30 days. Primary driver: expanded attack surface from cloud migration.", "severity": "medium", "metric": "incidents"},
-		{"title": "Compliance Readiness Declining", "text": "PCI DSS readiness is projected to reach 65% by audit date unless 8 critical controls are remediated. Recommend immediate escalation.", "severity": "critical", "metric": "compliance"},
-		{"title": "Patch Backlog Growth", "text": "Without additional remediation capacity, patch backlog will grow from 354 to ~487 items (+37%) in 30 days.", "severity": "high", "metric": "vulns"},
-		{"title": "Threat Actor Activity Increasing", "text": "Financial services sector threat activity forecast shows 23% increase in Q3, driven by APT29 and ransomware-as-a-service expansion.", "severity": "high", "metric": "threats"},
-		{"title": "Resource Requirement", "text": "Current analyst workload trajectory projects 140% capacity utilization in 6 weeks. Recommend hiring or automation expansion.", "severity": "medium", "metric": "resources"},
+	metrics := []gin.H{}
+	for _, m := range order {
+		metrics = append(metrics, gin.H{
+			"name":            m,
+			"points":          byMetric[m],
+			"lower_is_better": exeLowerIsBetterMetrics[m],
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"forecasts": forecasts,
-		"insights":  insights,
+		"metrics":  metrics,
+		"insights": []gin.H{},
 	})
 }
 
@@ -604,7 +762,7 @@ func GetEXEAnalytics(c *gin.Context) {
 		SecurityScore   int     `json:"security_score"`
 		RiskScore       int     `json:"risk_score"`
 		ComplianceScore int     `json:"compliance_score"`
-		Incidents       int     `json:"total_incidents"`
+		Incidents       int     `json:"incidents"`
 		Vulns           int     `json:"total_vulns"`
 		MTTD            float64 `json:"mttd_hours"`
 		MTTR            float64 `json:"mttr_hours"`
@@ -625,30 +783,10 @@ func GetEXEAnalytics(c *gin.Context) {
 		}
 	}
 
-	// SOC performance metrics
-	socPerf := gin.H{
-		"alerts_per_analyst_day":    42,
-		"escalation_rate":           8.3,
-		"first_response_mins":       4.2,
-		"analyst_utilization":       87,
-		"playbook_adherence":        94,
-		"automation_savings_hours":  124,
-	}
-
-	// Business unit risk comparison
-	buComparison := []gin.H{
-		{"name": "Finance",       "risk_score": 78, "incidents": 3, "compliance": 91},
-		{"name": "Engineering",   "risk_score": 64, "incidents": 5, "compliance": 82},
-		{"name": "Customer Ops",  "risk_score": 59, "incidents": 2, "compliance": 88},
-		{"name": "HR",            "risk_score": 41, "incidents": 1, "compliance": 94},
-		{"name": "Marketing",     "risk_score": 38, "incidents": 2, "compliance": 90},
-		{"name": "Legal",         "risk_score": 28, "incidents": 0, "compliance": 97},
-	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"series":         series,
-		"soc_perf":       socPerf,
-		"bu_comparison":  buComparison,
+		"time_series":     series,
+		"soc_performance": gin.H{},
+		"business_units":  []gin.H{},
 	})
 }
 

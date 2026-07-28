@@ -491,6 +491,7 @@ export const complianceAPI = {
   getAll:    ()                    => api.get('/compliance/reports'),
   getById:   (id: number)          => api.get(`/compliance/reports/${id}`),
   getScores: (id: number)          => api.get(`/compliance/reports/${id}/scores`),
+  getLatestScores: ()              => api.get('/compliance/scores/latest').catch(() => ({ data: [] })),
   delete:    (id: number)          => api.delete(`/compliance/reports/${id}`),
   pdfUrl:    (id: number)          => `${api.defaults.baseURL}/compliance/reports/${id}/pdf`,
 };

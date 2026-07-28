@@ -213,9 +213,15 @@ func portEdgeInfo(port string) (service, sensitivity, note string) {
 
 // alertCountsByAgent returns a map of agent_id → unacked alert count for a tenant.
 func alertCountsByAgent(tenantID int) (map[int]int, error) {
+	// Was `acknowledged=false` — no such boolean column exists on `alerts`
+	// (real lifecycle field is `status`: 'open'|'acknowledged'|'resolved',
+	// same convention GetAlertsPaginated uses). The query always failed and
+	// the caller's non-fatal fallback to an empty map meant every node's
+	// AlertCount — and the map's "alerting nodes" summary/highlighting —
+	// silently showed 0 regardless of how many real open alerts existed.
 	rows, err := database.DB.Query(
 		`SELECT agent_id, COUNT(*) FROM alerts
-		 WHERE tenant_id=$1 AND acknowledged=false
+		 WHERE tenant_id=$1 AND status='open'
 		 GROUP BY agent_id`,
 		tenantID,
 	)

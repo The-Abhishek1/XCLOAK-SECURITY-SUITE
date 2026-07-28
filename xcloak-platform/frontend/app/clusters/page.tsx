@@ -7,7 +7,8 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { clustersAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Copy, Cpu, ExternalLink, GitMerge, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, VolumeX, Zap } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Copy, Cpu, ExternalLink, GitMerge, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, VolumeX, Zap } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -203,29 +204,13 @@ function CopyBtn({ text }: { text: string }) {
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KPICard({ label, value, sub, color, icon: Icon }: {
-  label: string; value: number | string; sub?: string; color: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="g-card p-4 flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider mb-0.5 font-medium" style={{ color: 'var(--text-3)' }}>{label}</p>
-        <p className="text-2xl font-bold leading-none" style={{ color }}>{value}</p>
-        {sub && <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
 // ── Trend Sparkline ────────────────────────────────────────────────────────────
 
 function TrendSparkline({ data }: { data: Array<{ day: string; count: number }> }) {
   const max = Math.max(...data.map(d => d.count), 1);
-  if (!data.length) return <div className="h-12" />;
+  if (!data.length || data.every(d => d.count === 0)) {
+    return <div className="h-12 flex items-center justify-center text-[11px]" style={{ color: 'var(--text-3)' }}>No data</div>;
+  }
   return (
     <div className="flex items-end gap-1 h-12">
       {data.map((d, i) => (
@@ -1102,14 +1087,14 @@ export default function ClustersPage() {
           {overview ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <KPICard label="Active Clusters"   value={overview.active_clusters}    color="var(--accent)"   icon={GitMerge} />
-                <KPICard label="New (24h)"         value={overview.new_clusters}        color="#fbbf24"         icon={Plus} />
-                <KPICard label="High Risk"         value={overview.high_risk}           color="var(--red)"      icon={AlertTriangle} />
-                <KPICard label="Campaigns"         value={overview.campaigns}           color="#a78bfa"         icon={Target} />
-                <KPICard label="Related Incidents" value={overview.related_incidents}   color="#fb923c"         icon={Zap} />
-                <KPICard label="Avg Cluster Size"  value={overview.avg_cluster_size}    color="var(--text-2)"   icon={Layers} />
-                <KPICard label="Cluster Confidence" value={`${overview.cluster_confidence}%`} color="var(--green)" icon={Shield} />
-                <KPICard label="Total"             value={overview.total}               color="var(--text-3)"   icon={Activity} />
+                <MetricCard layout="icon-chip" label="Active Clusters"   value={overview.active_clusters}    color="var(--accent)"   icon={GitMerge} />
+                <MetricCard layout="icon-chip" label="New (24h)"         value={overview.new_clusters}        color="#fbbf24"         icon={Plus} />
+                <MetricCard layout="icon-chip" label="High Risk"         value={overview.high_risk}           color="var(--red)"      icon={AlertTriangle} />
+                <MetricCard layout="icon-chip" label="Campaigns"         value={overview.campaigns}           color="#a78bfa"         icon={Target} />
+                <MetricCard layout="icon-chip" label="Related Incidents" value={overview.related_incidents}   color="#fb923c"         icon={Zap} />
+                <MetricCard layout="icon-chip" label="Avg Cluster Size"  value={overview.avg_cluster_size}    color="var(--text-2)"   icon={Layers} />
+                <MetricCard layout="icon-chip" label="Cluster Confidence" value={`${overview.cluster_confidence}%`} color="var(--green)" icon={Shield} />
+                <MetricCard layout="icon-chip" label="Total"             value={overview.total}               color="var(--text-3)"   icon={Activity} />
               </div>
 
               {/* Trend */}

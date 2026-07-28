@@ -71,6 +71,34 @@ func GetFrameworkScores(reportID int, tenantID int) ([]FrameworkScore, error) {
 	return scores, nil
 }
 
+// GetLatestFrameworkScores returns each framework's most recently computed
+// score (from its latest report), scoped to tenantID.
+func GetLatestFrameworkScores(tenantID int) ([]FrameworkScore, error) {
+	rows, err := database.DB.Query(`
+		SELECT cs.framework, cs.score, cs.passed, cs.failed
+		FROM compliance_scores cs
+		WHERE cs.tenant_id = $1
+		  AND cs.report_id = (
+		      SELECT MAX(cs2.report_id) FROM compliance_scores cs2
+		      WHERE cs2.framework = cs.framework AND cs2.tenant_id = $1
+		  )
+		ORDER BY cs.framework
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	scores := []FrameworkScore{}
+	for rows.Next() {
+		var fs FrameworkScore
+		if err := rows.Scan(&fs.Framework, &fs.Score, &fs.Passed, &fs.Failed); err == nil {
+			scores = append(scores, fs)
+		}
+	}
+	return scores, nil
+}
+
 type platformSnapshot struct {
 	agentCount     int
 	onlineAgents   int

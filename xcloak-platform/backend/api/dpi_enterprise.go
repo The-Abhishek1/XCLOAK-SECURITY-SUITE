@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -412,7 +414,7 @@ func GetDPITLSInspection(c *gin.Context) {
 		Severity    string `json:"severity"`
 	}
 	ja3s := []JA3Entry{}
-	jr, _ := database.DB.Query(`SELECT fingerprint, label, severity FROM ja3_fingerprints WHERE tenant_id=$1 OR tenant_id=0 OR tenant_id IS NULL ORDER BY severity DESC LIMIT 20`, tid)
+	jr, _ := database.DB.Query(`SELECT hash, threat_name, severity FROM ja3_fingerprints WHERE tenant_id=$1 OR tenant_id IS NULL ORDER BY severity DESC LIMIT 20`, tid)
 	if jr != nil { defer jr.Close(); for jr.Next() { var j JA3Entry; jr.Scan(&j.Fingerprint, &j.Label, &j.Severity); ja3s = append(ja3s, j) } }
 	if ja3s == nil { ja3s = []JA3Entry{} }
 
@@ -675,17 +677,17 @@ Based on the DPI data, provide analysis in JSON only (no markdown):
 // PostDPIResponseAction — POST /api/dpi/response-action
 func PostDPIResponseAction(c *gin.Context) {
 	tid := tenantIDFromContext(c)
-	uid := userIDFromContext(c)
 
 	var body struct {
-		Action    string `json:"action"`
-		IP        string `json:"ip"`
-		Domain    string `json:"domain"`
-		URL       string `json:"url"`
-		JA3       string `json:"ja3"`
-		AgentID   int    `json:"agent_id"`
-		SessionID string `json:"session_id"`
-		Reason    string `json:"reason"`
+		Action     string `json:"action"`
+		IP         string `json:"ip"`
+		Domain     string `json:"domain"`
+		URL        string `json:"url"`
+		JA3        string `json:"ja3"`
+		AgentID    int    `json:"agent_id"`
+		SessionID  string `json:"session_id"`
+		PlaybookID int    `json:"playbook_id"`
+		Reason     string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"}); return
@@ -695,39 +697,105 @@ func PostDPIResponseAction(c *gin.Context) {
 	switch body.Action {
 	case "block_ip":
 		if body.IP == "" { c.JSON(http.StatusBadRequest, gin.H{"error": "ip required"}); return }
-		database.DB.Exec(`INSERT INTO iocs (tenant_id,created_by,ioc_type,value,threat_type,confidence,is_enabled,description) VALUES ($1,$2,'ip',$3,'dpi_block',100,true,$4) ON CONFLICT (tenant_id,ioc_type,value) DO UPDATE SET is_enabled=true`,
-			tid, uid, body.IP, "DPI Block: "+body.Reason)
+		// Previously hand-rolled a raw INSERT against columns that don't
+		// exist on `iocs` (real: indicator, type, severity, description,
+		// enabled) and bypassed the transaction that sets the app.tenant_id
+		// GUC this table's forced row-level-security policy requires — it
+		// silently inserted nothing while still reporting success.
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.IP, Type: "ip", Severity: "high", Enabled: true,
+			Description: "DPI Block: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ip: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("IP %s blocked via IOC", body.IP)
 	case "block_domain":
 		if body.Domain == "" { c.JSON(http.StatusBadRequest, gin.H{"error": "domain required"}); return }
-		database.DB.Exec(`INSERT INTO iocs (tenant_id,created_by,ioc_type,value,threat_type,confidence,is_enabled,description) VALUES ($1,$2,'domain',$3,'dpi_block',100,true,$4) ON CONFLICT (tenant_id,ioc_type,value) DO UPDATE SET is_enabled=true`,
-			tid, uid, body.Domain, "DPI Block: "+body.Reason)
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Domain, Type: "domain", Severity: "high", Enabled: true,
+			Description: "DPI Block: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block domain: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("Domain %s blocked", body.Domain)
 	case "block_url":
 		if body.URL == "" { c.JSON(http.StatusBadRequest, gin.H{"error": "url required"}); return }
-		database.DB.Exec(`INSERT INTO iocs (tenant_id,created_by,ioc_type,value,threat_type,confidence,is_enabled,description) VALUES ($1,$2,'url',$3,'dpi_block',100,true,$4) ON CONFLICT DO NOTHING`,
-			tid, uid, body.URL, "DPI Block: "+body.Reason)
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.URL, Type: "url", Severity: "high", Enabled: true,
+			Description: "DPI Block: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block url: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("URL %s blocked", body.URL)
 	case "block_ja3":
-		if body.JA3 == "" { c.JSON(http.StatusBadRequest, gin.H{"error": "ja3 required"}); return }
-		database.DB.Exec(`INSERT INTO ja3_fingerprints (tenant_id,fingerprint,label,severity,description) VALUES ($1,$2,'DPI-blocked','critical',$3) ON CONFLICT DO NOTHING`,
-			tid, body.JA3, "Blocked via DPI response: "+body.Reason)
+		if len(body.JA3) != 32 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ja3 must be a 32-character MD5 hex string"}); return
+		}
+		// Real columns are hash/threat_name/source (not fingerprint/label,
+		// which don't exist on this table).
+		if _, err := database.DB.Exec(
+			`INSERT INTO ja3_fingerprints (tenant_id,hash,threat_name,severity,source,description)
+			 VALUES ($1,$2,'DPI-blocked','critical','dpi-response',$3)
+			 ON CONFLICT (hash, COALESCE(tenant_id, 0)) DO UPDATE SET enabled=true`,
+			tid, body.JA3, "Blocked via DPI response: "+body.Reason,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ja3: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("JA3 %s blocked", body.JA3[:16]+"...")
 	case "kill_session":
-		result = fmt.Sprintf("Session %s kill requested for agent #%d", body.SessionID, body.AgentID)
+		// No agent task type exists anywhere in the executor for terminating
+		// a single already-established network session (kill_process kills
+		// by PID, which DPI sessions don't carry) — honest failure instead
+		// of a 200 that reads like the connection was actually torn down.
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "terminating an individual network session is not supported by the agent yet"})
+		return
 	case "push_firewall_rule":
-		result = fmt.Sprintf("Firewall rule pushed: block %s", body.IP)
+		if body.IP == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ip required"}); return
+		}
+		// Same real firewall_rules table Incidents'/NBA's block_ip actions
+		// use — an actually-enforced rule, not just a canned string.
+		if _, err := database.DB.Exec(
+			`INSERT INTO firewall_rules (tenant_id,name,direction,action,source_ip,enabled)
+			 VALUES ($1,$2,'inbound','block',$3,true) ON CONFLICT DO NOTHING`,
+			tid, "DPI block: "+body.IP, body.IP,
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create firewall rule: " + err.Error()}); return
+		}
+		result = fmt.Sprintf("Firewall rule created blocking %s", body.IP)
 	case "create_alert":
-		database.DB.Exec(`INSERT INTO alerts (tenant_id,rule_id,agent_id,message,severity,status) VALUES ($1,0,$2,$3,'high','open') ON CONFLICT DO NOTHING`,
-			tid, body.AgentID, fmt.Sprintf("DPI Alert: %s — %s", body.Action, body.Reason))
+		var agentIDArg any
+		if body.AgentID != 0 {
+			agentIDArg = body.AgentID
+		}
+		if _, err := database.DB.Exec(
+			`INSERT INTO alerts (tenant_id,agent_id,rule_name,log_message,severity,status) VALUES ($1,$2,'DPI Response Action',$3,'high','open')`,
+			tid, agentIDArg, fmt.Sprintf("DPI Alert: %s — %s", body.Action, body.Reason),
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create alert: " + err.Error()}); return
+		}
 		result = "Alert created"
 	case "create_incident":
 		var incID int
-		database.DB.QueryRow(`INSERT INTO incidents (tenant_id,title,description,severity,status,created_by) VALUES ($1,$2,$3,'high','open',$4) RETURNING id`,
-			tid, "DPI Incident: "+body.Reason, fmt.Sprintf("Deep packet inspection triggered incident. IP: %s Domain: %s URL: %s", body.IP, body.Domain, body.URL), uid).Scan(&incID)
+		if err := database.DB.QueryRow(`INSERT INTO incidents (tenant_id,title,description,severity,status) VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, "DPI Incident: "+body.Reason, fmt.Sprintf("Deep packet inspection triggered incident. IP: %s Domain: %s URL: %s", body.IP, body.Domain, body.URL)).Scan(&incID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create incident: " + err.Error()}); return
+		}
 		result = fmt.Sprintf("Incident #%d created", incID)
 	case "run_playbook":
-		result = "SOAR playbook queued"
+		if body.PlaybookID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "playbook_id required"}); return
+		}
+		playbook, err := repositories.GetPlaybookByID(body.PlaybookID, tid)
+		if err != nil || playbook == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "playbook not found"}); return
+		}
+		if err := services.ExecutePlaybookByID(body.PlaybookID, tid, models.Alert{
+			TenantID: tid, Severity: "high", RuleName: fmt.Sprintf("DPI: %s", body.Reason),
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "playbook execution failed: " + err.Error()}); return
+		}
+		result = fmt.Sprintf("Playbook %q triggered", playbook.Name)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"}); return
 	}

@@ -44,4 +44,5 @@ type Agent struct {
 	// Server-computed fields — populated in list endpoints, never sent by agents.
 	OpenAlertCount int  `json:"open_alert_count,omitempty"`
 	RiskScore      *int `json:"risk_score,omitempty"`
+	IsIsolated     bool `json:"is_isolated,omitempty"`
 }

@@ -61,6 +61,23 @@
   --destructive: var(--red);
   --destructive-foreground: #fff;
   --radius: 0.5rem;
+
+  /* ── Spacing scale (theme-independent) ──────────────────── */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px; --space-5: 20px;
+  --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+  /* ── Radius scale — matches existing .g-* literals ──────── */
+  --radius-sm: 6px;   /* .s-critical etc. severity badges */
+  --radius-md: 9px;   /* .g-btn / .g-input / .g-select */
+  --radius-lg: 12px;  /* .g-card / .g-table */
+  --radius-xl: 14px;  /* .g-panel / .stat-glow */
+  --radius-2xl: 16px; /* .g-modal */
+
+  /* ── Type scale — matches existing hardcoded font sizes ─── */
+  --text-xs: 11px; --text-sm: 13px; --text-base: 14px; --text-md: 15px;
+  --text-lg: 18px; --text-xl: 22px; --text-2xl: 28px;
+  --font-weight-normal: 400; --font-weight-medium: 500;
+  --font-weight-semibold: 600; --font-weight-bold: 700;
 }
 
 /* ── LIGHT THEME ─────────────────────────────────────────── */
@@ -127,7 +144,7 @@
     background: var(--bg-0);
     color: var(--text-1);
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-    font-size: 14px;
+    font-size: var(--text-base);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     min-height: 100%;
@@ -146,7 +163,7 @@
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-glass);
 }
 
@@ -155,7 +172,7 @@
   backdrop-filter: var(--blur-sm);
   -webkit-backdrop-filter: var(--blur-sm);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -170,11 +187,11 @@
   background: var(--glass-bg);
   backdrop-filter: var(--blur-sm);
   -webkit-backdrop-filter: var(--blur-sm);
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
   color: var(--text-1);
-  font-size: 13px;
-  padding: 8px 12px;
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
   width: 100%;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -190,11 +207,11 @@
   background: var(--glass-bg);
   backdrop-filter: var(--blur-sm);
   -webkit-backdrop-filter: var(--blur-sm);
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
   color: var(--text-1);
-  font-size: 13px;
-  padding: 8px 32px 8px 12px;
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
   width: 100%;
   outline: none;
   cursor: pointer;
@@ -210,7 +227,7 @@
 /* ── BUTTONS ─────────────────────────────────────────────── */
 .g-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  border-radius: 9px; font-size: 13px; font-weight: 500;
+  border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--font-weight-medium);
   padding: 7px 14px; cursor: pointer;
   transition: all 0.15s ease; white-space: nowrap;
   border: none; outline: none;
@@ -240,17 +257,18 @@
 .g-btn-danger:hover { background: var(--red); color: #fff; }
 
 /* ── SEVERITY BADGES ─────────────────────────────────────── */
-.s-critical { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-border);    border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
-.s-high     { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
-.s-medium   { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
-.s-low      { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-border);   border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
-.s-online   { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-border);  border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
-.s-offline  { background: rgba(74,90,117,0.15); color: var(--text-3); border: 1px solid rgba(74,90,117,0.2); border-radius: 6px; padding: 2px 8px; font-size: 11px; }
+.s-critical { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-border);    border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--font-weight-medium); }
+.s-high     { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--font-weight-medium); }
+.s-medium   { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--font-weight-medium); }
+.s-low      { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-border);   border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--font-weight-medium); }
+.s-online   { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-border);  border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--font-weight-medium); }
+.s-offline  { background: rgba(74,90,117,0.15); color: var(--text-3); border: 1px solid rgba(74,90,117,0.2); border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); }
+.s-info     { background: rgba(74,90,117,0.15); color: var(--text-3); border: 1px solid rgba(74,90,117,0.2); border-radius: var(--radius-sm); padding: 2px 8px; font-size: var(--text-xs); font-weight: var(--font-weight-medium); }
 
 /* ── TABLE ───────────────────────────────────────────────── */
-.g-table { background: var(--glass-bg); backdrop-filter: var(--blur-sm); -webkit-backdrop-filter: var(--blur-sm); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.g-thead { background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--border); padding: 10px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); }
-.g-tr { border-bottom: 1px solid var(--border); padding: 12px 16px; transition: background 0.12s; }
+.g-table { background: var(--glass-bg); backdrop-filter: var(--blur-sm); -webkit-backdrop-filter: var(--blur-sm); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.g-thead { background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--border); padding: 10px 16px; font-size: var(--text-xs); font-weight: var(--font-weight-semibold); text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); }
+.g-tr { border-bottom: 1px solid var(--border); padding: var(--space-3) var(--space-4); transition: background 0.12s; }
 .g-tr:hover { background: var(--accent-glow); }
 .g-tr:last-child { border-bottom: none; }
 
@@ -261,8 +279,8 @@
   backdrop-filter: var(--blur-sm);
   -webkit-backdrop-filter: var(--blur-sm);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 20px;
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -298,7 +316,7 @@
   background: rgba(0,0,0,0.55);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
+  display: flex; align-items: center; justify-content: center; padding: var(--space-4);
   animation: fadeIn 0.15s ease;
 }
 .g-modal {
@@ -306,7 +324,7 @@
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border-md);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
   width: 100%; max-width: 480px;
   animation: slideUp 0.2s ease;
@@ -331,7 +349,13 @@
 /* pulse dot */
 .dot-online  { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(52,211,153,0.4); animation: ping 2s ease-out infinite; }
 .dot-offline { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+.dot-critical { width: 7px; height: 7px; border-radius: 50%; background: var(--red);    box-shadow: 0 0 0 0 rgba(248,81,73,0.4);   animation: ping-red 2s ease-out infinite; }
+.dot-high     { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 0 rgba(251,146,60,0.4);  animation: ping-orange 2s ease-out infinite; }
+.dot-medium   { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); }
+.dot-low      { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
 @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.4); } 70% { box-shadow: 0 0 0 8px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
+@keyframes ping-red    { 0% { box-shadow: 0 0 0 0 rgba(248,81,73,0.4); }  70% { box-shadow: 0 0 0 8px rgba(248,81,73,0); }  100% { box-shadow: 0 0 0 0 rgba(248,81,73,0); } }
+@keyframes ping-orange { 0% { box-shadow: 0 0 0 0 rgba(251,146,60,0.4); } 70% { box-shadow: 0 0 0 8px rgba(251,146,60,0); } 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0); } }
 
 /* grid line bg decoration */
 .grid-bg {

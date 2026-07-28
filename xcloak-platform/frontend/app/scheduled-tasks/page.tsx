@@ -4,18 +4,24 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { steAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
+import {
+  LayoutDashboard, ListTodo, CalendarClock, History, ClipboardCheck, Bell, BarChart3,
+  ScrollText, FileBarChart2, Sparkles, X, Plus, Trash2, RefreshCw, Play, Check,
+  AlertTriangle, Download, Clock,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'tasks' | 'upcoming' | 'history' | 'approvals' | 'notifications' | 'analytics' | 'audit' | 'reports';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',     label: 'Dashboard' },
-  { id: 'tasks',         label: 'Task Library' },
-  { id: 'upcoming',      label: 'Upcoming' },
-  { id: 'history',       label: 'Exec History' },
-  { id: 'approvals',     label: 'Approvals' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'analytics',     label: 'Analytics' },
-  { id: 'audit',         label: 'Audit Trail' },
-  { id: 'reports',       label: 'Reports' },
+const TABS: { key: Tab; label: string; icon: any; count?: number }[] = [
+  { key: 'dashboard',     label: 'Dashboard',     icon: LayoutDashboard },
+  { key: 'tasks',         label: 'Task Library',  icon: ListTodo },
+  { key: 'upcoming',      label: 'Upcoming',      icon: CalendarClock },
+  { key: 'history',       label: 'Exec History',  icon: History },
+  { key: 'approvals',     label: 'Approvals',     icon: ClipboardCheck },
+  { key: 'notifications', label: 'Notifications', icon: Bell },
+  { key: 'analytics',     label: 'Analytics',     icon: BarChart3 },
+  { key: 'audit',         label: 'Audit Trail',   icon: ScrollText },
+  { key: 'reports',       label: 'Reports',       icon: FileBarChart2 },
 ];
 
 const STATUS_COLOR: Record<string, string> = {
@@ -64,15 +70,6 @@ function pill(label: string, color: string) {
     </span>
   );
 }
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────
 function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) => void }) {
@@ -80,31 +77,32 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Tasks"      value={dash.total_tasks}           color="var(--accent)" />
-        <StatCard label="Active"           value={dash.active_tasks}          color="#22c55e" />
-        <StatCard label="Paused"           value={dash.paused_tasks}          color="#6b7280" />
-        <StatCard label="Running Now"      value={dash.running_tasks}         color="#3b82f6" sub="currently executing" />
-        <StatCard label="Completed"        value={dash.completed_executions}  color="#22c55e" sub="total" />
-        <StatCard label="Failed"           value={dash.failed_executions}     color="#ef4444" sub="total" />
-        <StatCard label="Avg Duration"     value={`${((dash.avg_execution_time||0)/1000).toFixed(1)}s`} color="#f97316" />
-        <StatCard label="Total Executions" value={dash.total_executions}      color="#a855f7" />
+        <MetricCard label="Total Tasks"      value={dash.total_tasks}           color="var(--accent)" />
+        <MetricCard label="Active"           value={dash.active_tasks}          color="#22c55e" />
+        <MetricCard label="Paused"           value={dash.paused_tasks}          color="#6b7280" />
+        <MetricCard label="Running Now"      value={dash.running_tasks}         color="#3b82f6" sub="currently executing" />
+        <MetricCard label="Completed"        value={dash.completed_executions}  color="#22c55e" sub="total" />
+        <MetricCard label="Failed"           value={dash.failed_executions}     color="#ef4444" sub="total" />
+        <MetricCard label="Avg Duration"     value={`${((dash.avg_execution_time||0)/1000).toFixed(1)}s`} color="#f97316" />
+        <MetricCard label="Total Executions" value={dash.total_executions}      color="#a855f7" />
       </div>
 
       {dash.pending_approvals > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608', cursor: 'pointer' }} onClick={() => onTabChange('approvals')}>
-          <span style={{ fontWeight: 700, color: '#f97316' }}>⚠ {dash.pending_approvals} task{dash.pending_approvals !== 1 ? 's' : ''} pending approval.</span>
+        <div className="g-card flex items-center gap-2" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608', cursor: 'pointer' }} onClick={() => onTabChange('approvals')}>
+          <AlertTriangle className="h-4 w-4" style={{ color: '#f97316' }} />
+          <span style={{ fontWeight: 700, color: '#f97316' }}>{dash.pending_approvals} task{dash.pending_approvals !== 1 ? 's' : ''} pending approval.</span>
           <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>Click to review in Approvals tab.</span>
         </div>
       )}
       {dash.unread_notifications > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #3b82f6', background: '#3b82f608' }}>
-          <span style={{ fontWeight: 700, color: '#3b82f6' }}>🔔 {dash.unread_notifications} unread notification{dash.unread_notifications !== 1 ? 's' : ''}.</span>
+        <div className="g-card flex items-center gap-2" style={{ padding: 12, borderLeft: '3px solid #3b82f6', background: '#3b82f608' }}>
+          <Bell className="h-4 w-4" style={{ color: '#3b82f6' }} />
+          <span style={{ fontWeight: 700, color: '#3b82f6' }}>{dash.unread_notifications} unread notification{dash.unread_notifications !== 1 ? 's' : ''}.</span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Upcoming Executions</div>
+        <SectionCard title="Upcoming Executions">
           {(!dash.upcoming_executions || dash.upcoming_executions.length === 0) && (
             <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No upcoming executions scheduled</div>
           )}
@@ -114,11 +112,10 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(u.next_run_at)}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Recent Failures</div>
+        </SectionCard>
+        <SectionCard title="Recent Failures">
           {(!dash.recent_failures || dash.recent_failures.length === 0) && (
-            <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No recent failures 🎉</div>
+            <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No recent failures</div>
           )}
           {(dash.recent_failures || []).map((f: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
@@ -126,11 +123,10 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               <span style={{ fontSize: 10, color: '#ef4444', background: '#ef444422', padding: '2px 7px', borderRadius: 8 }}>failed</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Task Coverage</div>
+      <SectionCard title="Task Coverage">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
           {[
             ['Active Tasks', dash.active_tasks, dash.total_tasks, '#22c55e'],
@@ -148,7 +144,7 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -158,9 +154,7 @@ function TasksTab({ tasks, onRefresh, onNew }: { tasks: any[]; onRefresh: () => 
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterType, setFilterType] = useState('');
   const [filterSched, setFilterSched] = useState('');
-  const [deleting, setDeleting] = useState<number | null>(null);
   const [running, setRunning] = useState<number | null>(null);
   const [toast, setToast] = useState('');
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
@@ -168,14 +162,13 @@ function TasksTab({ tasks, onRefresh, onNew }: { tasks: any[]; onRefresh: () => 
   const filtered = useMemo(() => tasks.filter(t => {
     if (filterCat && t.category !== filterCat) return false;
     if (filterStatus && t.status !== filterStatus) return false;
-    if (filterType && t.task_type !== filterType) return false;
     if (filterSched && t.schedule_type !== filterSched) return false;
     if (search) {
       const q = search.toLowerCase();
       return t.name.toLowerCase().includes(q) || t.task_id.toLowerCase().includes(q) || (t.owner || '').toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q);
     }
     return true;
-  }), [tasks, filterCat, filterStatus, filterType, filterSched, search]);
+  }), [tasks, filterCat, filterStatus, filterSched, search]);
 
   const toggle = async (t: any) => {
     await steAPI.updateTask(t.id, { enabled: !t.enabled });
@@ -195,10 +188,8 @@ function TasksTab({ tasks, onRefresh, onNew }: { tasks: any[]; onRefresh: () => 
     finally { setRunning(null); }
   };
   const del = async (t: any) => {
-    setDeleting(t.id);
     await steAPI.deleteTask(t.id);
     onRefresh();
-    setDeleting(null);
   };
 
   return (
@@ -218,69 +209,63 @@ function TasksTab({ tasks, onRefresh, onNew }: { tasks: any[]; onRefresh: () => 
           <option value="">All Schedules</option>
           {SCHEDULE_TYPES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onRefresh}>↻</button>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11, marginLeft: 'auto' }} onClick={onNew}>+ New Task</button>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} />
+        <ActionButton variant="primary" icon={Plus} style={{ marginLeft: 'auto' }} onClick={onNew}>New Task</ActionButton>
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{filtered.length} of {tasks.length} tasks</div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead">
-              <tr>{['Task ID','Name','Category','Type','Schedule','Owner','Priority','Status','Last Run','Next Run','Runs',''].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}</tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr><td colSpan={12} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No tasks found</td></tr>
-              )}
-              {filtered.map(t => {
-                let tags: string[] = [];
-                try { tags = JSON.parse(t.tags || '[]'); } catch { tags = []; }
-                return (
-                  <tr key={t.id} style={{ borderBottom: '1px solid var(--border)', opacity: t.enabled ? 1 : 0.6 }}>
-                    <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{t.task_id}</td>
-                    <td style={{ padding: '10px 12px', maxWidth: 220 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
-                      {t.description && <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{t.description}</div>}
-                      {tags.length > 0 && <div style={{ display: 'flex', gap: 3, marginTop: 3, flexWrap: 'wrap' }}>
-                        {tags.slice(0, 3).map(tg => <span key={tg} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--border)', color: 'var(--text-3)' }}>{tg}</span>)}
-                      </div>}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{(t.category||'').replace(/_/g,' ')}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{(t.task_type||'').replace(/_/g,' ')}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{(t.schedule_type||'').replace(/_/g,' ')}</div>
-                      {t.cron_expr && <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{t.cron_expr}</div>}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{t.owner || '—'}</td>
-                    <td style={{ padding: '10px 12px' }}>{pill(t.priority || 'medium', PRIORITY_COLOR[t.priority] || '#6b7280')}</td>
-                    <td style={{ padding: '10px 12px' }}>{pill(t.enabled ? 'enabled' : 'disabled', t.enabled ? '#22c55e' : '#6b7280')}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{t.last_run_at ? timeAgo(t.last_run_at) : '—'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{t.next_run_at ? timeAgo(t.next_run_at) : '—'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>
-                      <span style={{ color: '#22c55e' }}>{t.success_count}</span>
-                      <span style={{ color: 'var(--text-3)' }}>/</span>
-                      <span style={{ color: '#ef4444' }}>{t.failure_count}</span>
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '3px 8px' }} onClick={() => toggle(t)}>
-                          {t.enabled ? 'Pause' : 'Enable'}
-                        </button>
-                        <button className="g-btn g-btn-primary" style={{ fontSize: 10, padding: '3px 8px' }} onClick={() => runNow(t)} disabled={running === t.id}>
-                          {running === t.id ? '…' : '▶ Run'}
-                        </button>
-                        <button style={{ color: 'var(--text-3)', fontSize: 13 }} onClick={() => del(t)} disabled={deleting === t.id}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard padded={false} className="overflow-x-auto">
+        <DataTable<any>
+          rows={filtered}
+          rowKey={(t: any) => t.id}
+          rowStyle={(t: any) => !t.enabled ? { opacity: 0.6 } : undefined}
+          emptyState={<EmptyState title="No tasks found" />}
+          columns={[
+            { key: 'task_id', header: 'Task ID', render: (t: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{t.task_id}</span> },
+            { key: 'name', header: 'Name', render: (t: any) => {
+              let tags: string[] = [];
+              try { tags = JSON.parse(t.tags || '[]'); } catch { tags = []; }
+              return (
+                <div style={{ maxWidth: 220 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+                  {t.description && <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{t.description}</div>}
+                  {tags.length > 0 && <div style={{ display: 'flex', gap: 3, marginTop: 3, flexWrap: 'wrap' }}>
+                    {tags.slice(0, 3).map(tg => <span key={tg} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--border)', color: 'var(--text-3)' }}>{tg}</span>)}
+                  </div>}
+                </div>
+              );
+            } },
+            { key: 'category', header: 'Category', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{(t.category||'').replace(/_/g,' ')}</span> },
+            { key: 'task_type', header: 'Type', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{(t.task_type||'').replace(/_/g,' ')}</span> },
+            { key: 'schedule_type', header: 'Schedule', render: (t: any) => (
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{(t.schedule_type||'').replace(/_/g,' ')}</div>
+                {t.cron_expr && <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{t.cron_expr}</div>}
+              </div>
+            ) },
+            { key: 'owner', header: 'Owner', render: (t: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{t.owner || '—'}</span> },
+            { key: 'priority', header: 'Priority', render: (t: any) => pill(t.priority || 'medium', PRIORITY_COLOR[t.priority] || '#6b7280') },
+            { key: 'enabled', header: 'Status', render: (t: any) => pill(t.enabled ? 'enabled' : 'disabled', t.enabled ? '#22c55e' : '#6b7280') },
+            { key: 'last_run_at', header: 'Last Run', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{t.last_run_at ? timeAgo(t.last_run_at) : '—'}</span> },
+            { key: 'next_run_at', header: 'Next Run', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{t.next_run_at ? timeAgo(t.next_run_at) : '—'}</span> },
+            { key: 'runs', header: 'Runs', render: (t: any) => (
+              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                <span style={{ color: '#22c55e' }}>{t.success_count}</span>
+                <span style={{ color: 'var(--text-3)' }}>/</span>
+                <span style={{ color: '#ef4444' }}>{t.failure_count}</span>
+              </span>
+            ) },
+            { key: 'actions', header: '', render: (t: any) => (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <ActionButton variant="ghost" style={{ fontSize: 10 }} onClick={() => toggle(t)}>{t.enabled ? 'Pause' : 'Enable'}</ActionButton>
+                <ActionButton variant="primary" icon={Play} style={{ fontSize: 10 }} onClick={() => runNow(t)} disabled={running === t.id}>
+                  {running === t.id ? '…' : 'Run'}
+                </ActionButton>
+                <ActionButton variant="danger" icon={Trash2} onClick={() => del(t)} />
+              </div>
+            ) },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -290,10 +275,10 @@ function UpcomingTab({ items }: { items: any[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Upcoming Scheduled Executions</div>
-      {items.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>No upcoming executions</div>}
+      {items.length === 0 && <EmptyState title="No upcoming executions" />}
       {items.map((u, i) => (
         <div key={i} className="g-card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ fontSize: 22 }}>⏰</div>
+          <Clock className="h-5 w-5 shrink-0" style={{ color: 'var(--accent)' }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600, fontSize: 13 }}>{u.name}</div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
@@ -344,42 +329,35 @@ function HistoryTab({ execs }: { execs: any[] }) {
         </select>
         <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>{filtered.length} results</span>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead">
-              <tr>{['Execution ID','Task Name','Start Time','End Time','Duration','Status','Trigger','Executed By','Targets',''].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}</tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && <tr><td colSpan={9} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No executions found</td></tr>}
-              {filtered.map(e => (
-                <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.execution_id}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 500 }}>{e.task_name}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.start_time)}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.end_time ? timeAgo(e.end_time) : '—'}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)' }}>{e.duration ? `${(e.duration/1000).toFixed(1)}s` : '—'}</td>
-                  <td style={{ padding: '10px 12px' }}>{pill(e.status, STATUS_COLOR[e.status] || '#6b7280')}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{e.trigger}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{e.executed_by}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11 }}>
-                    <span style={{ color: '#22c55e' }}>{e.success_count || 0}✓</span>
-                    {' '}
-                    <span style={{ color: '#ef4444' }}>{e.failure_count || 0}✗</span>
-                  </td>
-                  <td style={{ padding: '10px 12px', fontSize: 11 }}>
-                    {e.exit_code !== undefined && e.exit_code !== null && (
-                      <span style={{ fontFamily: 'monospace', fontSize: 10, color: e.exit_code === 0 ? '#22c55e' : '#ef4444' }}>exit:{e.exit_code}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={filtered}
+          rowKey={(e: any) => e.id}
+          emptyState={<EmptyState title="No executions found" />}
+          columns={[
+            { key: 'execution_id', header: 'Execution ID', render: (e: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.execution_id}</span> },
+            { key: 'task_name', header: 'Task Name', render: (e: any) => <span style={{ fontSize: 13, fontWeight: 500 }}>{e.task_name}</span> },
+            { key: 'start_time', header: 'Start Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.start_time)}</span> },
+            { key: 'end_time', header: 'End Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.end_time ? timeAgo(e.end_time) : '—'}</span> },
+            { key: 'duration', header: 'Duration', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{e.duration ? `${(e.duration/1000).toFixed(1)}s` : '—'}</span> },
+            { key: 'status', header: 'Status', render: (e: any) => pill(e.status, STATUS_COLOR[e.status] || '#6b7280') },
+            { key: 'trigger', header: 'Trigger', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{e.trigger}</span> },
+            { key: 'executed_by', header: 'Executed By', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.executed_by}</span> },
+            { key: 'targets', header: 'Targets', render: (e: any) => (
+              <span style={{ fontSize: 11 }}>
+                <span style={{ color: '#22c55e' }}>{e.success_count || 0}✓</span>
+                {' '}
+                <span style={{ color: '#ef4444' }}>{e.failure_count || 0}✗</span>
+              </span>
+            ) },
+            { key: 'exit_code', header: '', render: (e: any) => (
+              e.exit_code !== undefined && e.exit_code !== null ? (
+                <span style={{ fontFamily: 'monospace', fontSize: 10, color: e.exit_code === 0 ? '#22c55e' : '#ef4444' }}>exit:{e.exit_code}</span>
+              ) : null
+            ) },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -409,7 +387,7 @@ function ApprovalsTab({ approvals, onRefresh }: { approvals: any[]; onRefresh: (
       {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid var(--accent)', fontSize: 13 }}>{toast}</div>}
       <div>
         <div style={{ fontWeight: 600, marginBottom: 12 }}>Pending Approval ({pending.length})</div>
-        {pending.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>No pending approvals</div>}
+        {pending.length === 0 && <EmptyState title="No pending approvals" />}
         {pending.map(a => (
           <div key={a.id} className="g-card" style={{ padding: 16, marginBottom: 10, borderLeft: '3px solid #f97316' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -422,44 +400,30 @@ function ApprovalsTab({ approvals, onRefresh }: { approvals: any[]; onRefresh: (
               </div>
               {pill('pending', '#f97316')}
             </div>
-            {a.reason && <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10, fontStyle: 'italic' }}>"{a.reason}"</div>}
+            {a.reason && <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10, fontStyle: 'italic' }}>&quot;{a.reason}&quot;</div>}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input className="g-input" placeholder="Decision note (optional)…" value={deciding === a.id ? note : ''} onChange={e => setNote(e.target.value)} style={{ fontSize: 11, flex: 1 }} />
-              <button className="g-btn g-btn-primary" style={{ fontSize: 11, background: '#22c55e', border: '1px solid #16a34a' }} onClick={() => decide(a.id, 'approved')} disabled={deciding === a.id}>
-                ✓ Approve
-              </button>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 11, color: '#ef4444' }} onClick={() => decide(a.id, 'rejected')} disabled={deciding === a.id}>
-                ✗ Reject
-              </button>
+              <ActionButton variant="primary" icon={Check} style={{ fontSize: 11 }} onClick={() => decide(a.id, 'approved')} disabled={deciding === a.id}>Approve</ActionButton>
+              <ActionButton variant="danger" icon={X} style={{ fontSize: 11 }} onClick={() => decide(a.id, 'rejected')} disabled={deciding === a.id}>Reject</ActionButton>
             </div>
           </div>
         ))}
       </div>
       {past.length > 0 && (
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Past Decisions</div>
-          <div className="g-card" style={{ overflow: 'hidden' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead className="g-thead">
-                <tr>{['Task','Requester','Approver','Decision','Note','Date'].map(h => (
-                  <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {past.map(a => (
-                  <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 500 }}>{a.task_name}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.requester}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.approver || '—'}</td>
-                    <td style={{ padding: '10px 12px' }}>{pill(a.status, STATUS_COLOR[a.status] || '#6b7280')}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>{a.decision_note || '—'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.decided_at ? timeAgo(a.decided_at) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SectionCard title="Past Decisions" padded={false}>
+          <DataTable<any>
+            rows={past}
+            rowKey={(a: any) => a.id}
+            columns={[
+              { key: 'task_name', header: 'Task', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 500 }}>{a.task_name}</span> },
+              { key: 'requester', header: 'Requester', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.requester}</span> },
+              { key: 'approver', header: 'Approver', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.approver || '—'}</span> },
+              { key: 'status', header: 'Decision', render: (a: any) => pill(a.status, STATUS_COLOR[a.status] || '#6b7280') },
+              { key: 'decision_note', header: 'Note', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>{a.decision_note || '—'}</span> },
+              { key: 'decided_at', header: 'Date', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.decided_at ? timeAgo(a.decided_at) : '—'}</span> },
+            ]}
+          />
+        </SectionCard>
       )}
     </div>
   );
@@ -467,22 +431,17 @@ function ApprovalsTab({ approvals, onRefresh }: { approvals: any[]; onRefresh: (
 
 // ─── Notifications ─────────────────────────────────────────────────────────
 function NotificationsTab({ notifications, onMarkRead }: { notifications: any[]; onMarkRead: () => void }) {
-  const EVENT_ICON: Record<string, string> = {
-    task_started: '▶', task_completed: '✓', task_failed: '✗',
-    task_missed: '⚠', approval_required: '🔔', approval_approved: '✓',
-    approval_rejected: '✗', schedule_modified: '✏',
-  };
   const unread = notifications.filter(n => !n.read).length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontWeight: 600 }}>Notifications {unread > 0 && <span style={{ fontSize: 11, background: '#3b82f622', color: '#3b82f6', borderRadius: 10, padding: '1px 8px', marginLeft: 6 }}>{unread} unread</span>}</div>
-        {unread > 0 && <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</button>}
+        {unread > 0 && <ActionButton variant="ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</ActionButton>}
       </div>
-      {notifications.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>No notifications</div>}
+      {notifications.length === 0 && <EmptyState title="No notifications" />}
       {notifications.map(n => (
         <div key={n.id} className="g-card" style={{ padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'flex-start', opacity: n.read ? 0.6 : 1, borderLeft: `3px solid ${SEVERITY_COLOR[n.severity] || '#6b7280'}` }}>
-          <div style={{ fontSize: 18, width: 24, textAlign: 'center', flexShrink: 0 }}>{EVENT_ICON[n.event_type] || '•'}</div>
+          <Bell className="h-4 w-4 shrink-0" style={{ color: SEVERITY_COLOR[n.severity] || '#6b7280', marginTop: 2 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: n.read ? 400 : 600 }}>{n.message}</div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
@@ -504,15 +463,14 @@ function AnalyticsTab({ data }: { data: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Completed Executions" value={data.total_completed}                         color="#22c55e" />
-        <StatCard label="Failed Executions"     value={data.total_failed}                           color="#ef4444" />
-        <StatCard label="Success Rate"          value={`${(data.success_rate||0).toFixed(1)}%`}     color="#a855f7" />
-        <StatCard label="Avg Duration"          value={`${((data.avg_duration_ms||0)/1000).toFixed(1)}s`} color="#f97316" />
-        <StatCard label="Automation Hours Saved" value={`${(data.automation_hours||0).toFixed(1)}h`} color="#06b6d4" />
+        <MetricCard label="Completed Executions" value={data.total_completed}                         color="#22c55e" />
+        <MetricCard label="Failed Executions"     value={data.total_failed}                           color="#ef4444" />
+        <MetricCard label="Success Rate"          value={`${(data.success_rate||0).toFixed(1)}%`}     color="#a855f7" />
+        <MetricCard label="Avg Duration"          value={`${((data.avg_duration_ms||0)/1000).toFixed(1)}s`} color="#f97316" />
+        <MetricCard label="Automation Hours Saved" value={`${(data.automation_hours||0).toFixed(1)}h`} color="#06b6d4" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Executions by Category</div>
+        <SectionCard title="Executions by Category">
           {(!data.by_category || data.by_category.length === 0) && <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No execution data yet</div>}
           {(data.by_category || []).map((c: any) => (
             <div key={c.category} style={{ marginBottom: 10 }}>
@@ -528,9 +486,8 @@ function AnalyticsTab({ data }: { data: any }) {
               </div>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Most Executed Task Types</div>
+        </SectionCard>
+        <SectionCard title="Most Executed Task Types">
           {(!data.by_task_type || data.by_task_type.length === 0) && <div style={{ fontSize: 13, color: 'var(--text-3)' }}>No execution data yet</div>}
           {(data.by_task_type || []).map((t: any, i: number) => (
             <div key={t.task_type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
@@ -541,7 +498,7 @@ function AnalyticsTab({ data }: { data: any }) {
               <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{t.executions}</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -550,29 +507,20 @@ function AnalyticsTab({ data }: { data: any }) {
 // ─── Audit Trail ───────────────────────────────────────────────────────────
 function AuditTab({ items }: { items: any[] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {items.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>No audit events</div>}
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Time','Task','Action','Actor','Details'].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {items.map(a => (
-              <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(a.created_at)}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 500 }}>{a.task_name || a.task_id || '—'}</td>
-                <td style={{ padding: '10px 12px' }}>{pill(a.action, ACTION_COLOR[a.action] || '#6b7280')}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.actor}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>{a.details || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <SectionCard padded={false}>
+      <DataTable<any>
+        rows={items}
+        rowKey={(a: any) => a.id}
+        emptyState={<EmptyState title="No audit events" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(a.created_at)}</span> },
+          { key: 'task_name', header: 'Task', render: (a: any) => <span style={{ fontSize: 12, fontWeight: 500 }}>{a.task_name || a.task_id || '—'}</span> },
+          { key: 'action', header: 'Action', render: (a: any) => pill(a.action, ACTION_COLOR[a.action] || '#6b7280') },
+          { key: 'actor', header: 'Actor', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.actor}</span> },
+          { key: 'details', header: 'Details', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>{a.details || '—'}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -601,13 +549,13 @@ function ReportsTab({ onGenerate }: { onGenerate: (type: string) => void }) {
       <div style={{ fontWeight: 600, fontSize: 14 }}>Generate Reports</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {reports.map(r => (
-          <div key={r.id} className="g-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>{r.label}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', flex: 1 }}>{r.desc}</div>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 11, alignSelf: 'flex-start' }} onClick={() => gen(r.id)} disabled={generating === r.id}>
-              {generating === r.id ? 'Generating…' : '⬇ Generate'}
-            </button>
-          </div>
+          <SectionCard key={r.id}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{r.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>{r.desc}</div>
+            <ActionButton variant="primary" icon={Download} style={{ fontSize: 11 }} onClick={() => gen(r.id)} disabled={generating === r.id}>
+              {generating === r.id ? 'Generating…' : 'Generate'}
+            </ActionButton>
+          </SectionCard>
         ))}
       </div>
     </div>
@@ -637,16 +585,18 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, background: 'var(--glass-bg)', borderLeft: '1px solid var(--border)', zIndex: 100, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.3)' }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>⚡ AI Schedule Assistant</div>
-        <button onClick={onClose} style={{ fontSize: 18, color: 'var(--text-3)', lineHeight: 1 }}>×</button>
+        <span className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: 14 }}>
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--accent)' }} /> AI Schedule Assistant
+        </span>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} />
       </div>
       <div style={{ padding: 16, flex: 1, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto' }}>
         <textarea className="g-input" placeholder="Describe your task, environment, or paste a config…" value={input} onChange={e => setInput(e.target.value)} style={{ fontSize: 12, minHeight: 80, resize: 'vertical' }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {actions.map(a => (
-            <button key={a.id} className="g-btn g-btn-ghost" style={{ fontSize: 11, justifyContent: 'flex-start' }} onClick={() => ask(a.id)} disabled={loading}>
+            <ActionButton key={a.id} variant="ghost" style={{ fontSize: 11, justifyContent: 'flex-start' }} onClick={() => ask(a.id)} disabled={loading}>
               {a.label}
-            </button>
+            </ActionButton>
           ))}
         </div>
         {loading && <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>Analyzing…</div>}
@@ -661,7 +611,7 @@ function AIPanel({ onClose }: { onClose: () => void }) {
 }
 
 // ─── New Task Modal ─────────────────────────────────────────────────────────
-function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function NewTaskModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
     name: '', description: '', category: 'security_operations', task_type: 'threat_hunt',
     script_language: '', owner: '', priority: 'medium',
@@ -703,121 +653,115 @@ function NewTaskModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   );
 
   return (
-    <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="g-modal" style={{ maxWidth: 680, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>New Scheduled Task</div>
-          <button onClick={onClose} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
-        </div>
-        <div style={{ padding: 20, overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {section('Basic Info', <>
-            {field('Task Name *', <input className="g-input w-full" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Daily Threat Hunt" />)}
-            {field('Description', <textarea className="g-input w-full" value={form.description} onChange={e => set('description', e.target.value)} placeholder="What does this task do?" style={{ minHeight: 56, resize: 'vertical' }} />)}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              {field('Category', <select className="g-select w-full" value={form.category} onChange={e => set('category', e.target.value)}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
-              </select>)}
-              {field('Priority', <select className="g-select w-full" value={form.priority} onChange={e => set('priority', e.target.value)}>
-                {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
-              </select>)}
-              {field('Owner', <input className="g-input w-full" value={form.owner} onChange={e => set('owner', e.target.value)} placeholder="analyst@corp.com" />)}
-            </div>
-          </>)}
+    <Modal open={open} onClose={onClose} title="New Scheduled Task" maxWidth={680}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxHeight: '65vh', overflow: 'auto' }}>
+        {section('Basic Info', <>
+          {field('Task Name *', <input className="g-input w-full" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Daily Threat Hunt" />)}
+          {field('Description', <textarea className="g-input w-full" value={form.description} onChange={e => set('description', e.target.value)} placeholder="What does this task do?" style={{ minHeight: 56, resize: 'vertical' }} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {field('Category', <select className="g-select w-full" value={form.category} onChange={e => set('category', e.target.value)}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}
+            </select>)}
+            {field('Priority', <select className="g-select w-full" value={form.priority} onChange={e => set('priority', e.target.value)}>
+              {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
+            </select>)}
+            {field('Owner', <input className="g-input w-full" value={form.owner} onChange={e => set('owner', e.target.value)} placeholder="analyst@corp.com" />)}
+          </div>
+        </>)}
 
-          {section('Task Type', <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {field('Task Type', <select className="g-select w-full" value={form.task_type} onChange={e => set('task_type', e.target.value)}>
-                {TASK_TYPES.map(g => (
-                  <optgroup key={g.group} label={g.group}>
-                    {g.values.map(v => <option key={v} value={v}>{v.replace(/_/g,' ')}</option>)}
-                  </optgroup>
-                ))}
-              </select>)}
-              {['powershell','bash','python','cmd','go_binary'].includes(form.task_type) && field('Script Language', <select className="g-select w-full" value={form.script_language} onChange={e => set('script_language', e.target.value)}>
-                <option value="">Select language</option>
-                {['powershell','bash','python','cmd','go'].map(l => <option key={l} value={l}>{l}</option>)}
-              </select>)}
-            </div>
-          </>)}
+        {section('Task Type', <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {field('Task Type', <select className="g-select w-full" value={form.task_type} onChange={e => set('task_type', e.target.value)}>
+              {TASK_TYPES.map(g => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.values.map(v => <option key={v} value={v}>{v.replace(/_/g,' ')}</option>)}
+                </optgroup>
+              ))}
+            </select>)}
+            {['powershell','bash','python','cmd','go_binary'].includes(form.task_type) && field('Script Language', <select className="g-select w-full" value={form.script_language} onChange={e => set('script_language', e.target.value)}>
+              <option value="">Select language</option>
+              {['powershell','bash','python','cmd','go'].map(l => <option key={l} value={l}>{l}</option>)}
+            </select>)}
+          </div>
+        </>)}
 
-          {section('Schedule', <>
-            {field('Schedule Type', <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {SCHEDULE_TYPES.map(s => (
-                <button key={s} type="button" onClick={() => set('schedule_type', s)} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: form.schedule_type === s ? 'var(--accent-glow)' : 'var(--glass-bg)', border: `1px solid ${form.schedule_type === s ? 'var(--accent-border)' : 'var(--border)'}`, color: form.schedule_type === s ? 'var(--accent)' : 'var(--text-2)' }}>
-                  {s.replace(/_/g,' ')}
+        {section('Schedule', <>
+          {field('Schedule Type', <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {SCHEDULE_TYPES.map(s => (
+              <button key={s} type="button" onClick={() => set('schedule_type', s)} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: form.schedule_type === s ? 'var(--accent-glow)' : 'var(--glass-bg)', border: `1px solid ${form.schedule_type === s ? 'var(--accent-border)' : 'var(--border)'}`, color: form.schedule_type === s ? 'var(--accent)' : 'var(--text-2)' }}>
+                {s.replace(/_/g,' ')}
+              </button>
+            ))}
+          </div>)}
+          {form.schedule_type === 'cron' && field('Cron Expression', <>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+              {CRON_PRESETS.map(p => (
+                <button key={p.value} type="button" onClick={() => set('cron_expr', p.value)} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: form.cron_expr === p.value ? 'var(--accent-glow)' : 'var(--glass-bg)', border: `1px solid ${form.cron_expr === p.value ? 'var(--accent-border)' : 'var(--border)'}`, color: form.cron_expr === p.value ? 'var(--accent)' : 'var(--text-2)' }}>
+                  {p.label}
                 </button>
               ))}
-            </div>)}
-            {form.schedule_type === 'cron' && field('Cron Expression', <>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                {CRON_PRESETS.map(p => (
-                  <button key={p.value} type="button" onClick={() => set('cron_expr', p.value)} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: form.cron_expr === p.value ? 'var(--accent-glow)' : 'var(--glass-bg)', border: `1px solid ${form.cron_expr === p.value ? 'var(--accent-border)' : 'var(--border)'}`, color: form.cron_expr === p.value ? 'var(--accent)' : 'var(--text-2)' }}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <input className="g-input w-full" style={{ fontFamily: 'monospace', fontSize: 12 }} value={form.cron_expr} onChange={e => set('cron_expr', e.target.value)} placeholder="0 2 * * *" />
-            </>)}
-          </>)}
-
-          {section('Execution Target', <>
-            {field('Target Type', <select className="g-select w-full" value={form.target_type} onChange={e => set('target_type', e.target.value)}>
-              {TARGET_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
-            </select>)}
-          </>)}
-
-          {section('Trigger Conditions', <>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {TRIGGER_CONDITIONS.map(t => {
-                const active = selectedTriggers.includes(t);
-                return (
-                  <button key={t} type="button" onClick={() => setSelectedTriggers(prev => active ? prev.filter(x => x !== t) : [...prev, t])} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: active ? 'var(--accent-glow)' : 'var(--glass-bg)', border: `1px solid ${active ? 'var(--accent-border)' : 'var(--border)'}`, color: active ? 'var(--accent)' : 'var(--text-2)' }}>
-                    {t.replace(/_/g,' ')}
-                  </button>
-                );
-              })}
             </div>
+            <input className="g-input w-full" style={{ fontFamily: 'monospace', fontSize: 12 }} value={form.cron_expr} onChange={e => set('cron_expr', e.target.value)} placeholder="0 2 * * *" />
           </>)}
+        </>)}
 
-          {section('Execution Controls', <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
-              {field('Max Runtime (s)', <input className="g-input w-full" type="number" value={form.max_runtime} onChange={e => set('max_runtime', +e.target.value)} />)}
-              {field('Retry Attempts', <input className="g-input w-full" type="number" value={form.retry_attempts} onChange={e => set('retry_attempts', +e.target.value)} />)}
-              {field('Retry Delay (s)', <input className="g-input w-full" type="number" value={form.retry_delay} onChange={e => set('retry_delay', +e.target.value)} />)}
-              {field('Timeout (s)', <input className="g-input w-full" type="number" value={form.timeout} onChange={e => set('timeout', +e.target.value)} />)}
-            </div>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.parallel} onChange={e => set('parallel', e.target.checked)} />
-                Parallel Execution
-              </label>
-              {form.parallel && field('Concurrency Limit', <input className="g-input" type="number" value={form.concurrency_limit} onChange={e => set('concurrency_limit', +e.target.value)} style={{ width: 80 }} />)}
-            </div>
-          </>)}
+        {section('Execution Target', <>
+          {field('Target Type', <select className="g-select w-full" value={form.target_type} onChange={e => set('target_type', e.target.value)}>
+            {TARGET_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
+          </select>)}
+        </>)}
 
-          {section('Approval Workflow', <>
+        {section('Trigger Conditions', <>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {TRIGGER_CONDITIONS.map(t => {
+              const active = selectedTriggers.includes(t);
+              return (
+                <button key={t} type="button" onClick={() => setSelectedTriggers(prev => active ? prev.filter(x => x !== t) : [...prev, t])} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: active ? 'var(--accent-glow)' : 'var(--glass-bg)', border: `1px solid ${active ? 'var(--accent-border)' : 'var(--border)'}`, color: active ? 'var(--accent)' : 'var(--text-2)' }}>
+                  {t.replace(/_/g,' ')}
+                </button>
+              );
+            })}
+          </div>
+        </>)}
+
+        {section('Execution Controls', <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+            {field('Max Runtime (s)', <input className="g-input w-full" type="number" value={form.max_runtime} onChange={e => set('max_runtime', +e.target.value)} />)}
+            {field('Retry Attempts', <input className="g-input w-full" type="number" value={form.retry_attempts} onChange={e => set('retry_attempts', +e.target.value)} />)}
+            {field('Retry Delay (s)', <input className="g-input w-full" type="number" value={form.retry_delay} onChange={e => set('retry_delay', +e.target.value)} />)}
+            {field('Timeout (s)', <input className="g-input w-full" type="number" value={form.timeout} onChange={e => set('timeout', +e.target.value)} />)}
+          </div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-              <input type="checkbox" checked={form.requires_approval} onChange={e => set('requires_approval', e.target.checked)} />
-              Require Approval Before Execution
+              <input type="checkbox" checked={form.parallel} onChange={e => set('parallel', e.target.checked)} />
+              Parallel Execution
             </label>
-            {form.requires_approval && field('Approval Policy', <select className="g-select w-full" value={form.approval_policy} onChange={e => set('approval_policy', e.target.value)}>
-              <option value="">Select policy</option>
-              {APPROVAL_POLICIES.map(p => <option key={p} value={p}>{p.replace(/_/g,' ')}</option>)}
-            </select>)}
-          </>)}
+            {form.parallel && field('Concurrency Limit', <input className="g-input" type="number" value={form.concurrency_limit} onChange={e => set('concurrency_limit', +e.target.value)} style={{ width: 80 }} />)}
+          </div>
+        </>)}
 
-          {section('Tags', <>
-            {field('Tags (comma-separated)', <input className="g-input w-full" value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="threat-hunt, critical, daily" />)}
-          </>)}
-        </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button className="g-btn g-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !form.name}>
-            {saving ? 'Creating…' : 'Create Task'}
-          </button>
-        </div>
+        {section('Approval Workflow', <>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.requires_approval} onChange={e => set('requires_approval', e.target.checked)} />
+            Require Approval Before Execution
+          </label>
+          {form.requires_approval && field('Approval Policy', <select className="g-select w-full" value={form.approval_policy} onChange={e => set('approval_policy', e.target.value)}>
+            <option value="">Select policy</option>
+            {APPROVAL_POLICIES.map(p => <option key={p} value={p}>{p.replace(/_/g,' ')}</option>)}
+          </select>)}
+        </>)}
+
+        {section('Tags', <>
+          {field('Tags (comma-separated)', <input className="g-input w-full" value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="threat-hunt, critical, daily" />)}
+        </>)}
       </div>
-    </div>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+        <ActionButton variant="ghost" icon={X} onClick={onClose}>Cancel</ActionButton>
+        <ActionButton variant="primary" icon={Check} onClick={save} disabled={saving || !form.name}>
+          {saving ? 'Creating…' : 'Create Task'}
+        </ActionButton>
+      </div>
+    </Modal>
   );
 }
 
@@ -876,6 +820,12 @@ export default function ScheduledTasksPage() {
   const unreadCount = notifications.filter(n => !n.read).length;
   const pendingApprovals = approvals.filter(a => a.status === 'pending').length;
 
+  const tabsWithCount = TABS.map(t => {
+    if (t.key === 'approvals') return { ...t, count: pendingApprovals || undefined };
+    if (t.key === 'notifications') return { ...t, count: unreadCount || undefined };
+    return t;
+  });
+
   return (
     <RootLayout
       title="Scheduled Tasks"
@@ -884,31 +834,16 @@ export default function ScheduledTasksPage() {
       refreshing={refreshing}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>⚡ AI</button>
-          <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>+ New Task</button>
+          <ActionButton variant="ghost" icon={Sparkles} style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>AI Assistant</ActionButton>
+          <ActionButton variant="primary" icon={Plus} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>New Task</ActionButton>
         </div>
       }
     >
       {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20, overflowX: 'auto' }}>
-        {TABS.map(t => {
-          const badge = t.id === 'approvals' ? pendingApprovals : t.id === 'notifications' ? unreadCount : 0;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: '10px 16px', fontSize: 12, fontWeight: tab === t.id ? 700 : 400,
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              background: 'none', whiteSpace: 'nowrap', position: 'relative',
-            }}>
-              {t.label}
-              {badge > 0 && (
-                <span style={{ position: 'absolute', top: 6, right: 4, fontSize: 8, fontWeight: 700, background: '#ef4444', color: '#fff', borderRadius: 8, padding: '1px 4px', minWidth: 14, textAlign: 'center' }}>{badge}</span>
-              )}
-            </button>
-          );
-        })}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, marginBottom: 20, overflowX: 'auto' }}>
+        <TabBar tabs={tabsWithCount} active={tab} onChange={k => setTab(k as Tab)} />
       </div>
 
       {tab === 'dashboard'     && <DashboardTab dash={dash} onTabChange={setTab} />}
@@ -921,7 +856,7 @@ export default function ScheduledTasksPage() {
       {tab === 'audit'         && <AuditTab items={audit} />}
       {tab === 'reports'       && <ReportsTab onGenerate={genReport} />}
 
-      {showNew && <NewTaskModal onClose={() => setShowNew(false)} onCreated={() => { loadAll(); notify('Task created'); }} />}
+      <NewTaskModal open={showNew} onClose={() => setShowNew(false)} onCreated={() => { loadAll(); notify('Task created'); }} />
       {showAI && <AIPanel onClose={() => setShowAI(false)} />}
     </RootLayout>
   );

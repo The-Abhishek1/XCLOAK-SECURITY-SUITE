@@ -4,9 +4,16 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import {
   stteAPI, usersAPI, auditAPI, apiKeysAPI, customRolesAPI,
   sessionsAPI, securityPolicyAPI, integrationsAPI, notificationsAPI,
-  billingAPI,
 } from '@/lib/api';
 import { useUser } from '@/context/UserContext';
+import {
+  DataTable, EmptyState, SectionCard, TabBar, ActionButton, MetricCard, LoadingSkeleton,
+} from '@/components/design-system';
+import {
+  Building2, ShieldCheck, Plug, Sparkles, Server,
+  Send, Plus, UserCheck, UserX, Trash2, KeyRound, Copy, Save,
+  RefreshCw, Download, CheckCircle2, Zap, RotateCcw, Power, CheckCheck,
+} from 'lucide-react';
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 const PILL: Record<string, string> = {
@@ -46,7 +53,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: 'var(--space-3) 0', borderBottom: '1px solid var(--border)' }}>
       <div style={{ flex: 1, paddingRight: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{label}</div>
         {hint && <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{hint}</div>}
@@ -56,42 +63,42 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function SaveBar({ onSave, saving }: { onSave: () => void; saving: boolean }) {
+function SaveBar({ onSave, saving, label = 'Save Changes' }: { onSave: () => void; saving: boolean; label?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-      <button className="g-btn" onClick={onSave} disabled={saving} style={{ minWidth: 100 }}>
-        {saving ? 'Saving…' : 'Save Changes'}
-      </button>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-5)' }}>
+      <ActionButton variant="primary" icon={Save} onClick={onSave} disabled={saving} style={{ minWidth: 130 }}>
+        {saving ? 'Saving…' : label}
+      </ActionButton>
     </div>
   );
 }
 
 /* ── navigation structure ────────────────────────────────────────────────── */
 const TOP_TABS = [
-  { id: 'general',      label: 'General' },
-  { id: 'security',     label: 'Security' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'ai',           label: 'AI' },
-  { id: 'system',       label: 'System' },
+  { key: 'general',      label: 'General',      icon: Building2 },
+  { key: 'security',     label: 'Security',     icon: ShieldCheck },
+  { key: 'integrations', label: 'Integrations', icon: Plug },
+  { key: 'ai',           label: 'AI',           icon: Sparkles },
+  { key: 'system',       label: 'System',       icon: Server },
 ];
 
-const SIDEBAR: Record<string, { id: string; label: string }[][]> = {
+const SIDEBAR: Record<string, { key: string; label: string }[]> = {
   general: [
-    [{ id: 'organization', label: 'Organization' }, { id: 'users', label: 'Users & RBAC' }],
+    { key: 'organization', label: 'Organization' }, { key: 'users', label: 'Users & RBAC' },
   ],
   security: [
-    [{ id: 'authentication', label: 'Authentication' }, { id: 'agents', label: 'Agents' }],
+    { key: 'authentication', label: 'Authentication' }, { key: 'agents', label: 'Agents' },
   ],
   integrations: [
-    [{ id: 'integrations', label: 'Integrations' }, { id: 'notifications', label: 'Notifications' }],
+    { key: 'integrations', label: 'Integrations' }, { key: 'notifications', label: 'Notifications' },
   ],
   ai: [
-    [{ id: 'ai-models', label: 'Models' }, { id: 'ai-guardrails', label: 'Guardrails' }, { id: 'ai-usage', label: 'Usage Limits' }],
+    { key: 'ai-models', label: 'Models' }, { key: 'ai-guardrails', label: 'Guardrails' }, { key: 'ai-usage', label: 'Usage Limits' },
   ],
   system: [
-    [{ id: 'backup', label: 'Backup & Recovery' }, { id: 'api-management', label: 'API Management' }],
-    [{ id: 'updates', label: 'Updates' }, { id: 'licensing', label: 'Licensing' }],
-    [{ id: 'audit', label: 'Audit Trail' }],
+    { key: 'backup', label: 'Backup & Recovery' }, { key: 'api-management', label: 'API Management' },
+    { key: 'updates', label: 'Updates' }, { key: 'licensing', label: 'Licensing' },
+    { key: 'audit', label: 'Audit Trail' },
   ],
 };
 
@@ -268,65 +275,41 @@ export default function SettingsEnterprise() {
   }
 
   const d = data;
+  const sidebarItems = SIDEBAR[topTab] ?? [];
 
   return (
-    <RootLayout title="Settings" subtitle="Platform configuration and administration">
-      <div style={{ minHeight: '100vh', background: 'var(--bg-1)' }}>
-        {/* ── top tabs ──────────────────────────────────────────────────── */}
-        <div style={{ background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', padding: '0 32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingTop: 20, paddingBottom: 0 }}>
-            {msg && (
-              <div style={{ background: '#16a34a22', color: '#16a34a', border: '1px solid #16a34a55', borderRadius: 6, padding: '8px 16px', fontSize: 13 }}>
-                {msg}
-              </div>
-            )}
+    <RootLayout title="Settings" subtitle="Platform configuration and administration" onRefresh={loadAll}>
+      <div className="space-y-4">
+        {msg && (
+          <div className="flex items-center gap-2" style={{ background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius-md)', padding: '8px 16px', fontSize: 13 }}>
+            <CheckCheck className="h-3.5 w-3.5" />
+            {msg}
           </div>
-          <div style={{ display: 'flex', marginTop: 16 }}>
-            {TOP_TABS.map(t => (
-              <button key={t.id} onClick={() => switchTop(t.id)} style={{
-                background: 'none', border: 'none', padding: '10px 20px', cursor: 'pointer',
-                fontSize: 13, fontWeight: topTab === t.id ? 600 : 400,
-                color: topTab === t.id ? 'var(--accent)' : 'var(--text-2)',
-                borderBottom: topTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-                marginBottom: -1,
-              }}>{t.label}</button>
-            ))}
-          </div>
+        )}
+
+        {/* Top-level tabs */}
+        <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2 }}>
+          <TabBar tabs={TOP_TABS} active={topTab} onChange={switchTop} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', minHeight: 'calc(100vh - 120px)' }}>
-          {/* ── sidebar ─────────────────────────────────────────────────── */}
-          <div style={{ background: 'var(--bg-2)', borderRight: '1px solid var(--border)', padding: '20px 0' }}>
-            {(SIDEBAR[topTab] ?? []).map((group, gi) => (
-              <div key={gi} style={{ marginBottom: gi < (SIDEBAR[topTab]?.length ?? 0) - 1 ? 8 : 0 }}>
-                {group.map(s => (
-                  <button key={s.id} onClick={() => setSection(s.id)} style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    padding: '9px 20px', background: section === s.id ? 'var(--accent)22' : 'none',
-                    borderLeft: `3px solid ${section === s.id ? 'var(--accent)' : 'transparent'}`,
-                    border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: section === s.id ? 600 : 400,
-                    color: section === s.id ? 'var(--accent)' : 'var(--text-2)',
-                  }}>{s.label}</button>
-                ))}
-                {gi < (SIDEBAR[topTab]?.length ?? 0) - 1 && (
-                  <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
-                )}
-              </div>
-            ))}
-          </div>
+        {/* Sub-section tabs */}
+        {sidebarItems.length > 1 && (
+          <TabBar tabs={sidebarItems} active={section} onChange={setSection} />
+        )}
 
-          {/* ── content ─────────────────────────────────────────────────── */}
-          <div style={{ padding: '28px 36px', overflow: 'auto' }}>
-            {loading ? (
-              <div style={{ color: 'var(--text-3)', padding: 40, textAlign: 'center' }}>Loading…</div>
-            ) : (
-              <>
-                {/* ════════════════════════ ORGANIZATION ══════════════════ */}
-                {section === 'organization' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Organization</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Configure your organization profile and platform-wide defaults.</p>
-                    <div className="g-card">
+        {/* ── content ─────────────────────────────────────────────────── */}
+        <div>
+          {loading ? (
+            <LoadingSkeleton variant="card" count={4} />
+          ) : (
+            <>
+              {/* ════════════════════════ ORGANIZATION ══════════════════ */}
+              {section === 'organization' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Organization</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure your organization profile and platform-wide defaults.</p>
+                  <SectionCard padded={false}>
+                    <div className="px-4">
                       <Field label="Organization Name" hint="Displayed in the top navigation and reports">
                         <input className="g-input" value={org.org_name ?? ''} onChange={e => setOrg({ ...org, org_name: e.target.value })} style={{ width: 220 }} />
                       </Field>
@@ -361,134 +344,128 @@ export default function SettingsEnterprise() {
                       <Field label="Max Agents" hint="Maximum enrolled agents for this tenant">
                         <input className="g-input" type="number" min={1} value={org.max_agents ?? 1000} onChange={e => setOrg({ ...org, max_agents: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
-                      <Field label="Maintenance Mode" hint="Show maintenance banner to all users">
-                        <Toggle value={org.maintenance_mode ?? false} onChange={v => setOrg({ ...org, maintenance_mode: v })} />
-                      </Field>
-                    </div>
-                    <SaveBar onSave={saveOrg} saving={saving} />
-                  </div>
-                )}
-
-                {/* ════════════════════════ USERS & RBAC ══════════════════ */}
-                {section === 'users' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Users & RBAC</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Manage users, roles, and access control.</p>
-
-                    {/* invite */}
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Invite User</div>
-                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <input className="g-input" placeholder="Username" value={inviteUser} onChange={e => setInviteUser(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-                        <input className="g-input" type="email" placeholder="Email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
-                        <select className="g-input" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ minWidth: 120 }}>
-                          <option value="viewer">Viewer</option>
-                          <option value="analyst">Analyst</option>
-                          <option value="manager">Manager</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                        <button className="g-btn" disabled={inviting || !inviteUser || !inviteEmail} onClick={doInvite}>
-                          {inviting ? 'Inviting…' : 'Send Invite'}
-                        </button>
+                      <div style={{ padding: 'var(--space-3) 0' }}>
+                        <Field label="Maintenance Mode" hint="Show maintenance banner to all users">
+                          <Toggle value={org.maintenance_mode ?? false} onChange={v => setOrg({ ...org, maintenance_mode: v })} />
+                        </Field>
                       </div>
                     </div>
+                  </SectionCard>
+                  <SaveBar onSave={saveOrg} saving={saving} />
+                </div>
+              )}
 
-                    {/* users table */}
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>
-                        Users ({(d.users ?? []).length})
-                      </div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
-                        <tbody>
-                          {(d.users ?? []).map((u: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{u.username}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{u.email}</td>
-                              <td>
-                                <select className="g-input" value={u.role} style={{ fontSize: 12, padding: '2px 6px' }}
-                                  onChange={e => usersAPI.updateRole(u.id, e.target.value).then(loadAll)}>
-                                  <option value="viewer">viewer</option>
-                                  <option value="analyst">analyst</option>
-                                  <option value="manager">manager</option>
-                                  <option value="admin">admin</option>
-                                </select>
-                              </td>
-                              <td>{pill(u.is_active ? 'active' : 'inactive')}</td>
-                              <td>
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                  <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}
-                                    onClick={() => usersAPI.toggle(u.id, !u.is_active).then(loadAll)}>
-                                    {u.is_active ? 'Deactivate' : 'Activate'}
-                                  </button>
-                                  {u.username !== user?.username && (
-                                    <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: '#dc2626' }}
-                                      onClick={() => { if (window.confirm(`Delete ${u.username}?`)) usersAPI.delete(u.id).then(loadAll); }}>
-                                      Delete
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                          {!d.users?.length && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No users</td></tr>}
-                        </tbody>
-                      </table>
+              {/* ════════════════════════ USERS & RBAC ══════════════════ */}
+              {section === 'users' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Users & RBAC</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Manage users, roles, and access control.</p>
+
+                  <SectionCard title="Invite User" className="mb-5">
+                    <div className="flex gap-2.5 flex-wrap">
+                      <input className="g-input" placeholder="Username" value={inviteUser} onChange={e => setInviteUser(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+                      <input className="g-input" type="email" placeholder="Email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+                      <select className="g-input" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ minWidth: 120 }}>
+                        <option value="viewer">Viewer</option>
+                        <option value="analyst">Analyst</option>
+                        <option value="manager">Manager</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <ActionButton variant="primary" icon={Send} disabled={inviting || !inviteUser || !inviteEmail} onClick={doInvite}>
+                        {inviting ? 'Inviting…' : 'Send Invite'}
+                      </ActionButton>
                     </div>
+                  </SectionCard>
 
-                    {/* custom roles */}
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Custom Roles</div>
-                      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-                        <input className="g-input" placeholder="Role name" value={roleName} onChange={e => setRoleName(e.target.value)} style={{ flex: 1 }} />
-                        <button className="g-btn" disabled={!roleName}
-                          onClick={() => customRolesAPI.create(roleName, []).then(() => { setRoleName(''); loadAll(); })}>
-                          Create Role
-                        </button>
-                      </div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Role</th><th>Permissions</th><th>Actions</th></tr></thead>
-                        <tbody>
-                          {(d.roles ?? []).map((r: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{r.name}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{(r.permissions ?? []).slice(0, 3).join(', ')}{r.permissions?.length > 3 ? ` +${r.permissions.length - 3} more` : ''}</td>
-                              <td>
-                                <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: '#dc2626' }}
-                                  onClick={() => { if (window.confirm(`Delete role ${r.name}?`)) customRolesAPI.delete(r.id).then(loadAll); }}>
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          {!d.roles?.length && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 16 }}>No custom roles</td></tr>}
-                        </tbody>
-                      </table>
+                  <SectionCard title={`Users (${(d.users ?? []).length})`} className="mb-5" padded={false}>
+                    <DataTable<any>
+                      rows={d.users ?? []}
+                      rowKey={(u: any, i: number) => u.id ?? i}
+                      emptyState={<EmptyState title="No users" />}
+                      columns={[
+                        { key: 'username', header: 'Username', render: (u: any) => <span style={{ fontWeight: 600 }}>{u.username}</span> },
+                        { key: 'email', header: 'Email', render: (u: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{u.email}</span> },
+                        { key: 'role', header: 'Role', render: (u: any) => (
+                          <select className="g-input" value={u.role} style={{ fontSize: 12, padding: '2px 6px' }}
+                            onChange={e => usersAPI.updateRole(u.id, e.target.value).then(loadAll)}>
+                            <option value="viewer">viewer</option>
+                            <option value="analyst">analyst</option>
+                            <option value="manager">manager</option>
+                            <option value="admin">admin</option>
+                          </select>
+                        ) },
+                        { key: 'is_active', header: 'Status', render: (u: any) => pill(u.is_active ? 'active' : 'inactive') },
+                        { key: 'actions', header: 'Actions', render: (u: any) => (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <ActionButton variant="ghost" icon={u.is_active ? UserX : UserCheck} style={{ fontSize: 11, padding: '4px 10px' }}
+                              onClick={() => usersAPI.toggle(u.id, !u.is_active).then(loadAll)}>
+                              {u.is_active ? 'Deactivate' : 'Activate'}
+                            </ActionButton>
+                            {u.username !== user?.username && (
+                              <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
+                                onClick={() => { if (window.confirm(`Delete ${u.username}?`)) usersAPI.delete(u.id).then(loadAll); }}>
+                                Delete
+                              </ActionButton>
+                            )}
+                          </div>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
+
+                  <SectionCard title="Custom Roles">
+                    <div className="flex gap-2.5 mb-4">
+                      <input className="g-input" placeholder="Role name" value={roleName} onChange={e => setRoleName(e.target.value)} style={{ flex: 1 }} />
+                      <ActionButton variant="primary" icon={Plus} disabled={!roleName}
+                        onClick={() => customRolesAPI.create(roleName, []).then(() => { setRoleName(''); loadAll(); })}>
+                        Create Role
+                      </ActionButton>
                     </div>
-                  </div>
-                )}
+                    <DataTable<any>
+                      rows={d.roles ?? []}
+                      rowKey={(r: any, i: number) => r.id ?? i}
+                      emptyState={<EmptyState title="No custom roles" />}
+                      columns={[
+                        { key: 'name', header: 'Role', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+                        { key: 'permissions', header: 'Permissions', render: (r: any) => (
+                          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{(r.permissions ?? []).slice(0, 3).join(', ')}{r.permissions?.length > 3 ? ` +${r.permissions.length - 3} more` : ''}</span>
+                        ) },
+                        { key: 'actions', header: 'Actions', render: (r: any) => (
+                          <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => { if (window.confirm(`Delete role ${r.name}?`)) customRolesAPI.delete(r.id).then(loadAll); }}>
+                            Delete
+                          </ActionButton>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
 
-                {/* ════════════════════════ AUTHENTICATION ════════════════ */}
-                {section === 'authentication' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Authentication</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Configure MFA, sessions, password policy, and SSO.</p>
+              {/* ════════════════════════ AUTHENTICATION ════════════════ */}
+              {section === 'authentication' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Authentication</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure MFA, sessions, password policy, and SSO.</p>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>MFA & Session</div>
+                  <SectionCard title="MFA & Session" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="Require MFA for All Users" hint="Enforce multi-factor authentication organization-wide">
                         <Toggle value={org.require_mfa ?? false} onChange={v => setOrg({ ...org, require_mfa: v })} />
                       </Field>
                       <Field label="Session Timeout (minutes)" hint="Idle sessions are terminated after this duration">
                         <input className="g-input" type="number" min={5} max={1440} value={secPolicy.session_timeout_mins ?? 480} onChange={e => setSecPolicy({ ...secPolicy, session_timeout_mins: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
-                      <Field label="Max Concurrent Sessions" hint="Maximum active sessions per user account">
-                        <input className="g-input" type="number" min={1} max={20} value={secPolicy.max_sessions ?? 5} onChange={e => setSecPolicy({ ...secPolicy, max_sessions: parseInt(e.target.value) })} style={{ width: 100 }} />
-                      </Field>
+                      <div style={{ borderBottom: 'none' }}>
+                        <Field label="Max Concurrent Sessions" hint="Maximum active sessions per user account">
+                          <input className="g-input" type="number" min={1} max={20} value={secPolicy.max_sessions ?? 5} onChange={e => setSecPolicy({ ...secPolicy, max_sessions: parseInt(e.target.value) })} style={{ width: 100 }} />
+                        </Field>
+                      </div>
                     </div>
+                  </SectionCard>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Password Policy</div>
+                  <SectionCard title="Password Policy" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="Minimum Password Length">
                         <input className="g-input" type="number" min={8} max={128} value={secPolicy.min_password_length ?? 12} onChange={e => setSecPolicy({ ...secPolicy, min_password_length: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
@@ -502,9 +479,10 @@ export default function SettingsEnterprise() {
                         <input className="g-input" type="number" min={0} max={365} value={secPolicy.password_expiry_days ?? 90} onChange={e => setSecPolicy({ ...secPolicy, password_expiry_days: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
                     </div>
+                  </SectionCard>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Login Protection</div>
+                  <SectionCard title="Login Protection" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="Max Failed Login Attempts" hint="Account locked after this many consecutive failures">
                         <input className="g-input" type="number" min={3} max={20} value={secPolicy.max_failed_logins ?? 5} onChange={e => setSecPolicy({ ...secPolicy, max_failed_logins: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
@@ -515,45 +493,41 @@ export default function SettingsEnterprise() {
                         <input className="g-input" placeholder="10.0.0.0/8, 192.168.0.0/16" value={secPolicy.ip_allowlist ?? ''} onChange={e => setSecPolicy({ ...secPolicy, ip_allowlist: e.target.value })} style={{ width: 280 }} />
                       </Field>
                     </div>
+                  </SectionCard>
 
-                    {/* active sessions */}
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Active Sessions ({(d.sessions ?? []).length})</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>User</th><th>IP</th><th>User Agent</th><th>Created</th><th>Actions</th></tr></thead>
-                        <tbody>
-                          {(d.sessions ?? []).slice(0, 10).map((s: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{s.username ?? s.user_id}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.ip_address}</td>
-                              <td style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.user_agent}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.created_at ? new Date(s.created_at).toLocaleString() : ''}</td>
-                              <td>
-                                <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: '#dc2626' }}
-                                  onClick={() => sessionsAPI.revoke(s.id).then(loadAll)}>Revoke</button>
-                              </td>
-                            </tr>
-                          ))}
-                          {!d.sessions?.length && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 16 }}>No active sessions</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
+                  <SectionCard title={`Active Sessions (${(d.sessions ?? []).length})`} padded={false} className="mb-5">
+                    <DataTable<any>
+                      rows={(d.sessions ?? []).slice(0, 10)}
+                      rowKey={(s: any, i: number) => s.id ?? i}
+                      emptyState={<EmptyState title="No active sessions" />}
+                      columns={[
+                        { key: 'username', header: 'User', render: (s: any) => <span style={{ fontWeight: 600 }}>{s.username ?? s.user_id}</span> },
+                        { key: 'ip_address', header: 'IP', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.ip_address}</span> },
+                        { key: 'user_agent', header: 'User Agent', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{s.user_agent}</span> },
+                        { key: 'created_at', header: 'Created', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.created_at ? new Date(s.created_at).toLocaleString() : ''}</span> },
+                        { key: 'actions', header: 'Actions', render: (s: any) => (
+                          <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => sessionsAPI.revoke(s.id).then(loadAll)}>Revoke</ActionButton>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-                      <button className="g-btn-ghost" onClick={saveOrg} disabled={saving}>Save MFA Setting</button>
-                      <button className="g-btn" onClick={saveSecPolicy} disabled={saving}>{saving ? 'Saving…' : 'Save Security Policy'}</button>
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 'var(--space-5)' }}>
+                    <ActionButton variant="ghost" icon={Save} onClick={saveOrg} disabled={saving}>Save MFA Setting</ActionButton>
+                    <ActionButton variant="primary" icon={Save} onClick={saveSecPolicy} disabled={saving}>{saving ? 'Saving…' : 'Save Security Policy'}</ActionButton>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* ════════════════════════ AGENTS ════════════════════════ */}
-                {section === 'agents' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Agents</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Configure global agent behavior and enrollment settings.</p>
+              {/* ════════════════════════ AGENTS ════════════════════════ */}
+              {section === 'agents' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Agents</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure global agent behavior and enrollment settings.</p>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Monitoring</div>
+                  <SectionCard title="Monitoring" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="Offline Threshold (minutes)" hint="Agent marked offline after this many minutes without heartbeat">
                         <input className="g-input" type="number" min={5} max={120} value={agentCfg.offline_threshold_mins ?? 15} onChange={e => setAgentCfg({ ...agentCfg, offline_threshold_mins: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
@@ -567,9 +541,10 @@ export default function SettingsEnterprise() {
                         <input className="g-input" type="number" min={100} max={10000} value={agentCfg.max_log_batch ?? 1000} onChange={e => setAgentCfg({ ...agentCfg, max_log_batch: parseInt(e.target.value) })} style={{ width: 100 }} />
                       </Field>
                     </div>
+                  </SectionCard>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Collection</div>
+                  <SectionCard title="Collection" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="File Integrity Monitoring (FIM)">
                         <Toggle value={agentCfg.enable_fim ?? true} onChange={v => setAgentCfg({ ...agentCfg, enable_fim: v })} />
                       </Field>
@@ -583,154 +558,137 @@ export default function SettingsEnterprise() {
                         <Toggle value={agentCfg.require_signed_binaries ?? false} onChange={v => setAgentCfg({ ...agentCfg, require_signed_binaries: v })} />
                       </Field>
                     </div>
+                  </SectionCard>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Enrollment</div>
-                      <Field label="Enrollment Token TTL (hours)" hint="How long enrollment tokens remain valid after generation">
-                        <input className="g-input" type="number" min={1} max={720} value={agentCfg.enrollment_token_ttl_hours ?? 48} onChange={e => setAgentCfg({ ...agentCfg, enrollment_token_ttl_hours: parseInt(e.target.value) })} style={{ width: 100 }} />
-                      </Field>
+                  <SectionCard title="Enrollment" padded={false} className="mb-5">
+                    <div className="px-4">
+                      <div style={{ borderBottom: 'none' }}>
+                        <Field label="Enrollment Token TTL (hours)" hint="How long enrollment tokens remain valid after generation">
+                          <input className="g-input" type="number" min={1} max={720} value={agentCfg.enrollment_token_ttl_hours ?? 48} onChange={e => setAgentCfg({ ...agentCfg, enrollment_token_ttl_hours: parseInt(e.target.value) })} style={{ width: 100 }} />
+                        </Field>
+                      </div>
                     </div>
+                  </SectionCard>
 
-                    <SaveBar onSave={saveAgentCfg} saving={saving} />
-                  </div>
-                )}
+                  <SaveBar onSave={saveAgentCfg} saving={saving} />
+                </div>
+              )}
 
-                {/* ════════════════════════ INTEGRATIONS ══════════════════ */}
-                {section === 'integrations' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Integrations</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Connect external security tools and data sources.</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-                      {(d.integrations ?? []).map((intg: any, i: number) => (
-                        <div key={i} className="g-card">
-                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{intg.name ?? intg.integration_name}</div>
-                              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{intg.description ?? intg.integration_type}</div>
-                            </div>
-                            {pill(intg.enabled ? 'enabled' : 'disabled')}
+              {/* ════════════════════════ INTEGRATIONS ══════════════════ */}
+              {section === 'integrations' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Integrations</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Connect external security tools and data sources.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(d.integrations ?? []).map((intg: any, i: number) => (
+                      <SectionCard key={i} title={intg.name ?? intg.integration_name} subtitle={intg.description ?? intg.integration_type}
+                        actions={pill(intg.enabled ? 'enabled' : 'disabled')}>
+                        {intg.url && <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{intg.url}</div>}
+                        {intg.last_tested_at && (
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+                            Last tested: {new Date(intg.last_tested_at).toLocaleString()}
+                            {intg.last_test_success !== undefined && (
+                              <span style={{ marginLeft: 8 }}>{intg.last_test_success ? '✓ Passed' : '✗ Failed'}</span>
+                            )}
                           </div>
-                          {intg.url && <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{intg.url}</div>}
-                          {intg.last_tested_at && (
-                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
-                              Last tested: {new Date(intg.last_tested_at).toLocaleString()}
-                              {intg.last_test_success !== undefined && (
-                                <span style={{ marginLeft: 8 }}>{intg.last_test_success ? '✓ Passed' : '✗ Failed'}</span>
-                              )}
+                        )}
+                        <ActionButton variant="ghost" icon={Zap} style={{ fontSize: 12 }}
+                          disabled={testingIntg === (intg.name ?? intg.integration_name)}
+                          onClick={() => testIntegration(intg.name ?? intg.integration_name)}>
+                          {testingIntg === (intg.name ?? intg.integration_name) ? 'Testing…' : 'Test Connection'}
+                        </ActionButton>
+                      </SectionCard>
+                    ))}
+                    {!d.integrations?.length && (
+                      <div className="sm:col-span-2">
+                        <EmptyState title="No integrations configured yet" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ════════════════════════ NOTIFICATIONS ═════════════════ */}
+              {section === 'notifications' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Notifications</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure email alert rules and notification channels.</p>
+                  <SectionCard title={`Email Alert Rules (${(d.notifRules ?? []).length})`} padded={false}>
+                    <DataTable<any>
+                      rows={d.notifRules ?? []}
+                      rowKey={(r: any, i: number) => r.id ?? i}
+                      emptyState={<EmptyState title="No email rules configured" />}
+                      columns={[
+                        { key: 'name', header: 'Rule Name', render: (r: any) => <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{r.name}</span> },
+                        { key: 'event_type', header: 'Event', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.event_type}</span> },
+                        { key: 'recipients', header: 'Recipients', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{Array.isArray(r.recipients) ? r.recipients.join(', ') : r.recipients}</span> },
+                        { key: 'min_severity', header: 'Severity', render: (r: any) => r.min_severity ? pill(r.min_severity) : null },
+                        { key: 'enabled', header: 'Status', render: (r: any) => (
+                          <Toggle value={r.enabled ?? false}
+                            onChange={(v) => notificationsAPI.toggleEmailRule(r.id, v).then(loadAll)} />
+                        ) },
+                        { key: 'actions', header: 'Actions', render: (r: any) => (
+                          <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => { if (window.confirm('Delete rule?')) notificationsAPI.deleteEmailRule(r.id).then(loadAll); }}>
+                            Delete
+                          </ActionButton>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
+
+              {/* ════════════════════════ AI MODELS ════════════════════ */}
+              {section === 'ai-models' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>AI Models</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure LLM providers, models, and API credentials.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {[
+                      { provider: 'anthropic',  label: 'Anthropic Claude',   model: 'claude-sonnet-4-6',    badge: 'Default' },
+                      { provider: 'openai',      label: 'OpenAI GPT-4o',      model: 'gpt-4o-mini',          badge: '' },
+                      { provider: 'gemini',      label: 'Google Gemini',      model: 'gemini-1.5-pro',       badge: '' },
+                      { provider: 'azure_openai',label: 'Azure OpenAI',       model: 'gpt-4-turbo',          badge: '' },
+                      { provider: 'ollama',      label: 'Ollama (Local)',      model: 'llama3.1:70b',         badge: 'On-Premise' },
+                      { provider: 'mcp',         label: 'MCP Server',          model: 'custom',               badge: 'Ext.' },
+                    ].map((p) => {
+                      const existing = (d.aiProviders ?? []).find((a: any) => a.provider === p.provider);
+                      return (
+                        <SectionCard key={p.provider} title={p.label} subtitle={existing?.model ?? p.model}
+                          actions={<div className="flex items-center gap-1.5">{p.badge && pill(p.badge, '#7c3aed')}{pill(existing?.enabled ? 'enabled' : 'disabled')}</div>}>
+                          {existing?.api_key_masked && (
+                            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontFamily: 'monospace' }}>
+                              Key: {existing.api_key_masked}
                             </div>
                           )}
-                          <button className="g-btn-ghost" style={{ fontSize: 12 }}
-                            disabled={testingIntg === (intg.name ?? intg.integration_name)}
-                            onClick={() => testIntegration(intg.name ?? intg.integration_name)}>
-                            {testingIntg === (intg.name ?? intg.integration_name) ? 'Testing…' : 'Test Connection'}
-                          </button>
-                        </div>
-                      ))}
-                      {!d.integrations?.length && (
-                        <div className="g-card" style={{ gridColumn: '1/-1', textAlign: 'center', color: 'var(--text-3)', padding: 40 }}>
-                          No integrations configured yet
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ════════════════════════ NOTIFICATIONS ═════════════════ */}
-                {section === 'notifications' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Notifications</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Configure email alert rules and notification channels.</p>
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>
-                        Email Alert Rules ({(d.notifRules ?? []).length})
-                      </div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Rule Name</th><th>Event</th><th>Recipients</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
-                        <tbody>
-                          {(d.notifRules ?? []).map((r: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600, color: 'var(--text-1)' }}>{r.name}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.event_type}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{Array.isArray(r.recipients) ? r.recipients.join(', ') : r.recipients}</td>
-                              <td>{r.min_severity && pill(r.min_severity)}</td>
-                              <td>
-                                <Toggle value={r.enabled ?? false}
-                                  onChange={(v) => notificationsAPI.toggleEmailRule(r.id, v).then(loadAll)} />
-                              </td>
-                              <td>
-                                <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: '#dc2626' }}
-                                  onClick={() => { if (window.confirm('Delete rule?')) notificationsAPI.deleteEmailRule(r.id).then(loadAll); }}>
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          {!d.notifRules?.length && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No email rules configured</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* ════════════════════════ AI MODELS ════════════════════ */}
-                {section === 'ai-models' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>AI Models</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Configure LLM providers, models, and API credentials.</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-                      {[
-                        { provider: 'anthropic',  label: 'Anthropic Claude',   model: 'claude-sonnet-4-6',    badge: 'Default' },
-                        { provider: 'openai',      label: 'OpenAI GPT-4o',      model: 'gpt-4o-mini',          badge: '' },
-                        { provider: 'gemini',      label: 'Google Gemini',      model: 'gemini-1.5-pro',       badge: '' },
-                        { provider: 'azure_openai',label: 'Azure OpenAI',       model: 'gpt-4-turbo',          badge: '' },
-                        { provider: 'ollama',      label: 'Ollama (Local)',      model: 'llama3.1:70b',         badge: 'On-Premise' },
-                        { provider: 'mcp',         label: 'MCP Server',          model: 'custom',               badge: 'Ext.' },
-                      ].map((p) => {
-                        const existing = (d.aiProviders ?? []).find((a: any) => a.provider === p.provider);
-                        return (
-                          <div key={p.provider} className="g-card">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                              <div>
-                                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-1)' }}>{p.label}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{existing?.model ?? p.model}</div>
-                              </div>
-                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                {p.badge && pill(p.badge, '#7c3aed')}
-                                {pill(existing?.enabled ? 'enabled' : 'disabled')}
-                              </div>
-                            </div>
-                            {existing?.api_key_masked && (
-                              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8, fontFamily: 'monospace' }}>
-                                Key: {existing.api_key_masked}
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                              <input className="g-input" placeholder="API Key" type="password" style={{ flex: 1, fontSize: 12 }}
-                                onChange={e => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, api_key: e.target.value, enabled: true })} />
-                              <button className="g-btn-ghost" style={{ fontSize: 11 }}
-                                onClick={() => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, enabled: !(existing?.enabled) }).then(loadAll)}>
-                                {existing?.enabled ? 'Disable' : 'Enable'}
-                              </button>
-                            </div>
-                            {existing?.rate_limit_rpm && (
-                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
-                                Rate: {existing.rate_limit_rpm} RPM · Budget: ${existing.monthly_budget_usd ?? 0}/mo
-                              </div>
-                            )}
+                          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            <input className="g-input" placeholder="API Key" type="password" style={{ flex: 1, fontSize: 12 }}
+                              onChange={e => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, api_key: e.target.value, enabled: true })} />
+                            <ActionButton variant="ghost" icon={Power} style={{ fontSize: 11 }}
+                              onClick={() => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, enabled: !(existing?.enabled) }).then(loadAll)}>
+                              {existing?.enabled ? 'Disable' : 'Enable'}
+                            </ActionButton>
                           </div>
-                        );
-                      })}
-                    </div>
+                          {existing?.rate_limit_rpm && (
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
+                              Rate: {existing.rate_limit_rpm} RPM · Budget: ${existing.monthly_budget_usd ?? 0}/mo
+                            </div>
+                          )}
+                        </SectionCard>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* ════════════════════════ AI GUARDRAILS ════════════════ */}
-                {section === 'ai-guardrails' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>AI Guardrails</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Safety controls, approval workflows, and data protection for AI.</p>
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Safety Controls</div>
+              {/* ════════════════════════ AI GUARDRAILS ════════════════ */}
+              {section === 'ai-guardrails' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>AI Guardrails</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Safety controls, approval workflows, and data protection for AI.</p>
+                  <SectionCard title="Safety Controls" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="Require Approval for AI Actions" hint="All AI-requested actions must be approved by a human operator">
                         <Toggle value={aiGuard.require_approval_for_actions ?? true} onChange={v => setAiGuard({ ...aiGuard, require_approval_for_actions: v })} />
                       </Field>
@@ -743,81 +701,80 @@ export default function SettingsEnterprise() {
                       <Field label="Hallucination Warnings" hint="Show confidence warnings when AI uncertainty is high">
                         <Toggle value={aiGuard.hallucination_warnings ?? true} onChange={v => setAiGuard({ ...aiGuard, hallucination_warnings: v })} />
                       </Field>
-                      <Field label="Audit All Queries" hint="Log every AI query and response to the audit trail">
-                        <Toggle value={aiGuard.audit_all_queries ?? true} onChange={v => setAiGuard({ ...aiGuard, audit_all_queries: v })} />
-                      </Field>
+                      <div style={{ borderBottom: 'none' }}>
+                        <Field label="Audit All Queries" hint="Log every AI query and response to the audit trail">
+                          <Toggle value={aiGuard.audit_all_queries ?? true} onChange={v => setAiGuard({ ...aiGuard, audit_all_queries: v })} />
+                        </Field>
+                      </div>
                     </div>
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Context Limits</div>
+                  </SectionCard>
+                  <SectionCard title="Context Limits" padded={false} className="mb-5">
+                    <div className="px-4">
                       <Field label="Max Context Length (tokens)" hint="Maximum tokens of security data passed to AI per query">
                         <input className="g-input" type="number" min={1024} max={128000} value={aiGuard.max_context_length ?? 8192} onChange={e => setAiGuard({ ...aiGuard, max_context_length: parseInt(e.target.value) })} style={{ width: 120 }} />
                       </Field>
-                      <Field label="Allowed Roles" hint="Comma-separated roles with AI access">
-                        <input className="g-input" value={Array.isArray(aiGuard.allowed_roles) ? aiGuard.allowed_roles.join(',') : (aiGuard.allowed_roles ?? 'admin,analyst,manager')}
-                          onChange={e => setAiGuard({ ...aiGuard, allowed_roles: e.target.value.split(',').map((s: string) => s.trim()) })} style={{ width: 220 }} />
-                      </Field>
+                      <div style={{ borderBottom: 'none' }}>
+                        <Field label="Allowed Roles" hint="Comma-separated roles with AI access">
+                          <input className="g-input" value={Array.isArray(aiGuard.allowed_roles) ? aiGuard.allowed_roles.join(',') : (aiGuard.allowed_roles ?? 'admin,analyst,manager')}
+                            onChange={e => setAiGuard({ ...aiGuard, allowed_roles: e.target.value.split(',').map((s: string) => s.trim()) })} style={{ width: 220 }} />
+                        </Field>
+                      </div>
                     </div>
-                    <SaveBar onSave={saveAIGuardrails} saving={saving} />
-                  </div>
-                )}
+                  </SectionCard>
+                  <SaveBar onSave={saveAIGuardrails} saving={saving} />
+                </div>
+              )}
 
-                {/* ════════════════════════ AI USAGE ═════════════════════ */}
-                {section === 'ai-usage' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Usage Limits</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Set per-role message limits and monthly token budgets.</p>
-                    <div className="g-card">
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Role</th><th>Daily Messages</th><th>Monthly Tokens</th><th>Monthly Budget (USD)</th></tr></thead>
-                        <tbody>
-                          {[
-                            { role: 'admin',    msgs: 'Unlimited', tokens: 'Unlimited', budget: '$0 (no limit)' },
-                            { role: 'analyst',  msgs: '500',       tokens: '2,000,000',  budget: '$100' },
-                            { role: 'manager',  msgs: '200',       tokens: '1,000,000',  budget: '$50' },
-                            { role: 'viewer',   msgs: '50',        tokens: '100,000',    budget: '$10' },
-                          ].map((r, i) => (
-                            <tr key={i}>
-                              <td>{pill(r.role)}</td>
-                              <td style={{ fontWeight: 600 }}>{r.msgs}</td>
-                              <td style={{ color: 'var(--text-2)' }}>{r.tokens}</td>
-                              <td style={{ color: 'var(--text-2)' }}>{r.budget}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="g-card" style={{ marginTop: 16 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>Model Routing by Mode</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Mode</th><th>Primary Model</th><th>Fallback</th></tr></thead>
-                        <tbody>
-                          {[
-                            { mode: 'General Chat',          primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o-mini' },
-                            { mode: 'Investigation',         primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o' },
-                            { mode: 'Automation',            primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o' },
-                            { mode: 'Executive Assistant',   primary: 'claude-sonnet-4-6',  fallback: 'gemini-1.5-pro' },
-                            { mode: 'Threat Intelligence',   primary: 'claude-sonnet-4-6',  fallback: 'llama3.1:70b (local)' },
-                          ].map((r, i) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{r.mode}</td>
-                              <td style={{ color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{r.primary}</td>
-                              <td style={{ color: 'var(--text-3)', fontFamily: 'monospace', fontSize: 12 }}>{r.fallback}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+              {/* ════════════════════════ AI USAGE ═════════════════════ */}
+              {section === 'ai-usage' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Usage Limits</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Set per-role message limits and monthly token budgets.</p>
+                  <SectionCard padded={false}>
+                    <DataTable<any>
+                      rows={[
+                        { role: 'admin',    msgs: 'Unlimited', tokens: 'Unlimited', budget: '$0 (no limit)' },
+                        { role: 'analyst',  msgs: '500',       tokens: '2,000,000',  budget: '$100' },
+                        { role: 'manager',  msgs: '200',       tokens: '1,000,000',  budget: '$50' },
+                        { role: 'viewer',   msgs: '50',        tokens: '100,000',    budget: '$10' },
+                      ]}
+                      rowKey={(r: any) => r.role}
+                      columns={[
+                        { key: 'role', header: 'Role', render: (r: any) => pill(r.role) },
+                        { key: 'msgs', header: 'Daily Messages', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.msgs}</span> },
+                        { key: 'tokens', header: 'Monthly Tokens', render: (r: any) => <span style={{ color: 'var(--text-2)' }}>{r.tokens}</span> },
+                        { key: 'budget', header: 'Monthly Budget (USD)', render: (r: any) => <span style={{ color: 'var(--text-2)' }}>{r.budget}</span> },
+                      ]}
+                    />
+                  </SectionCard>
+                  <SectionCard title="Model Routing by Mode" padded={false} className="mt-4">
+                    <DataTable<any>
+                      rows={[
+                        { mode: 'General Chat',          primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o-mini' },
+                        { mode: 'Investigation',         primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o' },
+                        { mode: 'Automation',            primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o' },
+                        { mode: 'Executive Assistant',   primary: 'claude-sonnet-4-6',  fallback: 'gemini-1.5-pro' },
+                        { mode: 'Threat Intelligence',   primary: 'claude-sonnet-4-6',  fallback: 'llama3.1:70b (local)' },
+                      ]}
+                      rowKey={(r: any) => r.mode}
+                      columns={[
+                        { key: 'mode', header: 'Mode', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.mode}</span> },
+                        { key: 'primary', header: 'Primary Model', render: (r: any) => <span style={{ color: 'var(--accent)', fontFamily: 'monospace', fontSize: 12 }}>{r.primary}</span> },
+                        { key: 'fallback', header: 'Fallback', render: (r: any) => <span style={{ color: 'var(--text-3)', fontFamily: 'monospace', fontSize: 12 }}>{r.fallback}</span> },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
 
-                {/* ════════════════════════ BACKUP & RECOVERY ════════════ */}
-                {section === 'backup' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Backup & Recovery</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Configure automated backups and view restore points.</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                      <div className="g-card">
-                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Backup Configuration</div>
+              {/* ════════════════════════ BACKUP & RECOVERY ════════════ */}
+              {section === 'backup' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Backup & Recovery</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure automated backups and view restore points.</p>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+                    <SectionCard title="Backup Configuration" padded={false}>
+                      <div className="px-4">
                         <Field label="Automated Backups">
                           <Toggle value={backupCfg.enabled ?? true} onChange={v => setBackupCfg({ ...backupCfg, enabled: v })} />
                         </Field>
@@ -837,307 +794,274 @@ export default function SettingsEnterprise() {
                         <Field label="Encryption">
                           <Toggle value={backupCfg.encrypt ?? true} onChange={v => setBackupCfg({ ...backupCfg, encrypt: v })} />
                         </Field>
-                        <Field label="Storage">
-                          <select className="g-input" value={backupCfg.storage ?? 'local'} onChange={e => setBackupCfg({ ...backupCfg, storage: e.target.value })} style={{ width: 120 }}>
-                            <option value="local">Local</option>
-                            <option value="s3">AWS S3</option>
-                            <option value="gcs">Google Cloud</option>
-                            <option value="azure">Azure Blob</option>
-                          </select>
-                        </Field>
-                        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                          <button className="g-btn" onClick={saveBackupCfg} disabled={saving}>Save Config</button>
-                          <button className="g-btn-ghost" onClick={triggerBackup}>Backup Now</button>
+                        <div style={{ borderBottom: 'none' }}>
+                          <Field label="Storage">
+                            <select className="g-input" value={backupCfg.storage ?? 'local'} onChange={e => setBackupCfg({ ...backupCfg, storage: e.target.value })} style={{ width: 120 }}>
+                              <option value="local">Local</option>
+                              <option value="s3">AWS S3</option>
+                              <option value="gcs">Google Cloud</option>
+                              <option value="azure">Azure Blob</option>
+                            </select>
+                          </Field>
+                        </div>
+                        <div className="flex gap-2.5 mt-4 pb-4">
+                          <ActionButton variant="primary" icon={Save} onClick={saveBackupCfg} disabled={saving}>Save Config</ActionButton>
+                          <ActionButton variant="ghost" icon={RefreshCw} onClick={triggerBackup}>Backup Now</ActionButton>
                         </div>
                       </div>
+                    </SectionCard>
 
-                      <div className="g-card">
-                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Restore Points</div>
-                        {(d.backups ?? []).slice(0, 6).map((b: any, i: number) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
-                                {b.created_at ? new Date(b.created_at).toLocaleString() : ''}
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                                {b.backup_type} · {b.size_human ?? b.size_bytes} · {b.duration_secs}s
-                              </div>
+                    <SectionCard title="Restore Points">
+                      {(d.backups ?? []).slice(0, 6).map((b: any, i: number) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+                              {b.created_at ? new Date(b.created_at).toLocaleString() : ''}
                             </div>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              {pill(b.status)}
-                              <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}>Restore</button>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                              {b.backup_type} · {b.size_human ?? b.size_bytes} · {b.duration_secs}s
                             </div>
                           </div>
-                        ))}
-                        {!d.backups?.length && <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 20 }}>No backup history</div>}
-                      </div>
-                    </div>
-
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Backup History</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Backup ID</th><th>Type</th><th>Size</th><th>Duration</th><th>Status</th><th>Triggered By</th><th>Time</th></tr></thead>
-                        <tbody>
-                          {(d.backups ?? []).map((b: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.backup_id}</td>
-                              <td>{pill(b.backup_type)}</td>
-                              <td style={{ fontSize: 12 }}>{b.size_human ?? b.size_bytes}</td>
-                              <td style={{ fontSize: 12 }}>{b.duration_secs}s</td>
-                              <td>{pill(b.status)}</td>
-                              <td style={{ fontSize: 12 }}>{b.triggered_by}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{b.created_at ? new Date(b.created_at).toLocaleString() : ''}</td>
-                            </tr>
-                          ))}
-                          {!d.backups?.length && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No backups yet — click "Backup Now" to create the first one</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* ════════════════════════ API MANAGEMENT ════════════════ */}
-                {section === 'api-management' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>API Management</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Manage API keys, rate limits, and integration access.</p>
-
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Create API Key</div>
-                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <input className="g-input" placeholder="Key label (e.g. SIEM integration)" value={keyLabel} onChange={e => setKeyLabel(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-                        <select className="g-input" value={keyRole} onChange={e => setKeyRole(e.target.value)} style={{ minWidth: 120 }}>
-                          <option value="viewer">viewer</option>
-                          <option value="analyst">analyst</option>
-                          <option value="admin">admin</option>
-                        </select>
-                        <button className="g-btn" disabled={!keyLabel} onClick={createKey}>Generate Key</button>
-                      </div>
-                      {newKey && (
-                        <div style={{ marginTop: 14, background: 'var(--bg-2)', borderRadius: 6, padding: '12px 16px', border: '1px solid var(--accent)55' }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>API Key (copy now — won't be shown again):</div>
-                          <div style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', color: 'var(--text-1)' }}>{newKey}</div>
-                          <button className="g-btn-ghost" style={{ marginTop: 8, fontSize: 11 }} onClick={() => navigator.clipboard.writeText(newKey)}>Copy</button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>API Keys ({(d.keys ?? []).length})</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Label</th><th>Role</th><th>Key (masked)</th><th>Last Used</th><th>Expires</th><th>Actions</th></tr></thead>
-                        <tbody>
-                          {(d.keys ?? []).map((k: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{k.label}</td>
-                              <td>{pill(k.role)}</td>
-                              <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-3)' }}>{k.key_prefix ?? k.api_key_prefix}****</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never'}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never'}</td>
-                              <td>
-                                <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: '#dc2626' }}
-                                  onClick={() => { if (window.confirm('Revoke this API key?')) apiKeysAPI.revoke(k.id).then(loadAll); }}>
-                                  Revoke
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          {!d.keys?.length && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No API keys yet</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="g-card" style={{ marginTop: 16 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Rate Limits</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Endpoint Group</th><th>Limit (req/min)</th><th>Burst</th><th>Auth</th></tr></thead>
-                        <tbody>
-                          {[
-                            { group: 'Authentication', limit: 10, burst: 20, auth: false },
-                            { group: 'Alerts & Incidents', limit: 300, burst: 500, auth: true },
-                            { group: 'Search & Query', limit: 100, burst: 200, auth: true },
-                            { group: 'AI Assistant', limit: 60, burst: 100, auth: true },
-                            { group: 'Reports & Export', limit: 20, burst: 30, auth: true },
-                            { group: 'Agent Ingestion', limit: 2000, burst: 5000, auth: false },
-                          ].map((r, i) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600 }}>{r.group}</td>
-                              <td>{r.limit}</td>
-                              <td>{r.burst}</td>
-                              <td>{pill(r.auth ? 'required' : 'none', r.auth ? '#7c3aed' : '#6b7280')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* ════════════════════════ UPDATES ════════════════════════ */}
-                {section === 'updates' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Updates</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Version management and platform update history.</p>
-
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--text-1)' }}>v{d.updates?.current_version ?? '2.14.3'}</div>
-                          <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>Current Version — {pill(d.updates?.channel ?? 'stable')}</div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          {d.updates?.update_available ? (
-                            <button className="g-btn">Install Update v{d.updates?.latest_version}</button>
-                          ) : (
-                            <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>✓ Up to date</div>
-                          )}
-                          <button className="g-btn-ghost" onClick={checkUpdates} style={{ marginTop: 8, display: 'block', width: '100%' }}>Check for Updates</button>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                        Last checked: {d.updates?.last_checked ? new Date(d.updates.last_checked).toLocaleString() : '—'}
-                      </div>
-                    </div>
-
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Release History</div>
-                      {(d.updates?.history ?? []).length === 0 ? (
-                        <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 20 }}>No update history</div>
-                      ) : (
-                        <table className="g-table" style={{ width: '100%' }}>
-                          <thead><tr><th>Version</th><th>Type</th><th>Title</th><th>Applied By</th><th>Date</th></tr></thead>
-                          <tbody>
-                            {(d.updates?.history ?? []).map((u: any, i: number) => (
-                              <tr key={i}>
-                                <td style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent)' }}>v{u.version}</td>
-                                <td>{pill(u.release_type)}</td>
-                                <td style={{ fontSize: 13 }}>{u.title}</td>
-                                <td style={{ fontSize: 12 }}>{u.applied_by ?? '—'}</td>
-                                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : ''}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ════════════════════════ LICENSING ═════════════════════ */}
-                {section === 'licensing' && (
-                  <div style={{ maxWidth: 700 }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Licensing</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Manage your XCloak license, tier, and seat usage.</p>
-
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                        <div>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', textTransform: 'capitalize' }}>
-                            {d.license?.tier ?? 'Community'} Edition
-                          </div>
-                          <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>
-                            {d.license?.is_trial ? 'Trial' : 'Licensed'} · Support: {d.license?.support_tier ?? 'community'}
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            {pill(b.status)}
+                            <ActionButton variant="ghost" icon={RotateCcw} style={{ fontSize: 11, padding: '4px 10px' }}>Restore</ActionButton>
                           </div>
                         </div>
-                        {pill(d.license?.tier ?? 'community')}
-                      </div>
+                      ))}
+                      {!d.backups?.length && <EmptyState title="No backup history" />}
+                    </SectionCard>
+                  </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 16 }}>
-                        {[
-                          { label: 'Seats Used',     value: `${d.license?.seats_used ?? 0} / ${d.license?.seats_total ?? 5}` },
-                          { label: 'Agents Used',    value: `${d.license?.agents_used ?? 0} / ${d.license?.agents_total ?? 25}` },
-                          { label: 'Valid From',     value: d.license?.valid_from ?? '—' },
-                          { label: 'Valid Until',    value: d.license?.valid_until ?? '—' },
-                          { label: 'Issued To',      value: d.license?.issued_to ?? '—' },
-                          { label: 'Activated At',   value: d.license?.activated_at ? new Date(d.license.activated_at).toLocaleDateString() : '—' },
-                        ].map((item, i) => (
-                          <div key={i} style={{ background: 'var(--bg-2)', borderRadius: 6, padding: '12px 16px' }}>
-                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>{item.label}</div>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{item.value}</div>
-                          </div>
-                        ))}
-                      </div>
+                  <SectionCard title="Backup History" padded={false}>
+                    <DataTable<any>
+                      rows={d.backups ?? []}
+                      rowKey={(b: any, i: number) => b.backup_id ?? i}
+                      emptyState={<EmptyState title="No backups yet" message={'Click "Backup Now" to create the first one'} />}
+                      columns={[
+                        { key: 'backup_id', header: 'Backup ID', render: (b: any) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.backup_id}</span> },
+                        { key: 'backup_type', header: 'Type', render: (b: any) => pill(b.backup_type) },
+                        { key: 'size', header: 'Size', render: (b: any) => <span style={{ fontSize: 12 }}>{b.size_human ?? b.size_bytes}</span> },
+                        { key: 'duration_secs', header: 'Duration', render: (b: any) => <span style={{ fontSize: 12 }}>{b.duration_secs}s</span> },
+                        { key: 'status', header: 'Status', render: (b: any) => pill(b.status) },
+                        { key: 'triggered_by', header: 'Triggered By', render: (b: any) => <span style={{ fontSize: 12 }}>{b.triggered_by}</span> },
+                        { key: 'created_at', header: 'Time', render: (b: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{b.created_at ? new Date(b.created_at).toLocaleString() : ''}</span> },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
 
-                      {d.license?.features && (
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Enabled Features</div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {(Array.isArray(d.license.features) ? d.license.features :
-                              JSON.parse(d.license.features || '[]')).map((f: string, i: number) => (
-                              <span key={i} style={{ background: 'var(--accent)22', color: 'var(--accent)', border: '1px solid var(--accent)55', borderRadius: 4, padding: '2px 8px', fontSize: 11 }}>{f}</span>
-                            ))}
+              {/* ════════════════════════ API MANAGEMENT ════════════════ */}
+              {section === 'api-management' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>API Management</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Manage API keys, rate limits, and integration access.</p>
+
+                  <SectionCard title="Create API Key" className="mb-5">
+                    <div className="flex gap-2.5 flex-wrap">
+                      <input className="g-input" placeholder="Key label (e.g. SIEM integration)" value={keyLabel} onChange={e => setKeyLabel(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+                      <select className="g-input" value={keyRole} onChange={e => setKeyRole(e.target.value)} style={{ minWidth: 120 }}>
+                        <option value="viewer">viewer</option>
+                        <option value="analyst">analyst</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <ActionButton variant="primary" icon={KeyRound} disabled={!keyLabel} onClick={createKey}>Generate Key</ActionButton>
+                    </div>
+                    {newKey && (
+                      <div style={{ marginTop: 14, background: 'var(--bg-2)', borderRadius: 'var(--radius-md)', padding: '12px 16px', border: '1px solid var(--accent-border)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>API Key (copy now — won&apos;t be shown again):</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', color: 'var(--text-1)' }}>{newKey}</div>
+                        <ActionButton variant="ghost" icon={Copy} style={{ marginTop: 8, fontSize: 11 }} onClick={() => navigator.clipboard.writeText(newKey)}>Copy</ActionButton>
+                      </div>
+                    )}
+                  </SectionCard>
+
+                  <SectionCard title={`API Keys (${(d.keys ?? []).length})`} padded={false} className="mb-5">
+                    <DataTable<any>
+                      rows={d.keys ?? []}
+                      rowKey={(k: any, i: number) => k.id ?? i}
+                      emptyState={<EmptyState title="No API keys yet" />}
+                      columns={[
+                        { key: 'label', header: 'Label', render: (k: any) => <span style={{ fontWeight: 600 }}>{k.label}</span> },
+                        { key: 'role', header: 'Role', render: (k: any) => pill(k.role) },
+                        { key: 'key_prefix', header: 'Key (masked)', render: (k: any) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-3)' }}>{k.key_prefix ?? k.api_key_prefix}****</span> },
+                        { key: 'last_used_at', header: 'Last Used', render: (k: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never'}</span> },
+                        { key: 'expires_at', header: 'Expires', render: (k: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never'}</span> },
+                        { key: 'actions', header: 'Actions', render: (k: any) => (
+                          <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => { if (window.confirm('Revoke this API key?')) apiKeysAPI.revoke(k.id).then(loadAll); }}>
+                            Revoke
+                          </ActionButton>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
+
+                  <SectionCard title="Rate Limits" padded={false}>
+                    <DataTable<any>
+                      rows={[
+                        { group: 'Authentication', limit: 10, burst: 20, auth: false },
+                        { group: 'Alerts & Incidents', limit: 300, burst: 500, auth: true },
+                        { group: 'Search & Query', limit: 100, burst: 200, auth: true },
+                        { group: 'AI Assistant', limit: 60, burst: 100, auth: true },
+                        { group: 'Reports & Export', limit: 20, burst: 30, auth: true },
+                        { group: 'Agent Ingestion', limit: 2000, burst: 5000, auth: false },
+                      ]}
+                      rowKey={(r: any) => r.group}
+                      columns={[
+                        { key: 'group', header: 'Endpoint Group', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.group}</span> },
+                        { key: 'limit', header: 'Limit (req/min)', render: (r: any) => <span>{r.limit}</span> },
+                        { key: 'burst', header: 'Burst', render: (r: any) => <span>{r.burst}</span> },
+                        { key: 'auth', header: 'Auth', render: (r: any) => pill(r.auth ? 'required' : 'none', r.auth ? '#7c3aed' : '#6b7280') },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
+
+              {/* ════════════════════════ UPDATES ════════════════════════ */}
+              {section === 'updates' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Updates</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Version management and platform update history.</p>
+
+                  <SectionCard className="mb-5">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--text-1)' }}>v{d.updates?.current_version ?? '2.14.3'}</div>
+                        <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>Current Version — {pill(d.updates?.channel ?? 'stable')}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        {d.updates?.update_available ? (
+                          <ActionButton variant="primary" icon={Download}>Install Update v{d.updates?.latest_version}</ActionButton>
+                        ) : (
+                          <div className="flex items-center gap-1.5 justify-end" style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Up to date
                           </div>
+                        )}
+                        <ActionButton variant="ghost" icon={RefreshCw} onClick={checkUpdates} style={{ marginTop: 8, display: 'flex', width: '100%', justifyContent: 'center' }}>Check for Updates</ActionButton>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                      Last checked: {d.updates?.last_checked ? new Date(d.updates.last_checked).toLocaleString() : '—'}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard title="Release History" padded={false}>
+                    <DataTable<any>
+                      rows={d.updates?.history ?? []}
+                      rowKey={(u: any, i: number) => i}
+                      emptyState={<EmptyState title="No update history" />}
+                      columns={[
+                        { key: 'version', header: 'Version', render: (u: any) => <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent)' }}>v{u.version}</span> },
+                        { key: 'release_type', header: 'Type', render: (u: any) => pill(u.release_type) },
+                        { key: 'title', header: 'Title', render: (u: any) => <span style={{ fontSize: 13 }}>{u.title}</span> },
+                        { key: 'applied_by', header: 'Applied By', render: (u: any) => <span style={{ fontSize: 12 }}>{u.applied_by ?? '—'}</span> },
+                        { key: 'created_at', header: 'Date', render: (u: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : ''}</span> },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
+
+              {/* ════════════════════════ LICENSING ═════════════════════ */}
+              {section === 'licensing' && (
+                <div style={{ maxWidth: 700 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Licensing</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Manage your XCloak license, tier, and seat usage.</p>
+
+                  <SectionCard className="mb-5">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', textTransform: 'capitalize' }}>
+                          {d.license?.tier ?? 'Community'} Edition
                         </div>
-                      )}
-                    </div>
-
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Activate License Key</div>
-                      <div style={{ display: 'flex', gap: 10 }}>
-                        <input className="g-input" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={licKey} onChange={e => setLicKey(e.target.value)} style={{ flex: 1, fontFamily: 'monospace' }} />
-                        <button className="g-btn" disabled={activating || !licKey} onClick={activateLicense}>
-                          {activating ? 'Activating…' : 'Activate'}
-                        </button>
+                        <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>
+                          {d.license?.is_trial ? 'Trial' : 'Licensed'} · Support: {d.license?.support_tier ?? 'community'}
+                        </div>
                       </div>
-                      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>
-                        Contact sales@xcloak.io to obtain an Enterprise license key or upgrade your current plan.
-                      </p>
+                      {pill(d.license?.tier ?? 'community')}
                     </div>
-                  </div>
-                )}
 
-                {/* ════════════════════════ AUDIT TRAIL ════════════════════ */}
-                {section === 'audit' && (
-                  <div>
-                    <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Audit Trail</h2>
-                    <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24 }}>Complete history of all platform configuration changes and administrative actions.</p>
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {[
+                        { label: 'Seats Used',     value: `${d.license?.seats_used ?? 0} / ${d.license?.seats_total ?? 5}` },
+                        { label: 'Agents Used',    value: `${d.license?.agents_used ?? 0} / ${d.license?.agents_total ?? 25}` },
+                        { label: 'Valid From',     value: d.license?.valid_from ?? '—' },
+                        { label: 'Valid Until',    value: d.license?.valid_until ?? '—' },
+                        { label: 'Issued To',      value: d.license?.issued_to ?? '—' },
+                        { label: 'Activated At',   value: d.license?.activated_at ? new Date(d.license.activated_at).toLocaleDateString() : '—' },
+                      ].map((item, i) => (
+                        <MetricCard key={i} variant="compact" label={item.label} value={item.value} />
+                      ))}
+                    </div>
 
-                    <div className="g-card" style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Settings Changes</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Time</th><th>Action</th><th>Section</th><th>Actor</th><th>Details</th></tr></thead>
-                        <tbody>
-                          {(d.stteAudit ?? []).map((e: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                                {e.created_at ? new Date(e.created_at).toLocaleString() : ''}
-                              </td>
-                              <td>{pill((e.action ?? '').replace(/_/g, ' '))}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.section}</td>
-                              <td style={{ fontSize: 12, fontWeight: 600 }}>{e.actor}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{e.details ?? '—'}</td>
-                            </tr>
+                    {d.license?.features && (
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Enabled Features</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {(Array.isArray(d.license.features) ? d.license.features :
+                            JSON.parse(d.license.features || '[]')).map((f: string, i: number) => (
+                            <span key={i} style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)', borderRadius: 4, padding: '2px 8px', fontSize: 11 }}>{f}</span>
                           ))}
-                          {!d.stteAudit?.length && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No settings changes recorded</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
+                        </div>
+                      </div>
+                    )}
+                  </SectionCard>
 
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Platform Audit Log</div>
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>IP</th></tr></thead>
-                        <tbody>
-                          {(d.auditLogs ?? []).slice(0, 50).map((e: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                                {e.created_at ? new Date(e.created_at).toLocaleString() : ''}
-                              </td>
-                              <td style={{ fontSize: 12 }}>{e.action}</td>
-                              <td style={{ fontSize: 12, fontWeight: 600 }}>{e.username ?? e.actor ?? e.performed_by}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.target ?? e.object_id ?? '—'}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{e.ip_address ?? '—'}</td>
-                            </tr>
-                          ))}
-                          {!d.auditLogs?.length && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No audit logs</td></tr>}
-                        </tbody>
-                      </table>
+                  <SectionCard title="Activate License Key">
+                    <div className="flex gap-2.5">
+                      <input className="g-input" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={licKey} onChange={e => setLicKey(e.target.value)} style={{ flex: 1, fontFamily: 'monospace' }} />
+                      <ActionButton variant="primary" icon={CheckCircle2} disabled={activating || !licKey} onClick={activateLicense}>
+                        {activating ? 'Activating…' : 'Activate'}
+                      </ActionButton>
                     </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                    <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>
+                      Contact sales@xcloak.io to obtain an Enterprise license key or upgrade your current plan.
+                    </p>
+                  </SectionCard>
+                </div>
+              )}
+
+              {/* ════════════════════════ AUDIT TRAIL ════════════════════ */}
+              {section === 'audit' && (
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Audit Trail</h2>
+                  <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Complete history of all platform configuration changes and administrative actions.</p>
+
+                  <SectionCard title="Settings Changes" padded={false} className="mb-5">
+                    <DataTable<any>
+                      rows={d.stteAudit ?? []}
+                      rowKey={(e: any, i: number) => i}
+                      emptyState={<EmptyState title="No settings changes recorded" />}
+                      columns={[
+                        { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.created_at ? new Date(e.created_at).toLocaleString() : ''}</span> },
+                        { key: 'action', header: 'Action', render: (e: any) => pill((e.action ?? '').replace(/_/g, ' ')) },
+                        { key: 'section', header: 'Section', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.section}</span> },
+                        { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, fontWeight: 600 }}>{e.actor}</span> },
+                        { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{e.details ?? '—'}</span> },
+                      ]}
+                    />
+                  </SectionCard>
+
+                  <SectionCard title="Platform Audit Log" padded={false}>
+                    <DataTable<any>
+                      rows={(d.auditLogs ?? []).slice(0, 50)}
+                      rowKey={(e: any, i: number) => i}
+                      emptyState={<EmptyState title="No audit logs" />}
+                      columns={[
+                        { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.created_at ? new Date(e.created_at).toLocaleString() : ''}</span> },
+                        { key: 'action', header: 'Action', render: (e: any) => <span style={{ fontSize: 12 }}>{e.action}</span> },
+                        { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, fontWeight: 600 }}>{e.username ?? e.actor ?? e.performed_by}</span> },
+                        { key: 'target', header: 'Target', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.target ?? e.object_id ?? '—'}</span> },
+                        { key: 'ip_address', header: 'IP', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{e.ip_address ?? '—'}</span> },
+                      ]}
+                    />
+                  </SectionCard>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </RootLayout>

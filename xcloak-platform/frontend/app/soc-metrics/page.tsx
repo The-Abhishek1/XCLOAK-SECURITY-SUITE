@@ -3,27 +3,33 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { socMetricsAPI } from '@/lib/api';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Bell, ShieldAlert, Briefcase, Users, Crosshair, Wand2, Flame,
+  Laptop, Bug, ShieldCheck, Server, Sparkles, FileBarChart2, ScrollText,
+  X, FileText, Target, Share2, Settings, ClipboardList,
+} from 'lucide-react';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type Tab = 'dashboard'|'alerts'|'incidents'|'cases'|'analysts'|'detection'|'automation'|'threats'|'endpoints'|'vulns'|'compliance'|'infra'|'ai'|'reports'|'audit';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',  label: 'Dashboard'      },
-  { id: 'alerts',     label: 'Alerts'         },
-  { id: 'incidents',  label: 'Incidents'      },
-  { id: 'cases',      label: 'Cases'          },
-  { id: 'analysts',   label: 'Analysts'       },
-  { id: 'detection',  label: 'Detection'      },
-  { id: 'automation', label: 'Automation'     },
-  { id: 'threats',    label: 'Threats'        },
-  { id: 'endpoints',  label: 'Endpoints'      },
-  { id: 'vulns',      label: 'Vulnerabilities'},
-  { id: 'compliance', label: 'Compliance'     },
-  { id: 'infra',      label: 'Infrastructure' },
-  { id: 'ai',         label: 'AI Insights'    },
-  { id: 'reports',    label: 'Reports'        },
-  { id: 'audit',      label: 'Audit Trail'    },
+const TABS: { key: Tab; label: string; icon: any }[] = [
+  { key: 'dashboard',  label: 'Dashboard',       icon: LayoutDashboard },
+  { key: 'alerts',     label: 'Alerts',          icon: Bell },
+  { key: 'incidents',  label: 'Incidents',       icon: ShieldAlert },
+  { key: 'cases',      label: 'Cases',           icon: Briefcase },
+  { key: 'analysts',   label: 'Analysts',        icon: Users },
+  { key: 'detection',  label: 'Detection',       icon: Crosshair },
+  { key: 'automation', label: 'Automation',      icon: Wand2 },
+  { key: 'threats',    label: 'Threats',         icon: Flame },
+  { key: 'endpoints',  label: 'Endpoints',       icon: Laptop },
+  { key: 'vulns',      label: 'Vulnerabilities', icon: Bug },
+  { key: 'compliance', label: 'Compliance',      icon: ShieldCheck },
+  { key: 'infra',      label: 'Infrastructure',  icon: Server },
+  { key: 'ai',         label: 'AI Insights',     icon: Sparkles },
+  { key: 'reports',    label: 'Reports',         icon: FileBarChart2 },
+  { key: 'audit',      label: 'Audit Trail',     icon: ScrollText },
 ];
 
 // ── colour helpers ────────────────────────────────────────────────────────────
@@ -43,16 +49,6 @@ function pill(label: string, color: string) {
     <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: color + '22', color, border: `1px solid ${color}44`, textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
       {label}
     </span>
-  );
-}
-
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 110 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
   );
 }
 
@@ -135,21 +131,23 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: '0 0 0 auto', width: 440, background: 'var(--bg-1)', borderLeft: '1px solid var(--border)', zIndex: 50, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px #0006' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>✦ AI SOC Insights</span>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 12, padding: '2px 8px' }} onClick={onClose}>✕</button>
+        <span className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: 13 }}>
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--accent)' }} /> AI SOC Insights
+        </span>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '2px 8px' }} />
       </div>
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {AI_ACTIONS.map(a => (
-            <button key={a.id} onClick={() => setAction(a.id)} className="g-btn g-btn-ghost"
-              style={{ fontSize: 11, textAlign: 'left', fontWeight: action === a.id ? 700 : 400, color: action === a.id ? 'var(--accent)' : 'var(--text-2)', borderColor: action === a.id ? 'var(--accent)' : 'var(--border)' }}>
+            <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'} onClick={() => setAction(a.id)}
+              style={{ fontSize: 11, textAlign: 'left' }}>
               {a.label}
-            </button>
+            </ActionButton>
           ))}
         </div>
-        <button className="g-btn" onClick={run} disabled={loading} style={{ fontSize: 12 }}>
+        <ActionButton variant="primary" onClick={run} disabled={loading} style={{ fontSize: 12 }}>
           {loading ? 'Analyzing…' : 'Generate Insight'}
-        </button>
+        </ActionButton>
         {resp && (
           <div className="g-card" style={{ padding: 14, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.65, color: 'var(--text-1)' }}>
             {resp}
@@ -175,47 +173,49 @@ function DashboardTab({ dash }: { dash: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* SOC Health Hero */}
-      <div className="g-card" style={{ padding: 24, display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
-        <ScoreRing score={lat.soc_health_score || 0} size={96} label="SOC Health" />
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>SOC Health Score</div>
-          <div style={{ fontSize: 40, fontWeight: 800, color: healthColor, lineHeight: 1 }}>{lat.soc_health_score || 0}</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
-              Shift: <strong style={{ color: 'var(--text-1)' }}>{lat.current_shift || 'day'}</strong>
-            </span>
-            <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
-              Analysts: <strong style={{ color: '#22c55e' }}>{lat.analysts_online || 0}/{lat.active_analysts || 0}</strong> online
-            </span>
-            <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
-              Automation: <strong style={{ color: 'var(--accent)' }}>{lat.automation_coverage || 0}%</strong>
-            </span>
+      <SectionCard>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+          <ScoreRing score={lat.soc_health_score || 0} size={96} label="SOC Health" />
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>SOC Health Score</div>
+            <div style={{ fontSize: 40, fontWeight: 800, color: healthColor, lineHeight: 1 }}>{lat.soc_health_score || 0}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
+                Shift: <strong style={{ color: 'var(--text-1)' }}>{lat.current_shift || 'day'}</strong>
+              </span>
+              <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
+                Analysts: <strong style={{ color: '#22c55e' }}>{lat.analysts_online || 0}/{lat.active_analysts || 0}</strong> online
+              </span>
+              <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
+                Automation: <strong style={{ color: 'var(--accent)' }}>{lat.automation_coverage || 0}%</strong>
+              </span>
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { label: 'Active Alerts',   value: lat.active_alerts,    color: '#ef4444' },
+              { label: 'Active Incidents',value: lat.active_incidents,  color: '#f97316' },
+              { label: 'Open Cases',      value: lat.open_cases,        color: '#eab308' },
+              { label: 'SLA Compliance',  value: `${lat.sla_compliance || 0}%`, color: '#22c55e' },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'center', background: s.color + '18', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {[
-            { label: 'Active Alerts',   value: lat.active_alerts,    color: '#ef4444' },
-            { label: 'Active Incidents',value: lat.active_incidents,  color: '#f97316' },
-            { label: 'Open Cases',      value: lat.open_cases,        color: '#eab308' },
-            { label: 'SLA Compliance',  value: `${lat.sla_compliance || 0}%`, color: '#22c55e' },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign: 'center', background: s.color + '18', borderRadius: 10, padding: '10px 14px' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      </SectionCard>
 
       {/* Key metrics */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Critical Alerts"    value={lat.critical_alerts || 0}  color="#ef4444" />
-        <StatCard label="Alert Queue"        value={lat.alert_queue || 0}       color="#f97316" sub="items pending" />
-        <StatCard label="Critical Incidents" value={lat.critical_incidents || 0} color="#ef4444" />
-        <StatCard label="Case Backlog"       value={lat.case_backlog || 0}      color="#eab308" />
-        <StatCard label="MTTD"               value={`${(lat.mttd_mins||0).toFixed(0)}m`} color="#eab308" sub="mean time to detect" />
-        <StatCard label="MTTR"               value={`${((lat.mttr_mins||0)/60).toFixed(1)}h`} color="#f97316" sub="mean time to respond" />
-        <StatCard label="Playbooks Today"    value={lat.playbook_executions || 0} color="#a855f7" />
+        <MetricCard label="Critical Alerts"    value={lat.critical_alerts || 0}  color="#ef4444" />
+        <MetricCard label="Alert Queue"        value={lat.alert_queue || 0}       color="#f97316" sub="items pending" />
+        <MetricCard label="Critical Incidents" value={lat.critical_incidents || 0} color="#ef4444" />
+        <MetricCard label="Case Backlog"       value={lat.case_backlog || 0}      color="#eab308" />
+        <MetricCard label="MTTD"               value={`${(lat.mttd_mins||0).toFixed(0)}m`} color="#eab308" sub="mean time to detect" />
+        <MetricCard label="MTTR"               value={`${((lat.mttr_mins||0)/60).toFixed(1)}h`} color="#f97316" sub="mean time to respond" />
+        <MetricCard label="Playbooks Today"    value={lat.playbook_executions || 0} color="#a855f7" />
       </div>
 
       {/* Trend sparklines */}
@@ -225,10 +225,10 @@ function DashboardTab({ dash }: { dash: any }) {
           { label: 'Alert Volume (30d)',      data: alertTrend,  color: '#ef4444' },
           { label: 'Incident Volume (30d)',   data: incTrend,    color: '#f97316' },
         ].map(s => (
-          <div key={s.label} className="g-card" style={{ padding: 16 }}>
+          <SectionCard key={s.label}>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>{s.label}</div>
             <SparkBars data={s.data} color={s.color} height={52} />
-          </div>
+          </SectionCard>
         ))}
       </div>
     </div>
@@ -248,41 +248,38 @@ function AlertsTab({ alerts }: { alerts: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Alerts"      value={(alerts.total_alerts || 0).toLocaleString()} color="var(--text-1)" />
-        <StatCard label="Critical"          value={alerts.critical || 0} color="#ef4444" />
-        <StatCard label="High"              value={alerts.high || 0}     color="#f97316" />
-        <StatCard label="Queue Size"        value={alerts.queue_size || 0} color="#eab308" />
-        <StatCard label="False Positives"   value={alerts.false_positives || 0} color="#6b7280" />
-        <StatCard label="FP Rate"           value={`${(alerts.false_positive_rate || 0).toFixed(1)}%`} color={alerts.false_positive_rate > 15 ? '#ef4444' : '#22c55e'} />
-        <StatCard label="Escalated"         value={alerts.escalated || 0} color="#a855f7" />
-        <StatCard label="Suppressed"        value={alerts.suppressed || 0} color="#6b7280" />
-        <StatCard label="Proc. Time"        value={`${(alerts.processing_mins || 0).toFixed(1)}m`} sub="avg per alert" />
+        <MetricCard label="Total Alerts"      value={(alerts.total_alerts || 0).toLocaleString()} color="var(--text-1)" />
+        <MetricCard label="Critical"          value={alerts.critical || 0} color="#ef4444" />
+        <MetricCard label="High"              value={alerts.high || 0}     color="#f97316" />
+        <MetricCard label="Queue Size"        value={alerts.queue_size || 0} color="#eab308" />
+        <MetricCard label="False Positives"   value={alerts.false_positives || 0} color="#6b7280" />
+        <MetricCard label="FP Rate"           value={`${(alerts.false_positive_rate || 0).toFixed(1)}%`} color={alerts.false_positive_rate > 15 ? '#ef4444' : '#22c55e'} />
+        <MetricCard label="Escalated"         value={alerts.escalated || 0} color="#a855f7" />
+        <MetricCard label="Suppressed"        value={alerts.suppressed || 0} color="#6b7280" />
+        <MetricCard label="Proc. Time"        value={`${(alerts.processing_mins || 0).toFixed(1)}m`} sub="avg per alert" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>By Severity</div>
+        <SectionCard title="By Severity">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {bySev.map((s: any, i: number) => (
               <HorizBar key={i} label={s.severity} pct={(s.count / (alerts.total_alerts || 1)) * 100}
                 color={SEV_CLR[s.severity] || '#6b7280'} value={s.count.toLocaleString()} />
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>By Source</div>
+        </SectionCard>
+        <SectionCard title="By Source">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {bySource.map((s: any, i: number) => (
               <HorizBar key={i} label={s.source} pct={(s.count / (alerts.total_alerts || 1)) * 100}
                 color="#3b82f6" value={s.count.toLocaleString()} />
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 10 }}>Alert Volume Trend (30d)</div>
+        </SectionCard>
+        <SectionCard title="Alert Volume Trend (30d)">
           <SparkBars data={totalTrend} color="#ef4444" height={52} />
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, marginBottom: 6 }}>False Positives (30d)</div>
           <SparkBars data={fpTrend} color="#6b7280" height={32} />
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -301,11 +298,11 @@ function IncidentsTab({ incidents }: { incidents: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total"          value={incidents.total_incidents || 0}    color="var(--text-1)" />
-        <StatCard label="Critical"       value={incidents.critical || 0}            color="#ef4444" />
-        <StatCard label="Open"           value={incidents.open || 0}               color="#f97316" />
-        <StatCard label="Closed"         value={incidents.closed || 0}             color="#22c55e" />
-        <StatCard label="SLA Compliance" value={`${incidents.sla_compliance || 0}%`} color={incidents.sla_compliance >= 90 ? '#22c55e' : '#eab308'} />
+        <MetricCard label="Total"          value={incidents.total_incidents || 0}    color="var(--text-1)" />
+        <MetricCard label="Critical"       value={incidents.critical || 0}            color="#ef4444" />
+        <MetricCard label="Open"           value={incidents.open || 0}               color="#f97316" />
+        <MetricCard label="Closed"         value={incidents.closed || 0}             color="#22c55e" />
+        <MetricCard label="SLA Compliance" value={`${incidents.sla_compliance || 0}%`} color={incidents.sla_compliance >= 90 ? '#22c55e' : '#eab308'} />
       </div>
       {/* Response time cards */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -315,33 +312,31 @@ function IncidentsTab({ incidents }: { incidents: any }) {
           { label: 'MTTC', value: `${(incidents.mttc_mins || 0).toFixed(0)}m`,    sub: 'Mean Time to Contain',  color: '#f97316' },
           { label: 'MTTR', value: `${((incidents.mttr_mins || 0)/60).toFixed(1)}h`, sub: 'Mean Time to Respond', color: '#ef4444' },
           { label: 'MTTRec', value: `${((incidents.mttrec_mins || 0)/60).toFixed(1)}h`, sub: 'Mean Time to Recover', color: '#a855f7' },
-        ].map(m => <StatCard key={m.label} label={m.label} value={m.value} sub={m.sub} color={m.color} />)}
+        ].map(m => <MetricCard key={m.label} label={m.label} value={m.value} sub={m.sub} color={m.color} />)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>By Severity</div>
+        <SectionCard title="By Severity">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {bySev.map((s: any, i: number) => (
               <HorizBar key={i} label={s.severity} pct={(s.count / (incidents.total_incidents || 1)) * 100}
                 color={SEV_CLR[s.severity] || '#6b7280'} value={String(s.count)} />
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>By Category</div>
+        </SectionCard>
+        <SectionCard title="By Category">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {byCat.map((c: any, i: number) => (
               <HorizBar key={i} label={c.category} pct={(c.count / (incidents.total_incidents || 1)) * 100}
                 color="#3b82f6" value={String(c.count)} />
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
+        </SectionCard>
+        <SectionCard>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>MTTD Trend (30d)</div>
           <SparkBars data={mttdTrend} color="#eab308" height={40} />
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 12, marginBottom: 8 }}>MTTR Trend (30d)</div>
           <SparkBars data={mttrtTrend} color="#ef4444" height={40} />
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -358,18 +353,17 @@ function CasesTab({ cases }: { cases: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Cases"          value={cases.total_cases || 0}   color="var(--text-1)" />
-        <StatCard label="Open"                 value={cases.open || 0}          color="#f97316" />
-        <StatCard label="Closed"               value={cases.closed || 0}        color="#22c55e" />
-        <StatCard label="Backlog"              value={cases.backlog || 0}       color="#eab308" />
-        <StatCard label="Escalated"            value={cases.escalated || 0}     color="#ef4444" />
-        <StatCard label="Reopened"             value={cases.reopened || 0}      color="#6b7280" />
-        <StatCard label="Avg Investigation"    value={`${cases.avg_investigation_hrs || 0}h`} color="#3b82f6" />
-        <StatCard label="Avg Resolution"       value={`${cases.avg_resolution_hrs || 0}h`}    color="#a855f7" />
+        <MetricCard label="Total Cases"          value={cases.total_cases || 0}   color="var(--text-1)" />
+        <MetricCard label="Open"                 value={cases.open || 0}          color="#f97316" />
+        <MetricCard label="Closed"               value={cases.closed || 0}        color="#22c55e" />
+        <MetricCard label="Backlog"              value={cases.backlog || 0}       color="#eab308" />
+        <MetricCard label="Escalated"            value={cases.escalated || 0}     color="#ef4444" />
+        <MetricCard label="Reopened"             value={cases.reopened || 0}      color="#6b7280" />
+        <MetricCard label="Avg Investigation"    value={`${cases.avg_investigation_hrs || 0}h`} color="#3b82f6" />
+        <MetricCard label="Avg Resolution"       value={`${cases.avg_resolution_hrs || 0}h`}    color="#a855f7" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Cases by Team</div>
+        <SectionCard title="Cases by Team">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {byTeam.map((t: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -382,30 +376,22 @@ function CasesTab({ cases }: { cases: any }) {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Analyst Case Load</div>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr>
-              {['Analyst', 'Open', 'Closed', 'Avg Hrs'].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10, color: 'var(--text-3)', padding: '4px 8px' }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {byAnalyst.map((a: any, i: number) => (
-                <tr key={i}>
-                  <td style={{ fontSize: 11, color: 'var(--text-1)', padding: '6px 8px' }}>{a.analyst}</td>
-                  <td style={{ fontSize: 11, color: '#f97316', padding: '6px 8px', textAlign: 'center' }}>{a.open}</td>
-                  <td style={{ fontSize: 11, color: '#22c55e', padding: '6px 8px', textAlign: 'center' }}>{a.closed}</td>
-                  <td style={{ fontSize: 11, color: 'var(--text-3)', padding: '6px 8px' }}>{a.avg_hrs}h</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        </SectionCard>
+        <SectionCard title="Analyst Case Load" padded={false}>
+          <DataTable<any>
+            rows={byAnalyst}
+            rowKey={(a: any, i: number) => a.analyst ?? i}
+            emptyState={<EmptyState title="No analyst case data" />}
+            columns={[
+              { key: 'analyst', header: 'Analyst', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-1)' }}>{a.analyst}</span> },
+              { key: 'open', header: 'Open', align: 'center', render: (a: any) => <span style={{ fontSize: 11, color: '#f97316' }}>{a.open}</span> },
+              { key: 'closed', header: 'Closed', align: 'center', render: (a: any) => <span style={{ fontSize: 11, color: '#22c55e' }}>{a.closed}</span> },
+              { key: 'avg_hrs', header: 'Avg Hrs', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.avg_hrs}h</span> },
+            ]}
+          />
+        </SectionCard>
       </div>
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Cases by Status</div>
+      <SectionCard title="Cases by Status">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {byStatus.map((s: any, i: number) => {
             const colors: Record<string, string> = { open: '#ef4444', in_progress: '#3b82f6', pending_review: '#eab308', closed: '#22c55e', escalated: '#a855f7' };
@@ -418,7 +404,7 @@ function CasesTab({ cases }: { cases: any }) {
             );
           })}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -433,13 +419,12 @@ function AnalystsTab({ analysts }: { analysts: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Active"   value={analysts.total_active || 0} color="var(--accent)" />
-        <StatCard label="Online Now"     value={analysts.online_now || 0}   color="#22c55e" />
-        <StatCard label="Shift Coverage" value={shifts.length}              sub="shifts configured" />
+        <MetricCard label="Total Active"   value={analysts.total_active || 0} color="var(--accent)" />
+        <MetricCard label="Online Now"     value={analysts.online_now || 0}   color="#22c55e" />
+        <MetricCard label="Shift Coverage" value={shifts.length}              sub="shifts configured" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Shift Coverage</div>
+        <SectionCard title="Shift Coverage">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {shifts.map((s: any, i: number) => (
               <div key={i} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
@@ -451,34 +436,27 @@ function AnalystsTab({ analysts }: { analysts: any }) {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Analyst Performance (30d)</div>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr>
-              {['Analyst', 'Team', 'Alerts', 'Incidents', 'Cases', 'Avg Resp', 'Productivity', 'Burnout'].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10, color: 'var(--text-3)', padding: '5px 8px' }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {list.map((a: any, i: number) => {
+        </SectionCard>
+        <SectionCard title="Analyst Performance (30d)" padded={false}>
+          <DataTable<any>
+            rows={list}
+            rowKey={(a: any, i: number) => a.name ?? i}
+            emptyState={<EmptyState title="No analyst performance data" />}
+            columns={[
+              { key: 'name', header: 'Analyst', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-1)', fontWeight: 500 }}>{a.name}</span> },
+              { key: 'team', header: 'Team', render: (a: any) => <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{a.team}</span> },
+              { key: 'alerts_investigated', header: 'Alerts', align: 'center', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{a.alerts_investigated}</span> },
+              { key: 'incidents_resolved', header: 'Incidents', align: 'center', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{a.incidents_resolved}</span> },
+              { key: 'cases_closed', header: 'Cases', align: 'center', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{a.cases_closed}</span> },
+              { key: 'avg_response_mins', header: 'Avg Resp', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{Number(a.avg_response_mins || 0).toFixed(0)}m</span> },
+              { key: 'productivity_score', header: 'Productivity', render: (a: any) => pill(`${Number(a.productivity_score || 0).toFixed(0)}%`, '#22c55e') },
+              { key: 'burnout_index', header: 'Burnout', render: (a: any) => {
                 const burnoutColor = a.burnout_index >= 75 ? '#ef4444' : a.burnout_index >= 60 ? '#eab308' : '#22c55e';
-                return (
-                  <tr key={i}>
-                    <td style={{ fontSize: 11, color: 'var(--text-1)', padding: '7px 8px', fontWeight: 500 }}>{a.name}</td>
-                    <td style={{ fontSize: 10, color: 'var(--text-3)', padding: '7px 8px' }}>{a.team}</td>
-                    <td style={{ fontSize: 11, color: 'var(--text-2)', padding: '7px 8px', textAlign: 'center' }}>{a.alerts_investigated}</td>
-                    <td style={{ fontSize: 11, color: 'var(--text-2)', padding: '7px 8px', textAlign: 'center' }}>{a.incidents_resolved}</td>
-                    <td style={{ fontSize: 11, color: 'var(--text-2)', padding: '7px 8px', textAlign: 'center' }}>{a.cases_closed}</td>
-                    <td style={{ fontSize: 11, color: 'var(--text-3)', padding: '7px 8px' }}>{Number(a.avg_response_mins || 0).toFixed(0)}m</td>
-                    <td style={{ padding: '7px 8px' }}>{pill(`${Number(a.productivity_score || 0).toFixed(0)}%`, '#22c55e')}</td>
-                    <td style={{ padding: '7px 8px' }}>{pill(`${Number(a.burnout_index || 0).toFixed(0)}`, burnoutColor)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                return pill(`${Number(a.burnout_index || 0).toFixed(0)}`, burnoutColor);
+              } },
+            ]}
+          />
+        </SectionCard>
       </div>
     </div>
   );
@@ -496,27 +474,28 @@ function DetectionTab({ detection }: { detection: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Rules"      value={summary.total_rules || 0}     color="var(--text-1)" />
-        <StatCard label="Active"           value={summary.active_rules || 0}    color="#22c55e" />
-        <StatCard label="Sigma"            value={summary.sigma_rules || 0}     color="#3b82f6" />
-        <StatCard label="YARA"             value={summary.yara_rules || 0}      color="#a855f7" />
-        <StatCard label="Coverage"         value={`${summary.detection_coverage || 0}%`} color="var(--accent)" sub="MITRE ATT&CK" />
-        <StatCard label="Avg Accuracy"     value={`${summary.avg_accuracy || 0}%`}       color="#22c55e" />
-        <StatCard label="FP Rate"          value={`${summary.false_positive_rate || 0}%`} color="#eab308" />
-        <StatCard label="Success Rate"     value={`${summary.detection_success_rate || 0}%`} color="#22c55e" />
+        <MetricCard label="Total Rules"      value={summary.total_rules || 0}     color="var(--text-1)" />
+        <MetricCard label="Active"           value={summary.active_rules || 0}    color="#22c55e" />
+        <MetricCard label="Sigma"            value={summary.sigma_rules || 0}     color="#3b82f6" />
+        <MetricCard label="YARA"             value={summary.yara_rules || 0}      color="#a855f7" />
+        <MetricCard label="Coverage"         value={`${summary.detection_coverage || 0}%`} color="var(--accent)" sub="MITRE ATT&CK" />
+        <MetricCard label="Avg Accuracy"     value={`${summary.avg_accuracy || 0}%`}       color="#22c55e" />
+        <MetricCard label="FP Rate"          value={`${summary.false_positive_rate || 0}%`} color="#eab308" />
+        <MetricCard label="Success Rate"     value={`${summary.detection_success_rate || 0}%`} color="#22c55e" />
       </div>
       {/* Engine health */}
-      <div className="g-card" style={{ padding: 14, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        {Object.entries(engine).map(([k, v]: [string, any]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: v === 'healthy' ? '#22c55e' : '#eab308', display: 'inline-block' }} />
-            <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{k.replace(/_/g, ' ')}</span>
-          </div>
-        ))}
-      </div>
+      <SectionCard>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {Object.entries(engine).map(([k, v]: [string, any]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: v === 'healthy' ? '#22c55e' : '#eab308', display: 'inline-block' }} />
+              <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{k.replace(/_/g, ' ')}</span>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Top Rules by Hits</div>
+        <SectionCard title="Top Rules by Hits">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rules.slice(0, 8).map((r: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -527,16 +506,15 @@ function DetectionTab({ detection }: { detection: any }) {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>MITRE ATT&CK Coverage</div>
+        </SectionCard>
+        <SectionCard title="MITRE ATT&CK Coverage">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {mitre.map((m: any, i: number) => (
               <HorizBar key={i} label={m.tactic} pct={m.pct} color={m.pct >= 75 ? '#22c55e' : m.pct >= 50 ? '#eab308' : '#ef4444'}
                 value={`${m.covered}/${m.techniques}`} />
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -554,53 +532,47 @@ function AutomationTab({ automation }: { automation: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Playbook Executions" value={(automation.playbook_executions || 0).toLocaleString()} color="var(--accent)" />
-        <StatCard label="Script Executions"   value={(automation.script_executions || 0).toLocaleString()} color="#a855f7" />
-        <StatCard label="Success Rate"        value={`${automation.automation_success_rate || 0}%`} color="#22c55e" />
-        <StatCard label="Hours Saved"         value={`${(automation.analyst_hours_saved || 0).toFixed(0)}h`} color="#22c55e" sub="analyst time saved" />
-        <StatCard label="Automation Coverage" value={`${automation.automation_coverage || 0}%`} color="var(--accent)" />
+        <MetricCard label="Playbook Executions" value={(automation.playbook_executions || 0).toLocaleString()} color="var(--accent)" />
+        <MetricCard label="Script Executions"   value={(automation.script_executions || 0).toLocaleString()} color="#a855f7" />
+        <MetricCard label="Success Rate"        value={`${automation.automation_success_rate || 0}%`} color="#22c55e" />
+        <MetricCard label="Hours Saved"         value={`${(automation.analyst_hours_saved || 0).toFixed(0)}h`} color="#22c55e" sub="analyst time saved" />
+        <MetricCard label="Automation Coverage" value={`${automation.automation_coverage || 0}%`} color="var(--accent)" />
       </div>
       {/* Approval queue */}
-      <div className="g-card" style={{ padding: 14, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Approval Queue</span>
-        {[
-          { label: 'Pending', value: approval.pending, color: '#eab308' },
-          { label: 'Approved', value: approval.approved, color: '#22c55e' },
-          { label: 'Rejected', value: approval.rejected, color: '#ef4444' },
-          { label: 'Avg Wait', value: `${approval.avg_wait_mins}m`, color: '#3b82f6' },
-        ].map(s => (
-          <span key={s.label} style={{ fontSize: 10, background: s.color + '18', borderRadius: 6, padding: '4px 10px', color: s.color, fontWeight: 600 }}>
-            {s.label}: {s.value}
-          </span>
-        ))}
-      </div>
+      <SectionCard>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Approval Queue</span>
+          {[
+            { label: 'Pending', value: approval.pending, color: '#eab308' },
+            { label: 'Approved', value: approval.approved, color: '#22c55e' },
+            { label: 'Rejected', value: approval.rejected, color: '#ef4444' },
+            { label: 'Avg Wait', value: `${approval.avg_wait_mins}m`, color: '#3b82f6' },
+          ].map(s => (
+            <span key={s.label} style={{ fontSize: 10, background: s.color + '18', borderRadius: 6, padding: '4px 10px', color: s.color, fontWeight: 600 }}>
+              {s.label}: {s.value}
+            </span>
+          ))}
+        </div>
+      </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Playbook Performance</div>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr>
-              {['Playbook', 'Category', 'Executions', 'Success', 'Hrs Saved', 'Avg Runtime'].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10, color: 'var(--text-3)', padding: '5px 8px' }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {playbooks.map((p: any, i: number) => (
-                <tr key={i}>
-                  <td style={{ fontSize: 11, color: 'var(--text-1)', padding: '7px 8px', fontWeight: 500 }}>{p.name}</td>
-                  <td style={{ padding: '7px 8px' }}>{pill(p.category?.replace('_', ' '), '#3b82f6')}</td>
-                  <td style={{ fontSize: 11, color: 'var(--text-2)', padding: '7px 8px' }}>{(p.total || 0).toLocaleString()}</td>
-                  <td style={{ padding: '7px 8px' }}>{pill(`${p.success_rate}%`, p.success_rate >= 90 ? '#22c55e' : '#eab308')}</td>
-                  <td style={{ fontSize: 11, color: '#22c55e', padding: '7px 8px' }}>{Number(p.hours_saved || 0).toFixed(0)}h</td>
-                  <td style={{ fontSize: 11, color: 'var(--text-3)', padding: '7px 8px' }}>{p.avg_runtime_secs}s</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>Execution Volume (30d)</div>
+        <SectionCard title="Playbook Performance" padded={false}>
+          <DataTable<any>
+            rows={playbooks}
+            rowKey={(p: any, i: number) => p.name ?? i}
+            emptyState={<EmptyState title="No playbook data" />}
+            columns={[
+              { key: 'name', header: 'Playbook', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-1)', fontWeight: 500 }}>{p.name}</span> },
+              { key: 'category', header: 'Category', render: (p: any) => pill(p.category?.replace('_', ' '), '#3b82f6') },
+              { key: 'total', header: 'Executions', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{(p.total || 0).toLocaleString()}</span> },
+              { key: 'success_rate', header: 'Success', render: (p: any) => pill(`${p.success_rate}%`, p.success_rate >= 90 ? '#22c55e' : '#eab308') },
+              { key: 'hours_saved', header: 'Hrs Saved', render: (p: any) => <span style={{ fontSize: 11, color: '#22c55e' }}>{Number(p.hours_saved || 0).toFixed(0)}h</span> },
+              { key: 'avg_runtime_secs', header: 'Avg Runtime', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.avg_runtime_secs}s</span> },
+            ]}
+          />
+        </SectionCard>
+        <SectionCard title="Execution Volume (30d)">
           <SparkBars data={execTrend} color="#a855f7" height={80} />
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -617,16 +589,15 @@ function ThreatsTab({ threats }: { threats: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="IOC Hits"            value={(threats.ioc_hits || 0).toLocaleString()} color="#ef4444" />
-        <StatCard label="Malware Detections"  value={threats.malware_detections || 0}           color="#f97316" />
-        <StatCard label="Ransomware"          value={threats.ransomware_detections || 0}        color="#ef4444" />
-        <StatCard label="Threat Actor Hits"   value={threats.threat_actor_hits || 0}            color="#a855f7" />
-        <StatCard label="Active Campaigns"    value={threats.active_campaigns || 0}             color="#ef4444" />
-        <StatCard label="TI Sources"          value={threats.ti_sources || 0}                   color="#3b82f6" />
+        <MetricCard label="IOC Hits"            value={(threats.ioc_hits || 0).toLocaleString()} color="#ef4444" />
+        <MetricCard label="Malware Detections"  value={threats.malware_detections || 0}           color="#f97316" />
+        <MetricCard label="Ransomware"          value={threats.ransomware_detections || 0}        color="#ef4444" />
+        <MetricCard label="Threat Actor Hits"   value={threats.threat_actor_hits || 0}            color="#a855f7" />
+        <MetricCard label="Active Campaigns"    value={threats.active_campaigns || 0}             color="#ef4444" />
+        <MetricCard label="TI Sources"          value={threats.ti_sources || 0}                   color="#3b82f6" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>MITRE Technique Hits</div>
+        <SectionCard title="MITRE Technique Hits">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {mitre.map((m: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -636,9 +607,8 @@ function ThreatsTab({ threats }: { threats: any }) {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Malware Families</div>
+        </SectionCard>
+        <SectionCard title="Malware Families">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {malware.map((m: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -648,15 +618,14 @@ function ThreatsTab({ threats }: { threats: any }) {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Geographic Distribution</div>
+        </SectionCard>
+        <SectionCard title="Geographic Distribution">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {geo.map((g: any, i: number) => (
               <HorizBar key={i} label={g.country} pct={(g.count / (geo[0]?.count || 1)) * 100} color="#a855f7" value={(g.count||0).toLocaleString()} />
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -672,19 +641,18 @@ function EndpointsTab({ endpoints }: { endpoints: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Endpoints"  value={(endpoints.total_endpoints || 0).toLocaleString()} color="var(--text-1)" />
-        <StatCard label="Healthy"          value={(endpoints.healthy || 0).toLocaleString()} color="#22c55e" />
-        <StatCard label="Offline"          value={endpoints.offline || 0}            color="#eab308" />
-        <StatCard label="Quarantined"      value={endpoints.quarantined || 0}        color="#ef4444" />
-        <StatCard label="Isolated"         value={endpoints.isolated || 0}           color="#ef4444" />
-        <StatCard label="Coverage"         value={`${endpoints.coverage_pct || 0}%`} color="#22c55e" />
-        <StatCard label="Firewall Blocks"  value={(endpoints.firewall_blocks || 0).toLocaleString()} color="#f97316" />
-        <StatCard label="Net Anomalies"    value={endpoints.network_anomalies || 0}  color="#eab308" />
-        <StatCard label="DPI Events"       value={(endpoints.dpi_events || 0).toLocaleString()} color="#3b82f6" />
+        <MetricCard label="Total Endpoints"  value={(endpoints.total_endpoints || 0).toLocaleString()} color="var(--text-1)" />
+        <MetricCard label="Healthy"          value={(endpoints.healthy || 0).toLocaleString()} color="#22c55e" />
+        <MetricCard label="Offline"          value={endpoints.offline || 0}            color="#eab308" />
+        <MetricCard label="Quarantined"      value={endpoints.quarantined || 0}        color="#ef4444" />
+        <MetricCard label="Isolated"         value={endpoints.isolated || 0}           color="#ef4444" />
+        <MetricCard label="Coverage"         value={`${endpoints.coverage_pct || 0}%`} color="#22c55e" />
+        <MetricCard label="Firewall Blocks"  value={(endpoints.firewall_blocks || 0).toLocaleString()} color="#f97316" />
+        <MetricCard label="Net Anomalies"    value={endpoints.network_anomalies || 0}  color="#eab308" />
+        <MetricCard label="DPI Events"       value={(endpoints.dpi_events || 0).toLocaleString()} color="#3b82f6" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Platform Coverage</div>
+        <SectionCard title="Platform Coverage">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {platforms.map((p: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -707,9 +675,8 @@ function EndpointsTab({ endpoints }: { endpoints: any }) {
               <div style={{ fontSize: 16, fontWeight: 700, color: '#ef4444' }}>{(endpoints.blocked_connections || 0).toLocaleString()}</div>
             </div>
           </div>
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Recent Endpoint Isolations</div>
+        </SectionCard>
+        <SectionCard title="Recent Endpoint Isolations">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {isolations.map((iso: any, i: number) => (
               <div key={i} style={{ padding: '10px 12px', borderRadius: 8, background: '#ef444418', border: '1px solid #ef444444' }}>
@@ -719,7 +686,7 @@ function EndpointsTab({ endpoints }: { endpoints: any }) {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -737,48 +704,41 @@ function VulnsTab({ vulns }: { vulns: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total"            value={(vulns.total || 0).toLocaleString()} color="var(--text-1)" />
-        <StatCard label="Critical"         value={vulns.critical || 0}    color="#ef4444" />
-        <StatCard label="High"             value={vulns.high || 0}        color="#f97316" />
-        <StatCard label="Exploitable"      value={vulns.exploitable || 0} color="#ef4444" />
-        <StatCard label="Patch Compliance" value={`${vulns.patch_compliance || 0}%`} color={vulns.patch_compliance >= 90 ? '#22c55e' : '#eab308'} />
-        <StatCard label="Overdue"          value={vulns.overdue_remediations || 0} color="#ef4444" />
-        <StatCard label="MTTR"             value={`${vulns.mttr_days || 0}d`} sub="mean time to remediate" />
-        <StatCard label="Verification"     value={`${vulns.verification_success_rate || 0}%`} color="#22c55e" />
+        <MetricCard label="Total"            value={(vulns.total || 0).toLocaleString()} color="var(--text-1)" />
+        <MetricCard label="Critical"         value={vulns.critical || 0}    color="#ef4444" />
+        <MetricCard label="High"             value={vulns.high || 0}        color="#f97316" />
+        <MetricCard label="Exploitable"      value={vulns.exploitable || 0} color="#ef4444" />
+        <MetricCard label="Patch Compliance" value={`${vulns.patch_compliance || 0}%`} color={vulns.patch_compliance >= 90 ? '#22c55e' : '#eab308'} />
+        <MetricCard label="Overdue"          value={vulns.overdue_remediations || 0} color="#ef4444" />
+        <MetricCard label="MTTR"             value={`${vulns.mttr_days || 0}d`} sub="mean time to remediate" />
+        <MetricCard label="Verification"     value={`${vulns.verification_success_rate || 0}%`} color="#22c55e" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 12 }}>Risk-Prioritized Vulnerabilities</div>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr>
-              {['CVE', 'CVSS', 'Affected', 'Status'].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10, color: 'var(--text-3)', padding: '5px 8px' }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {top.map((v: any, i: number) => {
+        <SectionCard title="Risk-Prioritized Vulnerabilities" padded={false}>
+          <DataTable<any>
+            rows={top}
+            rowKey={(v: any, i: number) => v.cve ?? i}
+            emptyState={<EmptyState title="No vulnerability data" />}
+            columns={[
+              { key: 'cve', header: 'CVE', render: (v: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)' }}>{v.cve}</span> },
+              { key: 'cvss', header: 'CVSS', render: (v: any) => pill(String(v.cvss), v.cvss >= 9 ? '#ef4444' : v.cvss >= 7 ? '#f97316' : '#eab308') },
+              { key: 'affected', header: 'Affected', render: (v: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{v.affected} systems</span> },
+              { key: 'status', header: 'Status', render: (v: any) => {
                 const stCl: Record<string, string> = { open: '#ef4444', in_progress: '#3b82f6', overdue: '#f97316', patched: '#22c55e' };
-                return (
-                  <tr key={i}>
-                    <td style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)', padding: '7px 8px' }}>{v.cve}</td>
-                    <td style={{ padding: '7px 8px' }}>{pill(String(v.cvss), v.cvss >= 9 ? '#ef4444' : v.cvss >= 7 ? '#f97316' : '#eab308')}</td>
-                    <td style={{ fontSize: 11, color: 'var(--text-2)', padding: '7px 8px' }}>{v.affected} systems</td>
-                    <td style={{ padding: '7px 8px' }}>{pill(v.status?.replace('_', ' '), stCl[v.status] || '#6b7280')}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                return pill(v.status?.replace('_', ' '), stCl[v.status] || '#6b7280');
+              } },
+            ]}
+          />
+        </SectionCard>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="g-card" style={{ padding: 16 }}>
+          <SectionCard>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>Critical Vulns Trend (30d)</div>
             <SparkBars data={critTrend} color="#ef4444" height={48} />
-          </div>
-          <div className="g-card" style={{ padding: 16 }}>
+          </SectionCard>
+          <SectionCard>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>Patch Compliance Trend (30d)</div>
             <SparkBars data={patchTrend} color="#22c55e" height={48} />
-          </div>
+          </SectionCard>
         </div>
       </div>
     </div>
@@ -793,18 +753,17 @@ function ComplianceTab({ compliance }: { compliance: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Compliance Score"    value={`${compliance.compliance_score || 0}%`} color="#22c55e" />
-        <StatCard label="Passed Controls"     value={(compliance.passed_controls || 0).toLocaleString()} color="#22c55e" />
-        <StatCard label="Failed Controls"     value={compliance.failed_controls || 0} color="#ef4444" />
-        <StatCard label="Frameworks"          value={compliance.framework_count || 0} color="var(--accent)" />
-        <StatCard label="Audit Readiness"     value={`${compliance.audit_readiness || 0}%`} color="#22c55e" />
-        <StatCard label="Open Findings"       value={compliance.open_findings || 0}    color="#eab308" />
-        <StatCard label="Policy Violations"   value={compliance.policy_violations || 0} color="#ef4444" />
-        <StatCard label="Remediation Progress" value={`${compliance.remediation_progress || 0}%`} color="#3b82f6" />
+        <MetricCard label="Compliance Score"    value={`${compliance.compliance_score || 0}%`} color="#22c55e" />
+        <MetricCard label="Passed Controls"     value={(compliance.passed_controls || 0).toLocaleString()} color="#22c55e" />
+        <MetricCard label="Failed Controls"     value={compliance.failed_controls || 0} color="#ef4444" />
+        <MetricCard label="Frameworks"          value={compliance.framework_count || 0} color="var(--accent)" />
+        <MetricCard label="Audit Readiness"     value={`${compliance.audit_readiness || 0}%`} color="#22c55e" />
+        <MetricCard label="Open Findings"       value={compliance.open_findings || 0}    color="#eab308" />
+        <MetricCard label="Policy Violations"   value={compliance.policy_violations || 0} color="#ef4444" />
+        <MetricCard label="Remediation Progress" value={`${compliance.remediation_progress || 0}%`} color="#3b82f6" />
       </div>
       {frameworks.length > 0 && (
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 14 }}>Framework Status</div>
+        <SectionCard title="Framework Status">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {frameworks.map((f: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -816,7 +775,7 @@ function ComplianceTab({ compliance }: { compliance: any }) {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       )}
     </div>
   );
@@ -832,10 +791,10 @@ function InfraTab({ infra }: { infra: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Log Ingestion Rate" value={`${((infra.log_ingestion_rate || 0)/1e6).toFixed(1)}M/day`} color="var(--accent)" />
-        <StatCard label="Events Per Second"  value={(infra.eps || 0).toLocaleString()} color="#3b82f6" />
-        <StatCard label="Storage Used"       value={`${infra.storage_utilization || 0}%`} color={infra.storage_utilization > 80 ? '#ef4444' : '#22c55e'} />
-        <StatCard label="Agents Online"      value={`${agents.online || 0}/${agents.total || 0}`} color="#22c55e" />
+        <MetricCard label="Log Ingestion Rate" value={`${((infra.log_ingestion_rate || 0)/1e6).toFixed(1)}M/day`} color="var(--accent)" />
+        <MetricCard label="Events Per Second"  value={(infra.eps || 0).toLocaleString()} color="#3b82f6" />
+        <MetricCard label="Storage Used"       value={`${infra.storage_utilization || 0}%`} color={infra.storage_utilization > 80 ? '#ef4444' : '#22c55e'} />
+        <MetricCard label="Agents Online"      value={`${agents.online || 0}/${agents.total || 0}`} color="#22c55e" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
         {components.map((comp: any, i: number) => (
@@ -886,13 +845,10 @@ function AIInsightsTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
         {AI_ACTIONS.map(a => (
-          <button key={a.id} onClick={() => run(a.id)} className="g-btn g-btn-ghost"
-            style={{ fontSize: 12, textAlign: 'left', fontWeight: action === a.id ? 700 : 400,
-              color: action === a.id ? 'var(--accent)' : 'var(--text-2)',
-              borderColor: action === a.id ? 'var(--accent)' : 'var(--border)',
-              padding: '10px 14px' }}>
+          <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'} onClick={() => run(a.id)}
+            style={{ fontSize: 12, textAlign: 'left', padding: '10px 14px' }}>
             {a.label}
-          </button>
+          </ActionButton>
         ))}
       </div>
       {loading && <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)' }}>Analyzing SOC data…</div>}
@@ -931,62 +887,58 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="g-card" style={{ padding: 16, display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 4 }}>Report Title</div>
-          <input className="g-input" style={{ width: '100%', fontSize: 12 }} placeholder="e.g. Daily SOC Operations Report"
-            value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+      <SectionCard>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 4 }}>Report Title</div>
+            <input className="g-input" style={{ width: '100%', fontSize: 12 }} placeholder="e.g. Daily SOC Operations Report"
+              value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 4 }}>Type</div>
+            <select className="g-input" style={{ fontSize: 12 }} value={form.report_type}
+              onChange={e => setForm(f => ({ ...f, report_type: e.target.value }))}>
+              {[
+                ['daily_operations', 'Daily SOC Operations'],
+                ['weekly_performance', 'Weekly Performance'],
+                ['monthly_kpi', 'Monthly KPI'],
+                ['analyst_performance', 'Analyst Performance'],
+                ['detection_performance', 'Detection Performance'],
+                ['automation_effectiveness', 'Automation Effectiveness'],
+                ['sla_compliance', 'SLA Compliance'],
+              ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 4 }}>Period</div>
+            <select className="g-input" style={{ fontSize: 12 }} value={form.period_days}
+              onChange={e => setForm(f => ({ ...f, period_days: Number(e.target.value) }))}>
+              <option value={1}>Daily</option>
+              <option value={7}>Weekly</option>
+              <option value={30}>Monthly</option>
+              <option value={90}>Quarterly</option>
+            </select>
+          </div>
+          <ActionButton variant="primary" onClick={generate} disabled={generating || !form.title} style={{ fontSize: 12 }}>
+            {generating ? 'Generating…' : 'Generate'}
+          </ActionButton>
         </div>
-        <div>
-          <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 4 }}>Type</div>
-          <select className="g-input" style={{ fontSize: 12 }} value={form.report_type}
-            onChange={e => setForm(f => ({ ...f, report_type: e.target.value }))}>
-            {[
-              ['daily_operations', 'Daily SOC Operations'],
-              ['weekly_performance', 'Weekly Performance'],
-              ['monthly_kpi', 'Monthly KPI'],
-              ['analyst_performance', 'Analyst Performance'],
-              ['detection_performance', 'Detection Performance'],
-              ['automation_effectiveness', 'Automation Effectiveness'],
-              ['sla_compliance', 'SLA Compliance'],
-            ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 4 }}>Period</div>
-          <select className="g-input" style={{ fontSize: 12 }} value={form.period_days}
-            onChange={e => setForm(f => ({ ...f, period_days: Number(e.target.value) }))}>
-            <option value={1}>Daily</option>
-            <option value={7}>Weekly</option>
-            <option value={30}>Monthly</option>
-            <option value={90}>Quarterly</option>
-          </select>
-        </div>
-        <button className="g-btn" onClick={generate} disabled={generating || !form.title} style={{ fontSize: 12 }}>
-          {generating ? 'Generating…' : 'Generate'}
-        </button>
-      </div>
-      <div className="g-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr>
-            {['Title', 'Type', 'Period', 'Generated By', 'Date', 'Size'].map(h => (
-              <th key={h} style={{ textAlign: 'left', fontSize: 10, color: 'var(--text-3)', padding: '10px 14px' }}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {reports.map((r: any, i: number) => (
-              <tr key={i}>
-                <td style={{ fontSize: 12, color: 'var(--text-1)', padding: '10px 14px', fontWeight: 500, maxWidth: 280 }}>{r.title}</td>
-                <td style={{ padding: '10px 14px' }}>{pill(r.report_type?.replace(/_/g, ' '), typeColors[r.report_type] || '#6b7280')}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)', padding: '10px 14px', whiteSpace: 'nowrap' }}>{fmt(r.period_start)} – {fmt(r.period_end)}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-2)', padding: '10px 14px' }}>{r.generated_by}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)', padding: '10px 14px' }}>{fmt(r.created_at)}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)', padding: '10px 14px' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      </SectionCard>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          columns={[
+            { key: 'title', header: 'Title', render: (r: any) => <span style={{ fontWeight: 500 }}>{r.title}</span> },
+            { key: 'report_type', header: 'Type', render: (r: any) => pill(r.report_type?.replace(/_/g, ' '), typeColors[r.report_type] || '#6b7280') },
+            { key: 'period', header: 'Period', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmt(r.period_start)} – {fmt(r.period_end)}</span> },
+            { key: 'generated_by', header: 'Generated By', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{r.generated_by}</span> },
+            { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(r.created_at)}</span> },
+            { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</span> },
+          ]}
+          rows={reports}
+          rowKey={(r: any, i: number) => r.id ?? i}
+          emptyState={<EmptyState title="No reports yet" />}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -999,27 +951,32 @@ function AuditTab({ audit }: { audit: any[] }) {
     kpi_configured: '#eab308', dashboard_shared: '#a855f7',
     widget_configured: '#06b6d4',
   };
-  const actionIcon: Record<string, string> = {
-    report_generated: '📄', dashboard_accessed: '📊', kpi_configured: '🎯',
-    dashboard_shared: '📤', widget_configured: '⚙️',
+  const actionIcon: Record<string, any> = {
+    report_generated: FileText, dashboard_accessed: LayoutDashboard, kpi_configured: Target,
+    dashboard_shared: Share2, widget_configured: Settings,
   };
+  if (!audit.length) return <EmptyState title="No audit entries" />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {audit.map((a: any, i: number) => (
-        <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 14px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: (actionColor[a.action] || '#6b7280') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: 14 }}>{actionIcon[a.action] || '📋'}</span>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              {pill(a.action?.replace(/_/g, ' '), actionColor[a.action] || '#6b7280')}
-              <span style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 500 }}>{a.object_name || a.object_type}</span>
+      {audit.map((a: any, i: number) => {
+        const Icon = actionIcon[a.action] || ClipboardList;
+        const color = actionColor[a.action] || '#6b7280';
+        return (
+          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 14px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon className="h-4 w-4" style={{ color }} />
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{a.actor} · {a.ip_address} · {fmt(a.created_at)}</div>
-            {a.details && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{a.details}</div>}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                {pill(a.action?.replace(/_/g, ' '), color)}
+                <span style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 500 }}>{a.object_name || a.object_type}</span>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{a.actor} · {a.ip_address} · {fmt(a.created_at)}</div>
+              {a.details && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{a.details}</div>}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1088,31 +1045,15 @@ export default function SOCMetricsPage() {
 
   const unreadCount = notifs.filter(n => !n.read).length;
 
-  const tabBar = (
-    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', overflowX: 'auto', flexShrink: 0 }}>
-      {TABS.map(t => (
-        <button key={t.id} onClick={() => setTab(t.id)}
-          style={{ position: 'relative', padding: '10px 14px', fontSize: 12, whiteSpace: 'nowrap', background: 'none', border: 'none', cursor: 'pointer', color: tab === t.id ? 'var(--accent)' : 'var(--text-2)', borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent', fontWeight: tab === t.id ? 600 : 400 }}>
-          {t.label}
-          {t.id === 'ai' && (
-            <span style={{ position: 'absolute', top: 4, right: 2, fontSize: 8, color: 'var(--accent)' }}>✦</span>
-          )}
-        </button>
-      ))}
-    </div>
-  );
-
   const actions = (
     <div style={{ display: 'flex', gap: 8 }}>
       {unreadCount > 0 && (
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 12, position: 'relative' }} onClick={() => setTab('audit')}>
-          <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', fontSize: 9, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{unreadCount}</span>
-          Alerts
-        </button>
+        <div style={{ position: 'relative' }}>
+          <ActionButton variant="ghost" icon={Bell} onClick={() => setTab('audit')}>Alerts</ActionButton>
+          <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', fontSize: 9, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, pointerEvents: 'none' }}>{unreadCount}</span>
+        </div>
       )}
-      <button className="g-btn" style={{ fontSize: 12 }} onClick={() => setShowAI(v => !v)}>
-        ✦ AI Insights
-      </button>
+      <ActionButton variant="primary" icon={Sparkles} onClick={() => setShowAI(v => !v)}>AI Insights</ActionButton>
     </div>
   );
 
@@ -1139,9 +1080,11 @@ export default function SOCMetricsPage() {
   }
 
   return (
-    <RootLayout title="SOC Metrics" subtitle="Security Operations Center Intelligence" actions={actions}>
-      {tabBar}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+    <RootLayout title="SOC Metrics" subtitle="Security Operations Center Intelligence" onRefresh={loadAll} actions={actions}>
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, overflowX: 'auto' }}>
+        <TabBar tabs={TABS} active={tab} onChange={k => setTab(k as Tab)} />
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 0 0' }}>
         {renderTab()}
       </div>
       {showAI && <AIPanel onClose={() => setShowAI(false)} />}

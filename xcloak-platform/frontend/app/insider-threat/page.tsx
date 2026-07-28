@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { insiderThreatAPI, casesAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import { Activity, AlertTriangle, Ban, BarChart2, Bot, Check, CheckCircle2, ChevronRight, Clock, Cloud, Crosshair, Database, Download, Eye, FileText, Filter, GitBranch, Globe2, KeyRound, Layers, Loader2, LogOut, Play, Plus, Printer, RefreshCw, Scale, Search, Server, Shield, ShieldAlert, Star, Trash2, TrendingUp, Usb, UserX, Users, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, BarChart2, Bot, Check, CheckCircle2, ChevronRight, Clock, Cloud, Crosshair, Download, Eye, FileText, Filter, GitBranch, Globe2, Layers, Loader2, LogOut, Plus, Printer, RefreshCw, Scale, Search, Shield, ShieldAlert, Star, Trash2, TrendingUp, Usb, UserX, Users, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -269,130 +269,25 @@ function TimelineFeed({ events, loading }: { events: any[]; loading: boolean }) 
   );
 }
 
-// ── Data / Exfil Activity ─────────────────────────────────────────────────────
-
-function DataExfilCard({ events, detail }: { events: any[]; detail: UserDetail | null }) {
-  const exfilTypes = [
-    { label: 'USB Copy',              icon: Usb,      key: 'usb_copy',           color: 'var(--red)' },
-    { label: 'Cloud Upload',          icon: Cloud,    key: 'cloud_upload',        color: 'var(--orange)' },
-    { label: 'Mass File Copy',        icon: Layers,   key: 'mass_file_access',    color: 'var(--orange)' },
-    { label: 'Mass File Deletion',    icon: Trash2,   key: 'mass_file_deletion',  color: 'var(--red)' },
-    { label: 'Source Code Access',    icon: GitBranch,key: 'source_code',         color: 'var(--red)' },
-    { label: 'Exfiltration Detected', icon: Download, key: 'exfiltration',        color: 'var(--red)' },
-    { label: 'Sensitive File Access', icon: FileText, key: 'sensitive_file',      color: 'var(--yellow)' },
-    { label: 'Encryption Tool Used',  icon: Lock,     key: 'encryption',          color: 'var(--orange)' },
-  ];
-  const evSet = new Set(events.map(e => e.event_type));
-  const countMap = (detail?.event_counts ?? []).reduce((m, c) => ({ ...m, [c.category]: c.count }), {} as Record<string, number>);
-
-  return (
-    <div className="p-3 space-y-2">
-      {exfilTypes.map(t => {
-        const detected = evSet.has(t.key);
-        const cnt = countMap[t.key] ?? 0;
-        return (
-          <div key={t.label} className="flex items-center gap-2.5 rounded-lg px-3 py-2"
-            style={{ background: detected ? `${t.color}10` : 'var(--glass-bg)', border: `1px solid ${detected ? t.color + '33' : 'var(--border)'}` }}>
-            <t.icon className="h-3.5 w-3.5 shrink-0" style={{ color: detected ? t.color : 'var(--text-3)' }} />
-            <span className="text-xs flex-1" style={{ color: detected ? 'var(--text-1)' : 'var(--text-3)' }}>{t.label}</span>
-            {detected
-              ? <span className="text-[10px] font-bold" style={{ color: t.color }}>{cnt > 0 ? `${cnt}×` : 'Detected'}</span>
-              : <Check className="h-3 w-3" style={{ color: 'var(--text-3)' }} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── USB & Cloud Activity ──────────────────────────────────────────────────────
-
-function USBCloudCard({ events }: { events: any[] }) {
-  const usb    = events.filter(e => e.event_type === 'usb_copy');
-  const cloud  = events.filter(e => e.event_type === 'cloud_upload');
-  const print  = events.filter(e => e.event_type === 'print');
-  const source = events.filter(e => e.event_type === 'source_code');
-
-  const sections = [
-    { label: 'USB Events',         icon: Usb,      items: usb,    color: 'var(--red)' },
-    { label: 'Cloud Uploads',      icon: Cloud,    items: cloud,  color: 'var(--orange)' },
-    { label: 'Print Jobs',         icon: Printer,  items: print,  color: 'var(--yellow)' },
-    { label: 'Source Code Access', icon: GitBranch,items: source, color: 'var(--red)' },
-  ];
-
-  return (
-    <div className="p-3 space-y-3">
-      {sections.map(s => (
-        <div key={s.label}>
-          <div className="flex items-center gap-2 mb-1.5">
-            <s.icon className="h-3.5 w-3.5 shrink-0" style={{ color: s.color }} />
-            <span className="text-[11px] font-semibold" style={{ color: s.items.length > 0 ? s.color : 'var(--text-3)' }}>
-              {s.label} ({s.items.length})
-            </span>
-          </div>
-          {s.items.slice(0, 3).map((ev, i) => (
-            <div key={i} className="pl-5 text-[11px] pb-1" style={{ borderBottom: '1px solid var(--border)' }}>
-              <p className="truncate" style={{ color: 'var(--text-2)' }}>{ev.description}</p>
-              <p style={{ color: 'var(--text-3)' }}>{timeAgo(ev.detected_at)}</p>
-            </div>
-          ))}
-          {s.items.length === 0 && <p className="pl-5 text-[10px]" style={{ color: 'var(--text-3)' }}>No activity</p>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Sensitive Data Access ─────────────────────────────────────────────────────
-
-function SensitiveAccessCard({ events, detail }: { events: any[]; detail: UserDetail | null }) {
-  const categories = [
-    { label: 'HR Files',             flag: 'hr_access',       icon: Users },
-    { label: 'Finance Data',         flag: 'finance_access',  icon: BarChart2 },
-    { label: 'Payroll',              flag: 'payroll_access',  icon: Database },
-    { label: 'Customer Database',    flag: 'customer_db',     icon: Database },
-    { label: 'Source Code',          flag: 'source_code',     icon: GitBranch },
-    { label: 'API Keys / Certs',     flag: 'credential_access',icon: Lock },
-    { label: 'Password Vaults',      flag: 'password_vault',  icon: Lock },
-    { label: 'Intellectual Property',flag: 'ip_access',       icon: FileText },
-    { label: 'Confidential Docs',    flag: 'sensitive_file',  icon: FileText },
-  ];
-  const flags = new Set([...(detail?.flags ?? []), ...events.map(e => e.event_type)]);
-  return (
-    <div className="p-3 grid grid-cols-2 gap-1.5">
-      {categories.map(cat => {
-        const detected = flags.has(cat.flag);
-        return (
-          <div key={cat.label} className="flex items-center gap-1.5 text-[11px] py-0.5">
-            {detected
-              ? <AlertTriangle className="h-3 w-3 shrink-0" style={{ color: 'var(--red)' }} />
-              : <Check className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} />}
-            <span style={{ color: detected ? 'var(--red)' : 'var(--text-3)' }}>{cat.label}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Behavioral Indicators ─────────────────────────────────────────────────────
-
+// DataExfilCard, USBCloudCard, and SensitiveAccessCard were removed outright —
+// every check in all three (USB copy, cloud upload, mass file access/deletion,
+// source code access, exfiltration, encryption, print jobs, HR/finance/payroll/
+// credential access, etc.) referenced event types or profile flags that
+// services/ueba_service.go (the only place UEBAEvent/UserRiskProfile.Flags
+// are ever constructed) never produces — confirmed by grepping every
+// `EventType:`/`flags = append` in that file. Those "policies" exist as
+// configuration (see insider_threat_enterprise.go's default policy list) but
+// nothing in the agent or backend actually collects USB/cloud-upload/print/
+// file-access telemetry to trigger them, so the checks could never fire.
+// This card is trimmed to the 4 indicators backed by a real signal.
 function BehavioralIndicatorsCard({ events, detail }: { events: any[]; detail: UserDetail | null }) {
   const evTypes = new Set(events.map(e => e.event_type));
-  const flags = new Set(detail?.flags ?? []);
   const indicators = [
-    { label: 'Working Outside Normal Hours', detected: evTypes.has('off_hours_login'),      color: 'var(--orange)' },
-    { label: 'Weekend Activity',             detected: flags.has('weekend_activity'),         color: 'var(--yellow)' },
-    { label: 'Large File Transfers',         detected: evTypes.has('usb_copy') || evTypes.has('cloud_upload'), color: 'var(--red)' },
-    { label: 'Excessive Downloads',          detected: evTypes.has('mass_file_access'),      color: 'var(--orange)' },
-    { label: 'Mass File Deletion',           detected: evTypes.has('mass_file_deletion'),    color: 'var(--red)' },
-    { label: 'Accessing Unusual Systems',    detected: evTypes.has('rare_network'),          color: 'var(--yellow)' },
+    { label: 'Working Outside Normal Hours', detected: evTypes.has('off_hours_login'), color: 'var(--orange)' },
     { label: 'Repeated Policy Violations',   detected: (detail?.event_counts?.length ?? 0) > 3, color: 'var(--orange)' },
-    { label: 'New Device Usage',             detected: flags.has('new_device'),              color: 'var(--yellow)' },
     { label: 'Privileged User Activity',     detected: evTypes.has('priv_escalation') || evTypes.has('sudo'), color: 'var(--red)' },
-    { label: 'Printing Sensitive Files',     detected: evTypes.has('print'),                 color: 'var(--orange)' },
-    { label: 'Encryption Tool Usage',        detected: evTypes.has('encryption'),            color: 'var(--red)' },
-    { label: 'Brute Force Attempt',          detected: evTypes.has('brute_force'),           color: 'var(--red)' },
+    { label: 'Brute Force Attempt',          detected: evTypes.has('brute_force'), color: 'var(--red)' },
   ];
   const triggered = indicators.filter(i => i.detected);
   return (
@@ -565,76 +460,37 @@ function PolicyViolationsPanel({ violations }: { violations: PolicyViolation[] }
 }
 
 // ── Response Actions ──────────────────────────────────────────────────────────
-
-const RESPONSE_ACTIONS = [
-  { key: 'disable_user',     label: 'Disable User',        icon: Ban,        color: 'var(--red)',    desc: 'Revoke all access' },
-  { key: 'lock_account',     label: 'Lock Account',         icon: Lock,       color: 'var(--red)',    desc: 'Block login pending review' },
-  { key: 'force_logout',     label: 'Force Logout',         icon: LogOut,     color: 'var(--red)',    desc: 'Revoke all sessions' },
-  { key: 'require_mfa',      label: 'Require MFA',          icon: KeyRound,   color: 'var(--yellow)', desc: 'Enforce on next login' },
-  { key: 'block_usb',        label: 'Block USB',            icon: Usb,        color: 'var(--orange)', desc: 'Policy: no removable storage' },
-  { key: 'block_cloud',      label: 'Block Cloud Upload',   icon: Cloud,      color: 'var(--orange)', desc: 'Proxy-level block' },
-  { key: 'isolate_endpoint', label: 'Isolate Endpoint',     icon: Server,     color: 'var(--red)',    desc: 'Network isolation' },
-  { key: 'kill_process',     label: 'Kill Process',         icon: XCircle,    color: 'var(--orange)', desc: 'Kill by PID' },
-  { key: 'remove_privileges',label: 'Remove Privileges',    icon: ShieldAlert,color: 'var(--yellow)', desc: 'Revoke admin rights' },
-  { key: 'legal_hold',       label: 'Legal Hold',           icon: Scale,      color: 'var(--accent)', desc: 'Preserve evidence + audit trail' },
-  { key: 'run_playbook',     label: 'Run SOAR Playbook',    icon: Play,       color: 'var(--accent)', desc: 'Automated response' },
-];
+// Same finding and fix as UEBA's ResponseActionsPanel: every action except
+// Force Logout returned a canned success string with no real backend effect
+// (no IdP call, no agent task, no legal-hold record, no playbook run) while
+// logging a fake "completed" entry into the user's own timeline. Removed
+// everything except the one action with a real effect.
 
 function ResponseActionsPanel({ username, onAction }: { username: string; onAction: (msg: string) => void }) {
-  const [running, setRunning] = useState<string | null>(null);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [param, setParam] = useState('');
+  const [running, setRunning] = useState(false);
 
-  const PARAM_LABELS: Record<string, string> = { kill_process: 'PID', run_playbook: 'Playbook ID' };
-  const needsParam = activeKey ? PARAM_LABELS[activeKey] : null;
-
-  const dispatch = async (key: string, p = '') => {
-    setRunning(key);
+  const dispatch = async () => {
+    setRunning(true);
     try {
-      const params: Record<string, string> = {};
-      if (key === 'kill_process') params.pid = p;
-      if (key === 'run_playbook') params.playbook_id = p;
-      const r = await insiderThreatAPI.responseAction(username, key, params);
-      onAction((r.data as any)?.result ?? `${key} dispatched`);
-      setActiveKey(null); setParam('');
+      const r = await insiderThreatAPI.responseAction(username, 'force_logout', {});
+      onAction((r.data as any)?.result ?? 'force_logout dispatched');
     } catch { onAction('Action failed'); }
-    finally { setRunning(null); }
+    finally { setRunning(false); }
   };
 
   return (
-    <div className="p-3 space-y-2">
-      {activeKey && needsParam && (
-        <div className="flex items-center gap-2 rounded-lg px-3 py-2.5"
-          style={{ background: 'var(--glass-bg)', border: '1px solid var(--accent-border)' }}>
-          <input value={param} onChange={e => setParam(e.target.value)}
-            placeholder={needsParam + '…'} className="g-input flex-1 text-xs"
-            onKeyDown={e => e.key === 'Enter' && param && dispatch(activeKey, param)} />
-          <button onClick={() => param && dispatch(activeKey, param)} disabled={!param || running === activeKey}
-            className="g-btn g-btn-primary text-xs px-3">
-            {running === activeKey ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Run'}
-          </button>
-          <button onClick={() => { setActiveKey(null); setParam(''); }} className="g-btn g-btn-ghost text-xs px-2">
-            <X className="h-3 w-3" />
-          </button>
+    <div className="p-3">
+      <button onClick={dispatch} disabled={running}
+        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-hover)] transition-colors"
+        style={{ background: 'var(--glass-bg)', border: '1px solid var(--red)33' }}>
+        {running
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color: 'var(--red)' }} />
+          : <LogOut className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--red)' }} />}
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium truncate" style={{ color: 'var(--text-1)' }}>Force Logout</p>
+          <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>Revoke all sessions</p>
         </div>
-      )}
-      <div className="grid grid-cols-3 gap-1.5">
-        {RESPONSE_ACTIONS.map(a => (
-          <button key={a.key}
-            onClick={() => PARAM_LABELS[a.key] ? (setActiveKey(a.key), setParam('')) : dispatch(a.key)}
-            disabled={running !== null}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-hover)] transition-colors"
-            style={{ background: 'var(--glass-bg)', border: `1px solid ${a.color}33` }}>
-            {running === a.key
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color: a.color }} />
-              : <a.icon className="h-3.5 w-3.5 shrink-0" style={{ color: a.color }} />}
-            <div className="min-w-0">
-              <p className="text-[10px] font-medium truncate" style={{ color: 'var(--text-1)' }}>{a.label}</p>
-              <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>{a.desc}</p>
-            </div>
-          </button>
-        ))}
-      </div>
+      </button>
     </div>
   );
 }
@@ -818,38 +674,21 @@ function UserDetailPanel({ score, onClose }: { score: InsiderScore; onClose: () 
           </div>
         </div>
 
-        {/* Row 3: Data Exfil + USB / Cloud */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <div className={CARD}>
-            <SectionHeader icon={Download} title="Data Exfiltration Detection" />
-            {loadingT ? <div className="p-4"><Spinner /></div>
-              : <DataExfilCard events={timeline} detail={detail} />}
-          </div>
-          <div className={CARD}>
-            <SectionHeader icon={Usb} title="USB / Cloud / Print Activity" />
-            {loadingT ? <div className="p-4"><Spinner /></div>
-              : <USBCloudCard events={timeline} />}
-          </div>
-        </div>
-
-        {/* Row 4: Sensitive Data Access + Privileged User Monitoring */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <div className={CARD}>
-            <SectionHeader icon={Database} title="Sensitive Data Access" />
-            {loadingD ? <div className="p-4"><Spinner /></div>
-              : <SensitiveAccessCard events={timeline} detail={detail} />}
-          </div>
+        {/* Row 3: Privileged User Monitoring */}
+        <div className="grid grid-cols-1 gap-3">
           <div className={CARD}>
             <SectionHeader icon={TrendingUp} title="Privileged User Monitoring" />
             <div className="p-3 space-y-2">
+              {/* service_account/cloud_admin/rare_admin/account_creation event
+                  types have no detector anywhere (same audit as the cards
+                  above) — removed. "Policy Change" rewired from a dead
+                  'policy_change' type to the real 'priv_change' one
+                  ueba_service.go actually emits for platform privilege
+                  actions. */}
               {[
                 { label: 'Domain Admin Activity', et: 'priv_escalation',  color: 'var(--red)' },
                 { label: 'Sudo / RunAs',           et: 'sudo',             color: 'var(--orange)' },
-                { label: 'Service Account Login',  et: 'service_account',  color: 'var(--yellow)' },
-                { label: 'Cloud Admin Access',     et: 'cloud_admin',      color: 'var(--orange)' },
-                { label: 'Unusual Admin Activity', et: 'rare_admin',       color: 'var(--red)' },
-                { label: 'Policy Change',          et: 'policy_change',    color: 'var(--yellow)' },
-                { label: 'Account Creation',       et: 'account_creation', color: 'var(--orange)' },
+                { label: 'Policy Change',          et: 'priv_change',      color: 'var(--yellow)' },
               ].map(p => {
                 const detected = timeline.some(e => e.event_type === p.et);
                 return (
@@ -946,11 +785,11 @@ function AnalyticsDashboard({ analytics }: { analytics: Analytics | null }) {
     <div className="p-4 space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { l: 'Active Cases',       v: analytics.active_cases,      c: 'var(--accent)' },
-          { l: 'Policy Violations',  v: analytics.policy_violations,  c: 'var(--red)' },
-          { l: 'Exfil Events (7d)', v: analytics.exfil_events,      c: 'var(--red)' },
-          { l: 'USB Events (7d)',   v: analytics.usb_events,         c: 'var(--orange)' },
-          { l: 'Cloud Uploads',     v: analytics.cloud_uploads,      c: 'var(--yellow)' },
+          { l: 'Active Cases',           v: analytics.active_cases,      c: 'var(--accent)' },
+          { l: 'Policy Violations (7d)', v: analytics.policy_violations, c: 'var(--red)' },
+          { l: 'Exfil Events (7d)',      v: analytics.exfil_events,      c: 'var(--red)' },
+          { l: 'USB Events (7d)',        v: analytics.usb_events,        c: 'var(--orange)' },
+          { l: 'Cloud Uploads (7d)',     v: analytics.cloud_uploads,     c: 'var(--yellow)' },
           { l: 'High Risk Users',   v: analytics.high_risk_count,    c: 'var(--orange)' },
           { l: 'Avg Insider Score', v: `${analytics.insider_score}%`, c: RISK_COLOR(analytics.insider_score) },
         ].map(s => (

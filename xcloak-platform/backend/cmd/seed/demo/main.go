@@ -82,6 +82,8 @@ func main() {
 	seedFirewallRules(db)
 	log.Println("Seeding vulnerabilities…")
 	seedVulnerabilities(db, agentIDs)
+	log.Println("Seeding risk scores…")
+	seedRiskScores(db, agentIDs)
 	log.Println("Seeding assets…")
 	seedAssets(db, agentIDs)
 	log.Println("Seeding cases…")
@@ -92,6 +94,10 @@ func main() {
 	seedQuarantine(db, agentIDs)
 	log.Println("Seeding network anomalies…")
 	seedNetworkAnomalies(db, agentIDs)
+	log.Println("Seeding DPI findings…")
+	seedDPIFindings(db, agentIDs)
+	log.Println("Seeding detection rule hits…")
+	seedDetectionHits(db, agentIDs)
 	log.Println("Seeding UEBA events…")
 	seedUEBA(db, agentIDs)
 	log.Println("Seeding insider threat scores…")
@@ -841,15 +847,17 @@ func seedCompliance(db *sql.DB) {
 		return
 	}
 
+	// Framework names must match services.ComputeAllFrameworkScores's
+	// canonical list — otherwise a live "Generate Report" run creates a
+	// sibling row instead of superseding this seed placeholder.
 	frameworks := []struct {
 		framework string
 		score     int
 		passed    int
 		failed    int
 	}{
-		{"CIS", 72, 144, 56},
-		{"NIST_CSF", 68, 68, 32},
-		{"PCI_DSS", 81, 97, 23},
+		{"NIST", 68, 68, 32},
+		{"PCI-DSS", 81, 97, 23},
 	}
 	for _, f := range frameworks {
 		mustExec(db, `
@@ -1205,6 +1213,98 @@ func seedVulnerabilities(db *sql.DB, agentIDs []int) {
 	}
 }
 
+// seedRiskScores populates asset_risk_scores for the demo agents. In real
+// production usage this table is populated as a side effect of the real
+// alert/incident/vulnerability ingestion path calling
+// services.CalculateRiskScore(agentID) — this seeder bypasses that path
+// entirely (raw SQL inserts, not the real Go service calls), so without this
+// step the table stays permanently empty and every consumer (Attack Path's
+// chokepoint/priv-level classification and node coloring, the Agents page)
+// sees risk_score=0/risk_level="unknown" for every demo agent no matter how
+// many alerts/vulns/incidents were seeded for it. Mirrors
+// services/risk_score_service.go's CalculateRiskScore formula (including
+// its 100-point clamp) exactly rather than calling it directly, since this
+// package intentionally has no dependency on xcloak-platform/services or
+// xcloak-platform/database (every seed function here is self-contained raw
+// SQL against its own *sql.DB) — if that formula changes, update both.
+func seedRiskScores(db *sql.DB, agentIDs []int) {
+	for _, agentID := range agentIDs {
+		score := 0
+
+		sevRows, err := db.Query(`SELECT severity, COUNT(*) FROM alerts WHERE agent_id=$1 GROUP BY severity`, agentID)
+		if err != nil {
+			log.Fatalf("seedRiskScores alerts: %v", err)
+		}
+		for sevRows.Next() {
+			var sev string
+			var cnt int
+			if sevRows.Scan(&sev, &cnt) != nil {
+				continue
+			}
+			switch sev {
+			case "critical":
+				score += 20 * cnt
+			case "high":
+				score += 10 * cnt
+			case "medium":
+				score += 5 * cnt
+			case "low":
+				score += 2 * cnt
+			}
+		}
+		sevRows.Close()
+
+		var kevCount, highEPSSCount int
+		db.QueryRow(`SELECT COUNT(*) FROM vulnerabilities WHERE agent_id=$1 AND is_kev=true`, agentID).Scan(&kevCount)
+		db.QueryRow(`SELECT COUNT(*) FROM vulnerabilities WHERE agent_id=$1 AND is_kev=false AND epss_score >= 0.5`, agentID).Scan(&highEPSSCount)
+		score += kevCount*30 + highEPSSCount*10
+
+		incRows, err := db.Query(`SELECT severity, COUNT(*) FROM incidents WHERE agent_id=$1 GROUP BY severity`, agentID)
+		if err != nil {
+			log.Fatalf("seedRiskScores incidents: %v", err)
+		}
+		for incRows.Next() {
+			var sev string
+			var cnt int
+			if incRows.Scan(&sev, &cnt) != nil {
+				continue
+			}
+			switch sev {
+			case "critical":
+				score += 30 * cnt
+			case "high":
+				score += 15 * cnt
+			case "medium":
+				score += 10 * cnt
+			}
+		}
+		incRows.Close()
+
+		if score > 100 {
+			score = 100
+		}
+		level := "low"
+		switch {
+		case score >= 80:
+			level = "critical"
+		case score >= 50:
+			level = "high"
+		case score >= 20:
+			level = "medium"
+		}
+
+		mustExec(db, `
+			INSERT INTO asset_risk_scores (agent_id, risk_score, risk_level, tenant_id)
+			VALUES ($1,$2,$3,9999)
+			ON CONFLICT (agent_id) DO UPDATE SET
+				risk_score = EXCLUDED.risk_score,
+				risk_level = EXCLUDED.risk_level,
+				updated_at = NOW()`,
+			agentID, score, level,
+		)
+	}
+}
+
 func seedAssets(db *sql.DB, agentIDs []int) {
 	assets := []struct {
 		agentIdx    int
@@ -1347,8 +1447,8 @@ func seedNetworkAnomalies(db *sql.DB, agentIDs []int) {
 		minsAgo      int
 	}{
 		{0, "beacon", "185.220.101.47", 443, "tcp", 98, "Periodic HTTPS beacon every 60s — Cobalt Strike jitter profile", 25},
-		{0, "exfil", "94.102.49.190", 443, "tcp", 87, "Large data transfer 15 MB outbound — potential exfiltration", 31},
-		{2, "lateral_move", "10.0.1.5", 445, "tcp", 82, "SMB connection from workstation to DC — pass-the-hash movement", 120},
+		{0, "exfiltration", "94.102.49.190", 443, "tcp", 87, "Large data transfer 15 MB outbound — potential exfiltration", 31},
+		{2, "lateral_movement", "10.0.1.5", 445, "tcp", 82, "SMB connection from workstation to DC — pass-the-hash movement", 120},
 		{0, "dns_tunnel", "8.8.8.8", 53, "udp", 76, "Abnormal DNS TXT query volume to evil-domain.xyz — iodine profile", 140},
 		{1, "port_scan", "10.0.0.0", 0, "tcp", 70, "Internal port scan originating from db-server-02", 200},
 		{3, "c2", "203.0.113.42", 8080, "tcp", 65, "Android device contacting suspicious IP on non-standard port", 380},
@@ -1362,6 +1462,100 @@ func seedNetworkAnomalies(db *sql.DB, agentIDs []int) {
 			agentID, a.anomalyType, a.dstIP, a.dstPort, a.proto, a.score, a.desc,
 			now.Add(-time.Duration(a.minsAgo)*time.Minute),
 		)
+	}
+}
+
+func seedDPIFindings(db *sql.DB, agentIDs []int) {
+	if len(agentIDs) == 0 {
+		return
+	}
+	now := time.Now()
+	findings := []struct {
+		agentIdx    int
+		findingType string
+		severity    string
+		score       int
+		indicator   string
+		desc        string
+		mitre       string
+		alertFired  bool
+		minsAgo     int
+	}{
+		{0, "dga", "high", 82, "xkq7z9wq2f.biz", "DGA-pattern domain resolved by web-prod-01 — high entropy, no dictionary words", "T1568.002", true, 40},
+		{2, "tls_anomaly", "medium", 61, "JA3 e7d705a3286e19ea42f587b344ee6865", "Self-signed cert with mismatched SNI on internal SMB-adjacent host", "T1573", false, 95},
+		{0, "http_pattern", "critical", 91, "/wp-admin/upload.php?cmd=whoami", "Webshell command-injection pattern in outbound HTTP request", "T1505.003", true, 20},
+		{1, "dns_tunnel", "high", 78, "a8f3e1.tunnel.evil-domain.xyz", "High-volume DNS TXT queries consistent with iodine tunneling", "T1071.004", true, 150},
+		{3, "proto_on_wrong_port", "medium", 55, "203.0.113.42:8080", "TLS handshake observed on non-standard port 8080", "T1571", false, 210},
+		{0, "yara_match", "critical", 95, "sha256:4f2a...c91e", "YARA rule 'cobalt_strike_beacon' matched downloaded PE payload", "T1105", true, 30},
+		{2, "dlp_credit_card", "high", 84, "4111-XXXX-XXXX-1142", "Credit card number pattern detected in outbound HTTP POST body", "T1114", true, 60},
+		{1, "sql_injection", "high", 73, "' OR 1=1--", "SQLi payload pattern detected in HTTP query string", "T1190", false, 300},
+		{0, "icmp_tunnel", "medium", 58, "185.220.101.47", "Oversized ICMP echo payloads consistent with ICMP tunneling", "T1095", false, 400},
+		{2, "high_entropy", "low", 42, "10.0.2.55:443", "High-entropy payload (0.97) in otherwise unencrypted session", "T1027", false, 500},
+	}
+	for _, f := range findings {
+		agentID := agentIDs[f.agentIdx%len(agentIDs)]
+		mustExec(db, `
+			INSERT INTO dpi_findings
+				(agent_id, tenant_id, finding_type, severity, score, indicator, description, mitre_technique, alert_fired, detected_at)
+			VALUES ($1,9999,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			agentID, f.findingType, f.severity, f.score, f.indicator, f.desc, f.mitre, f.alertFired,
+			now.Add(-time.Duration(f.minsAgo)*time.Minute),
+		)
+	}
+}
+
+// seedDetectionHits populates sigma_rule_hits/correlation_matches — real
+// hit-log tables that (unlike yara_matches) start out completely empty for
+// every demo tenant, since cmd/seed/rules only creates the rule *definitions*
+// and nothing ever logs a match against them. Without this, the Behavioral
+// Detection page's Coverage/Analytics/Testing tabs show zero triggered rules
+// even though the rules themselves are real and enabled.
+func seedDetectionHits(db *sql.DB, agentIDs []int) {
+	if len(agentIDs) == 0 {
+		return
+	}
+	now := time.Now()
+
+	sigmaIDs := []int{}
+	rows, err := db.Query(`SELECT id FROM sigma_rules WHERE tenant_id=9999 AND enabled=true ORDER BY id LIMIT 6`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			if rows.Scan(&id) == nil {
+				sigmaIDs = append(sigmaIDs, id)
+			}
+		}
+	}
+	for i, ruleID := range sigmaIDs {
+		hits := 2 + i
+		for h := 0; h < hits; h++ {
+			agentID := agentIDs[(i+h)%len(agentIDs)]
+			mustExec(db, `
+				INSERT INTO sigma_rule_hits (rule_id, agent_id, tenant_id, matched_at)
+				VALUES ($1,$2,9999,$3)`,
+				ruleID, agentID, now.Add(-time.Duration(30+h*90+i*20)*time.Minute))
+		}
+	}
+
+	corrIDs := []int{}
+	cRows, err := db.Query(`SELECT id FROM correlation_rules WHERE tenant_id=9999 AND enabled=true ORDER BY id LIMIT 3`)
+	if err == nil {
+		defer cRows.Close()
+		for cRows.Next() {
+			var id int
+			if cRows.Scan(&id) == nil {
+				corrIDs = append(corrIDs, id)
+			}
+		}
+	}
+	for i, ruleID := range corrIDs {
+		agentID := agentIDs[i%len(agentIDs)]
+		mustExec(db, `
+			INSERT INTO correlation_matches (rule_id, tenant_id, agent_id, confidence, detail, matched_at)
+			VALUES ($1,9999,$2,$3,$4,$5)`,
+			ruleID, agentID, 60+i*10,
+			"Sequence matched across correlated alert window", now.Add(-time.Duration(45+i*120)*time.Minute))
 	}
 }
 
@@ -1443,8 +1637,11 @@ func seedInsiderThreat(db *sql.DB) {
 		{"cjohnson", 31, "low", false},
 	}
 	for _, s := range scores {
-		contrib := fmt.Sprintf(`{"off_hours":%d,"failed_logins":%d,"data_access":%d}`,
-			s.score/4, s.score/5, s.score/3)
+		// Keys must match insiderContributors (services/insider_threat_service.go)
+		// exactly, or the frontend's Risk Breakdown (keyed off that same
+		// schema) renders nothing for every demo-seeded user.
+		contrib := fmt.Sprintf(`{"off_hours_auth":%d,"failed_auth":%d,"data_exfil":%d,"sensitive_access":%d,"privesc_attempt":%d,"anomalous_location":%d}`,
+			s.score/5, s.score/6, s.score/4, s.score/7, s.score/8, s.score/10)
 		mustExec(db, `
 			INSERT INTO insider_threat_scores
 				(tenant_id, username, score, risk_level, contributors, alert_fired, score_date, created_at)
@@ -1982,6 +2179,29 @@ func seedCorrelation(db *sql.DB) {
 			ON CONFLICT DO NOTHING`,
 			r.name, r.desc, r.severity, r.ruleName, r.technique, r.action, r.corrType, r.condValue, r.windowMins, r.threshold,
 		)
+	}
+
+	// The one "temporal" rule needs real stages for the Testing tab's
+	// simulator (repositories.GetCorrelationRuleStages) to have anything to
+	// evaluate — this table is otherwise never populated by any seeder.
+	var c2ChainID int
+	if err := db.QueryRow(`SELECT id FROM correlation_rules WHERE tenant_id=9999 AND name='C2 + Lateral Movement Chain'`).Scan(&c2ChainID); err == nil {
+		stages := []struct {
+			order   int
+			pattern string
+			source  string
+		}{
+			{0, "beacon", "alert"},
+			{1, "lateral", "alert"},
+		}
+		for _, s := range stages {
+			mustExec(db, `
+				INSERT INTO correlation_rule_stages (rule_id, stage_order, rule_name_pattern, source_type)
+				VALUES ($1,$2,$3,$4)
+				ON CONFLICT DO NOTHING`,
+				c2ChainID, s.order, s.pattern, s.source,
+			)
+		}
 	}
 }
 

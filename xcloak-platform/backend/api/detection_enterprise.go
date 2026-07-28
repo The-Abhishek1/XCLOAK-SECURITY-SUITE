@@ -24,6 +24,7 @@ func GetDetectionOverview(c *gin.Context) {
 		activeIOC, totalIOC                                          int
 		activeCorrelation, totalCorrelation                          int
 		sigmaTriggered24h, yaraTriggered24h, iocBlocked24h           int
+		correlationTriggered24h                                      int
 		totalAlerts24h, criticalAlerts24h                            int
 		suppressionRules                                             int
 	)
@@ -43,8 +44,13 @@ func GetDetectionOverview(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM correlation_rules WHERE tenant_id=$1`, tid).Scan(&totalCorrelation)
 
 	database.DB.QueryRow(`SELECT COUNT(DISTINCT rule_id) FROM sigma_rule_hits WHERE tenant_id=$1 AND matched_at>=$2`, tid, since).Scan(&sigmaTriggered24h)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE tenant_id=$1 AND matched_at>=$2`, tid, since).Scan(&yaraTriggered24h)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM ioc_blocks WHERE tenant_id=$1 AND blocked_at>=$2`, tid, since).Scan(&iocBlocked24h)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM yara_matches WHERE tenant_id=$1 AND created_at>=$2`, tid, since).Scan(&yaraTriggered24h)
+	// There is no `ioc_blocks` table anywhere in this schema — this query
+	// always errored and silently left iocBlocked24h at 0. Individual IOC
+	// hits are tracked on the iocs row itself (repositories.RecordIOCHit
+	// bumps hit_count/last_seen), so count IOCs actually seen in the window.
+	database.DB.QueryRow(`SELECT COUNT(*) FROM iocs WHERE tenant_id=$1 AND enabled=true AND last_seen>=$2`, tid, since).Scan(&iocBlocked24h)
+	database.DB.QueryRow(`SELECT COUNT(DISTINCT rule_id) FROM correlation_matches WHERE tenant_id=$1 AND matched_at>=$2`, tid, since).Scan(&correlationTriggered24h)
 
 	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND created_at>=$2`, tid, since).Scan(&totalAlerts24h)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND created_at>=$2 AND severity='critical'`, tid, since).Scan(&criticalAlerts24h)
@@ -57,7 +63,7 @@ func GetDetectionOverview(c *gin.Context) {
 	// Total rule count across all types
 	totalRules := totalSigma + totalYara + totalIOC + totalCorrelation
 	activeRules := activeSigma + activeYara + activeIOC + activeCorrelation
-	triggeredLast24h := sigmaTriggered24h + yaraTriggered24h + iocBlocked24h
+	triggeredLast24h := sigmaTriggered24h + yaraTriggered24h + iocBlocked24h + correlationTriggered24h
 
 	// False positive rate — suppression rules / triggered rules (proxy metric)
 	fpRate := 0.0
@@ -82,7 +88,7 @@ func GetDetectionOverview(c *gin.Context) {
 		{"type": "Sigma", "active": activeSigma, "disabled": disabledSigma, "total": totalSigma, "triggered": sigmaTriggered24h},
 		{"type": "YARA", "active": activeYara, "disabled": disabledYara, "total": totalYara, "triggered": yaraTriggered24h},
 		{"type": "IOC", "active": activeIOC, "disabled": totalIOC - activeIOC, "total": totalIOC, "triggered": iocBlocked24h},
-		{"type": "Correlation", "active": activeCorrelation, "disabled": totalCorrelation - activeCorrelation, "total": totalCorrelation, "triggered": 0},
+		{"type": "Correlation", "active": activeCorrelation, "disabled": totalCorrelation - activeCorrelation, "total": totalCorrelation, "triggered": correlationTriggered24h},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -97,7 +103,6 @@ func GetDetectionOverview(c *gin.Context) {
 		"total_alerts_24h":      totalAlerts24h,
 		"critical_alerts_24h":   criticalAlerts24h,
 		"rule_breakdown":        ruleBreakdown,
-		"engine_health":         "healthy",
 	})
 }
 
@@ -136,9 +141,9 @@ func GetDetectionTrends(c *gin.Context) {
 
 	// YARA match trend
 	yRows, _ := database.DB.Query(`
-		SELECT date_trunc('hour', matched_at) AS hour, COUNT(*) AS hits
+		SELECT date_trunc('hour', created_at) AS hour, COUNT(*) AS hits
 		FROM yara_matches
-		WHERE tenant_id=$1 AND matched_at>=NOW()-($2 * INTERVAL '1 hour')
+		WHERE tenant_id=$1 AND created_at>=NOW()-($2 * INTERVAL '1 hour')
 		GROUP BY hour ORDER BY hour`, tid, hours)
 	yara := []HourBucket{}
 	if yRows != nil {
@@ -349,12 +354,16 @@ func GetDetectionPerformance(c *gin.Context) {
 	var failedAlerts int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE tenant_id=$1 AND status='error' AND created_at>=NOW()-INTERVAL '24 hours'`, tid).Scan(&failedAlerts)
 
+	// No real per-engine latency/uptime instrumentation exists anywhere in
+	// this codebase — rule counts and hit/failure counts below are real
+	// queries; deliberately not fabricating status/avg_ms/uptime numbers
+	// that would look like real measurements but aren't backed by anything.
 	engines := []map[string]interface{}{
-		{"name": "Sigma Engine", "rules": sigmaTotal, "status": "healthy", "avg_ms": 2, "hits_1h": hitsLastHour},
-		{"name": "YARA Engine", "rules": yaraTotal, "status": "healthy", "avg_ms": 8},
-		{"name": "IOC Matcher", "rules": iocTotal, "status": "healthy", "avg_ms": 1},
-		{"name": "Correlation Engine", "rules": correlationTotal, "status": "healthy", "avg_ms": 15},
-		{"name": "ML/Behavioral", "rules": 0, "status": "healthy", "avg_ms": 45},
+		{"name": "Sigma Engine", "rules": sigmaTotal, "hits_1h": hitsLastHour},
+		{"name": "YARA Engine", "rules": yaraTotal},
+		{"name": "IOC Matcher", "rules": iocTotal},
+		{"name": "Correlation Engine", "rules": correlationTotal},
+		{"name": "ML/Behavioral", "rules": 0},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -362,8 +371,6 @@ func GetDetectionPerformance(c *gin.Context) {
 		"total_active":   sigmaTotal + yaraTotal + iocTotal + correlationTotal,
 		"hits_last_hour": hitsLastHour,
 		"failed_rules":   failedAlerts,
-		"queue_depth":    0,
-		"uptime_pct":     99.9,
 	})
 }
 
@@ -478,41 +485,92 @@ func PostDetectionSimulate(c *gin.Context) {
 	}
 	tid := tenantIDFromContext(c)
 
-	// Fetch existing historical hits for this sigma rule as the simulation result
+	// Fetch existing historical hits for this rule as the simulation result.
+	// Each rule type has its own hit-log table with different columns —
+	// previously only sigma was handled for the hourly trend (and yara's
+	// count query referenced a nonexistent `matched_at` column instead of
+	// the real `created_at`), so selecting "YARA"/"Correlation" in the
+	// Testing tab silently produced a sigma-rule's trend data (or nothing).
 	var estimatedMatches int
 	var lastMatch *time.Time
-
-	if req.RuleType == "sigma" && req.RuleID > 0 {
-		database.DB.QueryRow(`
-			SELECT COUNT(*), MAX(matched_at) FROM sigma_rule_hits
-			WHERE rule_id=$1 AND tenant_id=$2 AND matched_at>=NOW()-($3 * INTERVAL '1 hour')`,
-			req.RuleID, tid, req.Hours).Scan(&estimatedMatches, &lastMatch)
-	} else if req.RuleType == "yara" {
-		database.DB.QueryRow(`
-			SELECT COUNT(*) FROM yara_matches WHERE tenant_id=$1 AND matched_at>=NOW()-($2 * INTERVAL '1 hour')`,
-			tid, req.Hours).Scan(&estimatedMatches)
-	}
-
-	// Build hourly trend for the simulation window
-	hRows, _ := database.DB.Query(`
-		SELECT date_trunc('hour', matched_at), COUNT(*)
-		FROM sigma_rule_hits
-		WHERE rule_id=$1 AND tenant_id=$2 AND matched_at>=NOW()-($3 * INTERVAL '1 hour')
-		GROUP BY 1 ORDER BY 1`, req.RuleID, tid, req.Hours)
 
 	type HourCount struct {
 		Hour  string `json:"hour"`
 		Count int    `json:"count"`
 	}
 	hourly := []HourCount{}
-	if hRows != nil {
-		defer hRows.Close()
-		for hRows.Next() {
-			var h HourCount
-			var t time.Time
-			if hRows.Scan(&t, &h.Count) == nil {
-				h.Hour = t.Format(time.RFC3339)
-				hourly = append(hourly, h)
+
+	switch req.RuleType {
+	case "sigma":
+		if req.RuleID > 0 {
+			database.DB.QueryRow(`
+				SELECT COUNT(*), MAX(matched_at) FROM sigma_rule_hits
+				WHERE rule_id=$1 AND tenant_id=$2 AND matched_at>=NOW()-($3 * INTERVAL '1 hour')`,
+				req.RuleID, tid, req.Hours).Scan(&estimatedMatches, &lastMatch)
+
+			hRows, _ := database.DB.Query(`
+				SELECT date_trunc('hour', matched_at), COUNT(*)
+				FROM sigma_rule_hits
+				WHERE rule_id=$1 AND tenant_id=$2 AND matched_at>=NOW()-($3 * INTERVAL '1 hour')
+				GROUP BY 1 ORDER BY 1`, req.RuleID, tid, req.Hours)
+			if hRows != nil {
+				defer hRows.Close()
+				for hRows.Next() {
+					var h HourCount
+					var t time.Time
+					if hRows.Scan(&t, &h.Count) == nil {
+						h.Hour = t.Format(time.RFC3339)
+						hourly = append(hourly, h)
+					}
+				}
+			}
+		}
+	case "yara":
+		// yara_matches has no per-rule id (only a free-text rule_name), so
+		// this is tenant-wide rather than scoped to one specific rule.
+		database.DB.QueryRow(`
+			SELECT COUNT(*), MAX(created_at) FROM yara_matches
+			WHERE tenant_id=$1 AND created_at>=NOW()-($2 * INTERVAL '1 hour')`,
+			tid, req.Hours).Scan(&estimatedMatches, &lastMatch)
+
+		hRows, _ := database.DB.Query(`
+			SELECT date_trunc('hour', created_at), COUNT(*)
+			FROM yara_matches
+			WHERE tenant_id=$1 AND created_at>=NOW()-($2 * INTERVAL '1 hour')
+			GROUP BY 1 ORDER BY 1`, tid, req.Hours)
+		if hRows != nil {
+			defer hRows.Close()
+			for hRows.Next() {
+				var h HourCount
+				var t time.Time
+				if hRows.Scan(&t, &h.Count) == nil {
+					h.Hour = t.Format(time.RFC3339)
+					hourly = append(hourly, h)
+				}
+			}
+		}
+	case "correlation":
+		if req.RuleID > 0 {
+			database.DB.QueryRow(`
+				SELECT COUNT(*), MAX(matched_at) FROM correlation_matches
+				WHERE rule_id=$1 AND tenant_id=$2 AND matched_at>=NOW()-($3 * INTERVAL '1 hour')`,
+				req.RuleID, tid, req.Hours).Scan(&estimatedMatches, &lastMatch)
+
+			hRows, _ := database.DB.Query(`
+				SELECT date_trunc('hour', matched_at), COUNT(*)
+				FROM correlation_matches
+				WHERE rule_id=$1 AND tenant_id=$2 AND matched_at>=NOW()-($3 * INTERVAL '1 hour')
+				GROUP BY 1 ORDER BY 1`, req.RuleID, tid, req.Hours)
+			if hRows != nil {
+				defer hRows.Close()
+				for hRows.Next() {
+					var h HourCount
+					var t time.Time
+					if hRows.Scan(&t, &h.Count) == nil {
+						h.Hour = t.Format(time.RFC3339)
+						hourly = append(hourly, h)
+					}
+				}
 			}
 		}
 	}

@@ -3,6 +3,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { casesAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Briefcase, CheckSquare, Fingerprint, StickyNote, History, BarChart3, Sparkles,
+  HardDrive, ScrollText, Network, FileText, KeyRound, Image as ImageIcon, Calendar, FolderOpen,
+  Check, AlertTriangle, Zap, Lock, Hourglass, Square, X,
+} from 'lucide-react';
 
 type Tab = 'overview' | 'cases' | 'tasks' | 'evidence' | 'notebook' | 'timeline' | 'analytics' | 'response';
 
@@ -15,6 +21,10 @@ const TAB_LABELS: Record<Tab, string> = {
   timeline:  'Timeline',
   analytics: 'Analytics',
   response:  'Response & AI',
+};
+const TAB_ICONS: Record<Tab, any> = {
+  overview: LayoutDashboard, cases: Briefcase, tasks: CheckSquare, evidence: Fingerprint,
+  notebook: StickyNote, timeline: History, analytics: BarChart3, response: Sparkles,
 };
 
 const SEV_COLOR: Record<string, string> = {
@@ -31,15 +41,20 @@ const STATUS_LABEL: Record<string, string> = {
 const TASK_STATUS_COLOR: Record<string, string> = {
   pending: '#6b7280', in_progress: '#f97316', done: '#22c55e', blocked: '#ef4444',
 };
-const EV_TYPE_ICON: Record<string, string> = {
-  memory_dump: '💾', log: '📋', pcap: '🌐', file: '📄',
-  registry: '🗝', screenshot: '🖼', timeline: '📅',
+const EV_TYPE_ICON: Record<string, any> = {
+  memory_dump: HardDrive, log: ScrollText, pcap: Network, file: FileText,
+  registry: KeyRound, screenshot: ImageIcon, timeline: Calendar,
 };
 const TL_TYPE_COLOR: Record<string, string> = {
   case_created: '#3b82f6', assigned: '#6366f1', evidence_added: '#22c55e',
   ioc_found: '#ef4444', response_action: '#f97316', escalated: '#ef4444',
   approval_requested: '#a855f7', comment: '#6b7280', task_completed: '#22c55e',
 };
+
+function EvidenceIcon({ type, size = 14 }: { type: string; size?: number }) {
+  const Icon = EV_TYPE_ICON[type] || FolderOpen;
+  return <Icon style={{ width: size, height: size }} />;
+}
 
 // ── Overview ──────────────────────────────────────────────────────────────────
 function OverviewTab({ dash }: { dash: any }) {
@@ -56,16 +71,10 @@ function OverviewTab({ dash }: { dash: any }) {
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: '1rem' }}>
-        {cards.map(c => (
-          <div key={c.label} className="g-card" style={{ padding: '1.25rem', borderTop: `3px solid ${c.color}` }}>
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: c.color }}>{c.value}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>{c.label}</div>
-          </div>
-        ))}
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        {cards.map(c => <MetricCard key={c.label} label={c.label} value={c.value} color={c.color} />)}
       </div>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Analyst Workload</div>
+      <SectionCard title="Analyst Workload">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {(dash.analyst_workload || []).map((a: any) => (
             <div key={a.analyst} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -88,7 +97,7 @@ function OverviewTab({ dash }: { dash: any }) {
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '10px', height: '10px', background: '#f97316', borderRadius: '2px', display: 'inline-block' }} /> In Progress</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '2px', display: 'inline-block' }} /> Closed</span>
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -134,21 +143,20 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <select className="g-select" value={filter} onChange={e => setFilter(e.target.value)} style={{ fontSize: '0.82rem' }}>
+        <select className="g-select" value={filter} onChange={e => setFilter(e.target.value)} style={{ fontSize: '0.82rem', width: 170 }}>
           {STATUSES.map(s => <option key={s} value={s}>{s ? STATUS_LABEL[s] : 'All Statuses'}</option>)}
         </select>
-        <select className="g-select" value={sevFilter} onChange={e => setSevFilter(e.target.value)} style={{ fontSize: '0.82rem' }}>
+        <select className="g-select" value={sevFilter} onChange={e => setSevFilter(e.target.value)} style={{ fontSize: '0.82rem', width: 150 }}>
           {SEVS.map(s => <option key={s} value={s}>{s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All Severities'}</option>)}
         </select>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-          <button className="g-btn g-btn-ghost" onClick={() => setShowTemplates(!showTemplates)}>Templates</button>
-          <button className="g-btn g-btn-primary" onClick={() => setShowCreate(!showCreate)}>+ New Case</button>
+          <ActionButton variant="ghost" onClick={() => setShowTemplates(!showTemplates)}>Templates</ActionButton>
+          <ActionButton variant="primary" onClick={() => setShowCreate(!showCreate)}>+ New Case</ActionButton>
         </div>
       </div>
 
       {showTemplates && (
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Case Templates</div>
+        <SectionCard title="Case Templates">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '0.75rem' }}>
             {templates.map((t: any) => (
               <div key={t.id} className="g-card" style={{ padding: '0.85rem', cursor: 'pointer', border: '1px solid var(--border)' }} onClick={() => applyTemplate(t)}>
@@ -156,14 +164,16 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginBottom: '0.5rem' }}>{t.description}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                   {t.tasks?.slice(0, 3).map((task: string) => (
-                    <span key={task} style={{ fontSize: '0.68rem', color: 'var(--text-3)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '3px' }}>✓ {task}</span>
+                    <span key={task} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.68rem', color: 'var(--text-3)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '3px' }}>
+                      <Check style={{ width: 9, height: 9 }} /> {task}
+                    </span>
                   ))}
                   {t.tasks?.length > 3 && <span style={{ fontSize: '0.68rem', color: 'var(--text-3)' }}>+{t.tasks.length - 3} more</span>}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       )}
 
       {showCreate && (
@@ -189,55 +199,49 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="g-btn g-btn-primary" onClick={create} disabled={creating || !form.title}>{creating ? 'Creating…' : 'Create Case'}</button>
-            <button className="g-btn g-btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={create} disabled={creating || !form.title}>{creating ? 'Creating…' : 'Create Case'}</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowCreate(false)}>Cancel</ActionButton>
           </div>
         </div>
       )}
 
-      <div className="g-card" style={{ padding: 0, overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>
-              <th className="g-tr">Case ID</th><th className="g-tr">Title</th>
-              <th className="g-tr">Severity</th><th className="g-tr">Status</th>
-              <th className="g-tr">Owner</th><th className="g-tr">SLA</th>
-              <th className="g-tr">Due</th><th className="g-tr">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cases.map((c: any) => (
-              <tr key={c.id} onClick={() => onSelect(c)} style={{ cursor: 'pointer', background: selectedId === c.id ? 'rgba(99,102,241,0.1)' : undefined }}>
-                <td className="g-tr"><code style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>{c.case_id}</code></td>
-                <td className="g-tr" style={{ maxWidth: '280px' }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
-                  {c.tags && <div style={{ display: 'flex', gap: '0.25rem', marginTop: '2px', flexWrap: 'wrap' }}>
-                    {c.tags.split(',').slice(0, 3).map((t: string) => (
-                      <span key={t} style={{ fontSize: '0.65rem', background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 4px', borderRadius: '2px' }}>{t.trim()}</span>
-                    ))}
-                  </div>}
-                </td>
-                <td className="g-tr">
-                  <span style={{ background: `${SEV_COLOR[c.severity]}18`, color: SEV_COLOR[c.severity], padding: '2px 7px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>{c.severity.toUpperCase()}</span>
-                </td>
-                <td className="g-tr">
-                  <span style={{ background: `${STATUS_COLOR[c.status]}18`, color: STATUS_COLOR[c.status], padding: '2px 7px', borderRadius: '3px', fontSize: '0.75rem' }}>{STATUS_LABEL[c.status] || c.status}</span>
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{c.owner}</td>
-                <td className="g-tr">
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: c.sla_status === 'breach' ? '#ef4444' : c.sla_status === 'warning' ? '#eab308' : '#22c55e' }}>
-                    {c.sla_status === 'breach' ? '⚠ BREACH' : c.sla_status === 'warning' ? '⚡ Warning' : '✓ OK'}
-                  </span>
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', color: c.due_date && new Date(c.due_date) < new Date() ? '#ef4444' : 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                  {c.due_date ? timeAgo(c.due_date) : '—'}
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(c.updated_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        onRowClick={c => onSelect(c)}
+        rowStyle={c => selectedId === c.id ? { background: 'rgba(99,102,241,0.1)' } : undefined}
+        rowKey={(c: any) => c.id}
+        rows={cases}
+        columns={[
+          { key: 'case_id', header: 'Case ID', render: (c: any) => <code style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>{c.case_id}</code> },
+          { key: 'title', header: 'Title', render: (c: any) => (
+            <div style={{ maxWidth: '280px' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
+              {c.tags && <div style={{ display: 'flex', gap: '0.25rem', marginTop: '2px', flexWrap: 'wrap' }}>
+                {c.tags.split(',').slice(0, 3).map((t: string) => (
+                  <span key={t} style={{ fontSize: '0.65rem', background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 4px', borderRadius: '2px' }}>{t.trim()}</span>
+                ))}
+              </div>}
+            </div>
+          ) },
+          { key: 'severity', header: 'Severity', render: (c: any) => (
+            <span style={{ background: `${SEV_COLOR[c.severity]}18`, color: SEV_COLOR[c.severity], padding: '2px 7px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>{c.severity.toUpperCase()}</span>
+          ) },
+          { key: 'status', header: 'Status', render: (c: any) => (
+            <span style={{ background: `${STATUS_COLOR[c.status]}18`, color: STATUS_COLOR[c.status], padding: '2px 7px', borderRadius: '3px', fontSize: '0.75rem' }}>{STATUS_LABEL[c.status] || c.status}</span>
+          ) },
+          { key: 'owner', header: 'Owner', render: (c: any) => <span style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>{c.owner}</span> },
+          { key: 'sla', header: 'SLA', render: (c: any) => (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: c.sla_status === 'breach' ? '#ef4444' : c.sla_status === 'warning' ? '#eab308' : '#22c55e' }}>
+              {c.sla_status === 'breach' ? <><AlertTriangle style={{ width: 11, height: 11 }} /> BREACH</> : c.sla_status === 'warning' ? <><Zap style={{ width: 11, height: 11 }} /> Warning</> : <><Check style={{ width: 11, height: 11 }} /> OK</>}
+            </span>
+          ) },
+          { key: 'due', header: 'Due', render: (c: any) => (
+            <span style={{ fontSize: '0.78rem', color: c.due_date && new Date(c.due_date) < new Date() ? '#ef4444' : 'var(--text-3)', whiteSpace: 'nowrap' }}>
+              {c.due_date ? timeAgo(c.due_date) : '—'}
+            </span>
+          ) },
+          { key: 'updated', header: 'Updated', render: (c: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(c.updated_at)}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -289,7 +293,7 @@ function TasksTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: str
           <div style={{ fontWeight: 600 }}>{caseTitle}</div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{done}/{tasks.length} tasks completed</div>
         </div>
-        <button className="g-btn g-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Add Task</button>
+        <ActionButton variant="primary" onClick={() => setShowAdd(!showAdd)}>+ Add Task</ActionButton>
       </div>
 
       {tasks.length > 0 && (
@@ -302,12 +306,12 @@ function TasksTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: str
         <div className="g-card" style={{ padding: '1rem', border: '1px solid rgba(99,102,241,0.3)' }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <input className="g-input" style={{ flex: 2, minWidth: '180px' }} placeholder="Task title *" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addTask()} />
-            <select className="g-select" value={newTask.priority} onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))}>
+            <select className="g-select" value={newTask.priority} onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))} style={{ flex: 1, minWidth: 0 }}>
               {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             <input className="g-input" placeholder="Assignee" value={newTask.assignee} onChange={e => setNewTask(f => ({ ...f, assignee: e.target.value }))} />
-            <button className="g-btn g-btn-primary" onClick={addTask} disabled={!newTask.title}>Add</button>
-            <button className="g-btn g-btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={addTask} disabled={!newTask.title}>Add</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowAdd(false)}>Cancel</ActionButton>
           </div>
         </div>
       )}
@@ -327,7 +331,7 @@ function TasksTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: str
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem',
                   }}
                 >
-                  {t.status === 'done' ? '✓' : ''}
+                  {t.status === 'done' && <Check style={{ width: 12, height: 12 }} />}
                 </button>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
@@ -342,13 +346,17 @@ function TasksTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: str
                     <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                       {checks.map((item, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--text-3)' }}>
-                          <span style={{ color: t.status === 'done' ? '#22c55e' : 'var(--text-3)' }}>{t.status === 'done' ? '☑' : '☐'}</span>
+                          {t.status === 'done' ? <CheckSquare style={{ width: 11, height: 11, color: '#22c55e' }} /> : <Square style={{ width: 11, height: 11 }} />}
                           {item}
                         </div>
                       ))}
                     </div>
                   )}
-                  {t.notes && <div style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: '#22c55e', fontStyle: 'italic' }}>✓ {t.notes}</div>}
+                  {t.notes && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: '0.4rem', fontSize: '0.78rem', color: '#22c55e', fontStyle: 'italic' }}>
+                      <Check style={{ width: 11, height: 11, flexShrink: 0 }} /> {t.notes}
+                    </div>
+                  )}
                   {t.due_date && <div style={{ marginTop: '0.25rem', fontSize: '0.72rem', color: 'var(--text-3)' }}>Due: {timeAgo(t.due_date)}</div>}
                 </div>
               </div>
@@ -397,7 +405,7 @@ function EvidenceTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
           <div style={{ fontWeight: 600 }}>{caseTitle}</div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{items.length} evidence items · Chain of Custody Tracking</div>
         </div>
-        <button className="g-btn g-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Add Evidence</button>
+        <ActionButton variant="primary" onClick={() => setShowAdd(!showAdd)}>+ Add Evidence</ActionButton>
       </div>
 
       {showAdd && (
@@ -418,8 +426,8 @@ function EvidenceTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <button className="g-btn g-btn-primary" onClick={add} disabled={!form.title}>Add Evidence</button>
-            <button className="g-btn g-btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={add} disabled={!form.title}>Add Evidence</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowAdd(false)}>Cancel</ActionButton>
           </div>
         </div>
       )}
@@ -430,13 +438,13 @@ function EvidenceTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
             <div key={e.id} className="g-card" style={{ padding: '1rem', cursor: 'pointer', border: `1px solid ${selected?.id === e.id ? 'var(--accent)' : 'transparent'}` }} onClick={() => setSelected(selected?.id === e.id ? null : e)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.1rem' }}>{EV_TYPE_ICON[e.evidence_type] || '📁'}</span>
+                  <EvidenceIcon type={e.evidence_type} size={16} />
                   <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>{e.title}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.75rem' }}>
                   <code style={{ color: '#818cf8' }}>{e.evidence_id}</code>
                   {e.verified
-                    ? <span style={{ color: '#22c55e', fontWeight: 600 }}>✓ Verified</span>
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e', fontWeight: 600 }}><Check style={{ width: 11, height: 11 }} /> Verified</span>
                     : <span style={{ color: '#eab308' }}>Pending</span>}
                 </div>
               </div>
@@ -466,7 +474,9 @@ function EvidenceTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
             </div>
             <div style={{ marginBottom: '0.75rem' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginBottom: '0.25rem' }}>Verification</div>
-              <span style={{ color: selected.verified ? '#22c55e' : '#eab308', fontWeight: 600 }}>{selected.verified ? '✓ Hash Verified' : '⏳ Pending Verification'}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: selected.verified ? '#22c55e' : '#eab308', fontWeight: 600 }}>
+                {selected.verified ? <><Check style={{ width: 12, height: 12 }} /> Hash Verified</> : <><Hourglass style={{ width: 12, height: 12 }} /> Pending Verification</>}
+              </span>
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-3)', marginBottom: '0.5rem' }}>Custody Log</div>
@@ -541,9 +551,9 @@ function NotebookTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
               </button>
             ))}
           </div>
-          <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !draft.trim()}>
+          <ActionButton variant="primary" onClick={save} disabled={saving || !draft.trim()}>
             {saving ? 'Saving…' : 'Save Note'}
-          </button>
+          </ActionButton>
         </div>
       </div>
 
@@ -632,8 +642,7 @@ function AnalyticsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '1rem' }}>Case Volume Trend (8d)</div>
+      <SectionCard title="Case Volume Trend (8d)">
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
           {data.case_trend?.map((p: any, i: number) => (
             <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
@@ -642,11 +651,10 @@ function AnalyticsTab() {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Cases by Severity</div>
+        <SectionCard title="Cases by Severity">
           {data.by_severity?.map((s: any) => (
             <div key={s.severity} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
               <span style={{ minWidth: '70px', fontSize: '0.82rem', color: SEV_COLOR[s.severity] }}>{s.severity}</span>
@@ -656,9 +664,8 @@ function AnalyticsTab() {
               <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{s.count}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Cases by Analyst</div>
+        </SectionCard>
+        <SectionCard title="Cases by Analyst">
           {data.by_analyst?.map((a: any) => (
             <div key={a.analyst} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
               <span style={{ minWidth: '80px', fontSize: '0.82rem', fontFamily: 'monospace' }}>{a.analyst}</span>
@@ -668,12 +675,11 @@ function AnalyticsTab() {
               <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{a.count}</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Avg Resolution by Severity</div>
+        <SectionCard title="Avg Resolution by Severity">
           {data.avg_resolution_hours?.map((r: any) => (
             <div key={r.severity} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
               <span style={{ minWidth: '70px', fontSize: '0.82rem', color: SEV_COLOR[r.severity] }}>{r.severity}</span>
@@ -683,11 +689,8 @@ function AnalyticsTab() {
               <span style={{ fontSize: '0.8rem', minWidth: '30px', textAlign: 'right', color: 'var(--text-3)' }}>{r.hours}h</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <span style={{ fontWeight: 600 }}>SLA Compliance</span>
-          </div>
+        </SectionCard>
+        <SectionCard title="SLA Compliance">
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
             <div style={{ fontSize: '3rem', fontWeight: 700, color: data.sla_compliance >= 80 ? '#22c55e' : data.sla_compliance >= 60 ? '#eab308' : '#ef4444' }}>
               {data.sla_compliance}%
@@ -700,7 +703,7 @@ function AnalyticsTab() {
           <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--text-3)', textAlign: 'center' }}>
             Recurring cases: <strong style={{ color: '#f97316' }}>{data.recurring_case_count}</strong>
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -766,13 +769,11 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* AI Investigation Assistant */}
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>AI Investigation Assistant</div>
+      <SectionCard title="AI Investigation Assistant">
         {!selectedCase && <div style={{ fontSize: '0.82rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Select a case from the <strong>Cases</strong> tab for case-specific analysis.</div>}
         <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
           {AI_MODES.map(m => (
-            <button key={m.id} className={`g-btn ${aiMode === m.id ? 'g-btn-primary' : 'g-btn-ghost'}`}
-              style={{ fontSize: '0.8rem' }} onClick={() => setAiMode(m.id)}>{m.label}</button>
+            <ActionButton key={m.id} variant={aiMode === m.id ? 'primary' : 'ghost'} onClick={() => setAiMode(m.id)} style={{ fontSize: '0.8rem' }}>{m.label}</ActionButton>
           ))}
         </div>
         {aiMode === 'ask' && (
@@ -781,9 +782,9 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
             value={askQuery} onChange={e => setAskQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') runAI(); }} />
         )}
-        <button className="g-btn g-btn-primary" onClick={runAI} disabled={aiLoading || (aiMode === 'ask' && !askQuery.trim())}>
+        <ActionButton variant="primary" icon={Sparkles} onClick={runAI} disabled={aiLoading || (aiMode === 'ask' && !askQuery.trim())}>
           {aiLoading ? 'Analyzing…' : 'Analyze'}
-        </button>
+        </ActionButton>
 
         {aiResult && (
           <div style={{ marginTop: '1rem', background: 'rgba(99,102,241,0.07)', padding: '1rem', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.2)' }}>
@@ -814,7 +815,9 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
               <div style={{ marginBottom: '0.75rem' }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-3)', marginBottom: '0.35rem' }}>Missing Evidence</div>
                 {aiResult.missing_evidence.map((e: string, i: number) => (
-                  <div key={i} style={{ fontSize: '0.8rem', color: '#eab308', paddingLeft: '0.5rem', borderLeft: '2px solid #eab308', marginBottom: '0.2rem' }}>⚠ {e}</div>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', color: '#eab308', paddingLeft: '0.5rem', borderLeft: '2px solid #eab308', marginBottom: '0.2rem' }}>
+                    <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} /> {e}
+                  </div>
                 ))}
               </div>
             )}
@@ -844,23 +847,24 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
 
       {/* Report Generator */}
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <span style={{ fontWeight: 600 }}>Report Generator</span>
+      <SectionCard
+        title="Report Generator"
+        actions={
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <select className="g-select" value={reportType} onChange={e => setReportType(e.target.value)} style={{ fontSize: '0.82rem' }}>
+            <select className="g-select" value={reportType} onChange={e => setReportType(e.target.value)} style={{ fontSize: '0.82rem', width: 200 }}>
               {['executive', 'technical', 'incident', 'dfir', 'compliance', 'lessons_learned'].map(t => (
                 <option key={t} value={t}>{t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
               ))}
             </select>
-            <button className="g-btn g-btn-primary" onClick={genReport} disabled={reportLoading}>
+            <ActionButton variant="primary" onClick={genReport} disabled={reportLoading}>
               {reportLoading ? 'Generating…' : 'Generate'}
-            </button>
+            </ActionButton>
           </div>
-        </div>
+        }
+      >
         {report && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -904,13 +908,10 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
 
       {/* Collaboration / Comments */}
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>
-          Collaboration {selectedCase ? `— ${selectedCase.case_id}` : ''}
-        </div>
+      <SectionCard title={`Collaboration${selectedCase ? ` — ${selectedCase.case_id}` : ''}`}>
         {!selectedCase
           ? <div style={{ fontSize: '0.82rem', color: 'var(--text-3)' }}>Select a case to view and add comments.</div>
           : (
@@ -923,7 +924,11 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
                       <span style={{ color: 'var(--text-3)' }}>{timeAgo(cm.created_at)}</span>
                     </div>
                     <div style={{ fontSize: '0.83rem', color: 'var(--text-2)', lineHeight: 1.5 }}>{cm.content}</div>
-                    {cm.is_internal && <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginTop: '0.25rem', display: 'block' }}>🔒 Internal</span>}
+                    {cm.is_internal && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.68rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>
+                        <Lock style={{ width: 9, height: 9 }} /> Internal
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -931,11 +936,11 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
                 <textarea className="g-input" style={{ flex: 1, height: '60px', resize: 'none' }}
                   placeholder="Add an internal comment…"
                   value={comment} onChange={e => setComment(e.target.value)} />
-                <button className="g-btn g-btn-primary" onClick={addComment} disabled={!comment.trim()} style={{ alignSelf: 'flex-end' }}>Post</button>
+                <ActionButton variant="primary" onClick={addComment} disabled={!comment.trim()} style={{ alignSelf: 'flex-end' }}>Post</ActionButton>
               </div>
             </>
           )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -960,37 +965,25 @@ export default function CasesPage() {
   const tabs = Object.keys(TAB_LABELS) as Tab[];
 
   return (
-    <RootLayout>
-      <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+    <RootLayout title="Case Management"
+      subtitle="Incident investigation, evidence tracking, chain of custody, and DFIR reporting"
+      actions={selectedCase ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Case Management</h1>
-            <p style={{ color: 'var(--text-3)', margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
-              Incident investigation, evidence tracking, chain of custody, and DFIR reporting
-            </p>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Active Case</div>
+            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent)' }}>{selectedCase.case_id}</div>
           </div>
-          {selectedCase && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Active Case</div>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent)' }}>{selectedCase.case_id}</div>
-              </div>
-              <span style={{ background: `${SEV_COLOR[selectedCase.severity]}18`, color: SEV_COLOR[selectedCase.severity], padding: '2px 7px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>{selectedCase.severity.toUpperCase()}</span>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: '0.75rem', padding: '3px 8px' }} onClick={() => setSelectedCase(null)}>✕</button>
-            </div>
-          )}
+          <span style={{ background: `${SEV_COLOR[selectedCase.severity]}18`, color: SEV_COLOR[selectedCase.severity], padding: '2px 7px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>{selectedCase.severity.toUpperCase()}</span>
+          <ActionButton variant="ghost" icon={X} onClick={() => setSelectedCase(null)} style={{ padding: '3px 6px' }} />
         </div>
-
-        <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {tabs.map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              padding: '0.6rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap',
-              color: tab === t ? 'var(--accent)' : 'var(--text-3)',
-              borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}`,
-              marginBottom: '-1px', transition: 'all 0.15s',
-            }}>{TAB_LABELS[t]}</button>
-          ))}
+      ) : undefined}>
+      <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+          <TabBar
+            tabs={tabs.map(t => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t] }))}
+            active={tab}
+            onChange={t => setTab(t as Tab)}
+          />
         </div>
 
         <div style={{ display: loaded.current['overview'] && tab === 'overview' ? 'block' : 'none' }}>

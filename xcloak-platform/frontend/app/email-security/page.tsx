@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { emailSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, Search, Shield, Trash2, User, XCircle, Zap } from '@/lib/icon-stubs';
+import { MetricCard, SectionCard, DataTable, TabBar, ActionButton } from '@/components/design-system';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from 'lucide-react';
 
 const TABS = [
   { id: 'dashboard',    label: 'Dashboard',    icon: Activity },
@@ -37,19 +38,7 @@ const AUTH_COLOR: Record<string, React.CSSProperties> = {
   none: { color: 'var(--text-3)' },
 };
 
-function StatCard({ label, value, sub, color, icon: Icon }: {
-  label: string; value: number | string; sub?: string; color?: React.CSSProperties; icon?: any;
-}) {
-  return (
-    <div className="g-card p-4 space-y-1">
-      <div className="flex items-center gap-1.5 text-xs text-[var(--text-3)]">
-        {Icon && <Icon className="h-3.5 w-3.5" />}{label}
-      </div>
-      <div className="text-2xl font-bold" style={color ?? { color: 'var(--text-1)' }}>{value}</div>
-      {sub && <div className="text-xs text-[var(--text-3)]">{sub}</div>}
-    </div>
-  );
-}
+const SELECTED_ROW_STYLE: React.CSSProperties = { background: 'var(--accent-glow)' };
 
 function ThreatBadge({ type }: { type: string }) {
   return (
@@ -73,50 +62,51 @@ function DashboardTab() {
 
   if (loading) return <div className="text-[var(--text-3)] text-sm p-4">Loading...</div>;
 
-  const scoreColor: React.CSSProperties = data?.email_security_score > 85 ? { color: 'var(--green)' } : data?.email_security_score > 70 ? { color: 'var(--yellow)' } : { color: 'var(--red)' };
+  const scoreColor: string = data?.email_security_score > 85 ? 'var(--green)' : data?.email_security_score > 70 ? 'var(--yellow)' : 'var(--red)';
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="Processed"      value={(data?.emails_processed ?? 0).toLocaleString()} icon={Mail} />
-        <StatCard label="Delivered"      value={(data?.emails_delivered ?? 0).toLocaleString()} color={{ color: 'var(--green)' }} icon={CheckCircle} />
-        <StatCard label="Blocked"        value={(data?.emails_blocked ?? 0).toLocaleString()}   color={{ color: 'var(--red)' }} icon={XCircle} />
-        <StatCard label="Security Score" value={`${data?.email_security_score ?? 0}%`}          color={scoreColor} />
-        <StatCard label="High-Risk Users" value={data?.high_risk_users ?? 0}                    color={{ color: 'var(--orange)' }} icon={User} />
+        <MetricCard label="Processed"      value={(data?.emails_processed ?? 0).toLocaleString()} icon={Mail} />
+        <MetricCard label="Delivered"      value={(data?.emails_delivered ?? 0).toLocaleString()} color="var(--green)" icon={CheckCircle} />
+        <MetricCard label="Blocked"        value={(data?.emails_blocked ?? 0).toLocaleString()}   color="var(--red)" icon={XCircle} />
+        <MetricCard label="Security Score" value={`${data?.email_security_score ?? 0}%`}          color={scoreColor} />
+        <MetricCard label="High-Risk Users" value={data?.high_risk_users ?? 0}                    color="var(--orange)" icon={User} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Phishing Attempts"    value={data?.phishing_attempts ?? 0}   color={{ color: 'var(--red)' }} icon={AlertCircle} />
-        <StatCard label="Malware Attachments"  value={data?.malware_attachments ?? 0} color={{ color: 'var(--blue)' }} icon={Paperclip} />
-        <StatCard label="BEC Attempts"         value={data?.bec_attempts ?? 0}        color={{ color: 'var(--orange)' }} icon={DollarSign} />
-        <StatCard label="URL Clicks"           value={data?.url_clicks ?? 0}          color={data?.url_clicks > 0 ? { color: 'var(--yellow)' } : { color: 'var(--green)' }} icon={Link2} />
+        <MetricCard label="Phishing Attempts"    value={data?.phishing_attempts ?? 0}   color="var(--red)" icon={AlertCircle} />
+        <MetricCard label="Malware Attachments"  value={data?.malware_attachments ?? 0} color="var(--blue)" icon={Paperclip} />
+        <MetricCard label="BEC Attempts"         value={data?.bec_attempts ?? 0}        color="var(--orange)" icon={DollarSign} />
+        <MetricCard label="URL Clicks"           value={data?.url_clicks ?? 0}          color={data?.url_clicks > 0 ? 'var(--yellow)' : 'var(--green)'} icon={Link2} />
       </div>
 
       {flow && (
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Mail Flow Pipeline</div>
-          <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
-            {(flow.steps ?? []).map((step: any, i: number) => (
-              <div key={i} className="flex flex-col items-center gap-1 relative">
-                <div className="g-card px-2 py-2 text-center w-full space-y-0.5">
-                  <div className="text-[10px] text-[var(--text-3)] font-medium">{step.label}</div>
-                  <div className="text-sm font-bold text-[var(--text-1)]">{(step.count ?? 0).toLocaleString()}</div>
-                  {step.dropped > 0 && <div className="text-[9px]" style={{ color: 'var(--red)' }}>-{step.dropped.toLocaleString()} blocked</div>}
-                  {step.quarantined > 0 && <div className="text-[9px]" style={{ color: 'var(--yellow)' }}>-{step.quarantined.toLocaleString()} quarantined</div>}
-                </div>
-                {i < (flow.steps?.length ?? 0) - 1 && (
-                  <div className="hidden md:flex absolute right-[-8px] top-1/2 -translate-y-1/2 text-[var(--text-3)] z-10">
-                    <ChevronRight className="h-3.5 w-3.5" />
+        <SectionCard title="Mail Flow Pipeline">
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+              {(flow.steps ?? []).map((step: any, i: number) => (
+                <div key={i} className="flex flex-col items-center gap-1 relative">
+                  <div className="g-card px-2 py-2 text-center w-full space-y-0.5">
+                    <div className="text-[10px] text-[var(--text-3)] font-medium">{step.label}</div>
+                    <div className="text-sm font-bold text-[var(--text-1)]">{(step.count ?? 0).toLocaleString()}</div>
+                    {step.dropped > 0 && <div className="text-[9px]" style={{ color: 'var(--red)' }}>-{step.dropped.toLocaleString()} blocked</div>}
+                    {step.quarantined > 0 && <div className="text-[9px]" style={{ color: 'var(--yellow)' }}>-{step.quarantined.toLocaleString()} quarantined</div>}
                   </div>
-                )}
-              </div>
-            ))}
+                  {i < (flow.steps?.length ?? 0) - 1 && (
+                    <div className="hidden md:flex absolute right-[-8px] top-1/2 -translate-y-1/2 text-[var(--text-3)] z-10">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4 text-xs pt-1 border-t border-[var(--border)]">
+              <span className="text-[var(--text-3)]">Total: <span className="text-[var(--text-1)] font-bold">{(flow.total ?? 0).toLocaleString()}</span></span>
+              <span className="text-[var(--text-3)]">Blocked: <span className="font-bold" style={{ color: 'var(--red)' }}>{(flow.blocked ?? 0).toLocaleString()}</span></span>
+              <span className="text-[var(--text-3)]">Quarantined: <span className="font-bold" style={{ color: 'var(--yellow)' }}>{(flow.quarantined ?? 0).toLocaleString()}</span></span>
+            </div>
           </div>
-          <div className="flex gap-4 text-xs pt-1 border-t border-[var(--border)]">
-            <span className="text-[var(--text-3)]">Total: <span className="text-[var(--text-1)] font-bold">{(flow.total ?? 0).toLocaleString()}</span></span>
-            <span className="text-[var(--text-3)]">Blocked: <span className="font-bold" style={{ color: 'var(--red)' }}>{(flow.blocked ?? 0).toLocaleString()}</span></span>
-            <span className="text-[var(--text-3)]">Quarantined: <span className="font-bold" style={{ color: 'var(--yellow)' }}>{(flow.quarantined ?? 0).toLocaleString()}</span></span>
-          </div>
-        </div>
+        </SectionCard>
       )}
     </div>
   );
@@ -172,45 +162,37 @@ function InboxTab() {
         ))}
       </div>
       <div className="flex gap-2">
-        <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={reload}><Search className="h-3.5 w-3.5" />Search</button>
-        <button className="g-btn text-xs" onClick={() => { setSearch({ sender: '', recipient: '', subject: '', status: '', threat_type: '' }); setTimeout(reload, 0); }} title="Reset filters">↻</button>
+        <ActionButton variant="primary" icon={Search} onClick={reload} className="text-xs">Search</ActionButton>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={() => { setSearch({ sender: '', recipient: '', subject: '', status: '', threat_type: '' }); setTimeout(reload, 0); }} className="text-xs" title="Reset filters" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-            <div className="g-card overflow-hidden">
-              <table className="g-table w-full">
-                <thead className="g-thead"><tr>
-                  <th>From</th><th>Subject</th><th>To</th><th>Threat</th>
-                  <th>Score</th><th>Attach</th><th>URLs</th><th>Status</th><th>Time</th>
-                </tr></thead>
-                <tbody>
-                  {messages.map((m: any) => (
-                    <tr key={m.id} className={`g-tr cursor-pointer ${selected?.id === m.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === m.id ? null : m)}>
-                      <td><div className="text-xs text-[var(--text-1)] truncate max-w-[140px]">{m.sender}</div></td>
-                      <td><div className="text-xs text-[var(--text-2)] truncate max-w-[180px]">{m.subject}</div></td>
-                      <td><div className="text-xs text-[var(--text-3)] truncate max-w-[120px]">{m.recipient}</div></td>
-                      <td>{m.threat_type ? <ThreatBadge type={m.threat_type} /> : <span className="text-[10px] text-[var(--text-3)]">—</span>}</td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          <div className="w-8 h-1.5 rounded-full bg-[var(--border)]">
-                            <div className="h-full rounded-full" style={{ width: `${m.threat_score}%`, background: m.threat_score > 80 ? 'var(--red)' : m.threat_score > 50 ? 'var(--orange)' : 'var(--green)' }} />
-                          </div>
-                          <span className="text-xs font-bold" style={{ color: m.threat_score > 80 ? 'var(--red)' : m.threat_score > 50 ? 'var(--orange)' : 'var(--green)' }}>{m.threat_score}</span>
-                        </div>
-                      </td>
-                      <td>{m.has_attachment ? <Paperclip className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                      <td><span className="text-xs" style={{ color: m.url_count > 0 ? 'var(--blue)' : 'var(--text-3)' }}>{m.url_count}</span></td>
-                      <td><span className="text-xs font-medium" style={STATUS_COLOR[m.status] ?? { color: 'var(--text-2)' }}>{m.status}</span></td>
-                      <td><span className="text-xs text-[var(--text-3)]">{timeAgo(m.created_at)}</span></td>
-                    </tr>
-                  ))}
-                  {messages.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-8">No messages</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable<any>
+            loading={loading}
+            rows={messages}
+            rowKey={(m: any) => m.id}
+            onRowClick={m => setSelected(selected?.id === m.id ? null : m)}
+            rowStyle={(m: any) => selected?.id === m.id ? SELECTED_ROW_STYLE : undefined}
+            columns={[
+              { key: 'sender', header: 'From', render: (m: any) => <div className="text-xs text-[var(--text-1)] truncate max-w-[140px]">{m.sender}</div> },
+              { key: 'subject', header: 'Subject', render: (m: any) => <div className="text-xs text-[var(--text-2)] truncate max-w-[180px]">{m.subject}</div> },
+              { key: 'recipient', header: 'To', render: (m: any) => <div className="text-xs text-[var(--text-3)] truncate max-w-[120px]">{m.recipient}</div> },
+              { key: 'threat', header: 'Threat', render: (m: any) => m.threat_type ? <ThreatBadge type={m.threat_type} /> : <span className="text-[10px] text-[var(--text-3)]">—</span> },
+              { key: 'score', header: 'Score', render: (m: any) => (
+                <div className="flex items-center gap-1">
+                  <div className="w-8 h-1.5 rounded-full bg-[var(--border)]">
+                    <div className="h-full rounded-full" style={{ width: `${m.threat_score}%`, background: m.threat_score > 80 ? 'var(--red)' : m.threat_score > 50 ? 'var(--orange)' : 'var(--green)' }} />
+                  </div>
+                  <span className="text-xs font-bold" style={{ color: m.threat_score > 80 ? 'var(--red)' : m.threat_score > 50 ? 'var(--orange)' : 'var(--green)' }}>{m.threat_score}</span>
+                </div>
+              ) },
+              { key: 'attach', header: 'Attach', render: (m: any) => m.has_attachment ? <Paperclip className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span> },
+              { key: 'urls', header: 'URLs', render: (m: any) => <span className="text-xs" style={{ color: m.url_count > 0 ? 'var(--blue)' : 'var(--text-3)' }}>{m.url_count}</span> },
+              { key: 'status', header: 'Status', render: (m: any) => <span className="text-xs font-medium" style={STATUS_COLOR[m.status] ?? { color: 'var(--text-2)' }}>{m.status}</span> },
+              { key: 'time', header: 'Time', render: (m: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(m.created_at)}</span> },
+            ]}
+          />
         </div>
 
         <div>
@@ -238,13 +220,13 @@ function InboxTab() {
               <div className="space-y-1.5 pt-2 border-t border-[var(--border)]">
                 <div className="text-xs text-[var(--text-3)] font-medium">Response Actions</div>
                 {(['quarantine_email', 'delete_email', 'block_sender', 'block_domain', 'create_incident'] as string[]).map(action => (
-                  <button key={action} className="g-btn text-xs w-full text-left flex items-center gap-1.5" onClick={() => doRespond(action)} disabled={acting}>
-                    <Zap className="h-3 w-3" />{action.replace(/_/g, ' ')}
-                  </button>
+                  <ActionButton key={action} variant="ghost" icon={Zap} className="text-xs w-full justify-start" onClick={() => doRespond(action)} disabled={acting}>
+                    {action.replace(/_/g, ' ')}
+                  </ActionButton>
                 ))}
-                <button className="g-btn text-xs w-full text-left flex items-center gap-1.5" style={{ color: 'var(--blue)' }} onClick={() => {}}>
-                  <Search className="h-3 w-3" />Pivot to SIEM
-                </button>
+                <ActionButton variant="ghost" icon={Search} className="text-xs w-full justify-start" style={{ color: 'var(--blue)' }} onClick={() => {}}>
+                  Pivot to SIEM
+                </ActionButton>
               </div>
             </div>
           ) : (
@@ -290,80 +272,65 @@ function ThreatsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         {(['all', 'phishing', 'bec', 'attachments', 'urls'] as const).map(s => (
-          <button key={s} onClick={() => setSubTab(s)}
-            className={`text-xs px-3 py-1.5 rounded border transition-colors capitalize ${subTab === s ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/5' : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)]'}`}>
+          <ActionButton key={s} variant={subTab === s ? 'primary' : 'ghost'} onClick={() => setSubTab(s)} className="text-xs capitalize">
             {s === 'all' ? `All Threats (${threats.length})` : s === 'attachments' ? `Attachments (${attachments.length})` : s === 'urls' ? `URLs (${urls.length})` : s}
-          </button>
+          </ActionButton>
         ))}
-        <button className="g-btn text-xs ml-auto" onClick={reload} title="Refresh">↻</button>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={reload} className="text-xs ml-auto" title="Refresh" />
       </div>
 
       {(subTab === 'phishing' || subTab === 'bec') && (
-        <div className="g-card p-3">
-          <div className="text-xs text-[var(--text-3)] font-medium mb-2">{subTab === 'phishing' ? 'Phishing' : 'BEC'} Detection Capabilities</div>
+        <SectionCard title={`${subTab === 'phishing' ? 'Phishing' : 'BEC'} Detection Capabilities`}>
           <div className="flex flex-wrap gap-1.5">
             {(subTab === 'phishing' ? PHISHING_TYPES : BEC_TYPES).map(t => (
               <span key={t} className="text-[10px] px-2 py-0.5 rounded bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--text-2)]">{t}</span>
             ))}
           </div>
-        </div>
+        </SectionCard>
       )}
 
       {(subTab === 'all' || subTab === 'phishing' || subTab === 'bec') && (
-        loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-          <div className="g-card overflow-hidden">
-            <table className="g-table w-full">
-              <thead className="g-thead"><tr>
-                <th>Sender</th><th>Subject</th><th>Recipient</th><th>Type</th>
-                <th>Score</th><th>Attach</th><th>URLs</th><th>Status</th><th>Time</th>
-              </tr></thead>
-              <tbody>
-                {threats.map((t: any) => (
-                  <tr key={t.id} className={`g-tr cursor-pointer ${selected?.id === t.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === t.id ? null : t)}>
-                    <td><div className="text-xs text-[var(--text-1)] truncate max-w-[150px]">{t.sender}</div></td>
-                    <td><div className="text-xs text-[var(--text-2)] truncate max-w-[200px]">{t.subject}</div></td>
-                    <td><div className="text-xs text-[var(--text-3)] truncate max-w-[120px]">{t.recipient}</div></td>
-                    <td><ThreatBadge type={t.threat_type} /></td>
-                    <td><span className="text-sm font-bold" style={{ color: t.threat_score > 90 ? 'var(--red)' : t.threat_score > 70 ? 'var(--orange)' : 'var(--yellow)' }}>{t.threat_score}</span></td>
-                    <td>{t.has_attachment ? <Paperclip className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                    <td><span className="text-xs" style={{ color: t.url_count > 0 ? 'var(--blue)' : 'var(--text-3)' }}>{t.url_count}</span></td>
-                    <td><span className="text-xs font-medium" style={STATUS_COLOR[t.status] ?? { color: 'var(--text-2)' }}>{t.status}</span></td>
-                    <td><span className="text-xs text-[var(--text-3)]">{timeAgo(t.created_at)}</span></td>
-                  </tr>
-                ))}
-                {threats.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-8">No threats detected</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        )
+        <DataTable<any>
+          loading={loading}
+          rows={threats}
+          rowKey={(t: any) => t.id}
+          onRowClick={t => setSelected(selected?.id === t.id ? null : t)}
+          rowStyle={(t: any) => selected?.id === t.id ? SELECTED_ROW_STYLE : undefined}
+          columns={[
+            { key: 'sender', header: 'Sender', render: (t: any) => <div className="text-xs text-[var(--text-1)] truncate max-w-[150px]">{t.sender}</div> },
+            { key: 'subject', header: 'Subject', render: (t: any) => <div className="text-xs text-[var(--text-2)] truncate max-w-[200px]">{t.subject}</div> },
+            { key: 'recipient', header: 'Recipient', render: (t: any) => <div className="text-xs text-[var(--text-3)] truncate max-w-[120px]">{t.recipient}</div> },
+            { key: 'type', header: 'Type', render: (t: any) => <ThreatBadge type={t.threat_type} /> },
+            { key: 'score', header: 'Score', render: (t: any) => <span className="text-sm font-bold" style={{ color: t.threat_score > 90 ? 'var(--red)' : t.threat_score > 70 ? 'var(--orange)' : 'var(--yellow)' }}>{t.threat_score}</span> },
+            { key: 'attach', header: 'Attach', render: (t: any) => t.has_attachment ? <Paperclip className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span> },
+            { key: 'urls', header: 'URLs', render: (t: any) => <span className="text-xs" style={{ color: t.url_count > 0 ? 'var(--blue)' : 'var(--text-3)' }}>{t.url_count}</span> },
+            { key: 'status', header: 'Status', render: (t: any) => <span className="text-xs font-medium" style={STATUS_COLOR[t.status] ?? { color: 'var(--text-2)' }}>{t.status}</span> },
+            { key: 'time', header: 'Time', render: (t: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(t.created_at)}</span> },
+          ]}
+        />
       )}
 
       {subTab === 'attachments' && (
         <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>Filename</th><th>Type</th><th>Size</th><th>Verdict</th>
-              <th>Macros</th><th>Embedded</th><th>Sandbox</th><th>SHA256</th><th>Time</th>
-            </tr></thead>
-            <tbody>
-              {attachments.map((a: any) => (
-                <tr key={a.id} className={`g-tr cursor-pointer ${selected?.id === a.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === a.id ? null : a)}>
-                  <td><div className="text-xs font-medium text-[var(--text-1)] truncate max-w-[180px]">{a.filename}</div></td>
-                  <td><span className="text-[10px] font-mono text-[var(--accent)] uppercase">{a.file_type}</span></td>
-                  <td><span className="text-xs text-[var(--text-2)]">{Math.round(a.file_size / 1024)} KB</span></td>
-                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={THREAT_COLOR[a.verdict === 'malicious' ? 'phishing' : a.verdict === 'suspicious' ? 'spam' : 'clean']}>{a.verdict}</span></td>
-                  <td>{a.has_macros ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
-                  <td>{a.has_embedded ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
-                  <td><div className="text-[10px] text-[var(--text-3)] truncate max-w-[200px]">{a.sandbox_result || '—'}</div></td>
-                  <td><span className="text-[10px] font-mono text-[var(--text-3)] truncate max-w-[100px] block">{a.sha256?.slice(0, 16)}...</span></td>
-                  <td><span className="text-xs text-[var(--text-3)]">{timeAgo(a.created_at)}</span></td>
-                </tr>
-              ))}
-              {attachments.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-8">No attachments</td></tr>}
-            </tbody>
-          </table>
+          <DataTable<any>
+            rows={attachments}
+            rowKey={(a: any) => a.id}
+            onRowClick={a => setSelected(selected?.id === a.id ? null : a)}
+            rowStyle={(a: any) => selected?.id === a.id ? SELECTED_ROW_STYLE : undefined}
+            columns={[
+              { key: 'filename', header: 'Filename', render: (a: any) => <div className="text-xs font-medium text-[var(--text-1)] truncate max-w-[180px]">{a.filename}</div> },
+              { key: 'type', header: 'Type', render: (a: any) => <span className="text-[10px] font-mono text-[var(--accent)] uppercase">{a.file_type}</span> },
+              { key: 'size', header: 'Size', render: (a: any) => <span className="text-xs text-[var(--text-2)]">{Math.round(a.file_size / 1024)} KB</span> },
+              { key: 'verdict', header: 'Verdict', render: (a: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={THREAT_COLOR[a.verdict === 'malicious' ? 'phishing' : a.verdict === 'suspicious' ? 'spam' : 'clean']}>{a.verdict}</span> },
+              { key: 'macros', header: 'Macros', render: (a: any) => a.has_macros ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> },
+              { key: 'embedded', header: 'Embedded', render: (a: any) => a.has_embedded ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> },
+              { key: 'sandbox', header: 'Sandbox', render: (a: any) => <div className="text-[10px] text-[var(--text-3)] truncate max-w-[200px]">{a.sandbox_result || '—'}</div> },
+              { key: 'sha256', header: 'SHA256', render: (a: any) => <span className="text-[10px] font-mono text-[var(--text-3)] truncate max-w-[100px] block">{a.sha256?.slice(0, 16)}...</span> },
+              { key: 'time', header: 'Time', render: (a: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(a.created_at)}</span> },
+            ]}
+          />
           {selected && selected.sandbox_result && (
             <div className="p-4 border-t border-[var(--border)] space-y-2">
               <div className="text-xs font-medium text-[var(--text-1)]">Sandbox Analysis — {selected.filename}</div>
@@ -378,31 +345,22 @@ function ThreatsTab() {
       )}
 
       {subTab === 'urls' && (
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>URL</th><th>Domain</th><th>Verdict</th><th>Reputation</th>
-              <th>Redirects</th><th>Shortened</th><th>New Domain</th><th>Login Form</th><th>Clicks</th><th>Time</th>
-            </tr></thead>
-            <tbody>
-              {urls.map((u: any) => (
-                <tr key={u.id} className="g-tr">
-                  <td><div className="text-xs font-mono text-[var(--text-1)] truncate max-w-[200px]">{u.url}</div></td>
-                  <td><span className="text-xs text-[var(--accent)]">{u.domain}</span></td>
-                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={THREAT_COLOR[u.verdict === 'malicious' ? 'phishing' : u.verdict === 'suspicious' ? 'spam' : 'clean']}>{u.verdict}</span></td>
-                  <td><span className="text-xs font-medium" style={{ color: u.reputation === 'malicious' ? 'var(--red)' : u.reputation === 'clean' ? 'var(--green)' : 'var(--yellow)' }}>{u.reputation}</span></td>
-                  <td><span className="text-xs font-bold" style={{ color: u.redirect_count > 1 ? 'var(--orange)' : 'var(--text-2)' }}>{u.redirect_count}</span></td>
-                  <td>{u.is_shortened ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                  <td>{u.is_newly_registered ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                  <td>{u.has_login_form ? <Eye className="h-3.5 w-3.5" style={{ color: 'var(--yellow)' }} /> : <span className="text-[var(--text-3)]">—</span>}</td>
-                  <td><span className="text-xs font-bold" style={{ color: u.click_count > 0 ? 'var(--red)' : 'var(--text-3)' }}>{u.click_count}</span></td>
-                  <td><span className="text-xs text-[var(--text-3)]">{timeAgo(u.created_at)}</span></td>
-                </tr>
-              ))}
-              {urls.length === 0 && <tr><td colSpan={10} className="text-center text-[var(--text-3)] py-8">No URLs</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={urls}
+          rowKey={(u: any) => u.id}
+          columns={[
+            { key: 'url', header: 'URL', render: (u: any) => <div className="text-xs font-mono text-[var(--text-1)] truncate max-w-[200px]">{u.url}</div> },
+            { key: 'domain', header: 'Domain', render: (u: any) => <span className="text-xs text-[var(--accent)]">{u.domain}</span> },
+            { key: 'verdict', header: 'Verdict', render: (u: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={THREAT_COLOR[u.verdict === 'malicious' ? 'phishing' : u.verdict === 'suspicious' ? 'spam' : 'clean']}>{u.verdict}</span> },
+            { key: 'reputation', header: 'Reputation', render: (u: any) => <span className="text-xs font-medium" style={{ color: u.reputation === 'malicious' ? 'var(--red)' : u.reputation === 'clean' ? 'var(--green)' : 'var(--yellow)' }}>{u.reputation}</span> },
+            { key: 'redirects', header: 'Redirects', render: (u: any) => <span className="text-xs font-bold" style={{ color: u.redirect_count > 1 ? 'var(--orange)' : 'var(--text-2)' }}>{u.redirect_count}</span> },
+            { key: 'shortened', header: 'Shortened', render: (u: any) => u.is_shortened ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <span className="text-[var(--text-3)]">—</span> },
+            { key: 'new_domain', header: 'New Domain', render: (u: any) => u.is_newly_registered ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <span className="text-[var(--text-3)]">—</span> },
+            { key: 'login_form', header: 'Login Form', render: (u: any) => u.has_login_form ? <Eye className="h-3.5 w-3.5" style={{ color: 'var(--yellow)' }} /> : <span className="text-[var(--text-3)]">—</span> },
+            { key: 'clicks', header: 'Clicks', render: (u: any) => <span className="text-xs font-bold" style={{ color: u.click_count > 0 ? 'var(--red)' : 'var(--text-3)' }}>{u.click_count}</span> },
+            { key: 'time', header: 'Time', render: (u: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(u.created_at)}</span> },
+          ]}
+        />
       )}
     </div>
   );
@@ -439,39 +397,31 @@ function AuthTab() {
         ))}
       </div>
 
-      <div className="g-card p-4 space-y-3">
-        <div className="text-sm font-medium text-[var(--text-1)]">Per-Domain Authentication Results</div>
-        <div className="overflow-x-auto">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>Domain</th>
-              {PROTOCOLS.map(p => <th key={p}>{p}</th>)}
-              <th>Aligned</th><th>Policy</th>
-            </tr></thead>
-            <tbody>
-              {(data?.domains ?? []).map((d: any) => (
-                <tr key={d.domain} className="g-tr">
-                  <td><span className="text-xs font-mono text-[var(--text-1)]">{d.domain}</span></td>
-                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.spf] ?? { color: 'var(--text-3)' }}>{d.spf}</span></td>
-                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.dkim] ?? { color: 'var(--text-3)' }}>{d.dkim}</span></td>
-                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.dmarc] ?? { color: 'var(--text-3)' }}>{d.dmarc}</span></td>
-                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.arc] ?? { color: 'var(--text-3)' }}>{d.arc}</span></td>
-                  <td><span className="text-xs font-bold" style={AUTH_COLOR[d.bimi] ?? { color: 'var(--text-3)' }}>{d.bimi}</span></td>
-                  <td>{d.aligned ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} />}</td>
-                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={d.policy === 'reject' ? { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' } : d.policy === 'quarantine' ? { background: 'var(--yellow-bg)', border: '1px solid var(--yellow-border)', color: 'var(--yellow)' } : { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>{d.policy}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <SectionCard title="Per-Domain Authentication Results">
+        <div className="space-y-3">
+          <DataTable<any>
+            rows={data?.domains ?? []}
+            rowKey={(d: any) => d.domain}
+            columns={[
+              { key: 'domain', header: 'Domain', render: (d: any) => <span className="text-xs font-mono text-[var(--text-1)]">{d.domain}</span> },
+              { key: 'spf', header: 'SPF', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.spf] ?? { color: 'var(--text-3)' }}>{d.spf}</span> },
+              { key: 'dkim', header: 'DKIM', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.dkim] ?? { color: 'var(--text-3)' }}>{d.dkim}</span> },
+              { key: 'dmarc', header: 'DMARC', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.dmarc] ?? { color: 'var(--text-3)' }}>{d.dmarc}</span> },
+              { key: 'arc', header: 'ARC', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.arc] ?? { color: 'var(--text-3)' }}>{d.arc}</span> },
+              { key: 'bimi', header: 'BIMI', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.bimi] ?? { color: 'var(--text-3)' }}>{d.bimi}</span> },
+              { key: 'aligned', header: 'Aligned', render: (d: any) => d.aligned ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> },
+              { key: 'policy', header: 'Policy', render: (d: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={d.policy === 'reject' ? { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' } : d.policy === 'quarantine' ? { background: 'var(--yellow-bg)', border: '1px solid var(--yellow-border)', color: 'var(--yellow)' } : { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>{d.policy}</span> },
+            ]}
+          />
+          <div className="g-card p-3 text-xs text-[var(--text-2)] space-y-1">
+            <div className="font-medium text-[var(--text-1)]">Recommendations</div>
+            <div>• Set DMARC policy to <span className="font-bold" style={{ color: 'var(--green)' }}>reject</span> on all owned domains to prevent spoofing</div>
+            <div>• 29% of inbound emails fail DMARC — consider enforcing strict alignment</div>
+            <div>• Implement BIMI with VMC to enable brand logo display in supported email clients</div>
+            <div>• Enable ARC sealing on your outbound email gateway</div>
+          </div>
         </div>
-        <div className="g-card p-3 text-xs text-[var(--text-2)] space-y-1">
-          <div className="font-medium text-[var(--text-1)]">Recommendations</div>
-          <div>• Set DMARC policy to <span className="font-bold" style={{ color: 'var(--green)' }}>reject</span> on all owned domains to prevent spoofing</div>
-          <div>• 29% of inbound emails fail DMARC — consider enforcing strict alignment</div>
-          <div>• Implement BIMI with VMC to enable brand logo display in supported email clients</div>
-          <div>• Enable ARC sealing on your outbound email gateway</div>
-        </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -498,31 +448,23 @@ function CampaignsTab() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-            <div className="g-card overflow-hidden">
-              <table className="g-table w-full">
-                <thead className="g-thead"><tr>
-                  <th>Campaign</th><th>Type</th><th>Actor</th><th>Emails</th>
-                  <th>Victims</th><th>Malware</th><th>Status</th><th>Last Seen</th>
-                </tr></thead>
-                <tbody>
-                  {campaigns.map((c: any) => (
-                    <tr key={c.id} className={`g-tr cursor-pointer ${selected?.id === c.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === c.id ? null : c)}>
-                      <td><span className="text-xs font-medium text-[var(--text-1)]">{c.name}</span></td>
-                      <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={CAMPAIGN_COLOR[c.campaign_type] ?? THREAT_COLOR.spam}>{c.campaign_type}</span></td>
-                      <td><span className="text-xs text-[var(--text-2)]">{c.threat_actor || '—'}</span></td>
-                      <td><span className="text-xs font-bold text-[var(--text-1)]">{c.email_count}</span></td>
-                      <td><span className="text-xs font-bold" style={{ color: c.victim_count > 0 ? 'var(--red)' : 'var(--green)' }}>{c.victim_count}</span></td>
-                      <td><span className="text-xs" style={{ color: 'var(--blue)' }}>{c.malware_family || '—'}</span></td>
-                      <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={c.status === 'active' ? { background: 'var(--red-bg)', border: '1px solid var(--red-border)', color: 'var(--red)' } : { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' }}>{c.status}</span></td>
-                      <td><span className="text-xs text-[var(--text-3)]">{timeAgo(c.last_seen)}</span></td>
-                    </tr>
-                  ))}
-                  {campaigns.length === 0 && <tr><td colSpan={8} className="text-center text-[var(--text-3)] py-8">No campaigns detected</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable<any>
+            loading={loading}
+            rows={campaigns}
+            rowKey={(c: any) => c.id}
+            onRowClick={c => setSelected(selected?.id === c.id ? null : c)}
+            rowStyle={(c: any) => selected?.id === c.id ? SELECTED_ROW_STYLE : undefined}
+            columns={[
+              { key: 'name', header: 'Campaign', render: (c: any) => <span className="text-xs font-medium text-[var(--text-1)]">{c.name}</span> },
+              { key: 'type', header: 'Type', render: (c: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={CAMPAIGN_COLOR[c.campaign_type] ?? THREAT_COLOR.spam}>{c.campaign_type}</span> },
+              { key: 'actor', header: 'Actor', render: (c: any) => <span className="text-xs text-[var(--text-2)]">{c.threat_actor || '—'}</span> },
+              { key: 'emails', header: 'Emails', render: (c: any) => <span className="text-xs font-bold text-[var(--text-1)]">{c.email_count}</span> },
+              { key: 'victims', header: 'Victims', render: (c: any) => <span className="text-xs font-bold" style={{ color: c.victim_count > 0 ? 'var(--red)' : 'var(--green)' }}>{c.victim_count}</span> },
+              { key: 'malware', header: 'Malware', render: (c: any) => <span className="text-xs" style={{ color: 'var(--blue)' }}>{c.malware_family || '—'}</span> },
+              { key: 'status', header: 'Status', render: (c: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={c.status === 'active' ? { background: 'var(--red-bg)', border: '1px solid var(--red-border)', color: 'var(--red)' } : { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' }}>{c.status}</span> },
+              { key: 'last_seen', header: 'Last Seen', render: (c: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(c.last_seen)}</span> },
+            ]}
+          />
         </div>
 
         <div className="space-y-3">
@@ -549,8 +491,8 @@ function CampaignsTab() {
                 ))}
               </dl>
               <div className="flex gap-2 pt-2 border-t border-[var(--border)]">
-                <button className="g-btn-primary text-xs flex-1" onClick={() => emailSecurityAPI.respond({ action: 'block_domain', domain: selected.common_domain })}>Block Domain</button>
-                <button className="g-btn text-xs flex-1" onClick={() => emailSecurityAPI.respond({ action: 'create_incident' })}>Create Incident</button>
+                <ActionButton variant="primary" className="text-xs flex-1 justify-center" onClick={() => emailSecurityAPI.respond({ action: 'block_domain', domain: selected.common_domain })}>Block Domain</ActionButton>
+                <ActionButton variant="ghost" className="text-xs flex-1 justify-center" onClick={() => emailSecurityAPI.respond({ action: 'create_incident' })}>Create Incident</ActionButton>
               </div>
             </div>
           ) : (
@@ -614,163 +556,167 @@ function IntelligenceTab() {
     <div className="space-y-4">
       {!loading && intel && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Malicious Domains</div>
-            {(intel.malicious_domains ?? []).map((d: any) => (
-              <div key={d.domain} className="space-y-0.5">
-                <div className="flex justify-between text-xs">
-                  <span className="font-mono" style={{ color: 'var(--red)' }}>{d.domain}</span>
-                  <span className="text-[var(--text-3)] font-bold">{d.hits} hits</span>
-                </div>
-                <div className="text-[10px] text-[var(--text-3)] capitalize">{d.category.replace(/_/g, ' ')} · since {d.first_seen}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Threat Distribution</div>
-            {(intel.by_threat_type ?? []).map((t: any) => (
-              <div key={t.type} className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="capitalize text-[var(--text-2)]">{t.type}</span>
-                  <span className="text-[var(--accent)] font-bold">{t.count}</span>
-                </div>
-                <div className="h-1 rounded-full bg-[var(--border)]">
-                  <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(t.count / barMax * 100)}%` }} />
-                </div>
-              </div>
-            ))}
-            <div className="pt-2 border-t border-[var(--border)] space-y-2">
-              <div className="text-xs font-medium text-[var(--text-1)]">Malware Families</div>
-              {(intel.malware_families ?? []).map((m: any) => (
-                <div key={m.family} className="flex justify-between text-xs">
-                  <span style={{ color: 'var(--blue)' }}>{m.family}</span>
-                  <span className="text-[var(--text-3)]">{m.category} · {m.count}</span>
+          <SectionCard title="Malicious Domains">
+            <div className="space-y-3">
+              {(intel.malicious_domains ?? []).map((d: any) => (
+                <div key={d.domain} className="space-y-0.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-mono" style={{ color: 'var(--red)' }}>{d.domain}</span>
+                    <span className="text-[var(--text-3)] font-bold">{d.hits} hits</span>
+                  </div>
+                  <div className="text-[10px] text-[var(--text-3)] capitalize">{d.category.replace(/_/g, ' ')} · since {d.first_seen}</div>
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
 
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Threat Actors</div>
-            {(intel.threat_actors ?? []).map((a: any) => (
-              <div key={a.actor} className="space-y-0.5">
-                <div className="text-xs font-medium" style={{ color: 'var(--orange)' }}>{a.actor}</div>
-                <div className="text-[10px] text-[var(--text-3)]">{a.campaigns} campaigns · targeting {a.target_industry}</div>
-                <div className="text-[10px] text-[var(--text-3)]">{a.email_volume} emails</div>
-              </div>
-            ))}
-            <div className="pt-2 border-t border-[var(--border)] space-y-2">
-              <div className="text-xs font-medium text-[var(--text-1)]">Malicious IPs</div>
-              {(intel.malicious_ips ?? []).map((ip: any) => (
-                <div key={ip.ip} className="flex justify-between text-xs">
-                  <span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span>
-                  <span className="text-[var(--text-3)]">{ip.country} · {ip.hits}</span>
+          <SectionCard title="Threat Distribution">
+            <div className="space-y-3">
+              {(intel.by_threat_type ?? []).map((t: any) => (
+                <div key={t.type} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="capitalize text-[var(--text-2)]">{t.type}</span>
+                    <span className="text-[var(--accent)] font-bold">{t.count}</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[var(--border)]">
+                    <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(t.count / barMax * 100)}%` }} />
+                  </div>
                 </div>
               ))}
+              <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                <div className="text-xs font-medium text-[var(--text-1)]">Malware Families</div>
+                {(intel.malware_families ?? []).map((m: any) => (
+                  <div key={m.family} className="flex justify-between text-xs">
+                    <span style={{ color: 'var(--blue)' }}>{m.family}</span>
+                    <span className="text-[var(--text-3)]">{m.category} · {m.count}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </SectionCard>
+
+          <SectionCard title="Threat Actors">
+            <div className="space-y-3">
+              {(intel.threat_actors ?? []).map((a: any) => (
+                <div key={a.actor} className="space-y-0.5">
+                  <div className="text-xs font-medium" style={{ color: 'var(--orange)' }}>{a.actor}</div>
+                  <div className="text-[10px] text-[var(--text-3)]">{a.campaigns} campaigns · targeting {a.target_industry}</div>
+                  <div className="text-[10px] text-[var(--text-3)]">{a.email_volume} emails</div>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                <div className="text-xs font-medium text-[var(--text-1)]">Malicious IPs</div>
+                {(intel.malicious_ips ?? []).map((ip: any) => (
+                  <div key={ip.ip} className="flex justify-between text-xs">
+                    <span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span>
+                    <span className="text-[var(--text-3)]">{ip.country} · {ip.hits}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </SectionCard>
         </div>
       )}
 
-      <div className="g-card p-4 space-y-3">
-        <div className="text-sm font-medium text-[var(--text-1)]">Sender Intelligence Lookup</div>
-        <div className="flex gap-2">
-          <input className="g-input text-xs flex-1" placeholder="e.g. suspicious-bank.xyz or noreply@example.com" value={senderDomain} onChange={e => setSenderDomain(e.target.value)} onKeyDown={e => e.key === 'Enter' && lookupSender()} />
-          <button className="g-btn-primary text-xs" onClick={lookupSender} disabled={loadingSender}>{loadingSender ? 'Looking up…' : 'Look Up'}</button>
-        </div>
-        {senderData && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="g-card p-3 text-center">
-              <div className="text-xs text-[var(--text-3)]">Reputation</div>
-              <div className="text-sm font-bold" style={{ color: senderData.reputation === 'malicious' ? 'var(--red)' : senderData.reputation === 'trusted' ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation}</div>
-            </div>
-            <div className="g-card p-3 text-center">
-              <div className="text-xs text-[var(--text-3)]">Score</div>
-              <div className="text-sm font-bold" style={{ color: senderData.reputation_score < 30 ? 'var(--red)' : senderData.reputation_score > 70 ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation_score}/100</div>
-            </div>
-            <div className="g-card p-3 text-center">
-              <div className="text-xs text-[var(--text-3)]">Domain Age</div>
-              <div className="text-sm font-bold" style={{ color: senderData.domain_age_days < 30 ? 'var(--red)' : 'var(--text-1)' }}>{senderData.domain_age_days}d</div>
-            </div>
-            <div className="g-card p-3 text-center">
-              <div className="text-xs text-[var(--text-3)]">Threat Intel Hits</div>
-              <div className="text-sm font-bold" style={{ color: senderData.threat_intel_hits > 0 ? 'var(--red)' : 'var(--green)' }}>{senderData.threat_intel_hits}</div>
-            </div>
-            <div className="g-card p-3 col-span-2">
-              <div className="text-xs text-[var(--text-3)]">WHOIS</div>
-              <div className="text-xs text-[var(--text-1)]">{senderData.whois_registrar} · created {senderData.whois_created}</div>
-            </div>
-            <div className="g-card p-3 col-span-2">
-              <div className="text-xs text-[var(--text-3)]">GeoIP / ASN</div>
-              <div className="text-xs text-[var(--text-1)]">{senderData.geo_city}, {senderData.geo_country} · {senderData.asn} ({senderData.asn_org})</div>
-            </div>
+      <SectionCard title="Sender Intelligence Lookup">
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input className="g-input text-xs flex-1" placeholder="e.g. suspicious-bank.xyz or noreply@example.com" value={senderDomain} onChange={e => setSenderDomain(e.target.value)} onKeyDown={e => e.key === 'Enter' && lookupSender()} />
+            <ActionButton variant="primary" className="text-xs" onClick={lookupSender} loading={loadingSender}>Look Up</ActionButton>
           </div>
-        )}
-      </div>
-
-      <div className="g-card p-4 space-y-3">
-        <div className="text-sm font-medium text-[var(--text-1)]">AI Email Analysis</div>
-        <div className="flex gap-2 flex-wrap">
-          {[['analyze', 'Analyze Email'], ['url', 'Analyze URL'], ['attachment', 'Analyze Hash'], ['ask', 'Ask AI']].map(([mode, label]) => (
-            <button key={mode} onClick={() => setAiMode(mode)}
-              className={`text-xs px-3 py-1.5 rounded border transition-colors ${aiMode === mode ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/5' : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)]'}`}>
-              {label}
-            </button>
-          ))}
+          {senderData && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="g-card p-3 text-center">
+                <div className="text-xs text-[var(--text-3)]">Reputation</div>
+                <div className="text-sm font-bold" style={{ color: senderData.reputation === 'malicious' ? 'var(--red)' : senderData.reputation === 'trusted' ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation}</div>
+              </div>
+              <div className="g-card p-3 text-center">
+                <div className="text-xs text-[var(--text-3)]">Score</div>
+                <div className="text-sm font-bold" style={{ color: senderData.reputation_score < 30 ? 'var(--red)' : senderData.reputation_score > 70 ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation_score}/100</div>
+              </div>
+              <div className="g-card p-3 text-center">
+                <div className="text-xs text-[var(--text-3)]">Domain Age</div>
+                <div className="text-sm font-bold" style={{ color: senderData.domain_age_days < 30 ? 'var(--red)' : 'var(--text-1)' }}>{senderData.domain_age_days}d</div>
+              </div>
+              <div className="g-card p-3 text-center">
+                <div className="text-xs text-[var(--text-3)]">Threat Intel Hits</div>
+                <div className="text-sm font-bold" style={{ color: senderData.threat_intel_hits > 0 ? 'var(--red)' : 'var(--green)' }}>{senderData.threat_intel_hits}</div>
+              </div>
+              <div className="g-card p-3 col-span-2">
+                <div className="text-xs text-[var(--text-3)]">WHOIS</div>
+                <div className="text-xs text-[var(--text-1)]">{senderData.whois_registrar} · created {senderData.whois_created}</div>
+              </div>
+              <div className="g-card p-3 col-span-2">
+                <div className="text-xs text-[var(--text-3)]">GeoIP / ASN</div>
+                <div className="text-xs text-[var(--text-1)]">{senderData.geo_city}, {senderData.geo_country} · {senderData.asn} ({senderData.asn_org})</div>
+              </div>
+            </div>
+          )}
         </div>
-        <textarea className="g-input text-xs w-full resize-none" rows={3}
-          placeholder={aiMode === 'analyze' ? 'Paste email subject/content...' : aiMode === 'url' ? 'Paste suspicious URL...' : aiMode === 'attachment' ? 'Paste file hash (SHA256/MD5)...' : 'Ask about email security...'}
-          value={aiContent} onChange={e => setAiContent(e.target.value)} />
-        <div className="flex flex-wrap gap-1.5">
-          {[
-            'This message imitates your finance department and requests an urgent wire transfer.',
-            'The attached Office document contains macros commonly used in phishing campaigns.',
-            'The embedded link redirects through multiple domains before reaching a credential harvesting page.',
-          ].map((ex, i) => (
-            <button key={i} className="text-[10px] px-2 py-1 rounded bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)] hover:border-[var(--accent-border)] transition-colors" onClick={() => setAiContent(ex)}>
-              {ex.slice(0, 55)}...
-            </button>
-          ))}
-        </div>
-        <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={runAI} disabled={aiLoading}>
-          <Brain className="h-3.5 w-3.5" />{aiLoading ? 'Analyzing...' : 'Analyze'}
-        </button>
+      </SectionCard>
 
-        {aiResult && (
-          <div className="space-y-3 border-t border-[var(--border)] pt-3">
-            {aiResult.verdict && (
-              <div className="flex items-center gap-2">
-                <ThreatBadge type={aiResult.verdict === 'malicious' ? 'phishing' : aiResult.verdict === 'suspicious' ? 'spam' : 'clean'} />
-                <span className="text-sm font-bold text-[var(--text-1)] capitalize">{aiResult.verdict}</span>
-                {aiResult.confidence && <span className="text-xs text-[var(--text-3)]">Confidence: <span className="text-[var(--accent)]">{aiResult.confidence}%</span></span>}
-              </div>
-            )}
-            {(aiResult.explanation || aiResult.answer) && (
-              <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{aiResult.explanation || aiResult.answer}</div>
-            )}
-            {aiResult.indicators?.length > 0 && (
-              <div>
-                <div className="text-xs text-[var(--text-3)] mb-1">Indicators</div>
-                <ul className="space-y-0.5">{aiResult.indicators.map((ind: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span style={{ color: 'var(--red)' }}>!</span>{ind}</li>)}</ul>
-              </div>
-            )}
-            {aiResult.mitre_techniques?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {aiResult.mitre_techniques.map((t: string) => (
-                  <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue-border)', color: 'var(--blue)' }}>{t}</span>
-                ))}
-              </div>
-            )}
-            {aiResult.recommended_actions?.length > 0 && (
-              <div>
-                <div className="text-xs text-[var(--text-3)] mb-1">Recommended Actions</div>
-                <ul className="space-y-0.5">{aiResult.recommended_actions.map((a: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span className="text-[var(--accent)]">›</span>{a}</li>)}</ul>
-              </div>
-            )}
+      <SectionCard title="AI Email Analysis">
+        <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {[['analyze', 'Analyze Email'], ['url', 'Analyze URL'], ['attachment', 'Analyze Hash'], ['ask', 'Ask AI']].map(([mode, label]) => (
+              <ActionButton key={mode} variant={aiMode === mode ? 'primary' : 'ghost'} onClick={() => setAiMode(mode)} className="text-xs">
+                {label}
+              </ActionButton>
+            ))}
           </div>
-        )}
-      </div>
+          <textarea className="g-input text-xs w-full resize-none" rows={3}
+            placeholder={aiMode === 'analyze' ? 'Paste email subject/content...' : aiMode === 'url' ? 'Paste suspicious URL...' : aiMode === 'attachment' ? 'Paste file hash (SHA256/MD5)...' : 'Ask about email security...'}
+            value={aiContent} onChange={e => setAiContent(e.target.value)} />
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              'This message imitates your finance department and requests an urgent wire transfer.',
+              'The attached Office document contains macros commonly used in phishing campaigns.',
+              'The embedded link redirects through multiple domains before reaching a credential harvesting page.',
+            ].map((ex, i) => (
+              <button key={i} className="text-[10px] px-2 py-1 rounded bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)] hover:border-[var(--accent-border)] transition-colors" onClick={() => setAiContent(ex)}>
+                {ex.slice(0, 55)}...
+              </button>
+            ))}
+          </div>
+          <ActionButton variant="primary" icon={Brain} onClick={runAI} loading={aiLoading} className="text-xs">
+            Analyze
+          </ActionButton>
+
+          {aiResult && (
+            <div className="space-y-3 border-t border-[var(--border)] pt-3">
+              {aiResult.verdict && (
+                <div className="flex items-center gap-2">
+                  <ThreatBadge type={aiResult.verdict === 'malicious' ? 'phishing' : aiResult.verdict === 'suspicious' ? 'spam' : 'clean'} />
+                  <span className="text-sm font-bold text-[var(--text-1)] capitalize">{aiResult.verdict}</span>
+                  {aiResult.confidence && <span className="text-xs text-[var(--text-3)]">Confidence: <span className="text-[var(--accent)]">{aiResult.confidence}%</span></span>}
+                </div>
+              )}
+              {(aiResult.explanation || aiResult.answer) && (
+                <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{aiResult.explanation || aiResult.answer}</div>
+              )}
+              {aiResult.indicators?.length > 0 && (
+                <div>
+                  <div className="text-xs text-[var(--text-3)] mb-1">Indicators</div>
+                  <ul className="space-y-0.5">{aiResult.indicators.map((ind: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5 items-start"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" style={{ color: 'var(--red)' }} />{ind}</li>)}</ul>
+                </div>
+              )}
+              {aiResult.mitre_techniques?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {aiResult.mitre_techniques.map((t: string) => (
+                    <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--blue-bg)', border: '1px solid var(--blue-border)', color: 'var(--blue)' }}>{t}</span>
+                  ))}
+                </div>
+              )}
+              {aiResult.recommended_actions?.length > 0 && (
+                <div>
+                  <div className="text-xs text-[var(--text-3)] mb-1">Recommended Actions</div>
+                  <ul className="space-y-0.5">{aiResult.recommended_actions.map((a: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5 items-start"><ChevronRight className="h-3 w-3 shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />{a}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -808,47 +754,39 @@ function UserRiskTab() {
     <div className="space-y-4">
       <div className="flex gap-2">
         {(['risk', 'reported'] as const).map(s => (
-          <button key={s} onClick={() => setSubTab(s)}
-            className={`text-xs px-3 py-1.5 rounded border transition-colors ${subTab === s ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/5' : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)]'}`}>
+          <ActionButton key={s} variant={subTab === s ? 'primary' : 'ghost'} onClick={() => setSubTab(s)} className="text-xs">
             {s === 'risk' ? `User Risk (${users.length})` : `Reported Phishing (${reported.length})`}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : subTab === 'risk' ? (
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>User</th><th>Department</th><th>Clicks</th><th>Failures</th>
-              <th>Repeated</th><th>Training</th><th>Risk Score</th><th>Last Click</th>
-            </tr></thead>
-            <tbody>
-              {users.map((u: any) => (
-                <tr key={u.id} className="g-tr">
-                  <td>
-                    <div className="text-xs font-medium text-[var(--text-1)]">{u.display_name}</div>
-                    <div className="text-[10px] text-[var(--text-3)]">{u.email}</div>
-                  </td>
-                  <td><span className="text-xs text-[var(--text-2)]">{u.department}</span></td>
-                  <td><span className="text-xs font-bold" style={{ color: u.click_count > 0 ? 'var(--red)' : 'var(--green)' }}>{u.click_count}</span></td>
-                  <td><span className="text-xs font-bold" style={{ color: u.phishing_failures > 0 ? 'var(--red)' : 'var(--green)' }}>{u.phishing_failures}</span></td>
-                  <td>{u.is_repeated_victim ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
-                  <td><span className="text-xs font-medium capitalize" style={TRAINING_COLOR[u.training_status] ?? { color: 'var(--text-2)' }}>{u.training_status.replace('_', ' ')}</span></td>
-                  <td>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-12 h-1.5 rounded-full bg-[var(--border)]">
-                        <div className="h-full rounded-full" style={{ width: `${u.risk_score}%`, background: u.risk_score > 75 ? 'var(--red)' : u.risk_score > 50 ? 'var(--orange)' : 'var(--yellow)' }} />
-                      </div>
-                      <span className="text-xs font-bold" style={{ color: u.risk_score > 75 ? 'var(--red)' : u.risk_score > 50 ? 'var(--orange)' : 'var(--text-2)' }}>{u.risk_score}</span>
-                    </div>
-                  </td>
-                  <td><span className="text-xs text-[var(--text-3)]">{u.last_click_at ? timeAgo(u.last_click_at) : 'Never'}</span></td>
-                </tr>
-              ))}
-              {users.length === 0 && <tr><td colSpan={8} className="text-center text-[var(--text-3)] py-8">No user risk data</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={users}
+          rowKey={(u: any) => u.id}
+          columns={[
+            { key: 'user', header: 'User', render: (u: any) => (
+              <div>
+                <div className="text-xs font-medium text-[var(--text-1)]">{u.display_name}</div>
+                <div className="text-[10px] text-[var(--text-3)]">{u.email}</div>
+              </div>
+            ) },
+            { key: 'department', header: 'Department', render: (u: any) => <span className="text-xs text-[var(--text-2)]">{u.department}</span> },
+            { key: 'clicks', header: 'Clicks', render: (u: any) => <span className="text-xs font-bold" style={{ color: u.click_count > 0 ? 'var(--red)' : 'var(--green)' }}>{u.click_count}</span> },
+            { key: 'failures', header: 'Failures', render: (u: any) => <span className="text-xs font-bold" style={{ color: u.phishing_failures > 0 ? 'var(--red)' : 'var(--green)' }}>{u.phishing_failures}</span> },
+            { key: 'repeated', header: 'Repeated', render: (u: any) => u.is_repeated_victim ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> },
+            { key: 'training', header: 'Training', render: (u: any) => <span className="text-xs font-medium capitalize" style={TRAINING_COLOR[u.training_status] ?? { color: 'var(--text-2)' }}>{u.training_status.replace('_', ' ')}</span> },
+            { key: 'risk_score', header: 'Risk Score', render: (u: any) => (
+              <div className="flex items-center gap-1.5">
+                <div className="w-12 h-1.5 rounded-full bg-[var(--border)]">
+                  <div className="h-full rounded-full" style={{ width: `${u.risk_score}%`, background: u.risk_score > 75 ? 'var(--red)' : u.risk_score > 50 ? 'var(--orange)' : 'var(--yellow)' }} />
+                </div>
+                <span className="text-xs font-bold" style={{ color: u.risk_score > 75 ? 'var(--red)' : u.risk_score > 50 ? 'var(--orange)' : 'var(--text-2)' }}>{u.risk_score}</span>
+              </div>
+            ) },
+            { key: 'last_click', header: 'Last Click', render: (u: any) => <span className="text-xs text-[var(--text-3)]">{u.last_click_at ? timeAgo(u.last_click_at) : 'Never'}</span> },
+          ]}
+        />
       ) : (
         <div className="space-y-3">
           {reported.map((r: any) => (
@@ -879,15 +817,15 @@ function UserRiskTab() {
                   <textarea className="g-input text-xs w-full resize-none" rows={2} placeholder="Analyst notes..." value={notes} onChange={e => setNotes(e.target.value)} />
                   <div className="flex gap-1.5 flex-wrap">
                     {(['confirmed_phishing', 'false_positive', 'escalated'] as string[]).map(s => (
-                      <button key={s} className="g-btn text-xs capitalize" onClick={() => doTriage(r.id, s)}>{s.replace('_', ' ')}</button>
+                      <ActionButton key={s} variant="ghost" onClick={() => doTriage(r.id, s)} className="text-xs capitalize">{s.replace('_', ' ')}</ActionButton>
                     ))}
-                    <button className="g-btn text-xs" onClick={() => setTriaging(null)}>Cancel</button>
+                    <ActionButton variant="ghost" onClick={() => setTriaging(null)} className="text-xs">Cancel</ActionButton>
                   </div>
                 </div>
               ) : (
-                <button className="g-btn text-xs text-xs" onClick={() => { setTriaging(r.id); setNotes(r.analyst_notes); }}>
+                <ActionButton variant="ghost" onClick={() => { setTriaging(r.id); setNotes(r.analyst_notes); }} className="text-xs">
                   {r.triage_status === 'pending' ? 'Triage' : 'Edit Triage'}
-                </button>
+                </ActionButton>
               )}
             </div>
           ))}
@@ -914,32 +852,29 @@ function AnalyticsTab() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Top Threat Senders</div>
-          {(data?.top_senders ?? []).map((s: any, i: number) => (
-            <div key={i} className="space-y-1">
-              <div className="flex justify-between text-xs">
+        <SectionCard title="Top Threat Senders">
+          <div className="space-y-2">
+            {(data?.top_senders ?? []).map((s: any, i: number) => (
+              <div key={i} className="flex justify-between text-xs">
                 <span className="font-mono truncate max-w-[160px]" style={{ color: 'var(--red)' }}>{s.sender}</span>
                 <span className="text-[var(--text-2)] font-bold shrink-0 ml-2">{s.count}</span>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SectionCard>
 
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Top Blocked URL Domains</div>
-          {(data?.top_blocked_urls ?? []).map((u: any, i: number) => (
-            <div key={i} className="space-y-1">
-              <div className="flex justify-between text-xs">
+        <SectionCard title="Top Blocked URL Domains">
+          <div className="space-y-2">
+            {(data?.top_blocked_urls ?? []).map((u: any, i: number) => (
+              <div key={i} className="flex justify-between text-xs">
                 <span className="font-mono" style={{ color: 'var(--orange)' }}>{u.domain}</span>
                 <span className="text-[var(--text-2)] font-bold">{u.count}</span>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SectionCard>
 
-        <div className="g-card p-4 space-y-2">
-          <div className="text-sm font-medium text-[var(--text-1)]">14-Day BEC Trend</div>
+        <SectionCard title="14-Day BEC Trend">
           <div className="flex items-end gap-0.5 h-20">
             {(data?.bec_trend ?? []).map((d: any, i: number) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
@@ -948,11 +883,10 @@ function AnalyticsTab() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card p-4 space-y-3">
-        <div className="text-sm font-medium text-[var(--text-1)]">14-Day Phishing Trend</div>
+      <SectionCard title="14-Day Phishing Trend">
         <div className="flex items-end gap-0.5 h-24">
           {(data?.phishing_trend ?? []).map((d: any, i: number) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
@@ -961,7 +895,7 @@ function AnalyticsTab() {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -1033,78 +967,82 @@ function ResponseTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Response Actions</div>
-          <div className="grid grid-cols-1 gap-2">
-            {RESPONSE_ACTIONS.map(([action, label, target]) => (
-              <div key={action} className="flex gap-2">
-                <button
-                  className={`g-btn text-xs whitespace-nowrap ${actionTarget.action === action ? 'border-[var(--accent)] text-[var(--accent)]' : ''}`}
-                  onClick={() => setActionTarget(t => ({ action: t.action === action ? '' : action, value: t.action === action ? t.value : '' }))}
-                >
-                  <Zap className="h-3 w-3 shrink-0" />{label}
-                </button>
-                {actionTarget.action === action && target && (
-                  <input className="g-input text-xs flex-1" placeholder={target} value={actionTarget.value} onChange={e => setActionTarget(t => ({ ...t, value: e.target.value }))} />
-                )}
-                {actionTarget.action === action && (
-                  <button className="g-btn-primary text-xs whitespace-nowrap" onClick={doAction} disabled={actioning}>Execute</button>
-                )}
-              </div>
-            ))}
+        <SectionCard title="Response Actions">
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2">
+              {RESPONSE_ACTIONS.map(([action, label, target]) => (
+                <div key={action} className="flex gap-2">
+                  <ActionButton
+                    variant={actionTarget.action === action ? 'primary' : 'ghost'}
+                    icon={Zap}
+                    className="text-xs whitespace-nowrap"
+                    onClick={() => setActionTarget(t => ({ action: t.action === action ? '' : action, value: t.action === action ? t.value : '' }))}
+                  >
+                    {label}
+                  </ActionButton>
+                  {actionTarget.action === action && target && (
+                    <input className="g-input text-xs flex-1" placeholder={target} value={actionTarget.value} onChange={e => setActionTarget(t => ({ ...t, value: e.target.value }))} />
+                  )}
+                  {actionTarget.action === action && (
+                    <ActionButton variant="primary" className="text-xs whitespace-nowrap" onClick={doAction} loading={actioning}>Execute</ActionButton>
+                  )}
+                </div>
+              ))}
+            </div>
+            {actionResult && <div className="g-card p-2 text-xs" style={{ color: 'var(--green)' }}>{actionResult}</div>}
           </div>
-          {actionResult && <div className="g-card p-2 text-xs" style={{ color: 'var(--green)' }}>{actionResult}</div>}
-        </div>
+        </SectionCard>
 
         <div className="space-y-4">
-          <div className="g-card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-[var(--text-1)]">Email Policies</div>
-              <button className="g-btn text-xs flex items-center gap-1" onClick={() => setShowNewPolicy(s => !s)}><Plus className="h-3 w-3" />Add</button>
-            </div>
-            {showNewPolicy && (
-              <div className="space-y-2 p-3 rounded-lg border border-[var(--accent-border)] bg-[var(--accent)]/5">
-                <input className="g-input text-xs w-full" placeholder="Policy name" value={policyForm.name} onChange={e => setPolicyForm(f => ({ ...f, name: e.target.value }))} />
-                <div className="grid grid-cols-2 gap-2">
-                  <select className="g-select text-xs" value={policyForm.policy_type} onChange={e => setPolicyForm(f => ({ ...f, policy_type: e.target.value }))}>
-                    {POLICY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <select className="g-select text-xs" value={policyForm.action} onChange={e => setPolicyForm(f => ({ ...f, action: e.target.value }))}>
-                    {ACTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <input className="g-input text-xs w-full" placeholder="Criteria (e.g. file_type IN (exe,dll))" value={policyForm.criteria} onChange={e => setPolicyForm(f => ({ ...f, criteria: e.target.value }))} />
-                <div className="flex gap-2">
-                  <button className="g-btn-primary text-xs" onClick={doCreatePolicy}>Create</button>
-                  <button className="g-btn text-xs" onClick={() => setShowNewPolicy(false)}>Cancel</button>
-                </div>
-              </div>
-            )}
-            {loading ? <div className="text-[var(--text-3)] text-xs">Loading...</div> : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {policies.map((p: any) => (
-                  <div key={p.id} className={`flex items-start justify-between gap-2 p-2 rounded border ${p.enabled ? 'border-[var(--border)]' : 'border-[var(--border)] opacity-50'}`}>
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium text-[var(--text-1)]">{p.name}</div>
-                      <div className="text-[10px] text-[var(--text-3)]">{p.policy_type} · {p.action} · priority {p.priority}</div>
-                      {p.criteria && <div className="text-[10px] font-mono text-[var(--text-3)] truncate max-w-[220px]">{p.criteria}</div>}
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button className="text-[10px] px-1.5 py-0.5 rounded border transition-colors" style={p.enabled ? { borderColor: 'var(--green-border)', color: 'var(--green)' } : { borderColor: 'var(--border)', color: 'var(--text-3)' }} onClick={() => doTogglePolicy(p)}>{p.enabled ? 'ON' : 'OFF'}</button>
-                      <button className="text-[var(--text-3)] transition-colors p-0.5" style={{}} onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')} onClick={() => doDeletePolicy(p.id)}><Trash2 className="h-3 w-3" /></button>
-                    </div>
+          <SectionCard
+            title="Email Policies"
+            actions={<ActionButton variant="ghost" icon={Plus} onClick={() => setShowNewPolicy(s => !s)} className="text-xs">Add</ActionButton>}
+          >
+            <div className="space-y-3">
+              {showNewPolicy && (
+                <div className="space-y-2 p-3 rounded-lg border border-[var(--accent-border)] bg-[var(--accent)]/5">
+                  <input className="g-input text-xs w-full" placeholder="Policy name" value={policyForm.name} onChange={e => setPolicyForm(f => ({ ...f, name: e.target.value }))} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select className="g-select text-xs" value={policyForm.policy_type} onChange={e => setPolicyForm(f => ({ ...f, policy_type: e.target.value }))}>
+                      {POLICY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <select className="g-select text-xs" value={policyForm.action} onChange={e => setPolicyForm(f => ({ ...f, action: e.target.value }))}>
+                      {ACTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                   </div>
-                ))}
-                {policies.length === 0 && <div className="text-xs text-[var(--text-3)] text-center py-4">No policies configured</div>}
-              </div>
-            )}
-          </div>
+                  <input className="g-input text-xs w-full" placeholder="Criteria (e.g. file_type IN (exe,dll))" value={policyForm.criteria} onChange={e => setPolicyForm(f => ({ ...f, criteria: e.target.value }))} />
+                  <div className="flex gap-2">
+                    <ActionButton variant="primary" className="text-xs" onClick={doCreatePolicy}>Create</ActionButton>
+                    <ActionButton variant="ghost" className="text-xs" onClick={() => setShowNewPolicy(false)}>Cancel</ActionButton>
+                  </div>
+                </div>
+              )}
+              {loading ? <div className="text-[var(--text-3)] text-xs">Loading...</div> : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {policies.map((p: any) => (
+                    <div key={p.id} className={`flex items-start justify-between gap-2 p-2 rounded border ${p.enabled ? 'border-[var(--border)]' : 'border-[var(--border)] opacity-50'}`}>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-[var(--text-1)]">{p.name}</div>
+                        <div className="text-[10px] text-[var(--text-3)]">{p.policy_type} · {p.action} · priority {p.priority}</div>
+                        {p.criteria && <div className="text-[10px] font-mono text-[var(--text-3)] truncate max-w-[220px]">{p.criteria}</div>}
+                      </div>
+                      <div className="flex gap-1 shrink-0 items-center">
+                        <button className="text-[10px] px-1.5 py-0.5 rounded border transition-colors" style={p.enabled ? { borderColor: 'var(--green-border)', color: 'var(--green)' } : { borderColor: 'var(--border)', color: 'var(--text-3)' }} onClick={() => doTogglePolicy(p)}>{p.enabled ? 'ON' : 'OFF'}</button>
+                        <button className="text-[var(--text-3)] transition-colors p-0.5" onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')} onClick={() => doDeletePolicy(p.id)}><Trash2 className="h-3 w-3" /></button>
+                      </div>
+                    </div>
+                  ))}
+                  {policies.length === 0 && <div className="text-xs text-[var(--text-3)] text-center py-4">No policies configured</div>}
+                </div>
+              )}
+            </div>
+          </SectionCard>
         </div>
       </div>
 
-      <div className="g-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-[var(--text-1)]">Security Reports</div>
+      <SectionCard
+        title="Security Reports"
+        actions={
           <div className="flex gap-2">
             <select className="g-select text-xs" value={reportType} onChange={e => setReportType(e.target.value)}>
               <option value="executive">Executive Summary</option>
@@ -1113,25 +1051,24 @@ function ResponseTab() {
               <option value="malware">Malware Report</option>
               <option value="user_risk">User Risk Report</option>
             </select>
-            <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={doGenerateReport} disabled={generating}>
-              <FileText className="h-3.5 w-3.5" />{generating ? 'Generating...' : 'Generate'}
-            </button>
+            <ActionButton variant="primary" icon={FileText} onClick={doGenerateReport} loading={generating} className="text-xs">Generate</ActionButton>
           </div>
-        </div>
+        }
+      >
         {reportResult && (
           <div className="space-y-3">
             <div className="text-base font-semibold text-[var(--text-1)]">{reportResult.title}</div>
             <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{reportResult.executive_summary}</div>
             {reportResult.key_findings?.length > 0 && (
               <div><div className="text-xs text-[var(--text-3)] mb-1">Key Findings</div>
-                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span style={{ color: 'var(--red)' }}>!</span>{f}</li>)}</ul>
+                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5 items-start"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" style={{ color: 'var(--red)' }} />{f}</li>)}</ul>
               </div>
             )}
             {reportResult.risk_breakdown && (
               <div className="grid grid-cols-3 gap-3">
-                <StatCard label="Phishing"  value={reportResult.risk_breakdown.phishing ?? 0}  color={{ color: 'var(--red)' }} />
-                <StatCard label="Malware"   value={reportResult.risk_breakdown.malware ?? 0}   color={{ color: 'var(--blue)' }} />
-                <StatCard label="BEC"       value={reportResult.risk_breakdown.bec ?? 0}       color={{ color: 'var(--orange)' }} />
+                <MetricCard label="Phishing"  value={reportResult.risk_breakdown.phishing ?? 0}  color="var(--red)" />
+                <MetricCard label="Malware"   value={reportResult.risk_breakdown.malware ?? 0}   color="var(--blue)" />
+                <MetricCard label="BEC"       value={reportResult.risk_breakdown.bec ?? 0}       color="var(--orange)" />
               </div>
             )}
             {reportResult.top_recommendations?.length > 0 && (
@@ -1146,7 +1083,7 @@ function ResponseTab() {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -1172,20 +1109,14 @@ export default function EmailSecurityPage() {
   };
 
   return (
-    <RootLayout>
+    <RootLayout title="Email Security" subtitle="Phishing · BEC · Malware · URL Analysis · DMARC · Campaign Detection">
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Email Security</h1>
-          <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>Phishing · BEC · Malware · URL Analysis · DMARC · Campaign Detection</div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {TABS.map(({ id, label }) => (
-            <button key={id} onClick={() => setTab(id)}
-              style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === id ? 600 : 400, color: tab === id ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === id ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {label}
-            </button>
-          ))}
+        <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
+          <TabBar
+            tabs={TABS.map(t => ({ key: t.id, label: t.label, icon: t.icon }))}
+            active={tab}
+            onChange={setTab}
+          />
         </div>
 
         <div>

@@ -4,11 +4,20 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { supAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, VolumeX, Wrench, BarChart3, ScrollText, FileText,
+  AlertTriangle, Search, Check, Download, X, Plus, RefreshCw,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'rules' | 'builder' | 'analytics' | 'audit' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
   dashboard: 'Dashboard', rules: 'Active Rules', builder: 'Rule Builder',
   analytics: 'Analytics', audit: 'Audit Trail', reports: 'Reports',
+};
+const TAB_ICONS: Record<Tab, any> = {
+  dashboard: LayoutDashboard, rules: VolumeX, builder: Wrench,
+  analytics: BarChart3, audit: ScrollText, reports: FileText,
 };
 
 const SUP_TYPE_LABEL: Record<string, string> = {
@@ -36,16 +45,6 @@ const SCOPE_OPTIONS = ['single_asset', 'asset_group', 'department', 'business_un
 const EXCEPTION_OPTIONS = ['domain_controllers', 'critical_assets', 'threat_intel_match', 'high_user_risk'];
 const TIME_TYPES = ['until_date', 'maintenance_window', 'business_hours', 'recurring_schedule', 'one_time'];
 const SUP_TYPES = ['full_suppress', 'hide_from_queue', 'lower_severity', 'group_duplicates', 'rate_limit'];
-
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 130 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
 
 function StatusPill({ s }: { s: string }) {
   const c = STATUS_COLOR[s] || '#6b7280';
@@ -80,22 +79,22 @@ function DashboardTab({ dash }: { dash: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Active Rules" value={dash.active_rules} color="var(--accent)" />
-        <StatCard label="Suppressed Today" value={dash.suppressed_today?.toLocaleString()} color="#f97316" sub="alerts suppressed" />
-        <StatCard label="Expiring Rules" value={dash.expiring_rules} color={dash.expiring_rules > 0 ? '#f97316' : 'var(--text-1)'} sub="within 7 days" />
-        <StatCard label="Analyst Hours Saved" value={`${(dash.analyst_time_saved_h || 0).toFixed(0)}h`} color="#22c55e" sub="estimated" />
+        <MetricCard label="Active Rules" value={dash.active_rules} color="var(--accent)" />
+        <MetricCard label="Suppressed Today" value={dash.suppressed_today?.toLocaleString()} color="#f97316" sub="alerts suppressed" />
+        <MetricCard label="Expiring Rules" value={dash.expiring_rules} color={dash.expiring_rules > 0 ? '#f97316' : 'var(--text-1)'} sub="within 7 days" />
+        <MetricCard label="Analyst Hours Saved" value={`${(dash.analyst_time_saved_h || 0).toFixed(0)}h`} color="#22c55e" sub="estimated" />
       </div>
 
       {dash.expiring_rules > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608' }}>
-          <span style={{ fontWeight: 700, color: '#f97316' }}>⚠ {dash.expiring_rules} rule{dash.expiring_rules !== 1 ? 's' : ''} expiring within 7 days.</span>
-          <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>Review and renew or allow to expire.</span>
+        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertTriangle style={{ width: 15, height: 15, color: '#f97316', flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, color: '#f97316' }}>{dash.expiring_rules} rule{dash.expiring_rules !== 1 ? 's' : ''} expiring within 7 days.</span>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Review and renew or allow to expire.</span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Suppression Trend (7d)</div>
+        <SectionCard title="Suppression Trend (7d)">
           <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 80 }}>
             {dash.suppression_trend?.map((d: any) => (
               <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -104,10 +103,9 @@ function DashboardTab({ dash }: { dash: any }) {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Top Suppressed Detections</div>
+        <SectionCard title="Top Suppressed Detections">
           {dash.top_suppressed?.slice(0, 4).map((t: any) => (
             <div key={t.detection} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
@@ -119,31 +117,21 @@ function DashboardTab({ dash }: { dash: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Analysts Creating Rules</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr>
-              {['Analyst', 'Rules Created', 'Alerts Suppressed', 'Avg / Rule'].map(h => (
-                <th key={h} style={{ textAlign: 'left', padding: '5px 10px', color: 'var(--text-3)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {dash.analysts_creating_rules?.map((a: any) => (
-              <tr key={a.analyst} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 10px' }}>{a.analyst}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{a.rules_created}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#f97316', fontWeight: 700 }}>{a.suppressed.toLocaleString()}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'center', color: 'var(--text-3)' }}>{Math.round(a.suppressed / a.rules_created).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard title="Analysts Creating Rules" padded={false}>
+        <DataTable<any>
+          rows={dash.analysts_creating_rules || []}
+          rowKey={(a: any) => a.analyst}
+          columns={[
+            { key: 'analyst', header: 'Analyst', render: (a: any) => <span style={{ fontSize: 13 }}>{a.analyst}</span> },
+            { key: 'rules_created', header: 'Rules Created', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 700, textAlign: 'center', display: 'block' }}>{a.rules_created}</span> },
+            { key: 'suppressed', header: 'Alerts Suppressed', render: (a: any) => <span style={{ fontSize: 13, textAlign: 'center', display: 'block', color: '#f97316', fontWeight: 700 }}>{a.suppressed.toLocaleString()}</span> },
+            { key: 'avg', header: 'Avg / Rule', render: (a: any) => <span style={{ fontSize: 13, textAlign: 'center', display: 'block', color: 'var(--text-3)' }}>{Math.round(a.suppressed / a.rules_created).toLocaleString()}</span> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -197,11 +185,11 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input className="g-input" placeholder="Search rules…" value={search} onChange={e => setSearch(e.target.value)} style={{ fontSize: 12 }} />
           <div style={{ display: 'flex', gap: 4 }}>
-            <select className="g-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 11, flex: 1 }}>
+            <select className="g-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 11, flex: 1, minWidth: 0 }}>
               <option value="">All Status</option>
               {['active', 'draft', 'disabled', 'expired'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onRefresh}>↻</button>
+            <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} style={{ fontSize: 11, flexShrink: 0 }} />
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -236,7 +224,7 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
       {/* Right detail */}
       {!selected ? (
         <div className="g-card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 36 }}>🔇</div>
+          <VolumeX style={{ width: 36, height: 36, color: 'var(--text-3)' }} />
           <div style={{ color: 'var(--text-3)', fontSize: 14 }}>Select a rule to inspect</div>
         </div>
       ) : (
@@ -255,18 +243,18 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
             {selected.description && <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 8 }}>{selected.description}</div>}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {selected.status === 'draft' && selected.approval_status !== 'pending' && (
-                <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => setStatus(selected, 'active')}>Activate</button>
+                <ActionButton variant="primary" onClick={() => setStatus(selected, 'active')} style={{ fontSize: 12 }}>Activate</ActionButton>
               )}
               {selected.status === 'active' && (
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setStatus(selected, 'disabled')}>Disable</button>
+                <ActionButton variant="ghost" onClick={() => setStatus(selected, 'disabled')} style={{ fontSize: 12 }}>Disable</ActionButton>
               )}
               {selected.status === 'disabled' && (
-                <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => setStatus(selected, 'active')}>Re-enable</button>
+                <ActionButton variant="primary" onClick={() => setStatus(selected, 'active')} style={{ fontSize: 12 }}>Re-enable</ActionButton>
               )}
               {selected.approval_status === 'pending' && (
-                <button className="g-btn g-btn-primary" style={{ fontSize: 12, background: '#22c55e' }} onClick={() => setShowApprove(true)}>Review &amp; Approve</button>
+                <ActionButton variant="primary" onClick={() => setShowApprove(true)} style={{ fontSize: 12, background: '#22c55e' }}>Review &amp; Approve</ActionButton>
               )}
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 12, color: '#ef4444' }} onClick={() => deleteRule(selected)}>Delete</button>
+              <ActionButton variant="ghost" onClick={() => deleteRule(selected)} style={{ fontSize: 12, color: '#ef4444' }}>Delete</ActionButton>
             </div>
           </div>
 
@@ -278,9 +266,9 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
               </div>
               <textarea className="g-input" rows={2} value={approveNotes} onChange={e => setApproveNotes(e.target.value)} placeholder="Approval notes…" style={{ width: '100%', resize: 'none', marginBottom: 8, fontSize: 12 }} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="g-btn g-btn-primary" style={{ fontSize: 12, background: '#22c55e' }} onClick={() => approve('approve')}>Approve &amp; Activate</button>
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 12, color: '#ef4444' }} onClick={() => approve('reject')}>Reject</button>
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowApprove(false)}>Cancel</button>
+                <ActionButton variant="primary" onClick={() => approve('approve')} style={{ fontSize: 12, background: '#22c55e' }}>Approve &amp; Activate</ActionButton>
+                <ActionButton variant="ghost" onClick={() => approve('reject')} style={{ fontSize: 12, color: '#ef4444' }}>Reject</ActionButton>
+                <ActionButton variant="ghost" onClick={() => setShowApprove(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
               </div>
             </div>
           )}
@@ -421,8 +409,7 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
     <div style={{ display: 'flex', gap: 16, minHeight: 600 }}>
       {/* Builder left */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Rule Information</div>
+        <SectionCard title="Rule Information">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Rule Name</label>
@@ -437,7 +424,11 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
               <select className="g-select" value={priority} onChange={e => setPriority(e.target.value)} style={{ width: '100%' }}>
                 {['low', 'medium', 'high', 'critical'].map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
               </select>
-              {priority === 'critical' && <div style={{ fontSize: 10, color: '#f97316', marginTop: 3 }}>⚠ Critical rules require approval before activation</div>}
+              {priority === 'critical' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#f97316', marginTop: 3 }}>
+                  <AlertTriangle style={{ width: 10, height: 10 }} /> Critical rules require approval before activation
+                </div>
+              )}
             </div>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Suppression Type</label>
@@ -447,10 +438,9 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
               <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{supTypeDesc(supType)}</div>
             </div>
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Conditions (AND / OR Logic)</div>
+        <SectionCard title="Conditions (AND / OR Logic)">
           {conditions.map((cond, i) => (
             <div key={cond.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
               {i === 0 && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', width: 50, textAlign: 'right' }}>WHERE</span>}
@@ -461,23 +451,24 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
                   <option value="OR">OR</option>
                 </select>
               )}
-              <select className="g-select" value={cond.field} onChange={e => updateCondition(cond.id, 'field', e.target.value)} style={{ fontSize: 11, flex: 1 }}>
+              <select className="g-select" value={cond.field} onChange={e => updateCondition(cond.id, 'field', e.target.value)} style={{ fontSize: 11, flex: 1, minWidth: 0 }}>
                 {CONDITION_FIELDS.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
               </select>
-              <select className="g-select" value={cond.op} onChange={e => updateCondition(cond.id, 'op', e.target.value)} style={{ fontSize: 11, width: 96 }}>
+              <select className="g-select" value={cond.op} onChange={e => updateCondition(cond.id, 'op', e.target.value)} style={{ fontSize: 11, width: 96, flexShrink: 0 }}>
                 {CONDITION_OPS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
-              <input className="g-input" value={cond.value} onChange={e => updateCondition(cond.id, 'value', e.target.value)} placeholder="value / regex / wildcard*" style={{ fontSize: 11, flex: 1 }} />
+              <input className="g-input" value={cond.value} onChange={e => updateCondition(cond.id, 'value', e.target.value)} placeholder="value / regex / wildcard*" style={{ fontSize: 11, flex: 1, minWidth: 0 }} />
               {conditions.length > 1 && (
-                <button onClick={() => removeCondition(cond.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>×</button>
+                <button onClick={() => removeCondition(cond.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0 4px', display: 'flex', alignItems: 'center' }}>
+                  <X style={{ width: 14, height: 14 }} />
+                </button>
               )}
             </div>
           ))}
-          <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={addCondition}>+ Add Condition</button>
-        </div>
+          <ActionButton variant="ghost" icon={Plus} onClick={addCondition} style={{ fontSize: 12 }}>Add Condition</ActionButton>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Scope &amp; Time</div>
+        <SectionCard title="Scope &amp; Time">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Apply To</label>
@@ -506,45 +497,41 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
               </div>
             )}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Exceptions (Do NOT suppress when)</div>
+        <SectionCard title="Exceptions (Do NOT suppress when)">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {EXCEPTION_OPTIONS.map(ex => (
-              <button key={ex} onClick={() => toggleException(ex)}
-                className={exceptions.includes(ex) ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'}
-                style={{ fontSize: 12 }}>
-                {exceptions.includes(ex) ? '✓ ' : ''}{exceptionLabel(ex)}
-              </button>
+              <ActionButton key={ex} variant={exceptions.includes(ex) ? 'primary' : 'ghost'} icon={exceptions.includes(ex) ? Check : undefined} onClick={() => toggleException(ex)} style={{ fontSize: 12 }}>
+                {exceptionLabel(ex)}
+              </ActionButton>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="g-btn g-btn-ghost" style={{ fontSize: 13 }} onClick={runPreview} disabled={previewLoading}>
-            {previewLoading ? 'Previewing…' : '🔍 Preview Impact'}
-          </button>
-          <button className="g-btn g-btn-primary" style={{ fontSize: 13 }} onClick={save} disabled={!name || saved}>
-            {saved ? '✓ Saved' : 'Save Rule'}
-          </button>
+          <ActionButton variant="ghost" icon={Search} onClick={runPreview} disabled={previewLoading} style={{ fontSize: 13 }}>
+            {previewLoading ? 'Previewing…' : 'Preview Impact'}
+          </ActionButton>
+          <ActionButton variant="primary" icon={saved ? Check : undefined} onClick={save} disabled={!name || saved} style={{ fontSize: 13 }}>
+            {saved ? 'Saved' : 'Save Rule'}
+          </ActionButton>
         </div>
       </div>
 
       {/* Right: Preview + AI */}
       <div style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {/* AI Recommendation */}
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>AI Recommendation</div>
+        <SectionCard title="AI Recommendation">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
             <input className="g-input" value={detectionName} onChange={e => setDetectionName(e.target.value)} placeholder="Detection name…" style={{ fontSize: 12 }} />
             <div style={{ display: 'flex', gap: 6 }}>
               <input className="g-input" type="number" value={alertCount} onChange={e => setAlertCount(e.target.value)} placeholder="Alert count (30d)" style={{ fontSize: 12, flex: 1 }} />
               <input className="g-input" type="number" value={incidentCount} onChange={e => setIncidentCount(e.target.value)} placeholder="Incidents" style={{ fontSize: 12, width: 80 }} />
             </div>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={runAI} disabled={aiLoading || !detectionName}>
+            <ActionButton variant="primary" onClick={runAI} disabled={aiLoading || !detectionName} style={{ fontSize: 12 }}>
               {aiLoading ? 'Analyzing…' : 'Get AI Advice'}
-            </button>
+            </ActionButton>
           </div>
           {aiResult && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -565,15 +552,14 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
               )}
             </div>
           )}
-        </div>
+        </SectionCard>
 
         {/* Preview Results */}
         {previewResult ? (
-          <div className="g-card" style={{ padding: 14 }}>
-            <div style={{ fontWeight: 600, marginBottom: 10 }}>Preview Results</div>
+          <SectionCard title="Preview Results">
             <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-              <StatCard label="Historical Matches" value={previewResult.historical_matches?.toLocaleString()} sub={`in ${previewResult.lookback_days}d`} color="#f97316" />
-              <StatCard label="Alerts/Day" value={previewResult.simulated_outcome?.alerts_per_day_before || 0} />
+              <MetricCard label="Historical Matches" value={previewResult.historical_matches?.toLocaleString()} sub={`in ${previewResult.lookback_days}d`} color="#f97316" />
+              <MetricCard label="Alerts/Day" value={previewResult.simulated_outcome?.alerts_per_day_before || 0} />
             </div>
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 6 }}>Impacted Assets</div>
@@ -602,10 +588,10 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
                 ))}
               </div>
             )}
-          </div>
+          </SectionCard>
         ) : (
           <div className="g-card" style={{ padding: 16, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 28 }}>🔍</div>
+            <Search style={{ width: 28, height: 28, color: 'var(--text-3)' }} />
             <div style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center' }}>Click "Preview Impact" to see historical match count, impacted assets, and simulated outcome before saving</div>
           </div>
         )}
@@ -620,23 +606,23 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Active Rules" value={analytics.active_rules} color="var(--accent)" />
-        <StatCard label="Total Suppressed" value={analytics.total_suppressed?.toLocaleString()} color="#f97316" sub="all time" />
-        <StatCard label="Hours Saved" value={`${analytics.analyst_hours_saved?.toLocaleString()}h`} color="#22c55e" sub="analyst time" />
-        <StatCard label="FP Rate" value={`${analytics.false_positive_rate}%`} color="#22c55e" sub="of suppressed" />
-        <StatCard label="Flagged Rules" value={analytics.suppression_effectiveness?.rules_with_incidents || 0} color={(analytics.suppression_effectiveness?.rules_with_incidents || 0) > 0 ? '#ef4444' : 'var(--text-1)'} sub="incident correlation" />
+        <MetricCard label="Active Rules" value={analytics.active_rules} color="var(--accent)" />
+        <MetricCard label="Total Suppressed" value={analytics.total_suppressed?.toLocaleString()} color="#f97316" sub="all time" />
+        <MetricCard label="Hours Saved" value={`${analytics.analyst_hours_saved?.toLocaleString()}h`} color="#22c55e" sub="analyst time" />
+        <MetricCard label="FP Rate" value={`${analytics.false_positive_rate}%`} color="#22c55e" sub="of suppressed" />
+        <MetricCard label="Flagged Rules" value={analytics.suppression_effectiveness?.rules_with_incidents || 0} color={(analytics.suppression_effectiveness?.rules_with_incidents || 0) > 0 ? '#ef4444' : 'var(--text-1)'} sub="incident correlation" />
       </div>
 
       {(analytics.suppression_effectiveness?.rules_with_incidents || 0) > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #ef4444', background: '#ef444408' }}>
-          <span style={{ fontWeight: 700, color: '#ef4444' }}>⚠ {analytics.suppression_effectiveness.rules_with_incidents} suppression rule(s) have been associated with confirmed incidents.</span>
-          <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>Review and adjust these rules immediately.</span>
+        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #ef4444', background: '#ef444408', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertTriangle style={{ width: 15, height: 15, color: '#ef4444', flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, color: '#ef4444' }}>{analytics.suppression_effectiveness.rules_with_incidents} suppression rule(s) have been associated with confirmed incidents.</span>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Review and adjust these rules immediately.</span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Most Suppressed Rules</div>
+        <SectionCard title="Most Suppressed Rules">
           {analytics.most_suppressed_rules?.map((r: any) => (
             <div key={r.rule_name} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
@@ -649,10 +635,9 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{r.scope} · {r.owner?.split('@')[0]}</div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Top Noisy Detections</div>
+        <SectionCard title="Top Noisy Detections">
           {analytics.top_noisy_detections?.map((d: any) => (
             <div key={d.detection} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
@@ -665,34 +650,23 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{d.total?.toLocaleString()} total · {d.suppressed?.toLocaleString()} suppressed</div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Suppression by Team</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr>
-                {['Team', 'Rules', 'Suppressed'].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '5px 8px', color: 'var(--text-3)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {analytics.suppression_by_team?.map((t: any) => (
-                <tr key={t.team} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '7px 8px' }}>{t.team}</td>
-                  <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 600 }}>{t.rules_created}</td>
-                  <td style={{ padding: '7px 8px', textAlign: 'right', color: '#f97316', fontWeight: 700 }}>{t.alerts_suppressed?.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SectionCard title="Suppression by Team" padded={false}>
+          <DataTable<any>
+            rows={analytics.suppression_by_team || []}
+            rowKey={(t: any) => t.team}
+            columns={[
+              { key: 'team', header: 'Team', render: (t: any) => <span style={{ fontSize: 12 }}>{t.team}</span> },
+              { key: 'rules_created', header: 'Rules', render: (t: any) => <span style={{ fontSize: 12, fontWeight: 600, textAlign: 'center', display: 'block' }}>{t.rules_created}</span> },
+              { key: 'alerts_suppressed', header: 'Suppressed', render: (t: any) => <span style={{ fontSize: 12, textAlign: 'right', display: 'block', color: '#f97316', fontWeight: 700 }}>{t.alerts_suppressed?.toLocaleString()}</span> },
+            ]}
+          />
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>False Positive Trend</div>
+        <SectionCard title="False Positive Trend">
           <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 80 }}>
             {analytics.false_positive_trend?.map((d: any) => {
               const max = Math.max(...analytics.false_positive_trend.map((x: any) => Math.max(x.fps, x.suppressed)), 1);
@@ -711,7 +685,7 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
             <span><span style={{ width: 10, height: 10, background: '#ef444444', display: 'inline-block', borderRadius: 2, marginRight: 4 }} />False Positives</span>
             <span><span style={{ width: 10, height: 10, background: '#22c55e66', display: 'inline-block', borderRadius: 2, marginRight: 4 }} />Suppressed</span>
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -724,37 +698,26 @@ function AuditTab({ entries }: { entries: any[] }) {
     expired: '#ef4444', deleted: '#ef4444', approved: '#22c55e', rejected: '#ef4444',
   };
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600 }}>Suppression Audit Trail</span>
-        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Immutable — all changes recorded</span>
-      </div>
-      {entries.length === 0 && <div style={{ padding: 24, color: 'var(--text-3)', textAlign: 'center' }}>No audit entries</div>}
-      <div style={{ overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>
-              {['Time', 'Rule', 'Action', 'Actor', 'Details'].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map(e => (
-              <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '9px 14px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</td>
-                <td style={{ padding: '9px 14px', fontSize: 12, fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.rule_name}</td>
-                <td style={{ padding: '9px 14px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: (ACTION_COLOR[e.action] || '#6b7280') + '22', color: ACTION_COLOR[e.action] || '#6b7280', textTransform: 'capitalize' }}>{e.action}</span>
-                </td>
-                <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</td>
-                <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.details}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <SectionCard
+      title="Suppression Audit Trail"
+      subtitle="Immutable — all changes recorded"
+      padded={false}
+    >
+      <DataTable<any>
+        rows={entries}
+        rowKey={(e: any) => e.id}
+        emptyState={<EmptyState title="No audit entries" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</span> },
+          { key: 'rule_name', header: 'Rule', render: (e: any) => <span style={{ fontSize: 12, fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.rule_name}</span> },
+          { key: 'action', header: 'Action', render: (e: any) => (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: (ACTION_COLOR[e.action] || '#6b7280') + '22', color: ACTION_COLOR[e.action] || '#6b7280', textTransform: 'capitalize' }}>{e.action}</span>
+          ) },
+          { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</span> },
+          { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.details}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -775,8 +738,7 @@ function ReportsTab() {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 800 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Report Type</label>
@@ -784,9 +746,9 @@ function ReportsTab() {
               {REPORT_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <button className="g-btn g-btn-primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</button>
+          <ActionButton variant="primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</ActionButton>
         </div>
-      </div>
+      </SectionCard>
       {result && (
         <div className="g-card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -794,7 +756,7 @@ function ReportsTab() {
               <div style={{ fontWeight: 700, fontSize: 15 }}>{result.title}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}</div>
             </div>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>⬇ Export PDF</button>
+            <ActionButton variant="ghost" icon={Download} style={{ fontSize: 12 }}>Export PDF</ActionButton>
           </div>
           <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
@@ -802,7 +764,7 @@ function ReportsTab() {
           </div>
           {result.key_metrics && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-              {Object.entries(result.key_metrics).map(([k, v]) => <StatCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />)}
+              {Object.entries(result.key_metrics).map(([k, v]) => <MetricCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />)}
             </div>
           )}
           {result.flagged_rules?.length > 0 && (
@@ -864,33 +826,24 @@ export default function SuppressionPage() {
   };
 
   return (
-    <RootLayout>
+    <RootLayout title="Alert Suppression"
+      subtitle="Noise reduction · False positive management · Rule builder · AI recommendations · Preview mode"
+      actions={dash?.expiring_rules > 0 ? (
+        <div style={{ padding: '6px 14px', borderRadius: 6, background: '#f9731622', color: '#f97316', fontSize: 12, fontWeight: 700, border: '1px solid #f9731644' }}>
+          {dash.expiring_rules} rule{dash.expiring_rules !== 1 ? 's' : ''} expiring soon
+        </div>
+      ) : undefined}>
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Alert Suppression</h1>
-            <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
-              Noise reduction · False positive management · Rule builder · AI recommendations · Preview mode
-            </div>
-          </div>
-          {dash?.expiring_rules > 0 && (
-            <div style={{ padding: '6px 14px', borderRadius: 6, background: '#f9731622', color: '#f97316', fontSize: 12, fontWeight: 700, border: '1px solid #f9731644' }}>
-              {dash.expiring_rules} rule{dash.expiring_rules !== 1 ? 's' : ''} expiring soon
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-            <button key={t} onClick={() => switchTab(t)}
-              style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {TAB_LABELS[t]}
-              {t === 'rules' && rules.length > 0 && (
-                <span style={{ marginLeft: 5, fontSize: 10, background: 'var(--border)', padding: '1px 5px', borderRadius: 8, color: 'var(--text-3)' }}>{rules.length}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          tabs={(Object.keys(TAB_LABELS) as Tab[]).map(t => ({
+            key: t,
+            label: TAB_LABELS[t],
+            icon: TAB_ICONS[t],
+            count: t === 'rules' ? (rules.length > 0 ? rules.length : undefined) : undefined,
+          }))}
+          active={tab}
+          onChange={t => switchTab(t as Tab)}
+        />
 
         <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}><DashboardTab dash={dash} /></div>
         <div style={{ display: tab === 'rules' ? 'block' : 'none' }}>

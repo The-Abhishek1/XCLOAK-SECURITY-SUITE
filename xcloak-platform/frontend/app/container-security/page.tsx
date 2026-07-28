@@ -3,6 +3,10 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { containerSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, SectionCard, DataTable, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Boxes, Package, Activity, Lock, Radar, ClipboardCheck, BarChart3, Siren, Check, X,
+} from 'lucide-react';
 
 const SEV_BG: Record<string, string> = {
   critical: 'background:rgba(220,38,38,0.15);color:#f87171;border:1px solid rgba(220,38,38,0.3)',
@@ -14,18 +18,14 @@ const SEV_BG: Record<string, string> = {
 };
 type Tab = 'overview' | 'inventory' | 'images' | 'runtime' | 'rbac' | 'intelligence' | 'compliance' | 'analytics' | 'response';
 
+const TAB_ICONS: Record<Tab, any> = {
+  overview: LayoutDashboard, inventory: Boxes, images: Package, runtime: Activity, rbac: Lock,
+  intelligence: Radar, compliance: ClipboardCheck, analytics: BarChart3, response: Siren,
+};
+
 function SevBadge({ v }: { v: string }) {
   const style = SEV_BG[v?.toLowerCase()] || SEV_BG.low;
   return <span style={{ ...Object.fromEntries(style.split(';').filter(Boolean).map(s => { const [k, val] = s.split(':'); return [k.trim().replace(/-([a-z])/g, (_: string, c: string) => c.toUpperCase()), val?.trim()]; })), padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const }}>{v}</span>;
-}
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ flex: 1, minWidth: 140, padding: '18px 20px' }}>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || 'var(--accent)' }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
 }
 function RiskBar({ score }: { score: number }) {
   const color = score >= 80 ? '#ef4444' : score >= 60 ? '#f97316' : score >= 40 ? '#eab308' : '#22c55e';
@@ -39,6 +39,12 @@ function RiskBar({ score }: { score: number }) {
   );
 }
 
+function OkBad({ ok }: { ok: boolean }) {
+  return ok
+    ? <Check style={{ width: 13, height: 13, color: '#22c55e' }} />
+    : <X style={{ width: 13, height: 13, color: '#ef4444' }} />;
+}
+
 function OverviewTab() {
   const [dash, setDash] = useState<any>(null);
   useEffect(() => { containerSecurityAPI.getDashboard().then(r => setDash(r.data)); }, []);
@@ -46,19 +52,18 @@ function OverviewTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Clusters" value={d.clusters ?? '—'} />
-        <StatCard label="Nodes" value={d.nodes ?? '—'} />
-        <StatCard label="Pods" value={d.pods ?? '—'} />
-        <StatCard label="Namespaces" value={d.namespaces ?? '—'} />
-        <StatCard label="Running Containers" value={d.running_containers ?? '—'} color="var(--accent)" />
-        <StatCard label="Runtime Alerts" value={d.runtime_alerts ?? '—'} color={d.runtime_alerts > 0 ? '#ef4444' : undefined} />
-        <StatCard label="Vulnerable Images" value={d.vulnerable_images ?? '—'} color={d.vulnerable_images > 0 ? '#f97316' : undefined} />
-        <StatCard label="Critical Findings" value={d.critical_findings ?? '—'} color={d.critical_findings > 0 ? '#ef4444' : undefined} />
+        <MetricCard label="Clusters" value={d.clusters ?? '—'} color="var(--accent)" />
+        <MetricCard label="Nodes" value={d.nodes ?? '—'} color="var(--accent)" />
+        <MetricCard label="Pods" value={d.pods ?? '—'} color="var(--accent)" />
+        <MetricCard label="Namespaces" value={d.namespaces ?? '—'} color="var(--accent)" />
+        <MetricCard label="Running Containers" value={d.running_containers ?? '—'} color="var(--accent)" />
+        <MetricCard label="Runtime Alerts" value={d.runtime_alerts ?? '—'} color={d.runtime_alerts > 0 ? '#ef4444' : undefined} />
+        <MetricCard label="Vulnerable Images" value={d.vulnerable_images ?? '—'} color={d.vulnerable_images > 0 ? '#f97316' : undefined} />
+        <MetricCard label="Critical Findings" value={d.critical_findings ?? '—'} color={d.critical_findings > 0 ? '#ef4444' : undefined} />
       </div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div className="g-card" style={{ flex: 1, minWidth: 300, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Security Posture</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SectionCard title="Security Posture" className="flex-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 280 }}>
             {[
               { label: 'Container Risk Score', val: d.container_risk_score ?? 0 },
               { label: 'Compliance Score', val: d.compliance_score ?? 0 },
@@ -72,10 +77,9 @@ function OverviewTab() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 300, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Security Concerns</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        </SectionCard>
+        <SectionCard title="Security Concerns" className="flex-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 280 }}>
             {[
               { label: 'Privileged Pods', val: d.privileged_pods, color: '#ef4444' },
               { label: 'Pods Without Resource Limits', val: d.pods_no_limits, color: '#f97316' },
@@ -88,10 +92,9 @@ function OverviewTab() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 300, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Coverage</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        </SectionCard>
+        <SectionCard title="Coverage" className="flex-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 280 }}>
             {[
               { label: 'Runtime Protection', status: true },
               { label: 'Image Scanning', status: true },
@@ -102,11 +105,13 @@ function OverviewTab() {
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{row.label}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: row.status ? '#22c55e' : '#ef4444' }}>{row.status ? '✓ Active' : '✗ Missing'}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: row.status ? '#22c55e' : '#ef4444' }}>
+                  <OkBad ok={row.status} /> {row.status ? 'Active' : 'Missing'}
+                </span>
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -129,77 +134,69 @@ function InventoryTab() {
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {(['clusters', 'nodes', 'namespaces', 'pods'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)} style={{ textTransform: 'capitalize' }}>{s}</button>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)} style={{ textTransform: 'capitalize' }}>{s}</ActionButton>
         ))}
       </div>
       {sub === 'clusters' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Cluster</th><th>Provider</th><th>K8s Version</th><th>Nodes</th><th>Region</th><th>Risk</th><th>Compliance</th><th>Status</th>
-        </tr></thead><tbody>
-          {clusters.map((cl: any) => (
-            <tr key={cl.id} className="g-tr">
-              <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>{cl.name}</td>
-              <td><span style={{ color: PROV_COLOR[cl.provider] || 'var(--text-1)', fontWeight: 600, fontSize: 12, textTransform: 'uppercase' }}>{cl.provider}</span></td>
-              <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{cl.k8s_version}</td>
-              <td>{cl.node_count}</td>
-              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{cl.region}</td>
-              <td><RiskBar score={cl.risk_score} /></td>
-              <td><RiskBar score={cl.compliance_score} /></td>
-              <td><SevBadge v={cl.status === 'healthy' ? 'clean' : cl.status === 'degraded' ? 'medium' : 'high'} /></td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={clusters}
+          rowKey={(cl: any) => cl.id}
+          columns={[
+            { key: 'name', header: 'Cluster', render: (cl: any) => <span style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>{cl.name}</span> },
+            { key: 'provider', header: 'Provider', render: (cl: any) => <span style={{ color: PROV_COLOR[cl.provider] || 'var(--text-1)', fontWeight: 600, fontSize: 12, textTransform: 'uppercase' }}>{cl.provider}</span> },
+            { key: 'k8s_version', header: 'K8s Version', render: (cl: any) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{cl.k8s_version}</span> },
+            { key: 'node_count', header: 'Nodes', render: (cl: any) => <span>{cl.node_count}</span> },
+            { key: 'region', header: 'Region', render: (cl: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{cl.region}</span> },
+            { key: 'risk', header: 'Risk', render: (cl: any) => <RiskBar score={cl.risk_score} /> },
+            { key: 'compliance', header: 'Compliance', render: (cl: any) => <RiskBar score={cl.compliance_score} /> },
+            { key: 'status', header: 'Status', render: (cl: any) => <SevBadge v={cl.status === 'healthy' ? 'clean' : cl.status === 'degraded' ? 'medium' : 'high'} /> },
+          ]}
+        />
       )}
       {sub === 'nodes' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Node</th><th>OS</th><th>Runtime</th><th>CPU</th><th>Memory</th><th>Pods</th><th>CVEs</th><th>Risk</th><th>Status</th>
-        </tr></thead><tbody>
-          {nodes.map((n: any) => (
-            <tr key={n.id} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name}</td>
-              <td style={{ fontSize: 11 }}>{n.os}</td>
-              <td style={{ fontSize: 11, fontFamily: 'monospace' }}>{n.runtime}</td>
-              <td>{n.cpu_cores} vCPU</td>
-              <td>{n.memory_gb} GB</td>
-              <td>{n.pod_count}</td>
-              <td style={{ color: n.vuln_count > 4 ? '#ef4444' : n.vuln_count > 2 ? '#f97316' : '#22c55e', fontWeight: 600 }}>{n.vuln_count}</td>
-              <td><RiskBar score={n.risk_score} /></td>
-              <td><SevBadge v={n.status === 'ready' ? 'clean' : 'high'} /></td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={nodes}
+          rowKey={(n: any) => n.id}
+          columns={[
+            { key: 'name', header: 'Node', render: (n: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{n.name}</span> },
+            { key: 'os', header: 'OS', render: (n: any) => <span style={{ fontSize: 11 }}>{n.os}</span> },
+            { key: 'runtime', header: 'Runtime', render: (n: any) => <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{n.runtime}</span> },
+            { key: 'cpu', header: 'CPU', render: (n: any) => <span>{n.cpu_cores} vCPU</span> },
+            { key: 'memory', header: 'Memory', render: (n: any) => <span>{n.memory_gb} GB</span> },
+            { key: 'pod_count', header: 'Pods', render: (n: any) => <span>{n.pod_count}</span> },
+            { key: 'vuln_count', header: 'CVEs', render: (n: any) => <span style={{ color: n.vuln_count > 4 ? '#ef4444' : n.vuln_count > 2 ? '#f97316' : '#22c55e', fontWeight: 600 }}>{n.vuln_count}</span> },
+            { key: 'risk', header: 'Risk', render: (n: any) => <RiskBar score={n.risk_score} /> },
+            { key: 'status', header: 'Status', render: (n: any) => <SevBadge v={n.status === 'ready' ? 'clean' : 'high'} /> },
+          ]}
+        />
       )}
       {sub === 'namespaces' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Namespace</th><th>Pods</th><th>Privileged Pods</th><th>Risk Score</th>
-        </tr></thead><tbody>
-          {namespaces.map((ns: any) => (
-            <tr key={ns.namespace} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{ns.namespace}</td>
-              <td>{ns.pod_count}</td>
-              <td style={{ color: ns.privileged_pods > 0 ? '#ef4444' : '#22c55e', fontWeight: 600 }}>{ns.privileged_pods}</td>
-              <td style={{ width: 200 }}><RiskBar score={Math.round(ns.risk_score)} /></td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={namespaces}
+          rowKey={(ns: any) => ns.namespace}
+          columns={[
+            { key: 'namespace', header: 'Namespace', render: (ns: any) => <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{ns.namespace}</span> },
+            { key: 'pod_count', header: 'Pods', render: (ns: any) => <span>{ns.pod_count}</span> },
+            { key: 'privileged_pods', header: 'Privileged Pods', render: (ns: any) => <span style={{ color: ns.privileged_pods > 0 ? '#ef4444' : '#22c55e', fontWeight: 600 }}>{ns.privileged_pods}</span> },
+            { key: 'risk', header: 'Risk Score', width: '200px', render: (ns: any) => <RiskBar score={Math.round(ns.risk_score)} /> },
+          ]}
+        />
       )}
       {sub === 'pods' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Pod</th><th>Namespace</th><th>Image</th><th>Priv</th><th>Root</th><th>Host Net</th><th>Limits</th><th>Risk</th>
-        </tr></thead><tbody>
-          {pods.map((p: any) => (
-            <tr key={p.id} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.namespace}</td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.image}</td>
-              <td><span style={{ color: p.is_privileged ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{p.is_privileged ? '✗' : '✓'}</span></td>
-              <td><span style={{ color: p.run_as_root ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{p.run_as_root ? '✗' : '✓'}</span></td>
-              <td><span style={{ color: p.host_network ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{p.host_network ? '✗' : '✓'}</span></td>
-              <td><span style={{ color: p.has_resource_limits ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{p.has_resource_limits ? '✓' : '✗'}</span></td>
-              <td style={{ width: 140 }}><RiskBar score={p.risk_score} /></td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={pods}
+          rowKey={(p: any) => p.id}
+          columns={[
+            { key: 'name', header: 'Pod', render: (p: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{p.name}</span> },
+            { key: 'namespace', header: 'Namespace', render: (p: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.namespace}</span> },
+            { key: 'image', header: 'Image', render: (p: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.image}</span> },
+            { key: 'priv', header: 'Priv', render: (p: any) => <OkBad ok={!p.is_privileged} /> },
+            { key: 'root', header: 'Root', render: (p: any) => <OkBad ok={!p.run_as_root} /> },
+            { key: 'host_net', header: 'Host Net', render: (p: any) => <OkBad ok={!p.host_network} /> },
+            { key: 'limits', header: 'Limits', render: (p: any) => <OkBad ok={p.has_resource_limits} /> },
+            { key: 'risk', header: 'Risk', width: '140px', render: (p: any) => <RiskBar score={p.risk_score} /> },
+          ]}
+        />
       )}
     </div>
   );
@@ -217,53 +214,53 @@ function ImagesTab() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        <button className={sub === 'scan' ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub('scan')}>Image Scan Results</button>
-        <button className={sub === 'supply' ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub('supply')}>Supply Chain</button>
+        <ActionButton variant={sub === 'scan' ? 'primary' : 'ghost'} onClick={() => setSub('scan')}>Image Scan Results</ActionButton>
+        <ActionButton variant={sub === 'supply' ? 'primary' : 'ghost'} onClick={() => setSub('supply')}>Supply Chain</ActionButton>
       </div>
       {sub === 'scan' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Image</th><th>Registry</th><th>OS</th><th>Age</th><th>Critical</th><th>High</th><th>Med</th><th>Low</th><th>Secrets</th><th>Signed</th><th>SBOM</th><th>Risk</th>
-        </tr></thead><tbody>
-          {images.map((img: any) => (
-            <tr key={img.id} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{img.image}:{img.tag}</td>
-              <td style={{ fontSize: 11 }}>{img.registry}</td>
-              <td style={{ fontSize: 11 }}>{img.os}</td>
-              <td style={{ fontSize: 11, color: img.age_days > 365 ? '#ef4444' : 'var(--text-2)' }}>{img.age_days}d</td>
-              <td style={{ color: img.cve_critical > 0 ? '#ef4444' : 'var(--text-3)', fontWeight: img.cve_critical > 0 ? 700 : 400 }}>{img.cve_critical}</td>
-              <td style={{ color: img.cve_high > 0 ? '#f97316' : 'var(--text-3)', fontWeight: img.cve_high > 0 ? 700 : 400 }}>{img.cve_high}</td>
-              <td style={{ color: 'var(--text-2)' }}>{img.cve_medium}</td>
-              <td style={{ color: 'var(--text-3)' }}>{img.cve_low}</td>
-              <td><span style={{ color: img.has_secrets ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{img.has_secrets ? '✗ YES' : '✓ No'}</span></td>
-              <td><span style={{ color: img.signature_valid ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{img.signature_valid ? '✓' : '✗'}</span></td>
-              <td><span style={{ color: img.sbom_available ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{img.sbom_available ? '✓' : '✗'}</span></td>
-              <td style={{ width: 120 }}><RiskBar score={img.risk_score} /></td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={images}
+          rowKey={(img: any) => img.id}
+          columns={[
+            { key: 'image', header: 'Image', render: (img: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{img.image}:{img.tag}</span> },
+            { key: 'registry', header: 'Registry', render: (img: any) => <span style={{ fontSize: 11 }}>{img.registry}</span> },
+            { key: 'os', header: 'OS', render: (img: any) => <span style={{ fontSize: 11 }}>{img.os}</span> },
+            { key: 'age', header: 'Age', render: (img: any) => <span style={{ fontSize: 11, color: img.age_days > 365 ? '#ef4444' : 'var(--text-2)' }}>{img.age_days}d</span> },
+            { key: 'critical', header: 'Critical', render: (img: any) => <span style={{ color: img.cve_critical > 0 ? '#ef4444' : 'var(--text-3)', fontWeight: img.cve_critical > 0 ? 700 : 400 }}>{img.cve_critical}</span> },
+            { key: 'high', header: 'High', render: (img: any) => <span style={{ color: img.cve_high > 0 ? '#f97316' : 'var(--text-3)', fontWeight: img.cve_high > 0 ? 700 : 400 }}>{img.cve_high}</span> },
+            { key: 'medium', header: 'Med', render: (img: any) => <span style={{ color: 'var(--text-2)' }}>{img.cve_medium}</span> },
+            { key: 'low', header: 'Low', render: (img: any) => <span style={{ color: 'var(--text-3)' }}>{img.cve_low}</span> },
+            { key: 'secrets', header: 'Secrets', render: (img: any) => img.has_secrets
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444', fontWeight: 700 }}><X style={{ width: 12, height: 12 }} /> YES</span>
+              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e', fontWeight: 700 }}><Check style={{ width: 12, height: 12 }} /> No</span> },
+            { key: 'signed', header: 'Signed', render: (img: any) => <OkBad ok={img.signature_valid} /> },
+            { key: 'sbom', header: 'SBOM', render: (img: any) => <OkBad ok={img.sbom_available} /> },
+            { key: 'risk', header: 'Risk', width: '120px', render: (img: any) => <RiskBar score={img.risk_score} /> },
+          ]}
+        />
       )}
       {sub === 'supply' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <StatCard label="Total Images" value={sc.total_images ?? '—'} />
-            <StatCard label="Signed Images" value={sc.signed_images ?? '—'} sub={`${sc.signature_rate ?? 0}% coverage`} color="#22c55e" />
-            <StatCard label="SBOM Available" value={sc.sbom_available ?? '—'} sub={`${sc.sbom_rate ?? 0}% coverage`} color="#3b82f6" />
-            <StatCard label="Old Base Images" value={sc.old_base_images ?? '—'} sub="> 180 days old" color={sc.old_base_images > 0 ? '#f97316' : undefined} />
+            <MetricCard label="Total Images" value={sc.total_images ?? '—'} color="var(--accent)" />
+            <MetricCard label="Signed Images" value={sc.signed_images ?? '—'} sub={`${sc.signature_rate ?? 0}% coverage`} color="#22c55e" />
+            <MetricCard label="SBOM Available" value={sc.sbom_available ?? '—'} sub={`${sc.sbom_rate ?? 0}% coverage`} color="#3b82f6" />
+            <MetricCard label="Old Base Images" value={sc.old_base_images ?? '—'} sub="> 180 days old" color={sc.old_base_images > 0 ? '#f97316' : undefined} />
           </div>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Registry Trust</div>
-            <table className="g-table"><thead className="g-thead"><tr><th>Registry</th><th>Trusted</th><th>Images</th></tr></thead><tbody>
-              {(sc.trusted_registries || []).map((r: any) => (
-                <tr key={r.registry} className="g-tr">
-                  <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{r.registry}</td>
-                  <td><span style={{ color: r.trusted ? '#22c55e' : '#ef4444', fontWeight: 700 }}>{r.trusted ? '✓ Trusted' : '✗ Untrusted'}</span></td>
-                  <td>{r.images}</td>
-                </tr>
-              ))}
-            </tbody></table>
-          </div>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Supply Chain Recommendations</div>
+          <SectionCard title="Registry Trust">
+            <DataTable<any>
+              rows={sc.trusted_registries || []}
+              rowKey={(r: any) => r.registry}
+              columns={[
+                { key: 'registry', header: 'Registry', render: (r: any) => <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{r.registry}</span> },
+                { key: 'trusted', header: 'Trusted', render: (r: any) => r.trusted
+                  ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e', fontWeight: 700 }}><Check style={{ width: 12, height: 12 }} /> Trusted</span>
+                  : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444', fontWeight: 700 }}><X style={{ width: 12, height: 12 }} /> Untrusted</span> },
+                { key: 'images', header: 'Images', render: (r: any) => <span>{r.images}</span> },
+              ]}
+            />
+          </SectionCard>
+          <SectionCard title="Supply Chain Recommendations">
             {[
               'Enable Cosign image signing for all production images',
               'Generate and attach SBOMs to all container builds (syft/grype)',
@@ -272,11 +269,11 @@ function ImagesTab() {
               'Update base images older than 90 days — use Renovate or Dependabot',
             ].map((rec, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                <span style={{ color: '#ef4444', fontWeight: 700, marginTop: 1 }}>✗</span>
+                <X style={{ width: 13, height: 13, color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
                 <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{rec}</span>
               </div>
             ))}
-          </div>
+          </SectionCard>
         </div>
       )}
     </div>
@@ -291,31 +288,31 @@ function RuntimeTab() {
   return (
     <div style={{ display: 'flex', gap: 16 }}>
       <div style={{ flex: 2 }}>
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Alert Type</th><th>Severity</th><th>Pod</th><th>Namespace</th><th>MITRE</th><th>Status</th><th>Time</th>
-        </tr></thead><tbody>
-          {alerts.map((a: any) => (
-            <tr key={a.id} className="g-tr" onClick={() => setSelected(a)} style={{ cursor: 'pointer', background: selected?.id === a.id ? 'rgba(100,200,255,0.04)' : undefined }}>
-              <td>
-                <span style={{ color: ALERT_COLOR[a.alert_type] || 'var(--text-1)', fontWeight: 600, fontSize: 12 }}>
-                  {a.alert_type?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                </span>
-              </td>
-              <td><SevBadge v={a.severity} /></td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.pod_name}</td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{a.namespace}</td>
-              <td><code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 3 }}>{a.mitre_technique}</code></td>
-              <td><SevBadge v={a.status === 'open' ? 'critical' : a.status === 'investigating' ? 'medium' : 'clean'} /></td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={alerts}
+          rowKey={(a: any) => a.id}
+          onRowClick={a => setSelected(a)}
+          rowStyle={(a: any) => selected?.id === a.id ? { background: 'rgba(100,200,255,0.04)' } : undefined}
+          columns={[
+            { key: 'alert_type', header: 'Alert Type', render: (a: any) => (
+              <span style={{ color: ALERT_COLOR[a.alert_type] || 'var(--text-1)', fontWeight: 600, fontSize: 12 }}>
+                {a.alert_type?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+              </span>
+            ) },
+            { key: 'severity', header: 'Severity', render: (a: any) => <SevBadge v={a.severity} /> },
+            { key: 'pod_name', header: 'Pod', render: (a: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{a.pod_name}</span> },
+            { key: 'namespace', header: 'Namespace', render: (a: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{a.namespace}</span> },
+            { key: 'mitre', header: 'MITRE', render: (a: any) => <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 3 }}>{a.mitre_technique}</code> },
+            { key: 'status', header: 'Status', render: (a: any) => <SevBadge v={a.status === 'open' ? 'critical' : a.status === 'investigating' ? 'medium' : 'clean'} /> },
+            { key: 'time', header: 'Time', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(a.created_at)}</span> },
+          ]}
+        />
       </div>
       {selected && (
         <div className="g-card" style={{ flex: 1, minWidth: 280, padding: 20, position: 'sticky', top: 16, alignSelf: 'flex-start' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>Alert Details</div>
-            <button className="g-btn g-btn-ghost" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setSelected(null)}>✕</button>
+            <ActionButton variant="ghost" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setSelected(null)}><X style={{ width: 12, height: 12 }} /></ActionButton>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[
@@ -363,92 +360,85 @@ function RBACTab() {
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {(['rbac', 'secrets', 'network', 'admission'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'rbac' ? 'RBAC' : s.charAt(0).toUpperCase() + s.slice(1)}
-          </button>
+          </ActionButton>
         ))}
       </div>
       {sub === 'rbac' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <StatCard label="Total Findings" value={r.total ?? '—'} color="#ef4444" />
-            <StatCard label="Cluster Roles" value={r.cluster_roles ?? '—'} color="#f97316" />
-            <StatCard label="Bindings" value={r.bindings ?? '—'} />
-            <StatCard label="Excessive Perms" value={r.excessive ?? '—'} color="#f97316" />
-            <StatCard label="Wildcard Perms" value={r.wildcard ?? '—'} color="#ef4444" />
+            <MetricCard label="Total Findings" value={r.total ?? '—'} color="#ef4444" />
+            <MetricCard label="Cluster Roles" value={r.cluster_roles ?? '—'} color="#f97316" />
+            <MetricCard label="Bindings" value={r.bindings ?? '—'} color="var(--accent)" />
+            <MetricCard label="Excessive Perms" value={r.excessive ?? '—'} color="#f97316" />
+            <MetricCard label="Wildcard Perms" value={r.wildcard ?? '—'} color="#ef4444" />
           </div>
-          <table className="g-table"><thead className="g-thead"><tr>
-            <th>Kind</th><th>Name</th><th>Subject</th><th>Namespace</th><th>Finding</th><th>Severity</th><th>Description</th>
-          </tr></thead><tbody>
-            {(r.findings || []).map((f: any) => (
-              <tr key={f.id} className="g-tr">
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{f.kind}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{f.name}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{f.subject}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{f.namespace}</td>
-                <td style={{ fontSize: 11 }}>{f.finding_type?.replace(/_/g, ' ')}</td>
-                <td><SevBadge v={f.severity} /></td>
-                <td style={{ fontSize: 11, color: 'var(--text-2)', maxWidth: 280 }}>{f.description}</td>
-              </tr>
-            ))}
-          </tbody></table>
+          <DataTable<any>
+            rows={r.findings || []}
+            rowKey={(f: any) => f.id}
+            columns={[
+              { key: 'kind', header: 'Kind', render: (f: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{f.kind}</span> },
+              { key: 'name', header: 'Name', render: (f: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{f.name}</span> },
+              { key: 'subject', header: 'Subject', render: (f: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{f.subject}</span> },
+              { key: 'namespace', header: 'Namespace', render: (f: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{f.namespace}</span> },
+              { key: 'finding_type', header: 'Finding', render: (f: any) => <span style={{ fontSize: 11 }}>{f.finding_type?.replace(/_/g, ' ')}</span> },
+              { key: 'severity', header: 'Severity', render: (f: any) => <SevBadge v={f.severity} /> },
+              { key: 'description', header: 'Description', render: (f: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', maxWidth: 280, display: 'block' }}>{f.description}</span> },
+            ]}
+          />
         </div>
       )}
       {sub === 'secrets' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <StatCard label="Kubernetes Secrets" value={sc.total_secrets ?? '—'} />
-            <StatCard label="Plaintext Secrets" value={sc.plaintext ?? '—'} color={sc.plaintext > 0 ? '#ef4444' : undefined} />
-            <StatCard label="Expired Secrets" value={sc.expired ?? '—'} color={sc.expired > 0 ? '#f97316' : undefined} />
-            <StatCard label="Exposed Secrets" value={sc.exposed ?? '—'} color={sc.exposed > 0 ? '#ef4444' : undefined} />
+            <MetricCard label="Kubernetes Secrets" value={sc.total_secrets ?? '—'} color="var(--accent)" />
+            <MetricCard label="Plaintext Secrets" value={sc.plaintext ?? '—'} color={sc.plaintext > 0 ? '#ef4444' : undefined} />
+            <MetricCard label="Expired Secrets" value={sc.expired ?? '—'} color={sc.expired > 0 ? '#f97316' : undefined} />
+            <MetricCard label="Exposed Secrets" value={sc.exposed ?? '—'} color={sc.exposed > 0 ? '#ef4444' : undefined} />
           </div>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Secrets Providers</div>
-            <table className="g-table"><thead className="g-thead"><tr><th>Provider</th><th>Count</th><th>Status</th></tr></thead><tbody>
-              {(sc.providers || []).map((p: any) => (
-                <tr key={p.name} className="g-tr">
-                  <td style={{ fontWeight: 600 }}>{p.name}</td>
-                  <td>{p.count}</td>
-                  <td><SevBadge v={p.status === 'active' ? 'clean' : 'medium'} /></td>
-                </tr>
-              ))}
-            </tbody></table>
-          </div>
+          <SectionCard title="Secrets Providers">
+            <DataTable<any>
+              rows={sc.providers || []}
+              rowKey={(p: any) => p.name}
+              columns={[
+                { key: 'name', header: 'Provider', render: (p: any) => <span style={{ fontWeight: 600 }}>{p.name}</span> },
+                { key: 'count', header: 'Count', render: (p: any) => <span>{p.count}</span> },
+                { key: 'status', header: 'Status', render: (p: any) => <SevBadge v={p.status === 'active' ? 'clean' : 'medium'} /> },
+              ]}
+            />
+          </SectionCard>
         </div>
       )}
       {sub === 'network' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Name</th><th>Namespace</th><th>Direction</th><th>Pod Selector</th><th>Peer</th><th>Port</th><th>Status</th>
-        </tr></thead><tbody>
-          {netpols.map((np: any) => (
-            <tr key={np.id} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{np.name}</td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{np.namespace}</td>
-              <td style={{ fontSize: 11 }}>{np.direction}</td>
-              <td><code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 3 }}>{np.pod_selector}</code></td>
-              <td style={{ fontSize: 11 }}>{np.peer}</td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{np.port}</td>
-              <td><SevBadge v={np.status === 'active' ? 'clean' : np.status === 'warn' ? 'medium' : np.status === 'missing' ? 'high' : 'clean'} /></td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={netpols}
+          rowKey={(np: any) => np.id}
+          columns={[
+            { key: 'name', header: 'Name', render: (np: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{np.name}</span> },
+            { key: 'namespace', header: 'Namespace', render: (np: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{np.namespace}</span> },
+            { key: 'direction', header: 'Direction', render: (np: any) => <span style={{ fontSize: 11 }}>{np.direction}</span> },
+            { key: 'pod_selector', header: 'Pod Selector', render: (np: any) => <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 3 }}>{np.pod_selector}</code> },
+            { key: 'peer', header: 'Peer', render: (np: any) => <span style={{ fontSize: 11 }}>{np.peer}</span> },
+            { key: 'port', header: 'Port', render: (np: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{np.port}</span> },
+            { key: 'status', header: 'Status', render: (np: any) => <SevBadge v={np.status === 'active' ? 'clean' : np.status === 'warn' ? 'medium' : np.status === 'missing' ? 'high' : 'clean'} /> },
+          ]}
+        />
       )}
       {sub === 'admission' && (
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Workload</th><th>Kind</th><th>Namespace</th><th>Violation</th><th>Severity</th><th>Action</th><th>Time</th>
-        </tr></thead><tbody>
-          {admission.map((v: any) => (
-            <tr key={v.id} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{v.workload}</td>
-              <td style={{ fontSize: 11 }}>{v.kind}</td>
-              <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{v.namespace}</td>
-              <td style={{ fontSize: 11 }}>{v.violation_type?.replace(/_/g, ' ')}</td>
-              <td><SevBadge v={v.severity} /></td>
-              <td><SevBadge v={v.action === 'denied' ? 'clean' : v.action === 'allowed' ? 'high' : 'medium'} /></td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{v.created_at ? timeAgo(v.created_at) : '—'}</td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataTable<any>
+          rows={admission}
+          rowKey={(v: any) => v.id}
+          columns={[
+            { key: 'workload', header: 'Workload', render: (v: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{v.workload}</span> },
+            { key: 'kind', header: 'Kind', render: (v: any) => <span style={{ fontSize: 11 }}>{v.kind}</span> },
+            { key: 'namespace', header: 'Namespace', render: (v: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{v.namespace}</span> },
+            { key: 'violation_type', header: 'Violation', render: (v: any) => <span style={{ fontSize: 11 }}>{v.violation_type?.replace(/_/g, ' ')}</span> },
+            { key: 'severity', header: 'Severity', render: (v: any) => <SevBadge v={v.severity} /> },
+            { key: 'action', header: 'Action', render: (v: any) => <SevBadge v={v.action === 'denied' ? 'clean' : v.action === 'allowed' ? 'high' : 'medium'} /> },
+            { key: 'time', header: 'Time', render: (v: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{v.created_at ? timeAgo(v.created_at) : '—'}</span> },
+          ]}
+        />
       )}
     </div>
   );
@@ -481,90 +471,93 @@ function IntelligenceTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div className="g-card" style={{ flex: 1, minWidth: 280, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Threat Actors</div>
-          {(ti.threat_actors || []).map((a: any) => (
-            <div key={a.actor} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: 600, color: '#ef4444' }}>{a.actor}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{a.target} · {a.campaigns} campaigns</div>
-              <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 3, display: 'inline-block', marginTop: 4 }}>{a.ttps}</code>
-            </div>
-          ))}
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 280, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Recent CVEs</div>
-          {(ti.recent_cves || []).map((cv: any) => (
-            <div key={cv.cve} style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#ef4444', fontSize: 13 }}>{cv.cve}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 8 }}>{cv.type?.replace(/_/g, ' ')}</span>
-                <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>{cv.affected}</div>
+        <SectionCard title="Threat Actors" className="flex-1">
+          <div style={{ minWidth: 260 }}>
+            {(ti.threat_actors || []).map((a: any) => (
+              <div key={a.actor} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+                <div style={{ fontWeight: 600, color: '#ef4444' }}>{a.actor}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{a.target} · {a.campaigns} campaigns</div>
+                <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 3, display: 'inline-block', marginTop: 4 }}>{a.ttps}</code>
               </div>
-              <span style={{ fontWeight: 700, fontSize: 14, color: cv.score >= 9 ? '#ef4444' : cv.score >= 7 ? '#f97316' : '#eab308' }}>{cv.score}</span>
-            </div>
-          ))}
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 280, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>IOC Matches</div>
-          {(ti.ioc_matches || []).map((ioc: any) => (
-            <div key={ioc.value} style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <code style={{ fontSize: 11 }}>{ioc.value}</code>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>{ioc.hits} hits</span>
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{ioc.type?.toUpperCase()} · {ioc.category?.replace(/_/g, ' ')}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div className="g-card" style={{ flex: 1, minWidth: 320, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>AI Security Analysis</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {(['alert', 'image', 'ask'] as const).map(m => (
-              <button key={m} className={aiMode === m ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setAiMode(m)} style={{ fontSize: 11, padding: '4px 10px', textTransform: 'capitalize' }}>{m}</button>
             ))}
           </div>
-          <textarea
-            className="g-input"
-            rows={3}
-            style={{ width: '100%', resize: 'vertical' as const, fontFamily: 'monospace', fontSize: 12 }}
-            placeholder={aiMode === 'alert' ? 'Paste runtime alert details...' : aiMode === 'image' ? 'Paste image scan results...' : 'Ask a Kubernetes security question...'}
-            value={aiInput}
-            onChange={e => setAiInput(e.target.value)}
-          />
-          <button className="g-btn g-btn-primary" style={{ marginTop: 10, width: '100%' }} onClick={doAI} disabled={aiLoading || !aiInput.trim()}>
-            {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
-          </button>
-          {aiRes && (
-            <div style={{ marginTop: 16, padding: 14, background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '1px solid var(--border)' }}>
-              {aiRes.verdict && <div style={{ marginBottom: 10 }}><SevBadge v={aiRes.verdict === 'confirmed_threat' ? 'critical' : aiRes.verdict === 'false_positive' ? 'clean' : 'medium'} /></div>}
-              {aiRes.explanation && <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 12 }}>{aiRes.explanation}</p>}
-              {aiRes.mitre_techniques && (
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 4 }}>MITRE ATT&CK</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {aiRes.mitre_techniques.map((t: string) => <code key={t} style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 3 }}>{t}</code>)}
-                  </div>
-                </div>
-              )}
-              {aiRes.recommended_actions && (
+        </SectionCard>
+        <SectionCard title="Recent CVEs" className="flex-1">
+          <div style={{ minWidth: 260 }}>
+            {(ti.recent_cves || []).map((cv: any) => (
+              <div key={cv.cve} style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 6 }}>Recommended Actions</div>
-                  {aiRes.recommended_actions.map((a: string, i: number) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{i + 1}.</span>
-                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a}</span>
-                    </div>
-                  ))}
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#ef4444', fontSize: 13 }}>{cv.cve}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 8 }}>{cv.type?.replace(/_/g, ' ')}</span>
+                  <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>{cv.affected}</div>
                 </div>
-              )}
+                <span style={{ fontWeight: 700, fontSize: 14, color: cv.score >= 9 ? '#ef4444' : cv.score >= 7 ? '#f97316' : '#eab308' }}>{cv.score}</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+        <SectionCard title="IOC Matches" className="flex-1">
+          <div style={{ minWidth: 260 }}>
+            {(ti.ioc_matches || []).map((ioc: any) => (
+              <div key={ioc.value} style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <code style={{ fontSize: 11 }}>{ioc.value}</code>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>{ioc.hits} hits</span>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{ioc.type?.toUpperCase()} · {ioc.category?.replace(/_/g, ' ')}</div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <SectionCard title="AI Security Analysis" className="flex-1">
+          <div style={{ minWidth: 320 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {(['alert', 'image', 'ask'] as const).map(m => (
+                <ActionButton key={m} variant={aiMode === m ? 'primary' : 'ghost'} onClick={() => setAiMode(m)} style={{ fontSize: 11, padding: '4px 10px', textTransform: 'capitalize' }}>{m}</ActionButton>
+              ))}
             </div>
-          )}
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 320, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Security Timeline</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 400, overflowY: 'auto' }}>
+            <textarea
+              className="g-input"
+              rows={3}
+              style={{ width: '100%', resize: 'vertical' as const, fontFamily: 'monospace', fontSize: 12 }}
+              placeholder={aiMode === 'alert' ? 'Paste runtime alert details...' : aiMode === 'image' ? 'Paste image scan results...' : 'Ask a Kubernetes security question...'}
+              value={aiInput}
+              onChange={e => setAiInput(e.target.value)}
+            />
+            <ActionButton variant="primary" style={{ marginTop: 10, width: '100%', justifyContent: 'center' }} onClick={doAI} loading={aiLoading} disabled={!aiInput.trim()}>
+              {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
+            </ActionButton>
+            {aiRes && (
+              <div style={{ marginTop: 16, padding: 14, background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                {aiRes.verdict && <div style={{ marginBottom: 10 }}><SevBadge v={aiRes.verdict === 'confirmed_threat' ? 'critical' : aiRes.verdict === 'false_positive' ? 'clean' : 'medium'} /></div>}
+                {aiRes.explanation && <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 12 }}>{aiRes.explanation}</p>}
+                {aiRes.mitre_techniques && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 4 }}>MITRE ATT&CK</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {aiRes.mitre_techniques.map((t: string) => <code key={t} style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 3 }}>{t}</code>)}
+                    </div>
+                  </div>
+                )}
+                {aiRes.recommended_actions && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 6 }}>Recommended Actions</div>
+                    {aiRes.recommended_actions.map((a: string, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{i + 1}.</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </SectionCard>
+        <SectionCard title="Security Timeline" className="flex-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 400, overflowY: 'auto', minWidth: 320 }}>
             {timeline.map((ev: any) => (
               <div key={ev.id} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 6, borderLeft: `3px solid ${ev.severity === 'critical' ? '#ef4444' : ev.severity === 'high' ? '#f97316' : ev.severity === 'medium' ? '#eab308' : '#22c55e'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -576,7 +569,7 @@ function IntelligenceTab() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -589,7 +582,7 @@ function ComplianceTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Overall Compliance Score" value={`${c.overall_score ?? '—'}%`} color={c.overall_score >= 80 ? '#22c55e' : c.overall_score >= 60 ? '#f97316' : '#ef4444'} />
+        <MetricCard label="Overall Compliance Score" value={`${c.overall_score ?? '—'}%`} color={c.overall_score >= 80 ? '#22c55e' : c.overall_score >= 60 ? '#f97316' : '#ef4444'} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {(c.frameworks || []).map((fw: any) => (
@@ -610,21 +603,18 @@ function ComplianceTab() {
           </div>
         ))}
       </div>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Failed Controls</div>
-        <table className="g-table"><thead className="g-thead"><tr>
-          <th>Control</th><th>Title</th><th>Framework</th><th>Severity</th>
-        </tr></thead><tbody>
-          {(c.failed_controls || []).map((fc: any, i: number) => (
-            <tr key={i} className="g-tr">
-              <td style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{fc.control}</td>
-              <td style={{ fontSize: 12 }}>{fc.title}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-2)' }}>{fc.framework}</td>
-              <td><SevBadge v={fc.severity} /></td>
-            </tr>
-          ))}
-        </tbody></table>
-      </div>
+      <SectionCard title="Failed Controls">
+        <DataTable<any>
+          rows={c.failed_controls || []}
+          rowKey={(fc: any, i: number) => i}
+          columns={[
+            { key: 'control', header: 'Control', render: (fc: any) => <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{fc.control}</span> },
+            { key: 'title', header: 'Title', render: (fc: any) => <span style={{ fontSize: 12 }}>{fc.title}</span> },
+            { key: 'framework', header: 'Framework', render: (fc: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fc.framework}</span> },
+            { key: 'severity', header: 'Severity', render: (fc: any) => <SevBadge v={fc.severity} /> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -638,13 +628,12 @@ function AnalyticsTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Total Pods" value={a.total_pods ?? '—'} />
-        <StatCard label="Privileged Pods" value={a.privileged_pods ?? '—'} color={a.privileged_pods > 0 ? '#ef4444' : undefined} />
+        <MetricCard label="Total Pods" value={a.total_pods ?? '—'} color="var(--accent)" />
+        <MetricCard label="Privileged Pods" value={a.privileged_pods ?? '—'} color={a.privileged_pods > 0 ? '#ef4444' : undefined} />
       </div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div className="g-card" style={{ flex: 2, minWidth: 320, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Runtime Alerts — 14 Day Trend</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80, paddingBottom: 24 }}>
+        <SectionCard title="Runtime Alerts — 14 Day Trend" className="flex-[2]">
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80, paddingBottom: 24, minWidth: 320 }}>
             {(a.runtime_alert_trend || []).map((p: any) => (
               <div key={p.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
                 <div style={{ width: '80%', background: p.count > 4 ? '#ef4444' : p.count > 2 ? '#f97316' : 'var(--accent)', borderRadius: 2, height: `${(p.count / maxAlerts) * 56 + 4}px`, minHeight: 4 }} />
@@ -652,48 +641,51 @@ function AnalyticsTab() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 260, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Alerts by Type</div>
-          {(a.alert_by_type || []).map((t: any) => (
-            <div key={t.type} style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-2)', textTransform: 'capitalize' }}>{t.type?.replace(/_/g, ' ')}</span>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{t.count}</span>
+        </SectionCard>
+        <SectionCard title="Alerts by Type" className="flex-1">
+          <div style={{ minWidth: 260 }}>
+            {(a.alert_by_type || []).map((t: any) => (
+              <div key={t.type} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)', textTransform: 'capitalize' }}>{t.type?.replace(/_/g, ' ')}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>{t.count}</span>
+                </div>
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
+                  <div style={{ width: `${(t.count / maxAlertType) * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                </div>
               </div>
-              <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
-                <div style={{ width: `${(t.count / maxAlertType) * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SectionCard>
       </div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div className="g-card" style={{ flex: 1, minWidth: 300, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Top Vulnerable Images</div>
-          <table className="g-table"><thead className="g-thead"><tr><th>Image</th><th>Critical</th><th>High</th><th>Risk</th></tr></thead><tbody>
-            {(a.top_vulnerable_images || []).map((img: any, i: number) => (
-              <tr key={i} className="g-tr">
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{img.image}</td>
-                <td style={{ color: '#ef4444', fontWeight: 700 }}>{img.cve_critical}</td>
-                <td style={{ color: '#f97316', fontWeight: 700 }}>{img.cve_high}</td>
-                <td style={{ width: 120 }}><RiskBar score={img.risk} /></td>
-              </tr>
-            ))}
-          </tbody></table>
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 300, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Namespace Risk</div>
-          {(a.namespace_risk || []).map((ns: any) => (
-            <div key={ns.namespace} style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{ns.namespace}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{ns.pods} pods</span>
+        <SectionCard title="Top Vulnerable Images" className="flex-1">
+          <div style={{ minWidth: 300 }}>
+            <DataTable<any>
+              rows={a.top_vulnerable_images || []}
+              rowKey={(img: any, i: number) => i}
+              columns={[
+                { key: 'image', header: 'Image', render: (img: any) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{img.image}</span> },
+                { key: 'critical', header: 'Critical', render: (img: any) => <span style={{ color: '#ef4444', fontWeight: 700 }}>{img.cve_critical}</span> },
+                { key: 'high', header: 'High', render: (img: any) => <span style={{ color: '#f97316', fontWeight: 700 }}>{img.cve_high}</span> },
+                { key: 'risk', header: 'Risk', width: '120px', render: (img: any) => <RiskBar score={img.risk} /> },
+              ]}
+            />
+          </div>
+        </SectionCard>
+        <SectionCard title="Namespace Risk" className="flex-1">
+          <div style={{ minWidth: 300 }}>
+            {(a.namespace_risk || []).map((ns: any) => (
+              <div key={ns.namespace} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{ns.namespace}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{ns.pods} pods</span>
+                </div>
+                <RiskBar score={ns.risk} />
               </div>
-              <RiskBar score={ns.risk} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -736,8 +728,7 @@ function ResponseTab() {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Attack Path Visualization</div>
+      <SectionCard title="Attack Path Visualization">
         <div style={{ overflowX: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', minWidth: 600, padding: '8px 0', gap: 0 }}>
             {(ap.nodes || []).map((node: any, i: number) => (
@@ -755,85 +746,86 @@ function ResponseTab() {
             ))}
           </div>
         </div>
-      </div>
+      </SectionCard>
       {vulns.length > 0 && (
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Vulnerability Summary</div>
-          <table className="g-table"><thead className="g-thead"><tr><th>Image</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Risk</th></tr></thead><tbody>
-            {vulns.map((v: any) => (
-              <tr key={v.id} className="g-tr">
-                <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{v.image}</td>
-                <td style={{ color: '#ef4444', fontWeight: 700 }}>{v.cve_critical}</td>
-                <td style={{ color: '#f97316', fontWeight: 700 }}>{v.cve_high}</td>
-                <td style={{ color: '#eab308' }}>{v.cve_medium}</td>
-                <td style={{ color: 'var(--text-3)' }}>{v.cve_low}</td>
-                <td style={{ width: 120 }}><RiskBar score={v.risk_score} /></td>
-              </tr>
-            ))}
-          </tbody></table>
-        </div>
+        <SectionCard title="Vulnerability Summary">
+          <DataTable<any>
+            rows={vulns}
+            rowKey={(v: any) => v.id}
+            columns={[
+              { key: 'image', header: 'Image', render: (v: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{v.image}</span> },
+              { key: 'critical', header: 'Critical', render: (v: any) => <span style={{ color: '#ef4444', fontWeight: 700 }}>{v.cve_critical}</span> },
+              { key: 'high', header: 'High', render: (v: any) => <span style={{ color: '#f97316', fontWeight: 700 }}>{v.cve_high}</span> },
+              { key: 'medium', header: 'Medium', render: (v: any) => <span style={{ color: '#eab308' }}>{v.cve_medium}</span> },
+              { key: 'low', header: 'Low', render: (v: any) => <span style={{ color: 'var(--text-3)' }}>{v.cve_low}</span> },
+              { key: 'risk', header: 'Risk', width: '120px', render: (v: any) => <RiskBar score={v.risk_score} /> },
+            ]}
+          />
+        </SectionCard>
       )}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <div className="g-card" style={{ flex: 1, minWidth: 340, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Response Actions</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-            {ACTIONS.map(a => (
-              <button key={a.id} onClick={() => setAction(a.id)} style={{ textAlign: 'left' as const, padding: '10px 12px', borderRadius: 8, border: `1px solid ${action === a.id ? a.color : 'var(--border)'}`, background: action === a.id ? `${a.color}22` : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s' }}>
-                <div style={{ fontWeight: 600, fontSize: 12, color: action === a.id ? a.color : 'var(--text-1)' }}>{a.label}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{a.desc}</div>
-              </button>
-            ))}
-          </div>
-          <input className="g-input" placeholder="Pod name (optional)" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />
-          <input className="g-input" placeholder="Namespace (optional)" value={ns} onChange={e => setNs(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
-          <button className="g-btn g-btn-primary" style={{ width: '100%' }} onClick={doAction}>
-            Execute: {ACTIONS.find(a => a.id === action)?.label}
-          </button>
-          {msg && <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 6, fontSize: 12, color: '#4ade80' }}>{msg}</div>}
-        </div>
-        <div className="g-card" style={{ flex: 1, minWidth: 320, padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Generate Report</div>
-          <select className="g-select" value={reportType} onChange={e => setReportType(e.target.value)} style={{ width: '100%', marginBottom: 12 }}>
-            <option value="executive">Executive Summary</option>
-            <option value="technical">Technical Deep Dive</option>
-            <option value="compliance">Compliance Report</option>
-            <option value="incident">Incident Response Report</option>
-          </select>
-          <button className="g-btn g-btn-primary" style={{ width: '100%' }} onClick={doReport} disabled={reportLoading}>
-            {reportLoading ? 'Generating...' : 'Generate with AI'}
-          </button>
-          {reportResult && (
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--accent)' }}>{reportResult.title}</div>
-              {reportResult.executive_summary && <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>{reportResult.executive_summary}</p>}
-              {reportResult.key_findings && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Key Findings</div>
-                  {reportResult.key_findings.map((f: string, i: number) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                      <span style={{ color: '#ef4444', fontWeight: 700 }}>•</span>
-                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{f}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {reportResult.top_recommendations && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Top Recommendations</div>
-                  {reportResult.top_recommendations.map((rec: any, i: number) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{rec.priority}.</span>
-                      <div>
-                        <div style={{ fontSize: 12, color: 'var(--text-1)' }}>{rec.action}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>Est. effort: {rec.estimated_effort}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+        <SectionCard title="Response Actions" className="flex-1">
+          <div style={{ minWidth: 340 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+              {ACTIONS.map(a => (
+                <button key={a.id} onClick={() => setAction(a.id)} style={{ textAlign: 'left' as const, padding: '10px 12px', borderRadius: 8, border: `1px solid ${action === a.id ? a.color : 'var(--border)'}`, background: action === a.id ? `${a.color}22` : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s' }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: action === a.id ? a.color : 'var(--text-1)' }}>{a.label}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{a.desc}</div>
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+            <input className="g-input" placeholder="Pod name (optional)" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />
+            <input className="g-input" placeholder="Namespace (optional)" value={ns} onChange={e => setNs(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
+            <ActionButton variant="primary" style={{ width: '100%', justifyContent: 'center' }} onClick={doAction}>
+              Execute: {ACTIONS.find(a => a.id === action)?.label}
+            </ActionButton>
+            {msg && <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 6, fontSize: 12, color: '#4ade80' }}>{msg}</div>}
+          </div>
+        </SectionCard>
+        <SectionCard title="Generate Report" className="flex-1">
+          <div style={{ minWidth: 320 }}>
+            <select className="g-select" value={reportType} onChange={e => setReportType(e.target.value)} style={{ width: '100%', marginBottom: 12 }}>
+              <option value="executive">Executive Summary</option>
+              <option value="technical">Technical Deep Dive</option>
+              <option value="compliance">Compliance Report</option>
+              <option value="incident">Incident Response Report</option>
+            </select>
+            <ActionButton variant="primary" style={{ width: '100%', justifyContent: 'center' }} onClick={doReport} loading={reportLoading}>
+              {reportLoading ? 'Generating...' : 'Generate with AI'}
+            </ActionButton>
+            {reportResult && (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--accent)' }}>{reportResult.title}</div>
+                {reportResult.executive_summary && <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>{reportResult.executive_summary}</p>}
+                {reportResult.key_findings && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Key Findings</div>
+                    {reportResult.key_findings.map((f: string, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                        <span style={{ color: '#ef4444', fontWeight: 700 }}>•</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {reportResult.top_recommendations && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Top Recommendations</div>
+                    {reportResult.top_recommendations.map((rec: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{rec.priority}.</span>
+                        <div>
+                          <div style={{ fontSize: 12, color: 'var(--text-1)' }}>{rec.action}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>Est. effort: {rec.estimated_effort}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -850,19 +842,15 @@ export default function ContainerSecurityPage() {
   };
   const visibleTabs: Tab[] = ['overview', 'inventory', 'images', 'runtime', 'rbac', 'intelligence', 'compliance', 'analytics', 'response'];
   return (
-    <RootLayout>
+    <RootLayout title="Container & Kubernetes Security"
+      subtitle="Runtime protection, image scanning, RBAC analysis, and compliance for containerized workloads.">
     <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Container &amp; Kubernetes Security</h1>
-        <div style={{ marginTop: 4, color: 'var(--text-3)', fontSize: 13 }}>Runtime protection, image scanning, RBAC analysis, and compliance for containerized workloads.</div>
-      </div>
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-        {visibleTabs.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {TAB_LABELS[t]}
-          </button>
-        ))}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
+        <TabBar
+          tabs={visibleTabs.map(t => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t] }))}
+          active={tab}
+          onChange={t => setTab(t as Tab)}
+        />
       </div>
       <div>
         {loaded.current['overview']      && <div style={{ display: tab === 'overview'      ? 'block' : 'none' }}><OverviewTab /></div>}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -66,33 +67,56 @@ func GetSupDashboard(c *gin.Context) {
 	var activeRules, expiringRules int
 	var totalSuppressed int64
 	_ = row.Scan(&activeRules, &expiringRules, &totalSuppressed)
+
+	// Top suppressed detections — real data from sup_rules, only rules that
+	// have actually suppressed something (total_suppressed is incremented
+	// nowhere automatically today, so this is honestly empty until rules
+	// accrue real matches).
+	topSuppressed := []interface{}{}
+	tRows, err := database.DB.Query(`SELECT rule_name, COALESCE(description,''), total_suppressed FROM sup_rules WHERE tenant_id=$1 AND total_suppressed>0 ORDER BY total_suppressed DESC LIMIT 5`, tid)
+	if err == nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var ruleName, desc string
+			var count int
+			if tRows.Scan(&ruleName, &desc, &count) == nil {
+				detection := ruleName
+				if desc != "" {
+					detection = desc
+				}
+				topSuppressed = append(topSuppressed, map[string]interface{}{"detection": detection, "count": count, "rule": ruleName})
+			}
+		}
+	}
+
+	// Suppression trend — no per-day suppression-event table exists, so
+	// there is no honest way to build a real daily series. Return empty
+	// rather than fabricate numbers.
+	suppressionTrend := []interface{}{}
+
+	// Analysts creating rules — real GROUP BY on sup_rules.
+	analystsCreating := []interface{}{}
+	aRows, err := database.DB.Query(`SELECT COALESCE(created_by,'unknown'), COUNT(*), COALESCE(SUM(total_suppressed),0) FROM sup_rules WHERE tenant_id=$1 GROUP BY created_by ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if err == nil {
+		defer aRows.Close()
+		for aRows.Next() {
+			var analyst string
+			var rulesCreated int
+			var suppressed int64
+			if aRows.Scan(&analyst, &rulesCreated, &suppressed) == nil {
+				analystsCreating = append(analystsCreating, map[string]interface{}{"analyst": analyst, "rules_created": rulesCreated, "suppressed": suppressed})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"active_rules":        activeRules,
-		"suppressed_today":    totalSuppressed,
-		"expiring_rules":      expiringRules,
-		"analyst_time_saved_h": float64(totalSuppressed) * 0.05,
-		"top_suppressed": []interface{}{
-			map[string]interface{}{"detection": "Backup Process — PowerShell Execution", "count": 4200, "rule": "Backup Window Suppression"},
-			map[string]interface{}{"detection": "Scheduled Task Created — SYSTEM", "count": 1840, "rule": "Sysadmin Scheduled Tasks"},
-			map[string]interface{}{"detection": "LSASS Memory Access — Defender AV", "count": 972, "rule": "AV Scanner False Positive"},
-			map[string]interface{}{"detection": "Network Scan — Vulnerability Scanner", "count": 718, "rule": "Vuln Scanner Suppression"},
-			map[string]interface{}{"detection": "DNS Query — Windows Update", "count": 612, "rule": "Windows Update Noise"},
-		},
-		"suppression_trend": []interface{}{
-			map[string]interface{}{"date": "2026-07-11", "suppressed": 1240, "active_rules": 8},
-			map[string]interface{}{"date": "2026-07-12", "suppressed": 1820, "active_rules": 9},
-			map[string]interface{}{"date": "2026-07-13", "suppressed": 980, "active_rules": 9},
-			map[string]interface{}{"date": "2026-07-14", "suppressed": 2140, "active_rules": 11},
-			map[string]interface{}{"date": "2026-07-15", "suppressed": 1760, "active_rules": 11},
-			map[string]interface{}{"date": "2026-07-16", "suppressed": 2080, "active_rules": 12},
-			map[string]interface{}{"date": "2026-07-17", "suppressed": 1940, "active_rules": 12},
-		},
-		"analysts_creating_rules": []interface{}{
-			map[string]interface{}{"analyst": "alice@corp.com", "rules_created": 6, "suppressed": 7200},
-			map[string]interface{}{"analyst": "bob@corp.com", "rules_created": 3, "suppressed": 2840},
-			map[string]interface{}{"analyst": "carol@corp.com", "rules_created": 2, "suppressed": 1920},
-			map[string]interface{}{"analyst": "dave@corp.com", "rules_created": 1, "suppressed": 980},
-		},
+		"active_rules":            activeRules,
+		"suppressed_today":        totalSuppressed,
+		"expiring_rules":          expiringRules,
+		"analyst_time_saved_h":    float64(totalSuppressed) * 0.05,
+		"top_suppressed":          topSuppressed,
+		"suppression_trend":       suppressionTrend,
+		"analysts_creating_rules": analystsCreating,
 	})
 }
 
@@ -271,48 +295,151 @@ func PostSupApprove(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+type supCondition struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value string `json:"value"`
+	Logic string `json:"logic"`
+}
+
+// supFieldColumn maps a condition builder field to a real column on the
+// alerts (a) / agents (ag) join. Fields with no backing column are ignored
+// (not filtered on) rather than silently faked.
+func supFieldColumn(field string) string {
+	switch field {
+	case "detection_name", "alert_type":
+		return "a.rule_name"
+	case "severity":
+		return "a.severity"
+	case "mitre_technique":
+		return "a.mitre_technique"
+	case "hostname":
+		return "ag.hostname"
+	default:
+		return ""
+	}
+}
+
 // POST /api/sup/preview
 func PostSupPreview(c *gin.Context) {
+	tid := tenantIDFromContext(c)
 	var body struct {
 		Conditions string `json:"conditions"`
 		Scope      string `json:"scope"`
 		ScopeValue string `json:"scope_value"`
 	}
 	_ = c.ShouldBindJSON(&body)
+
+	var conds []supCondition
+	_ = json.Unmarshal([]byte(body.Conditions), &conds)
+
+	where := []string{"ag.tenant_id=$1", "a.created_at >= NOW() - INTERVAL '30 days'"}
+	args := []interface{}{tid}
+	idx := 2
+	for _, cond := range conds {
+		col := supFieldColumn(cond.Field)
+		if col == "" || cond.Value == "" {
+			continue
+		}
+		switch cond.Op {
+		case "equals":
+			where = append(where, fmt.Sprintf("%s = $%d", col, idx))
+			args = append(args, cond.Value)
+		case "not_equals":
+			where = append(where, fmt.Sprintf("%s != $%d", col, idx))
+			args = append(args, cond.Value)
+		case "starts_with":
+			where = append(where, fmt.Sprintf("%s ILIKE $%d", col, idx))
+			args = append(args, cond.Value+"%")
+		case "contains":
+			where = append(where, fmt.Sprintf("%s ILIKE $%d", col, idx))
+			args = append(args, "%"+cond.Value+"%")
+		case "matches", "regex":
+			where = append(where, fmt.Sprintf("%s ~* $%d", col, idx))
+			args = append(args, cond.Value)
+		default:
+			continue
+		}
+		idx++
+	}
+	if body.Scope == "single_asset" && body.ScopeValue != "" {
+		where = append(where, fmt.Sprintf("ag.hostname = $%d", idx))
+		args = append(args, body.ScopeValue)
+		idx++
+	}
+	whereSQL := strings.Join(where, " AND ")
+
+	var historicalMatches int
+	_ = database.DB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM alerts a JOIN agents ag ON ag.id=a.agent_id WHERE %s`, whereSQL), args...).Scan(&historicalMatches)
+
+	impactedAssets := []interface{}{}
+	iaRows, err := database.DB.Query(fmt.Sprintf(`SELECT ag.hostname, COUNT(*), MAX(a.created_at) FROM alerts a JOIN agents ag ON ag.id=a.agent_id WHERE %s GROUP BY ag.hostname ORDER BY COUNT(*) DESC LIMIT 10`, whereSQL), args...)
+	if err == nil {
+		defer iaRows.Close()
+		for iaRows.Next() {
+			var hostname string
+			var count int
+			var lastMatch time.Time
+			if iaRows.Scan(&hostname, &count, &lastMatch) == nil {
+				impactedAssets = append(impactedAssets, map[string]interface{}{"hostname": hostname, "alert_count": count, "last_match": lastMatch.Format(time.RFC3339)})
+			}
+		}
+	}
+
+	sampleMatches := []interface{}{}
+	smRows, err := database.DB.Query(fmt.Sprintf(`SELECT a.id, a.rule_name, ag.hostname, a.created_at, a.severity FROM alerts a JOIN agents ag ON ag.id=a.agent_id WHERE %s ORDER BY a.created_at DESC LIMIT 5`, whereSQL), args...)
+	if err == nil {
+		defer smRows.Close()
+		for smRows.Next() {
+			var id int
+			var ruleName, hostname, severity string
+			var ts time.Time
+			if smRows.Scan(&id, &ruleName, &hostname, &ts, &severity) == nil {
+				sampleMatches = append(sampleMatches, map[string]interface{}{"alert_id": fmt.Sprintf("ALT-%d", id), "detection": ruleName, "asset": hostname, "timestamp": ts.Format(time.RFC3339), "severity": severity})
+			}
+		}
+	}
+
+	// Confirmed incidents correlated with matching alerts (by fingerprint).
+	var incidentCount int
+	_ = database.DB.QueryRow(fmt.Sprintf(`SELECT COUNT(DISTINCT i.id) FROM incidents i JOIN alerts a ON a.fingerprint=i.fingerprint JOIN agents ag ON ag.id=a.agent_id WHERE %s`, whereSQL), args...).Scan(&incidentCount)
+
+	alertsPerDayBefore := float64(historicalMatches) / 30.0
+	riskAssessment := "low"
+	falseNegRisk := "very_low"
+	recommendation := fmt.Sprintf("Safe to suppress. 0 confirmed incidents in 30-day history for matching alerts (%d historical matches).", historicalMatches)
+	if incidentCount > 0 {
+		riskAssessment = "high"
+		falseNegRisk = "high"
+		recommendation = fmt.Sprintf("Caution: %d confirmed incident(s) correlate with alerts matching these conditions in the last 30 days. Suppressing may create a detection blind spot.", incidentCount)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"estimated_alerts_affected": 1240,
-		"historical_matches":        4200,
+		"estimated_alerts_affected": historicalMatches,
+		"historical_matches":        historicalMatches,
 		"lookback_days":             30,
-		"impacted_assets": []interface{}{
-			map[string]interface{}{"hostname": "BACKUP-SRV-01", "alert_count": 2100, "last_match": time.Now().Add(-2 * time.Hour).Format(time.RFC3339)},
-			map[string]interface{}{"hostname": "BACKUP-SRV-02", "alert_count": 1400, "last_match": time.Now().Add(-3 * time.Hour).Format(time.RFC3339)},
-			map[string]interface{}{"hostname": "WIN-LAPTOP-042", "alert_count": 700, "last_match": time.Now().Add(-6 * time.Hour).Format(time.RFC3339)},
-		},
+		"impacted_assets":           impactedAssets,
 		"simulated_outcome": map[string]interface{}{
-			"alerts_per_day_before": 140,
+			"alerts_per_day_before": alertsPerDayBefore,
 			"alerts_per_day_after":  0,
-			"analyst_hours_saved":   1.17,
-			"risk_assessment":       "low",
-			"false_negative_risk":   "very_low",
-			"recommendation":        "Safe to suppress. 0 confirmed incidents in 30-day history for matching alerts.",
+			"analyst_hours_saved":   alertsPerDayBefore * 0.05,
+			"risk_assessment":       riskAssessment,
+			"false_negative_risk":   falseNegRisk,
+			"recommendation":        recommendation,
 		},
-		"sample_matches": []interface{}{
-			map[string]interface{}{"alert_id": "ALT-4821", "detection": "Backup Process — PowerShell Execution", "asset": "BACKUP-SRV-01", "timestamp": time.Now().Add(-1 * time.Hour).Format(time.RFC3339), "severity": "medium"},
-			map[string]interface{}{"alert_id": "ALT-4799", "detection": "Backup Process — PowerShell Execution", "asset": "BACKUP-SRV-02", "timestamp": time.Now().Add(-2 * time.Hour).Format(time.RFC3339), "severity": "medium"},
-			map[string]interface{}{"alert_id": "ALT-4712", "detection": "Backup Process — PowerShell Execution", "asset": "BACKUP-SRV-01", "timestamp": time.Now().Add(-25 * time.Hour).Format(time.RFC3339), "severity": "medium"},
-		},
+		"sample_matches": sampleMatches,
 	})
 }
 
 // POST /api/sup/ai
 func PostSupAI(c *gin.Context) {
 	var body struct {
-		DetectionName string  `json:"detection_name"`
-		AlertCount    int     `json:"alert_count"`
-		LookbackDays  int     `json:"lookback_days"`
-		IncidentCount int     `json:"incident_count"`
-		AssetType     string  `json:"asset_type"`
-		Severity      string  `json:"severity"`
+		DetectionName  string `json:"detection_name"`
+		AlertCount     int    `json:"alert_count"`
+		LookbackDays   int    `json:"lookback_days"`
+		IncidentCount  int    `json:"incident_count"`
+		AssetType      string `json:"asset_type"`
+		Severity       string `json:"severity"`
 		MITRETechnique string `json:"mitre_technique"`
 	}
 	_ = c.ShouldBindJSON(&body)
@@ -337,13 +464,13 @@ Respond with JSON: {recommendation: "suppress"|"do_not_suppress"|"conditional_su
 		reasoning = fmt.Sprintf("Do not suppress. This detection has been associated with %d confirmed incident(s) in the last %d days. Suppressing it would create a blind spot for active threat activity.", body.IncidentCount, body.LookbackDays)
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"recommendation":           rec,
-		"confidence_pct":           supConfidence(body.AlertCount, body.IncidentCount),
-		"reasoning":                reasoning,
+		"recommendation":            rec,
+		"confidence_pct":            supConfidence(body.AlertCount, body.IncidentCount),
+		"reasoning":                 reasoning,
 		"conditions_if_conditional": "Limit suppression to known backup server asset group during 02:00–06:00 UTC maintenance window only",
-		"risk_if_suppressed":       supRisk(body.Severity, body.IncidentCount),
-		"alternative":              "Lower severity to Low instead of fully suppressing, preserving log retention for forensics",
-		"ai_analysis":              resp,
+		"risk_if_suppressed":        supRisk(body.Severity, body.IncidentCount),
+		"alternative":               "Lower severity to Low instead of fully suppressing, preserving log retention for forensics",
+		"ai_analysis":               resp,
 	})
 }
 
@@ -399,13 +526,13 @@ func GetSupAudit(c *gin.Context) {
 	}
 	defer rows.Close()
 	type Entry struct {
-		ID        int        `json:"id"`
-		RuleID    *int       `json:"rule_id"`
-		RuleName  *string    `json:"rule_name"`
-		Action    string     `json:"action"`
-		Actor     *string    `json:"actor"`
-		Details   *string    `json:"details"`
-		CreatedAt time.Time  `json:"created_at"`
+		ID        int       `json:"id"`
+		RuleID    *int      `json:"rule_id"`
+		RuleName  *string   `json:"rule_name"`
+		Action    string    `json:"action"`
+		Actor     *string   `json:"actor"`
+		Details   *string   `json:"details"`
+		CreatedAt time.Time `json:"created_at"`
 	}
 	entries := []Entry{}
 	for rows.Next() {
@@ -428,48 +555,61 @@ func GetSupAnalytics(c *gin.Context) {
 	var activeRules int
 	var totalSuppressed int64
 	_ = row.Scan(&activeRules, &totalSuppressed)
+
+	// Most suppressed rules — real data (only rules that have actually
+	// suppressed something).
+	mostSuppressed := []interface{}{}
+	msRows, err := database.DB.Query(`SELECT rule_name, total_suppressed, scope, COALESCE(owner,'') FROM sup_rules WHERE tenant_id=$1 AND total_suppressed>0 ORDER BY total_suppressed DESC LIMIT 5`, tid)
+	if err == nil {
+		defer msRows.Close()
+		for msRows.Next() {
+			var ruleName, scope, owner string
+			var suppressed int
+			if msRows.Scan(&ruleName, &suppressed, &scope, &owner) == nil {
+				mostSuppressed = append(mostSuppressed, map[string]interface{}{"rule_name": ruleName, "suppressed": suppressed, "scope": scope, "owner": owner})
+			}
+		}
+	}
+
+	// avg_suppression_per_rule and incident correlation are computed from
+	// real sup_rules data. There is no per-detection "total before
+	// suppression" table, no team dimension, and no monthly false-positive
+	// history table, so top_noisy_detections / suppression_by_team /
+	// false_positive_trend / false_positive_rate are honestly empty/zero
+	// rather than fabricated.
+	var avgPerRule float64
+	if activeRules > 0 {
+		avgPerRule = float64(totalSuppressed) / float64(activeRules)
+	}
+	// There is no per-rule application/enforcement of sup_rules against real
+	// alerts today, so there is no honest way to attribute a specific
+	// confirmed incident to a specific suppression rule. Report 0 rather
+	// than a fabricated correlation.
+	rulesWithIncidents := 0
+	rulesWithZeroIncidents := activeRules
+
 	c.JSON(http.StatusOK, gin.H{
-		"active_rules":        activeRules,
-		"total_suppressed":    totalSuppressed,
-		"analyst_hours_saved": float64(totalSuppressed) * 0.05,
-		"false_positive_rate": 94.2,
-		"most_suppressed_rules": []interface{}{
-			map[string]interface{}{"rule_name": "Backup Window Suppression", "suppressed": 4200, "scope": "asset_group", "owner": "alice@corp.com"},
-			map[string]interface{}{"rule_name": "Sysadmin Scheduled Tasks", "suppressed": 1840, "scope": "department", "owner": "bob@corp.com"},
-			map[string]interface{}{"rule_name": "AV Scanner False Positive", "suppressed": 972, "scope": "entire_environment", "owner": "alice@corp.com"},
-			map[string]interface{}{"rule_name": "Vuln Scanner Suppression", "suppressed": 718, "scope": "asset_group", "owner": "carol@corp.com"},
-			map[string]interface{}{"rule_name": "Windows Update Noise", "suppressed": 612, "scope": "entire_environment", "owner": "dave@corp.com"},
-		},
-		"top_noisy_detections": []interface{}{
-			map[string]interface{}{"detection": "Backup Process — PowerShell Execution", "total": 4200, "suppressed": 4200, "rate_pct": 100},
-			map[string]interface{}{"detection": "Scheduled Task Created — SYSTEM", "total": 1980, "suppressed": 1840, "rate_pct": 92.9},
-			map[string]interface{}{"detection": "LSASS Memory Access — AV Scanner", "total": 1100, "suppressed": 972, "rate_pct": 88.4},
-			map[string]interface{}{"detection": "Network Scan from Qualys", "total": 720, "suppressed": 718, "rate_pct": 99.7},
-			map[string]interface{}{"detection": "Windows Update DNS Queries", "total": 640, "suppressed": 612, "rate_pct": 95.6},
-		},
-		"suppression_by_team": []interface{}{
-			map[string]interface{}{"team": "SOC Team A", "rules_created": 6, "alerts_suppressed": 7200},
-			map[string]interface{}{"team": "SOC Team B", "rules_created": 3, "alerts_suppressed": 2840},
-			map[string]interface{}{"team": "IR Team", "rules_created": 2, "alerts_suppressed": 1920},
-			map[string]interface{}{"team": "Cloud Security", "rules_created": 1, "alerts_suppressed": 980},
-		},
-		"false_positive_trend": []interface{}{
-			map[string]interface{}{"month": "Apr", "fps": 8400, "suppressed": 6200},
-			map[string]interface{}{"month": "May", "fps": 7200, "suppressed": 8100},
-			map[string]interface{}{"month": "Jun", "fps": 6100, "suppressed": 9400},
-			map[string]interface{}{"month": "Jul", "fps": 4200, "suppressed": 12900},
-		},
+		"active_rules":          activeRules,
+		"total_suppressed":      totalSuppressed,
+		"analyst_hours_saved":   float64(totalSuppressed) * 0.05,
+		"false_positive_rate":   0,
+		"most_suppressed_rules": mostSuppressed,
+		"top_noisy_detections":  []interface{}{},
+		"suppression_by_team":   []interface{}{},
+		"false_positive_trend":  []interface{}{},
 		"suppression_effectiveness": map[string]interface{}{
-			"rules_with_zero_incidents": 11,
-			"rules_with_incidents":      1,
-			"avg_suppression_per_rule":  1058,
-			"coverage_pct":              91.7,
+			"rules_with_zero_incidents": rulesWithZeroIncidents,
+			"rules_with_incidents":      rulesWithIncidents,
+			"avg_suppression_per_rule":  avgPerRule,
+			"coverage_pct":              0,
 		},
 	})
 }
 
 // POST /api/sup/report
 func PostSupReport(c *gin.Context) {
+	createSupTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		ReportType string `json:"report_type"`
 	}
@@ -485,29 +625,44 @@ func PostSupReport(c *gin.Context) {
 	case "compliance":
 		title = "Suppression Compliance Report"
 	}
+
+	var activeRules, pendingApproval, criticalNoApproval, expiringSoon int
+	var totalSuppressed int64
+	_ = database.DB.QueryRow(`SELECT
+		COUNT(*) FILTER (WHERE status='active'),
+		COUNT(*) FILTER (WHERE approval_status='pending'),
+		COUNT(*) FILTER (WHERE priority='critical' AND approval_status NOT IN ('approved','not_required')),
+		COUNT(*) FILTER (WHERE status='active' AND expires_at IS NOT NULL AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'),
+		COALESCE(SUM(total_suppressed) FILTER (WHERE status='active'), 0)
+		FROM sup_rules WHERE tenant_id=$1`, tid).Scan(&activeRules, &pendingApproval, &criticalNoApproval, &expiringSoon, &totalSuppressed)
+
+	analystHours := float64(totalSuppressed) * 0.05
+
+	recommendations := []interface{}{}
+	if expiringSoon > 0 {
+		recommendations = append(recommendations, fmt.Sprintf("%d rule(s) expire within 7 days — review and renew or let expire", expiringSoon))
+	}
+	if criticalNoApproval > 0 {
+		recommendations = append(recommendations, fmt.Sprintf("Enable approval workflow for %d rule(s) currently in 'critical' priority without approval", criticalNoApproval))
+	}
+	if pendingApproval > 0 {
+		recommendations = append(recommendations, fmt.Sprintf("%d rule(s) pending approval — review to activate or reject", pendingApproval))
+	}
+
+	execSummary := fmt.Sprintf("%d active suppression rule(s) have suppressed %d alert(s) to date. Estimated %.0f analyst hour(s) saved.", activeRules, totalSuppressed, analystHours)
+
 	c.JSON(http.StatusOK, gin.H{
-		"title":            title + " — " + time.Now().Format("January 2006"),
-		"generated_at":     time.Now().Format(time.RFC3339),
-		"classification":   "CONFIDENTIAL — INTERNAL",
-		"executive_summary": "12 active suppression rules reduced analyst alert volume by 92.3% this period. Estimated 650 analyst hours saved. 1 suppression rule flagged for review — alerts matched a confirmed incident after rule activation.",
+		"title":             title + " — " + time.Now().Format("January 2006"),
+		"generated_at":      time.Now().Format(time.RFC3339),
+		"classification":    "CONFIDENTIAL — INTERNAL",
+		"executive_summary": execSummary,
 		"key_metrics": map[string]interface{}{
-			"active_rules": 12, "alerts_suppressed": 12940,
-			"analyst_hours_saved": 647, "false_positive_rate": "94.2%",
-			"rules_requiring_review": 1,
+			"active_rules":           activeRules,
+			"alerts_suppressed":      totalSuppressed,
+			"analyst_hours_saved":    analystHours,
+			"rules_requiring_review": pendingApproval,
 		},
-		"top_rules": []interface{}{
-			map[string]interface{}{"rule": "Backup Window Suppression", "suppressed": 4200, "incidents": 0, "status": "healthy"},
-			map[string]interface{}{"rule": "AV Scanner False Positive", "suppressed": 972, "incidents": 0, "status": "healthy"},
-			map[string]interface{}{"rule": "Vuln Scanner Suppression", "suppressed": 718, "incidents": 0, "status": "healthy"},
-		},
-		"flagged_rules": []interface{}{
-			map[string]interface{}{"rule": "Sysadmin Scheduled Tasks", "suppressed": 1840, "incidents": 1, "issue": "1 suppressed alert later correlated with confirmed incident INC-2026-0412"},
-		},
-		"recommendations": []interface{}{
-			"Review 'Sysadmin Scheduled Tasks' rule — alert matched confirmed incident INC-2026-0412",
-			"3 rules expire within 7 days — review and renew or let expire",
-			"Enable approval workflow for 2 rules currently in 'critical' priority without approval",
-			"Add exception for Domain Controllers to all full-suppress rules",
-		},
+		"flagged_rules":   []interface{}{},
+		"recommendations": recommendations,
 	})
 }

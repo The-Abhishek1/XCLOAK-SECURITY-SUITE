@@ -35,6 +35,18 @@ func TriageAlert(alert models.Alert) {
 	slog.Info("ai-triage: complete", "alert_id", alert.ID, "summary_len", len(result.Summary))
 }
 
+// GetTriageResult returns the persisted AI triage fields for an alert, so a
+// synchronous caller (the on-demand /api/ai/triage/:id handler) can hand the
+// fresh result straight back instead of the caller having to re-fetch the
+// whole alert list to see it.
+func GetTriageResult(alertID int) (summary string, action string, triagedAt *time.Time, err error) {
+	err = database.DB.QueryRow(`
+		SELECT COALESCE(ai_summary, ''), COALESCE(ai_action, ''), ai_triaged_at
+		FROM alerts WHERE id = $1
+	`, alertID).Scan(&summary, &action, &triagedAt)
+	return
+}
+
 // SummarizeIncident generates an AI narrative for an incident, scoped to
 // tenantID so a caller can't summarize another tenant's incident by ID.
 func SummarizeIncident(incidentID int, tenantID int) (*models.AIIncidentSummary, error) {

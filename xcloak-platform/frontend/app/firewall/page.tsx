@@ -4,22 +4,28 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { firewallAPI, fweAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
+import {
+  LayoutDashboard, FileText, Shield, ArrowLeftRight, LayoutGrid, ShieldAlert, Radio, Ban,
+  BarChart3, ClipboardCheck, Bell, ScrollText, FileBarChart2, Sparkles, X, Plus, Trash2,
+  RefreshCw, CheckCircle2, Check, Download, AlertTriangle,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'policies' | 'rules' | 'nat' | 'zones' | 'threats' | 'connections' | 'blocked' | 'analytics' | 'approvals' | 'notifications' | 'audit' | 'reports';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',     label: 'Dashboard' },
-  { id: 'policies',      label: 'Policies' },
-  { id: 'rules',         label: 'Firewall Rules' },
-  { id: 'nat',           label: 'NAT' },
-  { id: 'zones',         label: 'Zones' },
-  { id: 'threats',       label: 'Threat Protection' },
-  { id: 'connections',   label: 'Live Connections' },
-  { id: 'blocked',       label: 'Blocked List' },
-  { id: 'analytics',     label: 'Analytics' },
-  { id: 'approvals',     label: 'Approvals' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'audit',         label: 'Audit Trail' },
-  { id: 'reports',       label: 'Reports' },
+const TABS: { key: Tab; label: string; icon: any; count?: number }[] = [
+  { key: 'dashboard',     label: 'Dashboard',        icon: LayoutDashboard },
+  { key: 'policies',      label: 'Policies',         icon: FileText },
+  { key: 'rules',         label: 'Firewall Rules',   icon: Shield },
+  { key: 'nat',           label: 'NAT',              icon: ArrowLeftRight },
+  { key: 'zones',         label: 'Zones',            icon: LayoutGrid },
+  { key: 'threats',       label: 'Threat Protection',icon: ShieldAlert },
+  { key: 'connections',   label: 'Live Connections', icon: Radio },
+  { key: 'blocked',       label: 'Blocked List',     icon: Ban },
+  { key: 'analytics',     label: 'Analytics',        icon: BarChart3 },
+  { key: 'approvals',     label: 'Approvals',        icon: ClipboardCheck },
+  { key: 'notifications', label: 'Notifications',    icon: Bell },
+  { key: 'audit',         label: 'Audit Trail',      icon: ScrollText },
+  { key: 'reports',       label: 'Reports',          icon: FileBarChart2 },
 ];
 
 const ACTION_COLOR: Record<string, string> = {
@@ -53,15 +59,6 @@ const APPROVAL_POLICIES = ['internet_facing', 'production_firewall', 'default_po
 function pill(label: string, color: string) {
   return <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: color + '22', color, border: `1px solid ${color}44`, textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{label}</span>;
 }
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
 function bytes(n: number) {
   if (n > 1e9) return `${(n / 1e9).toFixed(1)} GB`;
   if (n > 1e6) return `${(n / 1e6).toFixed(1)} MB`;
@@ -75,26 +72,26 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Active Rules"      value={dash.active_rules}       color="var(--accent)" />
-        <StatCard label="Total Rules"       value={dash.total_rules}        color="var(--text-2)" />
-        <StatCard label="Threat Blocks"     value={dash.threat_blocks}      color="#ef4444" />
-        <StatCard label="Blocks (24h)"      value={dash.threats_24h}        color="#f97316" sub="last 24 hours" />
-        <StatCard label="Active Conns"      value={dash.active_connections} color="#3b82f6" />
-        <StatCard label="Total Traffic"     value={bytes(dash.total_bytes || 0)} color="#a855f7" />
-        <StatCard label="Policy Compliance" value={`${dash.policy_compliance}%`} color="#22c55e" />
-        <StatCard label="Firewall Health"   value={dash.firewall_health}    color="#22c55e" />
+        <MetricCard label="Active Rules"      value={dash.active_rules}       color="var(--accent)" />
+        <MetricCard label="Total Rules"       value={dash.total_rules}        color="var(--text-2)" />
+        <MetricCard label="Threat Blocks"     value={dash.threat_blocks}      color="#ef4444" />
+        <MetricCard label="Blocks (24h)"      value={dash.threats_24h}        color="#f97316" sub="last 24 hours" />
+        <MetricCard label="Active Conns"      value={dash.active_connections} color="#3b82f6" />
+        <MetricCard label="Total Traffic"     value={bytes(dash.total_bytes || 0)} color="#a855f7" />
+        <MetricCard label="Pending Approvals" value={dash.pending_approvals}  color="#f97316" />
+        <MetricCard label="Unread Alerts"     value={dash.unread_notifications} color="#ef4444" />
       </div>
 
       {dash.pending_approvals > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608', cursor: 'pointer' }} onClick={() => onTabChange('approvals')}>
-          <span style={{ fontWeight: 700, color: '#f97316' }}>⚠ {dash.pending_approvals} change{dash.pending_approvals !== 1 ? 's' : ''} pending approval.</span>
+        <div className="g-card flex items-center gap-2" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608', cursor: 'pointer' }} onClick={() => onTabChange('approvals')}>
+          <AlertTriangle className="h-4 w-4" style={{ color: '#f97316' }} />
+          <span style={{ fontWeight: 700, color: '#f97316' }}>{dash.pending_approvals} change{dash.pending_approvals !== 1 ? 's' : ''} pending approval.</span>
           <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>Click to review.</span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Threat Breakdown</div>
+        <SectionCard title="Threat Breakdown">
           {[
             ['Port Scans', dash.port_scan_blocks, '#f97316'],
             ['Brute Force', dash.brute_force_blocks, '#ef4444'],
@@ -105,9 +102,8 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               <span style={{ fontWeight: 700, color }}>{val}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Top Source IPs (Blocked)</div>
+        </SectionCard>
+        <SectionCard title="Top Source IPs (Blocked)">
           {(!dash.top_source_ips || dash.top_source_ips.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(dash.top_source_ips || []).slice(0, 5).map((ip: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
@@ -115,9 +111,8 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>{ip.count}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Top Destination IPs</div>
+        </SectionCard>
+        <SectionCard title="Top Destination IPs">
           {(!dash.top_dest_ips || dash.top_dest_ips.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(dash.top_dest_ips || []).slice(0, 5).map((ip: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
@@ -125,7 +120,7 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               <span style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6' }}>{ip.count}</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -156,73 +151,59 @@ function PoliciesTab({ policies, onRefresh }: { policies: any[]; onRefresh: () =
       {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid var(--accent)', fontSize: 13 }}>{toast}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{policies.length} policies</div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>+ New Policy</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>New Policy</ActionButton>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Policy ID', 'Name', 'Status', 'Priority', 'Rules', 'Owner', 'Version', 'Last Modified', ''].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {policies.length === 0 && <tr><td colSpan={9} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No policies</td></tr>}
-            {policies.map(p => {
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={policies}
+          rowKey={(p: any) => p.id}
+          emptyState={<EmptyState title="No policies" />}
+          columns={[
+            { key: 'policy_id', header: 'Policy ID', render: (p: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{p.policy_id}</span> },
+            { key: 'name', header: 'Name', render: (p: any) => {
               let tags: string[] = [];
               try { tags = JSON.parse(p.tags || '[]'); } catch {}
               return (
-                <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{p.policy_id}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
-                    {p.description && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.description}</div>}
-                    {tags.length > 0 && <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>{tags.slice(0, 3).map((t: string) => <span key={t} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--border)', color: 'var(--text-3)' }}>{t}</span>)}</div>}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>{pill(p.status || 'active', STATUS_COLOR[p.status] || '#22c55e')}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{p.priority}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{p.rule_count}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{p.owner || '—'}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>v{p.version}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(p.updated_at)}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <button style={{ fontSize: 13, color: 'var(--text-3)' }} onClick={() => del(p.id, p.name)}>🗑</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 480 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>New Firewall Policy</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
-            </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {[['Policy Name *', 'name', 'text', 'e.g. Internet Perimeter Policy'],
-                ['Description', 'description', 'text', 'What this policy covers'],
-                ['Owner', 'owner', 'text', 'network-team@corp.com'],
-                ['Tags', 'tags', 'text', 'perimeter, internet, production']].map(([label, key, type, ph]) => (
-                <div key={key}>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
-                  <input className="g-input w-full" type={type} placeholder={ph as string}
-                    value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+                  {p.description && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.description}</div>}
+                  {tags.length > 0 && <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>{tags.slice(0, 3).map((t: string) => <span key={t} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--border)', color: 'var(--text-3)' }}>{t}</span>)}</div>}
                 </div>
-              ))}
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Priority</label>
-                <input className="g-input w-full" type="number" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: +e.target.value }))} />
-              </div>
+              );
+            } },
+            { key: 'status', header: 'Status', render: (p: any) => pill(p.status || 'active', STATUS_COLOR[p.status] || '#22c55e') },
+            { key: 'priority', header: 'Priority', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.priority}</span> },
+            { key: 'rule_count', header: 'Rules', render: (p: any) => <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{p.rule_count}</span> },
+            { key: 'owner', header: 'Owner', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.owner || '—'}</span> },
+            { key: 'version', header: 'Version', render: (p: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>v{p.version}</span> },
+            { key: 'updated_at', header: 'Last Modified', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(p.updated_at)}</span> },
+            { key: 'actions', header: '', render: (p: any) => <ActionButton variant="danger" icon={Trash2} onClick={() => del(p.id, p.name)} /> },
+          ]}
+        />
+      </SectionCard>
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="New Firewall Policy" maxWidth={480}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[['Policy Name *', 'name', 'text', 'e.g. Internet Perimeter Policy'],
+            ['Description', 'description', 'text', 'What this policy covers'],
+            ['Owner', 'owner', 'text', 'network-team@corp.com'],
+            ['Tags', 'tags', 'text', 'perimeter, internet, production']].map(([label, key, type, ph]) => (
+            <div key={key}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
+              <input className="g-input w-full" type={type} placeholder={ph as string}
+                value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
             </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Policy'}</button>
-            </div>
+          ))}
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Priority</label>
+            <input className="g-input w-full" type="number" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: +e.target.value }))} />
           </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Check} onClick={save} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Policy'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -235,7 +216,6 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
   const [filterDir, setFilterDir] = useState('');
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState<any>(null);
-  const [deleting, setDeleting] = useState<number | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', source_ip: '', destination_ip: '', protocol: 'tcp', port_range: '', direction: 'in', action: 'allow', priority: 100, group_name: 'default', log_enabled: false, enabled: true, tags: '' });
   const [saving, setSaving] = useState(false);
@@ -259,9 +239,8 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
     finally { setValidating(false); }
   };
   const del = async (id: number) => {
-    setDeleting(id);
     await firewallAPI.delete(id);
-    onRefresh(); setDeleting(null); notify('Rule deleted');
+    onRefresh(); notify('Rule deleted');
   };
   const toggle = async (r: any) => {
     await firewallAPI.update(r.id, { ...r, enabled: !r.enabled });
@@ -293,9 +272,9 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
           <option value="">All Directions</option>
           {['in','out','both'].map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onRefresh}>↻</button>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={validate} disabled={validating}>{validating ? 'Validating…' : '✓ Validate'}</button>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11, marginLeft: 'auto' }} onClick={() => setShowNew(true)}>+ New Rule</button>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} />
+        <ActionButton variant="ghost" icon={CheckCircle2} onClick={validate} disabled={validating}>{validating ? 'Validating…' : 'Validate'}</ActionButton>
+        <ActionButton variant="primary" icon={Plus} style={{ marginLeft: 'auto' }} onClick={() => setShowNew(true)}>New Rule</ActionButton>
       </div>
 
       {validation && (
@@ -304,114 +283,100 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
             Validation: {validation.issue_count} issue{validation.issue_count !== 1 ? 's' : ''} in {validation.total_rules} rules
           </div>
           {validation.issues?.slice(0, 5).map((issue: any, i: number) => (
-            <div key={i} style={{ fontSize: 12, color: 'var(--text-2)', padding: '4px 0' }}>
-              <span style={{ color: '#f97316', marginRight: 6 }}>⚠</span>
-              <strong>{issue.name}</strong>: {issue.message}
+            <div key={i} className="flex items-start gap-1.5" style={{ fontSize: 12, color: 'var(--text-2)', padding: '4px 0' }}>
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: '#f97316', marginTop: 1 }} />
+              <span><strong>{issue.name}</strong>: {issue.message}</span>
             </div>
           ))}
-          <button style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }} onClick={() => setValidation(null)}>Dismiss</button>
+          <ActionButton variant="ghost" style={{ fontSize: 11, marginTop: 6 }} onClick={() => setValidation(null)}>Dismiss</ActionButton>
         </div>
       )}
 
       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{filtered.length} of {rules.length} rules</div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead">
-              <tr>{['#', 'Name', 'Action', 'Source', 'Destination', 'Protocol', 'Port(s)', 'Direction', 'Group', 'Log', 'Status', ''].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}</tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && <tr><td colSpan={12} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No rules found</td></tr>}
-              {filtered.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)', opacity: r.enabled ? 1 : 0.55 }}>
-                  <td style={{ padding: '10px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>{r.priority}</td>
-                  <td style={{ padding: '10px 12px', maxWidth: 200 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12 }}>{r.name}</div>
-                    {r.description && <div style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{r.description}</div>}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>{pill(r.action, ACTION_COLOR[r.action] || '#6b7280')}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{r.source_ip || 'any'}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{r.destination_ip || 'any'}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{r.protocol}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{r.port_range || r.port || '—'}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 8, textTransform: 'uppercase',
-                      background: r.direction === 'in' ? '#3b82f622' : r.direction === 'out' ? '#a855f722' : 'var(--border)',
-                      color: r.direction === 'in' ? '#3b82f6' : r.direction === 'out' ? '#a855f7' : 'var(--text-3)',
-                    }}>{r.direction || 'both'}</span>
-                  </td>
-                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)' }}>{r.group_name || '—'}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 11 }}>{r.log_enabled ? <span style={{ color: '#22c55e' }}>✓</span> : <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
-                  <td style={{ padding: '10px 12px' }}>{pill(r.enabled ? 'enabled' : 'disabled', r.enabled ? '#22c55e' : '#6b7280')}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => toggle(r)}>{r.enabled ? 'Disable' : 'Enable'}</button>
-                      <button style={{ fontSize: 13, color: 'var(--text-3)' }} onClick={() => del(r.id)} disabled={deleting === r.id}>🗑</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard padded={false} className="overflow-x-auto">
+        <DataTable<any>
+          rows={filtered}
+          rowKey={(r: any) => r.id}
+          rowStyle={(r: any) => !r.enabled ? { opacity: 0.55 } : undefined}
+          emptyState={<EmptyState title="No rules found" />}
+          columns={[
+            { key: 'priority', header: '#', render: (r: any) => <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>{r.priority}</span> },
+            { key: 'name', header: 'Name', render: (r: any) => (
+              <div style={{ maxWidth: 200 }}>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>{r.name}</div>
+                {r.description && <div style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{r.description}</div>}
+              </div>
+            ) },
+            { key: 'action', header: 'Action', render: (r: any) => pill(r.action, ACTION_COLOR[r.action] || '#6b7280') },
+            { key: 'source_ip', header: 'Source', render: (r: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{r.source_ip || 'any'}</span> },
+            { key: 'destination_ip', header: 'Destination', render: (r: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{r.destination_ip || 'any'}</span> },
+            { key: 'protocol', header: 'Protocol', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{r.protocol}</span> },
+            { key: 'port_range', header: 'Port(s)', render: (r: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{r.port_range || r.port || '—'}</span> },
+            { key: 'direction', header: 'Direction', render: (r: any) => (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 8, textTransform: 'uppercase',
+                background: r.direction === 'in' ? '#3b82f622' : r.direction === 'out' ? '#a855f722' : 'var(--border)',
+                color: r.direction === 'in' ? '#3b82f6' : r.direction === 'out' ? '#a855f7' : 'var(--text-3)',
+              }}>{r.direction || 'both'}</span>
+            ) },
+            { key: 'group_name', header: 'Group', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.group_name || '—'}</span> },
+            { key: 'log_enabled', header: 'Log', render: (r: any) => r.log_enabled ? <Check className="h-3.5 w-3.5" style={{ color: '#22c55e' }} /> : <span style={{ color: 'var(--text-3)' }}>—</span> },
+            { key: 'enabled', header: 'Status', render: (r: any) => pill(r.enabled ? 'enabled' : 'disabled', r.enabled ? '#22c55e' : '#6b7280') },
+            { key: 'actions', header: '', render: (r: any) => (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <ActionButton variant="ghost" style={{ fontSize: 10 }} onClick={() => toggle(r)}>{r.enabled ? 'Disable' : 'Enable'}</ActionButton>
+                <ActionButton variant="danger" icon={Trash2} onClick={() => del(r.id)} />
+              </div>
+            ) },
+          ]}
+        />
+      </SectionCard>
 
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 560 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>New Firewall Rule</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="New Firewall Rule" maxWidth={560}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '60vh', overflow: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {[['Rule Name *', 'name', 'text'], ['Group', 'group_name', 'text'], ['Source IP/CIDR', 'source_ip', 'text'], ['Destination IP/CIDR', 'destination_ip', 'text'], ['Port / Range', 'port_range', 'text'], ['Tags', 'tags', 'text']].map(([label, key, type]) => (
+              <div key={key}>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
+                <input className="g-input w-full" type={type} value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Action</label>
+              <select className="g-select w-full" value={form.action} onChange={e => setForm(f => ({ ...f, action: e.target.value }))}>
+                {['allow','deny','drop','reject','log'].map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
             </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflow: 'auto' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                {[['Rule Name *', 'name', 'text'], ['Group', 'group_name', 'text'], ['Source IP/CIDR', 'source_ip', 'text'], ['Destination IP/CIDR', 'destination_ip', 'text'], ['Port / Range', 'port_range', 'text'], ['Tags', 'tags', 'text']].map(([label, key, type]) => (
-                  <div key={key}>
-                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
-                    <input className="g-input w-full" type={type} value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Action</label>
-                  <select className="g-select w-full" value={form.action} onChange={e => setForm(f => ({ ...f, action: e.target.value }))}>
-                    {['allow','deny','drop','reject','log'].map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Protocol</label>
-                  <select className="g-select w-full" value={form.protocol} onChange={e => setForm(f => ({ ...f, protocol: e.target.value }))}>
-                    {PROTOS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Direction</label>
-                  <select className="g-select w-full" value={form.direction} onChange={e => setForm(f => ({ ...f, direction: e.target.value }))}>
-                    {['in','out','both'].map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.log_enabled} onChange={e => setForm(f => ({ ...f, log_enabled: e.target.checked }))} />
-                  Enable Logging
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
-                  Enabled
-                </label>
-              </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Protocol</label>
+              <select className="g-select w-full" value={form.protocol} onChange={e => setForm(f => ({ ...f, protocol: e.target.value }))}>
+                {PROTOS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={saveRule} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Rule'}</button>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Direction</label>
+              <select className="g-select w-full" value={form.direction} onChange={e => setForm(f => ({ ...f, direction: e.target.value }))}>
+                {['in','out','both'].map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
           </div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.log_enabled} onChange={e => setForm(f => ({ ...f, log_enabled: e.target.checked }))} />
+              Enable Logging
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.enabled} onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+              Enabled
+            </label>
+          </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Check} onClick={saveRule} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Rule'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -438,83 +403,69 @@ function NATTab({ items, onRefresh }: { items: any[]; onRefresh: () => void }) {
       {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid var(--accent)', fontSize: 13 }}>{toast}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{items.length} NAT rules</div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>+ New NAT Rule</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>New NAT Rule</ActionButton>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['NAT ID', 'Name', 'Type', 'Source', 'Destination', 'Translated IP', 'Protocol', 'Hits', 'Status', ''].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {items.length === 0 && <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No NAT rules</td></tr>}
-            {items.map(n => (
-              <tr key={n.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{n.nat_id}</td>
-                <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12 }}>{n.name}</td>
-                <td style={{ padding: '10px 12px' }}>{pill((n.nat_type || '').replace(/_/g, ' '), NAT_COLOR[n.nat_type] || '#6b7280')}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{n.src_ip || 'any'}{n.src_port ? `:${n.src_port}` : ''}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{n.dst_ip || 'any'}{n.dst_port ? `:${n.dst_port}` : ''}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)' }}>{n.translated_ip || '—'}{n.translated_port ? `:${n.translated_port}` : ''}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{n.protocol}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{(n.hit_count || 0).toLocaleString()}</td>
-                <td style={{ padding: '10px 12px' }}>{pill(n.enabled ? 'enabled' : 'disabled', n.enabled ? '#22c55e' : '#6b7280')}</td>
-                <td style={{ padding: '10px 12px' }}><button style={{ fontSize: 13, color: 'var(--text-3)' }} onClick={() => del(n.id)}>🗑</button></td>
-              </tr>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={items}
+          rowKey={(n: any) => n.id}
+          emptyState={<EmptyState title="No NAT rules" />}
+          columns={[
+            { key: 'nat_id', header: 'NAT ID', render: (n: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{n.nat_id}</span> },
+            { key: 'name', header: 'Name', render: (n: any) => <span style={{ fontWeight: 600, fontSize: 12 }}>{n.name}</span> },
+            { key: 'nat_type', header: 'Type', render: (n: any) => pill((n.nat_type || '').replace(/_/g, ' '), NAT_COLOR[n.nat_type] || '#6b7280') },
+            { key: 'source', header: 'Source', render: (n: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{n.src_ip || 'any'}{n.src_port ? `:${n.src_port}` : ''}</span> },
+            { key: 'destination', header: 'Destination', render: (n: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{n.dst_ip || 'any'}{n.dst_port ? `:${n.dst_port}` : ''}</span> },
+            { key: 'translated_ip', header: 'Translated IP', render: (n: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)' }}>{n.translated_ip || '—'}{n.translated_port ? `:${n.translated_port}` : ''}</span> },
+            { key: 'protocol', header: 'Protocol', render: (n: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{n.protocol}</span> },
+            { key: 'hit_count', header: 'Hits', render: (n: any) => <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{(n.hit_count || 0).toLocaleString()}</span> },
+            { key: 'enabled', header: 'Status', render: (n: any) => pill(n.enabled ? 'enabled' : 'disabled', n.enabled ? '#22c55e' : '#6b7280') },
+            { key: 'actions', header: '', render: (n: any) => <ActionButton variant="danger" icon={Trash2} onClick={() => del(n.id)} /> },
+          ]}
+        />
+      </SectionCard>
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="New NAT Rule" maxWidth={560}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Name *</label>
+              <input className="g-input w-full" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Web Server DNAT" />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>NAT Type</label>
+              <select className="g-select w-full" value={form.nat_type} onChange={e => setForm(f => ({ ...f, nat_type: e.target.value }))}>
+                {NAT_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {[['Source IP', 'src_ip'], ['Source Port', 'src_port'], ['Destination IP', 'dst_ip'],
+              ['Destination Port', 'dst_port'], ['Translated IP', 'translated_ip'], ['Translated Port', 'translated_port']].map(([label, key]) => (
+              <div key={key}>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
+                <input className="g-input w-full" value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={label.includes('IP') ? '10.0.0.1' : '80'} />
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 560 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>New NAT Rule</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Protocol</label>
+              <select className="g-select w-full" value={form.protocol} onChange={e => setForm(f => ({ ...f, protocol: e.target.value }))}>
+                {PROTOS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Name *</label>
-                  <input className="g-input w-full" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Web Server DNAT" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>NAT Type</label>
-                  <select className="g-select w-full" value={form.nat_type} onChange={e => setForm(f => ({ ...f, nat_type: e.target.value }))}>
-                    {NAT_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                {[['Source IP', 'src_ip'], ['Source Port', 'src_port'], ['Destination IP', 'dst_ip'],
-                  ['Destination Port', 'dst_port'], ['Translated IP', 'translated_ip'], ['Translated Port', 'translated_port']].map(([label, key]) => (
-                  <div key={key}>
-                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>{label}</label>
-                    <input className="g-input w-full" value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={label.includes('IP') ? '10.0.0.1' : '80'} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Protocol</label>
-                  <select className="g-select w-full" value={form.protocol} onChange={e => setForm(f => ({ ...f, protocol: e.target.value }))}>
-                    {PROTOS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Interface</label>
-                  <input className="g-input w-full" value={form.interface} onChange={e => setForm(f => ({ ...f, interface: e.target.value }))} placeholder="eth0" />
-                </div>
-              </div>
-            </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create NAT Rule'}</button>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Interface</label>
+              <input className="g-input w-full" value={form.interface} onChange={e => setForm(f => ({ ...f, interface: e.target.value }))} placeholder="eth0" />
             </div>
           </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Check} onClick={save} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create NAT Rule'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -538,8 +489,9 @@ function ZonesTab({ zones, onRefresh }: { zones: any[]; onRefresh: () => void })
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{zones.length} zones</div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>+ New Zone</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>New Zone</ActionButton>
       </div>
+      {zones.length === 0 && <EmptyState title="No zones configured" />}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         {zones.map(z => {
           const color = ZONE_COLORS[z.zone_type] || '#6b7280';
@@ -564,48 +516,41 @@ function ZonesTab({ zones, onRefresh }: { zones: any[]; onRefresh: () => void })
           );
         })}
       </div>
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 460 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>New Network Zone</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="New Network Zone" maxWidth={460}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Zone Name *</label>
+            <input className="g-input w-full" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Production DMZ" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Zone Type</label>
+              <select className="g-select w-full" value={form.zone_type} onChange={e => setForm(f => ({ ...f, zone_type: e.target.value }))}>
+                {ZONE_TYPES.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
+              </select>
             </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Zone Name *</label>
-                <input className="g-input w-full" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Production DMZ" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Zone Type</label>
-                  <select className="g-select w-full" value={form.zone_type} onChange={e => setForm(f => ({ ...f, zone_type: e.target.value }))}>
-                    {ZONE_TYPES.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Trust Level</label>
-                  <select className="g-select w-full" value={form.trust_level} onChange={e => setForm(f => ({ ...f, trust_level: e.target.value }))}>
-                    {['high','medium','low','untrusted'].map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>CIDR Ranges (comma-separated)</label>
-                <input className="g-input w-full" value={form.cidr_ranges} onChange={e => setForm(f => ({ ...f, cidr_ranges: e.target.value }))} placeholder="10.0.1.0/24, 10.0.2.0/24" />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description</label>
-                <input className="g-input w-full" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-              </div>
-            </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Zone'}</button>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Trust Level</label>
+              <select className="g-select w-full" value={form.trust_level} onChange={e => setForm(f => ({ ...f, trust_level: e.target.value }))}>
+                {['high','medium','low','untrusted'].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>CIDR Ranges (comma-separated)</label>
+            <input className="g-input w-full" value={form.cidr_ranges} onChange={e => setForm(f => ({ ...f, cidr_ranges: e.target.value }))} placeholder="10.0.1.0/24, 10.0.2.0/24" />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description</label>
+            <input className="g-input w-full" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Check} onClick={save} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Zone'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -615,9 +560,9 @@ function ThreatsTab({ threats }: { threats: any[] }) {
   const [filterType, setFilterType] = useState('');
   const [filterSev, setFilterSev] = useState('');
   const THREAT_LABELS: Record<string, string> = {
-    port_scan: '🔍 Port Scan', brute_force: '🔨 Brute Force', ddos: '💀 DDoS',
-    c2_traffic: '☠ C2 Traffic', exploit: '💥 Exploit', malicious_ip: '🚫 Malicious IP',
-    malicious_domain: '🌐 Bad Domain', threat_intel: '🎯 Threat Intel',
+    port_scan: 'Port Scan', brute_force: 'Brute Force', ddos: 'DDoS',
+    c2_traffic: 'C2 Traffic', exploit: 'Exploit', malicious_ip: 'Malicious IP',
+    malicious_domain: 'Bad Domain', threat_intel: 'Threat Intel',
   };
   const filtered = useMemo(() => threats.filter(t => {
     if (filterType && t.threat_type !== filterType) return false;
@@ -632,7 +577,7 @@ function ThreatsTab({ threats }: { threats: any[] }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <select className="g-select" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ fontSize: 11 }}>
           <option value="">All Types</option>
-          {types.map(t => <option key={t} value={t}>{(THREAT_LABELS[t] || t).replace(/[^a-zA-Z ]/g, '').trim()}</option>)}
+          {types.map(t => <option key={t} value={t}>{THREAT_LABELS[t] || t}</option>)}
         </select>
         <select className="g-select" value={filterSev} onChange={e => setFilterSev(e.target.value)} style={{ fontSize: 11 }}>
           <option value="">All Severities</option>
@@ -640,33 +585,26 @@ function ThreatsTab({ threats }: { threats: any[] }) {
         </select>
         <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>{filtered.length} events</span>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Time', 'Type', 'Source IP', 'Dest IP', 'Port', 'Protocol', 'Country', 'Action', 'Severity', 'Confidence', 'Rule'].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No threats</td></tr>}
-            {filtered.map(t => (
-              <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(t.created_at)}</td>
-                <td style={{ padding: '8px 12px' }}><span style={{ fontSize: 11, fontWeight: 600, color: THREAT_TYPE_COLOR[t.threat_type] || '#6b7280' }}>{THREAT_LABELS[t.threat_type] || t.threat_type}</span></td>
-                <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{t.src_ip || '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{t.dst_ip || '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{t.dst_port || '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{t.protocol || '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-3)' }}>{t.country || '—'}</td>
-                <td style={{ padding: '8px 12px' }}>{pill(t.action_taken, t.action_taken === 'blocked' ? '#ef4444' : '#22c55e')}</td>
-                <td style={{ padding: '8px 12px' }}>{pill(t.severity, SEVERITY_COLOR[t.severity] || '#6b7280')}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-2)' }}>{t.confidence}%</td>
-                <td style={{ padding: '8px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{t.rule_triggered || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={filtered}
+          rowKey={(t: any) => t.id}
+          emptyState={<EmptyState title="No threats" />}
+          columns={[
+            { key: 'created_at', header: 'Time', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(t.created_at)}</span> },
+            { key: 'threat_type', header: 'Type', render: (t: any) => <span style={{ fontSize: 11, fontWeight: 600, color: THREAT_TYPE_COLOR[t.threat_type] || '#6b7280' }}>{THREAT_LABELS[t.threat_type] || t.threat_type}</span> },
+            { key: 'src_ip', header: 'Source IP', render: (t: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{t.src_ip || '—'}</span> },
+            { key: 'dst_ip', header: 'Dest IP', render: (t: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{t.dst_ip || '—'}</span> },
+            { key: 'dst_port', header: 'Port', render: (t: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{t.dst_port || '—'}</span> },
+            { key: 'protocol', header: 'Protocol', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{t.protocol || '—'}</span> },
+            { key: 'country', header: 'Country', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t.country || '—'}</span> },
+            { key: 'action_taken', header: 'Action', render: (t: any) => pill(t.action_taken, t.action_taken === 'blocked' ? '#ef4444' : '#22c55e') },
+            { key: 'severity', header: 'Severity', render: (t: any) => pill(t.severity, SEVERITY_COLOR[t.severity] || '#6b7280') },
+            { key: 'confidence', header: 'Confidence', render: (t: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{t.confidence}%</span> },
+            { key: 'rule_triggered', header: 'Rule', render: (t: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{t.rule_triggered || '—'}</span> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -677,35 +615,30 @@ function ConnectionsTab({ conns }: { conns: any[] }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{conns.length} connections</div>
-        <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44' }}>● Live</span>
+        <span className="flex items-center gap-1.5" style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44' }}>
+          <Radio className="h-3 w-3" /> Live
+        </span>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Source', 'Destination', 'Protocol', 'Application', 'State', 'Duration', 'Bytes In', 'Bytes Out', 'Zone Src', 'Zone Dst', 'Rule'].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {conns.length === 0 && <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No active connections</td></tr>}
-            {conns.map(c => (
-              <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{c.src_ip}:{c.src_port}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{c.dst_ip}:{c.dst_port}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, textTransform: 'uppercase', color: 'var(--text-3)' }}>{c.protocol}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--accent)' }}>{c.application || '—'}</td>
-                <td style={{ padding: '8px 12px' }}>{pill(c.state, STATUS_COLOR[c.state] || '#6b7280')}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-3)' }}>{c.duration ? `${c.duration}s` : '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-2)' }}>{bytes(c.bytes_recv || 0)}</td>
-                <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-2)' }}>{bytes(c.bytes_sent || 0)}</td>
-                <td style={{ padding: '8px 12px', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{c.zone_src || '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{c.zone_dst || '—'}</td>
-                <td style={{ padding: '8px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{c.rule_id || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={conns}
+          rowKey={(c: any) => c.id}
+          emptyState={<EmptyState title="No active connections" />}
+          columns={[
+            { key: 'source', header: 'Source', render: (c: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{c.src_ip}:{c.src_port}</span> },
+            { key: 'destination', header: 'Destination', render: (c: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{c.dst_ip}:{c.dst_port}</span> },
+            { key: 'protocol', header: 'Protocol', render: (c: any) => <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-3)' }}>{c.protocol}</span> },
+            { key: 'application', header: 'Application', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--accent)' }}>{c.application || '—'}</span> },
+            { key: 'state', header: 'State', render: (c: any) => pill(c.state, STATUS_COLOR[c.state] || '#6b7280') },
+            { key: 'duration', header: 'Duration', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.duration ? `${c.duration}s` : '—'}</span> },
+            { key: 'bytes_recv', header: 'Bytes In', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{bytes(c.bytes_recv || 0)}</span> },
+            { key: 'bytes_sent', header: 'Bytes Out', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{bytes(c.bytes_sent || 0)}</span> },
+            { key: 'zone_src', header: 'Zone Src', render: (c: any) => <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{c.zone_src || '—'}</span> },
+            { key: 'zone_dst', header: 'Zone Dst', render: (c: any) => <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{c.zone_dst || '—'}</span> },
+            { key: 'rule_id', header: 'Rule', render: (c: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{c.rule_id || '—'}</span> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -731,68 +664,54 @@ function BlockedTab({ items, onRefresh }: { items: any[]; onRefresh: () => void 
       {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid #ef4444', fontSize: 13 }}>{toast}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{items.length} active blocks</div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11, background: '#ef4444', border: '1px solid #dc2626' }} onClick={() => setShowNew(true)}>🚫 Block</button>
+        <ActionButton variant="danger" icon={Ban} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>Block</ActionButton>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Type', 'Value', 'Reason', 'Blocked By', 'Expires', 'Added'].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {items.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No blocks</td></tr>}
-            {items.map(b => (
-              <tr key={b.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '10px 12px' }}>{pill(b.block_type, BLOCK_COLOR[b.block_type] || '#6b7280')}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-1)' }}>{b.value}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>{b.reason || '—'}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{b.blocked_by}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)' }}>{b.expires_at ? timeAgo(b.expires_at) : 'Never'}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(b.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 420 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>Block IP / Domain / Country</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
-            </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Block Type</label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {['ip','domain','country','application'].map(t => (
-                    <button key={t} type="button" onClick={() => setForm(f => ({ ...f, block_type: t }))} style={{ fontSize: 11, padding: '4px 12px', borderRadius: 8, background: form.block_type === t ? BLOCK_COLOR[t] + '22' : 'var(--glass-bg)', border: `1px solid ${form.block_type === t ? BLOCK_COLOR[t] : 'var(--border)'}`, color: form.block_type === t ? BLOCK_COLOR[t] : 'var(--text-2)' }}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Value *</label>
-                <input className="g-input w-full" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder={form.block_type === 'ip' ? '203.0.113.0/24' : form.block_type === 'domain' ? 'evil.example.com' : form.block_type === 'country' ? 'CN' : 'BitTorrent'} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Reason</label>
-                <input className="g-input w-full" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Threat intel match" />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Expires in (hours, 0 = never)</label>
-                <input className="g-input w-full" type="number" value={form.expires_in_hours} onChange={e => setForm(f => ({ ...f, expires_in_hours: +e.target.value }))} />
-              </div>
-            </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !form.value} style={{ background: '#ef4444', border: '1px solid #dc2626' }}>{saving ? 'Blocking…' : '🚫 Block'}</button>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={items}
+          rowKey={(b: any) => b.id}
+          emptyState={<EmptyState title="No blocks" />}
+          columns={[
+            { key: 'block_type', header: 'Type', render: (b: any) => pill(b.block_type, BLOCK_COLOR[b.block_type] || '#6b7280') },
+            { key: 'value', header: 'Value', render: (b: any) => <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-1)' }}>{b.value}</span> },
+            { key: 'reason', header: 'Reason', render: (b: any) => <span style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>{b.reason || '—'}</span> },
+            { key: 'blocked_by', header: 'Blocked By', render: (b: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{b.blocked_by}</span> },
+            { key: 'expires_at', header: 'Expires', render: (b: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{b.expires_at ? timeAgo(b.expires_at) : 'Never'}</span> },
+            { key: 'created_at', header: 'Added', render: (b: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(b.created_at)}</span> },
+          ]}
+        />
+      </SectionCard>
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="Block IP / Domain / Country" maxWidth={420}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Block Type</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['ip','domain','country','application'].map(t => (
+                <button key={t} type="button" onClick={() => setForm(f => ({ ...f, block_type: t }))} style={{ fontSize: 11, padding: '4px 12px', borderRadius: 8, background: form.block_type === t ? BLOCK_COLOR[t] + '22' : 'var(--glass-bg)', border: `1px solid ${form.block_type === t ? BLOCK_COLOR[t] : 'var(--border)'}`, color: form.block_type === t ? BLOCK_COLOR[t] : 'var(--text-2)' }}>
+                  {t}
+                </button>
+              ))}
             </div>
           </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Value *</label>
+            <input className="g-input w-full" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder={form.block_type === 'ip' ? '203.0.113.0/24' : form.block_type === 'domain' ? 'evil.example.com' : form.block_type === 'country' ? 'CN' : 'BitTorrent'} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Reason</label>
+            <input className="g-input w-full" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Threat intel match" />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Expires in (hours, 0 = never)</label>
+            <input className="g-input w-full" type="number" value={form.expires_in_hours} onChange={e => setForm(f => ({ ...f, expires_in_hours: +e.target.value }))} />
+          </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="danger" icon={Ban} onClick={save} disabled={saving || !form.value}>{saving ? 'Blocking…' : 'Block'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -803,12 +722,11 @@ function AnalyticsTab({ data }: { data: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Threats"   value={data.total_threats}  color="#ef4444" />
-        <StatCard label="Threats (24h)"   value={data.threats_24h}    color="#f97316" sub="last 24 hours" />
+        <MetricCard label="Total Threats"   value={data.total_threats}  color="#ef4444" />
+        <MetricCard label="Threats (24h)"   value={data.threats_24h}    color="#f97316" sub="last 24 hours" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Threats by Type</div>
+        <SectionCard title="Threats by Type">
           {(!data.by_threat_type || data.by_threat_type.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(data.by_threat_type || []).map((t: any) => (
             <div key={t.threat_type} style={{ marginBottom: 8 }}>
@@ -821,19 +739,17 @@ function AnalyticsTab({ data }: { data: any }) {
               </div>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Traffic by Protocol</div>
+        </SectionCard>
+        <SectionCard title="Traffic by Protocol">
           {(!data.by_protocol || data.by_protocol.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
-          {(data.by_protocol || []).map((p: any, i: number) => (
+          {(data.by_protocol || []).map((p: any) => (
             <div key={p.protocol} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-2)' }}>{p.protocol}</span>
               <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.count.toLocaleString()}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Top Blocked IPs</div>
+        </SectionCard>
+        <SectionCard title="Top Blocked IPs">
           {(!data.top_blocked_ips || data.top_blocked_ips.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(data.top_blocked_ips || []).slice(0, 8).map((ip: any, i: number) => (
             <div key={ip.ip} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
@@ -843,7 +759,7 @@ function AnalyticsTab({ data }: { data: any }) {
               <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>{ip.count}</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -879,9 +795,9 @@ function ApprovalsTab({ approvals, onRefresh }: { approvals: any[]; onRefresh: (
       {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid var(--accent)', fontSize: 13 }}>{toast}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontWeight: 600 }}>Pending ({pending.length})</div>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>+ Request Approval</button>
+        <ActionButton variant="ghost" icon={Plus} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>Request Approval</ActionButton>
       </div>
-      {pending.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>No pending approvals</div>}
+      {pending.length === 0 && <EmptyState title="No pending approvals" />}
       {pending.map(a => (
         <div key={a.id} className="g-card" style={{ padding: 16, borderLeft: '3px solid #f97316' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -895,90 +811,69 @@ function ApprovalsTab({ approvals, onRefresh }: { approvals: any[]; onRefresh: (
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input className="g-input" placeholder="Decision note…" value={deciding === a.id ? note : ''} onChange={e => setNote(e.target.value)} style={{ fontSize: 11, flex: 1 }} />
-            <button className="g-btn" style={{ fontSize: 11, background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44' }} onClick={() => decide(a.id, 'approved')} disabled={deciding === a.id}>✓ Approve</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 11, color: '#ef4444' }} onClick={() => decide(a.id, 'rejected')} disabled={deciding === a.id}>✗ Reject</button>
+            <ActionButton variant="primary" icon={Check} style={{ fontSize: 11 }} onClick={() => decide(a.id, 'approved')} disabled={deciding === a.id}>Approve</ActionButton>
+            <ActionButton variant="danger" icon={X} style={{ fontSize: 11 }} onClick={() => decide(a.id, 'rejected')} disabled={deciding === a.id}>Reject</ActionButton>
           </div>
         </div>
       ))}
       {past.length > 0 && (
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Past Decisions</div>
-          <div className="g-card" style={{ overflow: 'hidden' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead className="g-thead">
-                <tr>{['Change', 'Type', 'Requester', 'Approver', 'Decision', 'Date'].map(h => (
-                  <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {past.map(a => (
-                  <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 500, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.description}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)' }}>{CHANGE_LABELS[a.change_type] || a.change_type}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.requester}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.approver || '—'}</td>
-                    <td style={{ padding: '10px 12px' }}>{pill(a.status, STATUS_COLOR[a.status] || '#6b7280')}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.decided_at ? timeAgo(a.decided_at) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <SectionCard title="Past Decisions" padded={false}>
+          <DataTable<any>
+            rows={past}
+            rowKey={(a: any) => a.id}
+            columns={[
+              { key: 'description', header: 'Change', render: (a: any) => <span style={{ fontSize: 12, fontWeight: 500, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{a.description}</span> },
+              { key: 'change_type', header: 'Type', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{CHANGE_LABELS[a.change_type] || a.change_type}</span> },
+              { key: 'requester', header: 'Requester', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.requester}</span> },
+              { key: 'approver', header: 'Approver', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.approver || '—'}</span> },
+              { key: 'status', header: 'Decision', render: (a: any) => pill(a.status, STATUS_COLOR[a.status] || '#6b7280') },
+              { key: 'decided_at', header: 'Date', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.decided_at ? timeAgo(a.decided_at) : '—'}</span> },
+            ]}
+          />
+        </SectionCard>
+      )}
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="Request Approval" maxWidth={460}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Change Type</label>
+            <select className="g-select w-full" value={form.change_type} onChange={e => setForm(f => ({ ...f, change_type: e.target.value }))}>
+              {APPROVAL_POLICIES.map(p => <option key={p} value={p}>{CHANGE_LABELS[p] || p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description *</label>
+            <textarea className="g-input w-full" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the change you need approval for…" style={{ minHeight: 70, resize: 'vertical' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Priority</label>
+            <select className="g-select w-full" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+              {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
         </div>
-      )}
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 460 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>Request Approval</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
-            </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Change Type</label>
-                <select className="g-select w-full" value={form.change_type} onChange={e => setForm(f => ({ ...f, change_type: e.target.value }))}>
-                  {APPROVAL_POLICIES.map(p => <option key={p} value={p}>{CHANGE_LABELS[p] || p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description *</label>
-                <textarea className="g-input w-full" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the change you need approval for…" style={{ minHeight: 70, resize: 'vertical' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Priority</label>
-                <select className="g-select w-full" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                  {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-            </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={submit} disabled={!form.description}>Submit Request</button>
-            </div>
-          </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Check} onClick={submit} disabled={!form.description}>Submit Request</ActionButton>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
 
 // ── Notifications ──────────────────────────────────────────────────────────
 function NotificationsTab({ items, onMarkRead }: { items: any[]; onMarkRead: () => void }) {
-  const EVENT_ICON: Record<string, string> = {
-    rule_added: '➕', rule_modified: '✏', rule_deleted: '🗑', threat_blocked: '🛡',
-    firewall_offline: '⚠', config_changed: '⚙', approval_required: '🔔', block_added: '🚫', high_hit_count: '📈',
-  };
   const unread = items.filter(n => !n.read).length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontWeight: 600 }}>Notifications {unread > 0 && <span style={{ fontSize: 11, background: '#3b82f622', color: '#3b82f6', borderRadius: 10, padding: '1px 8px', marginLeft: 6 }}>{unread} unread</span>}</div>
-        {unread > 0 && <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</button>}
+        {unread > 0 && <ActionButton variant="ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</ActionButton>}
       </div>
-      {items.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>No notifications</div>}
+      {items.length === 0 && <EmptyState title="No notifications" />}
       {items.map(n => (
         <div key={n.id} className="g-card" style={{ padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'flex-start', opacity: n.read ? 0.6 : 1, borderLeft: `3px solid ${SEVERITY_COLOR[n.severity] || '#6b7280'}` }}>
-          <div style={{ fontSize: 18, width: 24, textAlign: 'center', flexShrink: 0 }}>{EVENT_ICON[n.event_type] || '•'}</div>
+          <Bell className="h-4 w-4 shrink-0" style={{ color: SEVERITY_COLOR[n.severity] || '#6b7280', marginTop: 2 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: n.read ? 400 : 600 }}>{n.title}</div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{n.message}</div>
@@ -997,28 +892,21 @@ function NotificationsTab({ items, onMarkRead }: { items: any[]; onMarkRead: () 
 // ── Audit Trail ────────────────────────────────────────────────────────────
 function AuditTab({ items }: { items: any[] }) {
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead className="g-thead">
-          <tr>{['Time', 'Action', 'Object Type', 'Object Name', 'Actor', 'Details'].map(h => (
-            <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-          ))}</tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No audit events</td></tr>}
-          {items.map(a => (
-            <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(a.created_at)}</td>
-              <td style={{ padding: '10px 12px' }}>{pill(a.action, AUDIT_COLOR[a.action] || '#6b7280')}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{(a.object_type || '').replace(/_/g, ' ')}</td>
-              <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 500 }}>{a.object_name || a.object_id || '—'}</td>
-              <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.actor}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.details || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <SectionCard padded={false}>
+      <DataTable<any>
+        rows={items}
+        rowKey={(a: any) => a.id}
+        emptyState={<EmptyState title="No audit events" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(a.created_at)}</span> },
+          { key: 'action', header: 'Action', render: (a: any) => pill(a.action, AUDIT_COLOR[a.action] || '#6b7280') },
+          { key: 'object_type', header: 'Object Type', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{(a.object_type || '').replace(/_/g, ' ')}</span> },
+          { key: 'object_name', header: 'Object Name', render: (a: any) => <span style={{ fontSize: 12, fontWeight: 500 }}>{a.object_name || a.object_id || '—'}</span> },
+          { key: 'actor', header: 'Actor', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.actor}</span> },
+          { key: 'details', header: 'Details', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{a.details || '—'}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -1042,13 +930,13 @@ function ReportsTab({ onGenerate }: { onGenerate: (t: string) => void }) {
       <div style={{ fontWeight: 600, fontSize: 14 }}>Generate Reports</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {reports.map(r => (
-          <div key={r.id} className="g-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>{r.label}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', flex: 1 }}>{r.desc}</div>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 11, alignSelf: 'flex-start' }} onClick={() => go(r.id)} disabled={gen === r.id}>
-              {gen === r.id ? 'Generating…' : '⬇ Generate'}
-            </button>
-          </div>
+          <SectionCard key={r.id}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{r.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>{r.desc}</div>
+            <ActionButton variant="primary" icon={Download} style={{ fontSize: 11 }} onClick={() => go(r.id)} disabled={gen === r.id}>
+              {gen === r.id ? 'Generating…' : 'Generate'}
+            </ActionButton>
+          </SectionCard>
         ))}
       </div>
     </div>
@@ -1061,12 +949,12 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const actions = [
-    { id: 'recommend_rules',        label: '📋 Recommend Rules' },
-    { id: 'detect_redundant',       label: '🔍 Detect Redundant Rules' },
-    { id: 'identify_shadowed',      label: '👥 Identify Shadowed Rules' },
-    { id: 'optimize_rule_order',    label: '⚡ Optimize Rule Order' },
-    { id: 'explain_traffic',        label: '🔎 Explain Traffic Decision' },
-    { id: 'recommend_improvements', label: '🛡 Recommend Improvements' },
+    { id: 'recommend_rules',        label: 'Recommend Rules' },
+    { id: 'detect_redundant',       label: 'Detect Redundant Rules' },
+    { id: 'identify_shadowed',      label: 'Identify Shadowed Rules' },
+    { id: 'optimize_rule_order',    label: 'Optimize Rule Order' },
+    { id: 'explain_traffic',        label: 'Explain Traffic Decision' },
+    { id: 'recommend_improvements', label: 'Recommend Improvements' },
   ];
   const ask = async (action: string) => {
     setLoading(true);
@@ -1076,14 +964,16 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, background: 'var(--glass-bg)', borderLeft: '1px solid var(--border)', zIndex: 100, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.3)' }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>🛡 Firewall AI Assistant</div>
-        <button onClick={onClose} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
+        <span className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: 14 }}>
+          <Shield className="h-4 w-4" style={{ color: 'var(--accent)' }} /> Firewall AI Assistant
+        </span>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} />
       </div>
       <div style={{ padding: 16, flex: 1, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto' }}>
         <textarea className="g-input" placeholder="Describe traffic, paste rule config, or ask about a connection…" value={input} onChange={e => setInput(e.target.value)} style={{ fontSize: 12, minHeight: 80, resize: 'vertical' }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {actions.map(a => (
-            <button key={a.id} className="g-btn g-btn-ghost" style={{ fontSize: 11, justifyContent: 'flex-start' }} onClick={() => ask(a.id)} disabled={loading}>{a.label}</button>
+            <ActionButton key={a.id} variant="ghost" style={{ fontSize: 11, justifyContent: 'flex-start' }} onClick={() => ask(a.id)} disabled={loading}>{a.label}</ActionButton>
           ))}
         </div>
         {loading && <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>Analyzing…</div>}
@@ -1155,6 +1045,12 @@ export default function FirewallPage() {
   const pendingApprovals = approvals.filter(a => a.status === 'pending').length;
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const tabsWithCount = TABS.map(t => {
+    if (t.key === 'approvals') return { ...t, count: pendingApprovals || undefined };
+    if (t.key === 'notifications') return { ...t, count: unreadCount || undefined };
+    return t;
+  });
+
   return (
     <RootLayout
       title="Firewall"
@@ -1162,29 +1058,12 @@ export default function FirewallPage() {
       onRefresh={() => loadAll(true)}
       refreshing={refreshing}
       actions={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>🛡 AI</button>
-        </div>
+        <ActionButton variant="ghost" icon={Sparkles} style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>AI Assistant</ActionButton>
       }
     >
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20, overflowX: 'auto' }}>
-        {TABS.map(t => {
-          const badge = t.id === 'approvals' ? pendingApprovals : t.id === 'notifications' ? unreadCount : 0;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: '10px 14px', fontSize: 12, fontWeight: tab === t.id ? 700 : 400,
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              background: 'none', whiteSpace: 'nowrap', position: 'relative',
-            }}>
-              {t.label}
-              {badge > 0 && (
-                <span style={{ position: 'absolute', top: 6, right: 2, fontSize: 8, fontWeight: 700, background: '#ef4444', color: '#fff', borderRadius: 8, padding: '1px 4px', minWidth: 14, textAlign: 'center' }}>{badge}</span>
-              )}
-            </button>
-          );
-        })}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, marginBottom: 20, overflowX: 'auto' }}>
+        <TabBar tabs={tabsWithCount} active={tab} onChange={k => setTab(k as Tab)} />
       </div>
 
       {tab === 'dashboard'     && <DashboardTab dash={dash} onTabChange={setTab} />}

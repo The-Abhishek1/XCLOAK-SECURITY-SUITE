@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -17,7 +19,7 @@ func InitSRTables() { createSRTables() }
 func createSRTables() {
 	database.DB.Exec(`
 	CREATE TABLE IF NOT EXISTS sr_scripts (
-		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		id              SERIAL PRIMARY KEY,
 		tenant_id       INTEGER NOT NULL,
 		script_id       TEXT NOT NULL,
 		name            TEXT NOT NULL,
@@ -32,11 +34,11 @@ func createSRTables() {
 		parameters      TEXT NOT NULL DEFAULT '[]',
 		requires_approval INTEGER NOT NULL DEFAULT 0,
 		is_signed       INTEGER NOT NULL DEFAULT 0,
-		last_modified   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		last_modified   TIMESTAMP NOT NULL DEFAULT NOW(),
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 	CREATE TABLE IF NOT EXISTS sr_executions (
-		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		id              SERIAL PRIMARY KEY,
 		tenant_id       INTEGER NOT NULL,
 		execution_id    TEXT NOT NULL,
 		script_id       TEXT NOT NULL,
@@ -44,6 +46,7 @@ func createSRTables() {
 		target          TEXT NOT NULL,
 		target_count    INTEGER NOT NULL DEFAULT 1,
 		status          TEXT NOT NULL DEFAULT 'running',
+		agent_task_id   INTEGER,
 		exit_code       INTEGER,
 		stdout          TEXT,
 		stderr          TEXT,
@@ -53,11 +56,11 @@ func createSRTables() {
 		parameters      TEXT NOT NULL DEFAULT '{}',
 		executed_by     TEXT NOT NULL,
 		approval_id     INTEGER,
-		started_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		completed_at    DATETIME
+		started_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+		completed_at    TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS sr_schedules (
-		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		id              SERIAL PRIMARY KEY,
 		tenant_id       INTEGER NOT NULL,
 		name            TEXT NOT NULL,
 		script_id       TEXT NOT NULL,
@@ -68,13 +71,13 @@ func createSRTables() {
 		run_as          TEXT NOT NULL DEFAULT 'system',
 		parameters      TEXT NOT NULL DEFAULT '{}',
 		enabled         INTEGER NOT NULL DEFAULT 1,
-		last_run        DATETIME,
-		next_run        DATETIME,
+		last_run        TIMESTAMP,
+		next_run        TIMESTAMP,
 		created_by      TEXT NOT NULL,
-		created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 	CREATE TABLE IF NOT EXISTS sr_approvals (
-		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		id              SERIAL PRIMARY KEY,
 		tenant_id       INTEGER NOT NULL,
 		execution_id    TEXT NOT NULL,
 		script_id       TEXT NOT NULL,
@@ -85,24 +88,24 @@ func createSRTables() {
 		reason          TEXT,
 		decision        TEXT NOT NULL DEFAULT 'pending',
 		decided_by      TEXT,
-		decided_at      DATETIME,
-		created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		decided_at      TIMESTAMP,
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 	);
 	CREATE TABLE IF NOT EXISTS sr_audit (
-		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		id              SERIAL PRIMARY KEY,
 		tenant_id       INTEGER NOT NULL,
 		action          TEXT NOT NULL,
 		script_id       TEXT,
 		script_name     TEXT NOT NULL,
 		actor           TEXT NOT NULL,
 		details         TEXT,
-		created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 	)`)
 }
 
 func srAudit(tid int, scriptID, scriptName, action, actor, details string) {
 	database.DB.Exec(
-		`INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details) VALUES (?,?,?,?,?,?)`,
+		`INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details) VALUES ($1,$2,$3,$4,$5,$6)`,
 		tid, action, scriptID, scriptName, actor, details,
 	)
 }
@@ -117,18 +120,18 @@ func GetSRDashboard(c *gin.Context) {
 		return n
 	}
 	avgTime := 0
-	database.DB.QueryRow(`SELECT COALESCE(AVG(execution_time),0) FROM sr_executions WHERE tenant_id=? AND execution_time IS NOT NULL`, tid).Scan(&avgTime)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(execution_time),0) FROM sr_executions WHERE tenant_id=$1 AND execution_time IS NOT NULL`, tid).Scan(&avgTime)
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_scripts":        row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=?`),
-		"active_scripts":       row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=? AND status='active'`),
-		"running_jobs":         row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='running'`),
-		"scheduled_jobs":       row(`SELECT COUNT(*) FROM sr_schedules WHERE tenant_id=? AND enabled=1`),
-		"successful_executions": row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='success'`),
-		"failed_executions":    row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='failed'`),
-		"avg_execution_time":   avgTime,
-		"pending_approvals":    row(`SELECT COUNT(*) FROM sr_approvals WHERE tenant_id=? AND decision='pending'`),
-		"managed_endpoints":    row(`SELECT COUNT(DISTINCT target) FROM sr_executions WHERE tenant_id=?`),
+		"total_scripts":         row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1`),
+		"active_scripts":        row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1 AND status='active'`),
+		"running_jobs":          row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='running'`),
+		"scheduled_jobs":        row(`SELECT COUNT(*) FROM sr_schedules WHERE tenant_id=$1 AND enabled=1`),
+		"successful_executions": row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='success'`),
+		"failed_executions":     row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='failed'`),
+		"avg_execution_time":    avgTime,
+		"pending_approvals":     row(`SELECT COUNT(*) FROM sr_approvals WHERE tenant_id=$1 AND decision='pending'`),
+		"managed_endpoints":     row(`SELECT COUNT(DISTINCT target) FROM sr_executions WHERE tenant_id=$1`),
 	})
 }
 
@@ -142,21 +145,25 @@ func GetSRScripts(c *gin.Context) {
 	cat := c.Query("category")
 	status := c.Query("status")
 
-	query := `SELECT id,script_id,name,description,category,language,version,author,status,tags,requires_approval,last_modified,created_at FROM sr_scripts WHERE tenant_id=? AND name LIKE ?`
+	query := `SELECT id,script_id,name,description,category,language,version,author,status,tags,requires_approval,last_modified,created_at FROM sr_scripts WHERE tenant_id=$1 AND name ILIKE $2`
 	args := []interface{}{tid, q}
+	i := 3
 	if lang != "" {
-		query += " AND language=?"
+		query += fmt.Sprintf(" AND language=$%d", i)
 		args = append(args, lang)
+		i++
 	}
 	if cat != "" {
-		query += " AND category=?"
+		query += fmt.Sprintf(" AND category=$%d", i)
 		args = append(args, cat)
+		i++
 	}
 	if status != "" {
-		query += " AND status=?"
+		query += fmt.Sprintf(" AND status=$%d", i)
 		args = append(args, status)
+		i++
 	}
-	query += " ORDER BY last_modified DESC LIMIT ?"
+	query += fmt.Sprintf(" ORDER BY last_modified DESC LIMIT $%d", i)
 	args = append(args, limit)
 
 	rows, err := database.DB.Query(query, args...)
@@ -189,7 +196,7 @@ func GetSRScript(c *gin.Context) {
 	var reqApproval, isSigned int
 	var lastMod, createdAt time.Time
 	err := database.DB.QueryRow(
-		`SELECT script_id,name,description,category,language,version,author,status,content,tags,parameters,requires_approval,is_signed,last_modified,created_at FROM sr_scripts WHERE id=? AND tenant_id=?`,
+		`SELECT script_id,name,description,category,language,version,author,status,content,tags,parameters,requires_approval,is_signed,last_modified,created_at FROM sr_scripts WHERE id=$1 AND tenant_id=$2`,
 		id, tid,
 	).Scan(&sid, &name, &desc, &cat, &lang, &ver, &author, &st, &content, &tags, &params, &reqApproval, &isSigned, &lastMod, &createdAt)
 	if err != nil {
@@ -209,35 +216,49 @@ func PostSRScript(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actor := usernameFromContext(c)
 	var b struct {
-		Name            string `json:"name"`
-		Description     string `json:"description"`
-		Category        string `json:"category"`
-		Language        string `json:"language"`
-		Version         string `json:"version"`
-		Author          string `json:"author"`
-		Content         string `json:"content"`
-		Tags            string `json:"tags"`
-		Parameters      string `json:"parameters"`
-		RequiresApproval bool  `json:"requires_approval"`
+		Name             string `json:"name"`
+		Description      string `json:"description"`
+		Category         string `json:"category"`
+		Language         string `json:"language"`
+		Version          string `json:"version"`
+		Author           string `json:"author"`
+		Content          string `json:"content"`
+		Tags             string `json:"tags"`
+		Parameters       string `json:"parameters"`
+		RequiresApproval bool   `json:"requires_approval"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if b.Category == "" { b.Category = "general" }
-	if b.Language == "" { b.Language = "bash" }
-	if b.Version == "" { b.Version = "1.0.0" }
-	if b.Author == "" { b.Author = actor }
-	if b.Tags == "" { b.Tags = "[]" }
-	if b.Parameters == "" { b.Parameters = "[]" }
+	if b.Category == "" {
+		b.Category = "general"
+	}
+	if b.Language == "" {
+		b.Language = "bash"
+	}
+	if b.Version == "" {
+		b.Version = "1.0.0"
+	}
+	if b.Author == "" {
+		b.Author = actor
+	}
+	if b.Tags == "" {
+		b.Tags = "[]"
+	}
+	if b.Parameters == "" {
+		b.Parameters = "[]"
+	}
 	scriptID := fmt.Sprintf("SCR-%04d-%d", tid, time.Now().UnixMilli()%100000)
 	reqApproval := 0
-	if b.RequiresApproval { reqApproval = 1 }
-	res, _ := database.DB.Exec(
-		`INSERT INTO sr_scripts (tenant_id,script_id,name,description,category,language,version,author,content,tags,parameters,requires_approval) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+	if b.RequiresApproval {
+		reqApproval = 1
+	}
+	var id int
+	database.DB.QueryRow(
+		`INSERT INTO sr_scripts (tenant_id,script_id,name,description,category,language,version,author,content,tags,parameters,requires_approval) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
 		tid, scriptID, b.Name, b.Description, b.Category, b.Language, b.Version, b.Author, b.Content, b.Tags, b.Parameters, reqApproval,
-	)
-	id, _ := res.LastInsertId()
+	).Scan(&id)
 	srAudit(tid, scriptID, b.Name, "created", actor, fmt.Sprintf("Language: %s, Category: %s", b.Language, b.Category))
 	c.JSON(http.StatusOK, gin.H{"id": id, "script_id": scriptID})
 }
@@ -252,16 +273,16 @@ func PatchSRScript(c *gin.Context) {
 		return
 	}
 	var sid, name string
-	database.DB.QueryRow(`SELECT script_id,name FROM sr_scripts WHERE id=? AND tenant_id=?`, id, tid).Scan(&sid, &name)
+	database.DB.QueryRow(`SELECT script_id,name FROM sr_scripts WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&sid, &name)
 	if content, ok := b["content"].(string); ok {
-		database.DB.Exec(`UPDATE sr_scripts SET content=?,last_modified=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`, content, id, tid)
+		database.DB.Exec(`UPDATE sr_scripts SET content=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, content, id, tid)
 	}
 	if status, ok := b["status"].(string); ok {
-		database.DB.Exec(`UPDATE sr_scripts SET status=?,last_modified=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`, status, id, tid)
+		database.DB.Exec(`UPDATE sr_scripts SET status=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, status, id, tid)
 		srAudit(tid, sid, name, "status_changed", actor, fmt.Sprintf("New status: %s", status))
 	}
 	if ver, ok := b["version"].(string); ok {
-		database.DB.Exec(`UPDATE sr_scripts SET version=?,last_modified=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`, ver, id, tid)
+		database.DB.Exec(`UPDATE sr_scripts SET version=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, ver, id, tid)
 	}
 	srAudit(tid, sid, name, "modified", actor, "Script content updated")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -272,68 +293,155 @@ func DeleteSRScript(c *gin.Context) {
 	actor := usernameFromContext(c)
 	id, _ := strconv.Atoi(c.Param("id"))
 	var sid, name string
-	database.DB.QueryRow(`SELECT script_id,name FROM sr_scripts WHERE id=? AND tenant_id=?`, id, tid).Scan(&sid, &name)
-	database.DB.Exec(`DELETE FROM sr_scripts WHERE id=? AND tenant_id=?`, id, tid)
+	database.DB.QueryRow(`SELECT script_id,name FROM sr_scripts WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&sid, &name)
+	database.DB.Exec(`DELETE FROM sr_scripts WHERE id=$1 AND tenant_id=$2`, id, tid)
 	srAudit(tid, sid, name, "deleted", actor, "Script deleted from library")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // ── Execute ────────────────────────────────────────────────────────────────
+//
+// Dispatches a real agent_tasks row (task_type "execute_script", the same
+// type the working /api/scripts/run endpoint in script_runner.go uses) to
+// the agent matching Target's hostname, instead of the previous behaviour
+// of faking a "success" result after a 2s sleep with canned stdout. If no
+// agent matches, the execution is recorded as failed with an honest reason
+// rather than a fabricated success.
 
 func PostSRExecute(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actor := usernameFromContext(c)
 	var b struct {
-		ScriptID      string          `json:"script_id"`
-		ScriptName    string          `json:"script_name"`
-		Target        string          `json:"target"`
-		TargetCount   int             `json:"target_count"`
-		RunAs         string          `json:"run_as"`
-		TriggerSource string          `json:"trigger_source"`
-		Parameters    json.RawMessage `json:"parameters"`
-		RequireApproval bool          `json:"require_approval"`
+		ScriptID        string          `json:"script_id"`
+		ScriptName      string          `json:"script_name"`
+		Target          string          `json:"target"`
+		TargetCount     int             `json:"target_count"`
+		RunAs           string          `json:"run_as"`
+		TriggerSource   string          `json:"trigger_source"`
+		Parameters      json.RawMessage `json:"parameters"`
+		RequireApproval bool            `json:"require_approval"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if b.RunAs == "" { b.RunAs = "system" }
-	if b.TriggerSource == "" { b.TriggerSource = "manual" }
-	if b.TargetCount < 1 { b.TargetCount = 1 }
+	if b.RunAs == "" {
+		b.RunAs = "system"
+	}
+	if b.TriggerSource == "" {
+		b.TriggerSource = "manual"
+	}
+	if b.TargetCount < 1 {
+		b.TargetCount = 1
+	}
 	params := "{}"
-	if b.Parameters != nil { params = string(b.Parameters) }
+	if b.Parameters != nil {
+		params = string(b.Parameters)
+	}
 
 	execID := fmt.Sprintf("EXEC-%04d-%d", tid, time.Now().UnixMilli()%1000000)
 
 	needsApproval := b.RequireApproval || b.RunAs == "root" || b.RunAs == "administrator" || b.TargetCount > 10
 	if needsApproval {
-		res, _ := database.DB.Exec(
-			`INSERT INTO sr_approvals (tenant_id,execution_id,script_id,script_name,target,run_as,requested_by,reason) VALUES (?,?,?,?,?,?,?,?)`,
+		var appID int
+		database.DB.QueryRow(
+			`INSERT INTO sr_approvals (tenant_id,execution_id,script_id,script_name,target,run_as,requested_by,reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
 			tid, execID, b.ScriptID, b.ScriptName, b.Target, b.RunAs, actor, "Execution requires approval",
-		)
-		appID, _ := res.LastInsertId()
+		).Scan(&appID)
 		srAudit(tid, b.ScriptID, b.ScriptName, "approval_required", actor, fmt.Sprintf("Target: %s, RunAs: %s", b.Target, b.RunAs))
 		c.JSON(http.StatusOK, gin.H{"execution_id": execID, "approval_required": true, "approval_id": appID})
 		return
 	}
 
+	status, agentTaskID, failReason := dispatchScriptExecution(tid, b.ScriptID, b.Target, b.RunAs, params)
+
 	database.DB.Exec(
-		`INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,trigger_source,run_as,parameters,executed_by) VALUES (?,?,?,?,?,?,'running',?,?,?,?)`,
-		tid, execID, b.ScriptID, b.ScriptName, b.Target, b.TargetCount, b.TriggerSource, b.RunAs, params, actor,
+		`INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,agent_task_id,stderr,trigger_source,run_as,parameters,executed_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		tid, execID, b.ScriptID, b.ScriptName, b.Target, b.TargetCount, status, nullableInt(agentTaskID), failReason, b.TriggerSource, b.RunAs, params, actor,
 	)
 	srAudit(tid, b.ScriptID, b.ScriptName, "executed", actor, fmt.Sprintf("Target: %s, RunAs: %s", b.Target, b.RunAs))
 
-	// Simulate execution completion
-	go func() {
-		time.Sleep(2 * time.Second)
-		execTime := 1200 + (time.Now().UnixMilli() % 8000)
-		database.DB.Exec(
-			`UPDATE sr_executions SET status='success',exit_code=0,execution_time=?,stdout='Execution completed successfully.\nAll tasks finished without errors.',completed_at=CURRENT_TIMESTAMP WHERE execution_id=? AND tenant_id=?`,
-			execTime, execID, tid,
-		)
-	}()
+	c.JSON(http.StatusOK, gin.H{"execution_id": execID, "approval_required": false, "status": status})
+}
 
-	c.JSON(http.StatusOK, gin.H{"execution_id": execID, "approval_required": false, "status": "running"})
+// dispatchScriptExecution resolves target to a real agent by hostname and
+// dispatches a real execute_script AgentTask carrying the script's actual
+// content. Returns the execution's initial status ("running" if dispatched,
+// "failed" if no matching agent or script content was found), the created
+// agent_tasks.id (0 if none), and a failure reason (empty on success).
+func dispatchScriptExecution(tid int, scriptID, target, runAs, params string) (status string, agentTaskID int, failReason string) {
+	var content, language string
+	err := database.DB.QueryRow(`SELECT content,language FROM sr_scripts WHERE script_id=$1 AND tenant_id=$2`, scriptID, tid).Scan(&content, &language)
+	if err != nil || content == "" {
+		return "failed", 0, "script not found in library or has no content"
+	}
+
+	var agentID int
+	err = database.DB.QueryRow(
+		`SELECT id FROM agents WHERE tenant_id=$1 AND (hostname=$2 OR ip_address=$2)`, tid, target,
+	).Scan(&agentID)
+	if err != nil {
+		return "failed", 0, fmt.Sprintf("no registered agent matches target %q", target)
+	}
+
+	shell := "bash"
+	switch language {
+	case "python", "python3":
+		shell = "python3"
+	case "powershell", "pwsh":
+		shell = "pwsh"
+	case "sh":
+		shell = "sh"
+	}
+	payload, _ := json.Marshal(map[string]string{"script": content, "shell": shell, "label": scriptID, "run_as": runAs, "parameters": params})
+
+	task := models.AgentTask{AgentID: agentID, TaskType: "execute_script", Payload: payload}
+	if err := repositories.CreateTask(task); err != nil {
+		return "failed", 0, "failed to dispatch task: " + err.Error()
+	}
+	database.DB.QueryRow(
+		`SELECT id FROM agent_tasks WHERE agent_id=$1 AND task_type='execute_script' ORDER BY id DESC LIMIT 1`, agentID,
+	).Scan(&agentTaskID)
+	return "running", agentTaskID, ""
+}
+
+func nullableInt(n int) interface{} {
+	if n == 0 {
+		return nil
+	}
+	return n
+}
+
+// syncExecutionFromAgentTask reflects the linked real agent_tasks row's
+// live status/result onto an sr_executions row still marked "running" —
+// the agent reports completion via the real POST /api/tasks/result flow
+// (services.CompleteTask), so this is a read-side join rather than a write
+// hook into that agent-authenticated endpoint.
+func syncExecutionFromAgentTask(tid, execRowID, agentTaskID int) {
+	if agentTaskID == 0 {
+		return
+	}
+	var taskStatus string
+	var result *string
+	var completedAt *time.Time
+	err := database.DB.QueryRow(`SELECT status, result, completed_at FROM agent_tasks WHERE id=$1`, agentTaskID).Scan(&taskStatus, &result, &completedAt)
+	if err != nil || taskStatus == "pending" || taskStatus == "running" {
+		return
+	}
+	newStatus := "success"
+	exitCode := 0
+	if taskStatus != "completed" {
+		newStatus = "failed"
+		exitCode = 1
+	}
+	stdout := ""
+	if result != nil {
+		stdout = *result
+	}
+	database.DB.Exec(
+		`UPDATE sr_executions SET status=$1,exit_code=$2,stdout=$3,completed_at=$4 WHERE id=$5 AND tenant_id=$6 AND status='running'`,
+		newStatus, exitCode, stdout, completedAt, execRowID, tid,
+	)
 }
 
 // ── Execution History ──────────────────────────────────────────────────────
@@ -344,17 +452,20 @@ func GetSRExecutions(c *gin.Context) {
 	status := c.Query("status")
 	script := c.Query("script_id")
 
-	query := `SELECT id,execution_id,script_id,script_name,target,target_count,status,exit_code,execution_time,trigger_source,run_as,executed_by,started_at,completed_at FROM sr_executions WHERE tenant_id=?`
+	query := `SELECT id,execution_id,script_id,script_name,target,target_count,status,agent_task_id,exit_code,execution_time,trigger_source,run_as,executed_by,started_at,completed_at FROM sr_executions WHERE tenant_id=$1`
 	args := []interface{}{tid}
+	i := 2
 	if status != "" {
-		query += " AND status=?"
+		query += fmt.Sprintf(" AND status=$%d", i)
 		args = append(args, status)
+		i++
 	}
 	if script != "" {
-		query += " AND script_id=?"
+		query += fmt.Sprintf(" AND script_id=$%d", i)
 		args = append(args, script)
+		i++
 	}
-	query += " ORDER BY started_at DESC LIMIT ?"
+	query += fmt.Sprintf(" ORDER BY started_at DESC LIMIT $%d", i)
 	args = append(args, limit)
 
 	rows, err := database.DB.Query(query, args...)
@@ -363,20 +474,32 @@ func GetSRExecutions(c *gin.Context) {
 		return
 	}
 	defer rows.Close()
+	type execRow struct {
+		id, targetCount        int
+		execID, scriptID, scriptName, target, st, trigSrc, runAs, execBy string
+		agentTaskID            *int
+		exitCode, execTime     *int
+		startedAt              time.Time
+		completedAt            *time.Time
+	}
+	pending := []execRow{}
 	out := []map[string]interface{}{}
 	for rows.Next() {
-		var id, targetCount int
-		var execID, scriptID, scriptName, target, st, trigSrc, runAs, execBy string
-		var exitCode, execTime *int
-		var startedAt time.Time
-		var completedAt *time.Time
-		rows.Scan(&id, &execID, &scriptID, &scriptName, &target, &targetCount, &st, &exitCode, &execTime, &trigSrc, &runAs, &execBy, &startedAt, &completedAt)
+		var r execRow
+		rows.Scan(&r.id, &r.execID, &r.scriptID, &r.scriptName, &r.target, &r.targetCount, &r.st, &r.agentTaskID, &r.exitCode, &r.execTime, &r.trigSrc, &r.runAs, &r.execBy, &r.startedAt, &r.completedAt)
+		if r.st == "running" && r.agentTaskID != nil {
+			pending = append(pending, r)
+		}
 		out = append(out, map[string]interface{}{
-			"id": id, "execution_id": execID, "script_id": scriptID, "script_name": scriptName,
-			"target": target, "target_count": targetCount, "status": st, "exit_code": exitCode,
-			"execution_time": execTime, "trigger_source": trigSrc, "run_as": runAs,
-			"executed_by": execBy, "started_at": startedAt, "completed_at": completedAt,
+			"id": r.id, "execution_id": r.execID, "script_id": r.scriptID, "script_name": r.scriptName,
+			"target": r.target, "target_count": r.targetCount, "status": r.st, "exit_code": r.exitCode,
+			"execution_time": r.execTime, "trigger_source": r.trigSrc, "run_as": r.runAs,
+			"executed_by": r.execBy, "started_at": r.startedAt, "completed_at": r.completedAt,
 		})
+	}
+	rows.Close()
+	for _, r := range pending {
+		syncExecutionFromAgentTask(tid, r.id, *r.agentTaskID)
 	}
 	c.JSON(http.StatusOK, out)
 }
@@ -386,17 +509,24 @@ func GetSRExecution(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var execID, scriptID, scriptName, target, st, stdout, stderr, trigSrc, runAs, execBy string
 	var targetCount int
+	var agentTaskID *int
 	var exitCode, execTime *int
 	var startedAt time.Time
 	var completedAt *time.Time
 	var params string
 	err := database.DB.QueryRow(
-		`SELECT execution_id,script_id,script_name,target,target_count,status,exit_code,stdout,stderr,execution_time,trigger_source,run_as,parameters,executed_by,started_at,completed_at FROM sr_executions WHERE id=? AND tenant_id=?`,
+		`SELECT execution_id,script_id,script_name,target,target_count,status,agent_task_id,exit_code,COALESCE(stdout,''),COALESCE(stderr,''),execution_time,trigger_source,run_as,parameters,executed_by,started_at,completed_at FROM sr_executions WHERE id=$1 AND tenant_id=$2`,
 		id, tid,
-	).Scan(&execID, &scriptID, &scriptName, &target, &targetCount, &st, &exitCode, &stdout, &stderr, &execTime, &trigSrc, &runAs, &params, &execBy, &startedAt, &completedAt)
+	).Scan(&execID, &scriptID, &scriptName, &target, &targetCount, &st, &agentTaskID, &exitCode, &stdout, &stderr, &execTime, &trigSrc, &runAs, &params, &execBy, &startedAt, &completedAt)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
+	}
+	if st == "running" && agentTaskID != nil {
+		syncExecutionFromAgentTask(tid, id, *agentTaskID)
+		database.DB.QueryRow(
+			`SELECT status,exit_code,COALESCE(stdout,''),completed_at FROM sr_executions WHERE id=$1 AND tenant_id=$2`, id, tid,
+		).Scan(&st, &exitCode, &stdout, &completedAt)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"execution_id": execID, "script_id": scriptID, "script_name": scriptName,
@@ -451,7 +581,7 @@ func PostSRAI(c *gin.Context) {
 func GetSRSchedules(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	rows, err := database.DB.Query(
-		`SELECT id,name,script_id,script_name,schedule_type,cron_expr,target,run_as,enabled,last_run,next_run,created_by,created_at FROM sr_schedules WHERE tenant_id=? ORDER BY created_at DESC`,
+		`SELECT id,name,script_id,script_name,schedule_type,cron_expr,target,run_as,enabled,last_run,next_run,created_by,created_at FROM sr_schedules WHERE tenant_id=$1 ORDER BY created_at DESC`,
 		tid,
 	)
 	if err != nil {
@@ -495,15 +625,21 @@ func PostSRSchedule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if b.ScheduleType == "" { b.ScheduleType = "once" }
-	if b.RunAs == "" { b.RunAs = "system" }
-	if b.Parameters == "" { b.Parameters = "{}" }
+	if b.ScheduleType == "" {
+		b.ScheduleType = "once"
+	}
+	if b.RunAs == "" {
+		b.RunAs = "system"
+	}
+	if b.Parameters == "" {
+		b.Parameters = "{}"
+	}
 	nextRun := time.Now().Add(time.Hour)
-	res, _ := database.DB.Exec(
-		`INSERT INTO sr_schedules (tenant_id,name,script_id,script_name,schedule_type,cron_expr,target,run_as,parameters,next_run,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+	var id int
+	database.DB.QueryRow(
+		`INSERT INTO sr_schedules (tenant_id,name,script_id,script_name,schedule_type,cron_expr,target,run_as,parameters,next_run,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
 		tid, b.Name, b.ScriptID, b.ScriptName, b.ScheduleType, b.CronExpr, b.Target, b.RunAs, b.Parameters, nextRun, actor,
-	)
-	id, _ := res.LastInsertId()
+	).Scan(&id)
 	srAudit(tid, b.ScriptID, b.ScriptName, "scheduled", actor, fmt.Sprintf("Schedule: %s, Target: %s", b.ScheduleType, b.Target))
 	c.JSON(http.StatusOK, gin.H{"id": id})
 }
@@ -517,8 +653,10 @@ func PatchSRSchedule(c *gin.Context) {
 	c.ShouldBindJSON(&b)
 	if b.Enabled != nil {
 		en := 0
-		if *b.Enabled { en = 1 }
-		database.DB.Exec(`UPDATE sr_schedules SET enabled=? WHERE id=? AND tenant_id=?`, en, id, tid)
+		if *b.Enabled {
+			en = 1
+		}
+		database.DB.Exec(`UPDATE sr_schedules SET enabled=$1 WHERE id=$2 AND tenant_id=$3`, en, id, tid)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -528,8 +666,8 @@ func DeleteSRSchedule(c *gin.Context) {
 	actor := usernameFromContext(c)
 	id, _ := strconv.Atoi(c.Param("id"))
 	var sid, sname string
-	database.DB.QueryRow(`SELECT script_id,script_name FROM sr_schedules WHERE id=? AND tenant_id=?`, id, tid).Scan(&sid, &sname)
-	database.DB.Exec(`DELETE FROM sr_schedules WHERE id=? AND tenant_id=?`, id, tid)
+	database.DB.QueryRow(`SELECT script_id,script_name FROM sr_schedules WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&sid, &sname)
+	database.DB.Exec(`DELETE FROM sr_schedules WHERE id=$1 AND tenant_id=$2`, id, tid)
 	srAudit(tid, sid, sname, "schedule_deleted", actor, "Scheduled job removed")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -539,9 +677,11 @@ func DeleteSRSchedule(c *gin.Context) {
 func GetSRApprovals(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	decision := c.Query("decision")
-	if decision == "" { decision = "pending" }
+	if decision == "" {
+		decision = "pending"
+	}
 	rows, err := database.DB.Query(
-		`SELECT id,execution_id,script_id,script_name,target,run_as,requested_by,reason,decision,decided_by,decided_at,created_at FROM sr_approvals WHERE tenant_id=? AND decision=? ORDER BY created_at DESC`,
+		`SELECT id,execution_id,script_id,script_name,target,run_as,requested_by,reason,decision,decided_by,decided_at,created_at FROM sr_approvals WHERE tenant_id=$1 AND decision=$2 ORDER BY created_at DESC`,
 		tid, decision,
 	)
 	if err != nil {
@@ -579,15 +719,16 @@ func PostSRApprove(c *gin.Context) {
 		return
 	}
 	var execID, sid, sname, target, runAs string
-	database.DB.QueryRow(`SELECT execution_id,script_id,script_name,target,run_as FROM sr_approvals WHERE id=? AND tenant_id=?`, id, tid).Scan(&execID, &sid, &sname, &target, &runAs)
+	database.DB.QueryRow(`SELECT execution_id,script_id,script_name,target,run_as FROM sr_approvals WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&execID, &sid, &sname, &target, &runAs)
 	database.DB.Exec(
-		`UPDATE sr_approvals SET decision=?,decided_by=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?`,
+		`UPDATE sr_approvals SET decision=$1,decided_by=$2,decided_at=NOW() WHERE id=$3 AND tenant_id=$4`,
 		b.Decision, actor, id, tid,
 	)
 	if b.Decision == "approve" {
+		status, agentTaskID, failReason := dispatchScriptExecution(tid, sid, target, runAs, "{}")
 		database.DB.Exec(
-			`INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,trigger_source,run_as,parameters,executed_by,approval_id) VALUES (?,?,?,?,'approved',1,'running','manual',?,?,?,?)`,
-			tid, execID, sid, sname, runAs, "{}", actor, id,
+			`INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,agent_task_id,stderr,trigger_source,run_as,parameters,executed_by,approval_id) VALUES ($1,$2,$3,$4,$5,1,$6,$7,$8,'manual',$9,'{}',$10,$11)`,
+			tid, execID, sid, sname, target, status, nullableInt(agentTaskID), failReason, runAs, actor, id,
 		)
 		srAudit(tid, sid, sname, "approved", actor, fmt.Sprintf("Execution %s approved and started", execID))
 	} else {
@@ -612,7 +753,7 @@ func GetSRAnalytics(c *gin.Context) {
 	}
 	topScripts := []scriptCount{}
 	rows, _ := database.DB.Query(
-		`SELECT script_name,COUNT(*) c FROM sr_executions WHERE tenant_id=? GROUP BY script_name ORDER BY c DESC LIMIT 5`, tid,
+		`SELECT script_name,COUNT(*) c FROM sr_executions WHERE tenant_id=$1 GROUP BY script_name ORDER BY c DESC LIMIT 5`, tid,
 	)
 	if rows != nil {
 		defer rows.Close()
@@ -629,7 +770,7 @@ func GetSRAnalytics(c *gin.Context) {
 	}
 	byCategory := []catCount{}
 	rows2, _ := database.DB.Query(
-		`SELECT category,COUNT(*) c FROM sr_scripts WHERE tenant_id=? GROUP BY category ORDER BY c DESC`, tid,
+		`SELECT category,COUNT(*) c FROM sr_scripts WHERE tenant_id=$1 GROUP BY category ORDER BY c DESC`, tid,
 	)
 	if rows2 != nil {
 		defer rows2.Close()
@@ -640,36 +781,38 @@ func GetSRAnalytics(c *gin.Context) {
 		}
 	}
 
-	total := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=?`)
-	success := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='success'`)
-	failed := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='failed'`)
+	total := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1`)
+	success := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='success'`)
+	failed := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='failed'`)
 	successRate := 0
-	if total > 0 { successRate = success * 100 / total }
+	if total > 0 {
+		successRate = success * 100 / total
+	}
 
 	avgTime := 0
-	database.DB.QueryRow(`SELECT COALESCE(AVG(execution_time),0) FROM sr_executions WHERE tenant_id=? AND execution_time IS NOT NULL`, tid).Scan(&avgTime)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(execution_time),0) FROM sr_executions WHERE tenant_id=$1 AND execution_time IS NOT NULL`, tid).Scan(&avgTime)
 
 	trend := []map[string]interface{}{}
 	for i := 6; i >= 0; i-- {
 		d := time.Now().AddDate(0, 0, -i)
 		dateStr := d.Format("2006-01-02")
 		var cnt int
-		database.DB.QueryRow(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND DATE(started_at)=?`, tid, dateStr).Scan(&cnt)
+		database.DB.QueryRow(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND started_at::date=$2::date`, tid, dateStr).Scan(&cnt)
 		trend = append(trend, map[string]interface{}{"date": dateStr, "count": cnt})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_executions":    total,
-		"successful":          success,
-		"failed":              failed,
-		"success_rate":        successRate,
-		"avg_execution_time":  avgTime,
-		"total_scripts":       row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=?`),
-		"active_scripts":      row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=? AND status='active'`),
+		"total_executions":            total,
+		"successful":                  success,
+		"failed":                      failed,
+		"success_rate":                successRate,
+		"avg_execution_time":          avgTime,
+		"total_scripts":               row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1`),
+		"active_scripts":              row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1 AND status='active'`),
 		"automation_time_saved_hours": (success * avgTime) / 3600000,
-		"most_executed":       topScripts,
-		"by_category":         byCategory,
-		"execution_trend":     trend,
+		"most_executed":               topScripts,
+		"by_category":                 byCategory,
+		"execution_trend":             trend,
 	})
 }
 
@@ -679,7 +822,7 @@ func GetSRAudit(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	limit := parseLimit(c, 200)
 	rows, err := database.DB.Query(
-		`SELECT id,action,script_id,script_name,actor,details,created_at FROM sr_audit WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`,
+		`SELECT id,action,script_id,script_name,actor,details,created_at FROM sr_audit WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2`,
 		tid, limit,
 	)
 	if err != nil {
@@ -711,28 +854,34 @@ func PostSRReport(c *gin.Context) {
 		ReportType string `json:"report_type"`
 	}
 	c.ShouldBindJSON(&b)
-	if b.ReportType == "" { b.ReportType = "execution" }
+	if b.ReportType == "" {
+		b.ReportType = "execution"
+	}
 
 	row := func(q string) int {
 		var n int
 		database.DB.QueryRow(q, tid).Scan(&n)
 		return n
 	}
-	total := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=?`)
-	success := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='success'`)
-	failed := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=? AND status='failed'`)
+	total := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1`)
+	success := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='success'`)
+	failed := row(`SELECT COUNT(*) FROM sr_executions WHERE tenant_id=$1 AND status='failed'`)
 	successRate := 0
-	if total > 0 { successRate = success * 100 / total }
+	if total > 0 {
+		successRate = success * 100 / total
+	}
 
 	titles := map[string]string{
-		"execution":   "Script Execution Report",
-		"automation":  "Automation Report",
-		"failure":     "Failure Analysis Report",
-		"audit":       "Script Audit Report",
-		"compliance":  "Compliance Report",
+		"execution":  "Script Execution Report",
+		"automation": "Automation Report",
+		"failure":    "Failure Analysis Report",
+		"audit":      "Script Audit Report",
+		"compliance": "Compliance Report",
 	}
 	title, ok := titles[b.ReportType]
-	if !ok { title = "Script Runner Report" }
+	if !ok {
+		title = "Script Runner Report"
+	}
 
 	srAudit(tid, "", "System", "report_generated", actor, fmt.Sprintf("Report: %s", b.ReportType))
 	c.JSON(http.StatusOK, gin.H{
@@ -741,13 +890,13 @@ func PostSRReport(c *gin.Context) {
 		"generated_at":      time.Now(),
 		"generated_by":      actor,
 		"classification":    "CONFIDENTIAL",
-		"executive_summary": fmt.Sprintf("During the reporting period, %d script executions were recorded with a %d%% success rate. %d executions completed successfully, %d failed. Automation saves an estimated 120+ analyst-hours per week.", total, successRate, success, failed),
+		"executive_summary": fmt.Sprintf("During the reporting period, %d script executions were recorded with a %d%% success rate. %d executions completed successfully, %d failed.", total, successRate, success, failed),
 		"key_metrics": map[string]interface{}{
 			"total_executions": total,
 			"success_rate":     successRate,
 			"failed":           failed,
-			"total_scripts":    row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=?`),
-			"scheduled_jobs":   row(`SELECT COUNT(*) FROM sr_schedules WHERE tenant_id=?`),
+			"total_scripts":    row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1`),
+			"scheduled_jobs":   row(`SELECT COUNT(*) FROM sr_schedules WHERE tenant_id=$1`),
 		},
 		"recommendations": []string{
 			"Enable script signing for all production scripts",

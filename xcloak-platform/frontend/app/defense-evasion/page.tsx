@@ -3,6 +3,11 @@ import { useState, useEffect, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { defenseEvasionAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, ShieldCheck, ShieldAlert, Ghost, Activity, Target, Radar, BarChart3, Siren,
+  Shield, Search, Flame, ScrollText, Lock, AlertTriangle, ChevronUp, ChevronDown, Cog,
+} from 'lucide-react';
 
 type Tab = 'overview' | 'controls' | 'tamper' | 'evasion' | 'behavioral' | 'mitre' | 'intelligence' | 'analytics' | 'response';
 
@@ -16,6 +21,10 @@ const TAB_LABELS: Record<Tab, string> = {
   intelligence: 'Threat Intel',
   analytics:    'Analytics',
   response:     'Response',
+};
+const TAB_ICONS: Record<Tab, any> = {
+  overview: LayoutDashboard, controls: ShieldCheck, tamper: ShieldAlert, evasion: Ghost,
+  behavioral: Activity, mitre: Target, intelligence: Radar, analytics: BarChart3, response: Siren,
 };
 
 const SEV_COLOR: Record<string, string> = {
@@ -39,16 +48,10 @@ function OverviewTab({ dash }: { dash: any }) {
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(175px,1fr))', gap: '1rem' }}>
-        {cards.map(c => (
-          <div key={c.label} className="g-card" style={{ padding: '1.25rem', borderTop: `3px solid ${c.color}` }}>
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: c.color }}>{c.value}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>{c.label}</div>
-          </div>
-        ))}
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        {cards.map(c => <MetricCard key={c.label} label={c.label} value={c.value} color={c.color} />)}
       </div>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Detected Evasion Categories</div>
+      <SectionCard title="Detected Evasion Categories">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
           {(dash.top_categories || []).map((t: string) => (
             <span key={t} style={{
@@ -57,70 +60,55 @@ function OverviewTab({ dash }: { dash: any }) {
             }}>{t}</span>
           ))}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
 
 // ── Security Controls ─────────────────────────────────────────────────────────
+const CONTROL_ICONS: Record<string, any> = {
+  antivirus: Shield, edr: Search, firewall: Flame, audit_logging: ScrollText, mac: Lock,
+};
+
 function ControlsTab() {
   const [data, setData] = useState<any>(null);
   useEffect(() => { defenseEvasionAPI.getControls().then(r => setData(r.data)); }, []);
   const controls = data?.controls || [];
 
-  const ICONS: Record<string, string> = {
-    antivirus: '🛡', edr: '🔍', firewall: '🔥', audit_logging: '📋', mac: '🔒',
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {data && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem' }}>
-          {[
-            { label: 'Active',   value: data.active,   color: '#22c55e' },
-            { label: 'Degraded', value: data.degraded, color: '#eab308' },
-            { label: 'Disabled', value: data.disabled, color: '#ef4444' },
-          ].map(c => (
-            <div key={c.label} className="g-card" style={{ padding: '1rem', textAlign: 'center', borderTop: `2px solid ${c.color}` }}>
-              <div style={{ fontSize: '1.8rem', fontWeight: 700, color: c.color }}>{c.value}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>{c.label}</div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <MetricCard label="Active" value={data.active} color="#22c55e" />
+          <MetricCard label="Degraded" value={data.degraded} color="#eab308" />
+          <MetricCard label="Disabled" value={data.disabled} color="#ef4444" />
         </div>
       )}
-      <div className="g-card" style={{ overflowX: 'auto', padding: 0 }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>
-              <th className="g-tr">Control</th><th className="g-tr">Type</th>
-              <th className="g-tr">Host</th><th className="g-tr">Status</th>
-              <th className="g-tr">Version</th><th className="g-tr">Last Check</th>
-              <th className="g-tr">Tampered</th>
-            </tr>
-          </thead>
-          <tbody>
-            {controls.map((c: any) => (
-              <tr key={c.id} style={{ background: c.tampered ? 'rgba(239,68,68,0.04)' : undefined }}>
-                <td className="g-tr" style={{ fontWeight: 600 }}>
-                  <span style={{ marginRight: '0.4rem' }}>{ICONS[c.control_type] || '⚙'}</span>{c.control_name}
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>{c.control_type}</td>
-                <td className="g-tr" style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{c.hostname}</td>
-                <td className="g-tr">
-                  <span style={{
-                    background: `${STATUS_COLOR[c.status] || '#666'}18`,
-                    color: STATUS_COLOR[c.status] || '#666',
-                    padding: '2px 8px', borderRadius: '3px', fontSize: '0.78rem', fontWeight: 600,
-                  }}>{c.status.toUpperCase()}</span>
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>{c.version}</td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{timeAgo(c.last_check)}</td>
-                <td className="g-tr">{c.tampered ? <span style={{ color: '#ef4444', fontWeight: 600 }}>⚠ YES</span> : <span style={{ color: '#22c55e' }}>OK</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={controls}
+        rowKey={(c: any) => c.id}
+        rowStyle={(c: any) => c.tampered ? { background: 'rgba(239,68,68,0.04)' } : undefined}
+        columns={[
+          { key: 'control_name', header: 'Control', render: (c: any) => {
+            const Icon = CONTROL_ICONS[c.control_type] || Cog;
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                <Icon style={{ width: 13, height: 13, flexShrink: 0 }} />{c.control_name}
+              </span>
+            );
+          } },
+          { key: 'control_type', header: 'Type', render: (c: any) => <span style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>{c.control_type}</span> },
+          { key: 'hostname', header: 'Host', render: (c: any) => <span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{c.hostname}</span> },
+          { key: 'status', header: 'Status', render: (c: any) => (
+            <span style={{ background: `${STATUS_COLOR[c.status] || '#666'}18`, color: STATUS_COLOR[c.status] || '#666', padding: '2px 8px', borderRadius: '3px', fontSize: '0.78rem', fontWeight: 600 }}>{c.status.toUpperCase()}</span>
+          ) },
+          { key: 'version', header: 'Version', render: (c: any) => <span style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>{c.version}</span> },
+          { key: 'last_check', header: 'Last Check', render: (c: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{timeAgo(c.last_check)}</span> },
+          { key: 'tampered', header: 'Tampered', render: (c: any) => c.tampered
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#ef4444', fontWeight: 600 }}><AlertTriangle style={{ width: 12, height: 12 }} /> YES</span>
+            : <span style={{ color: '#22c55e' }}>OK</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -142,43 +130,33 @@ function TamperTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', gap: '0.75rem' }}>
         {(['tamper', 'log'] as const).map(v => (
-          <button key={v} className={`g-btn ${view === v ? 'g-btn-primary' : 'g-btn-ghost'}`}
-            onClick={() => setView(v)}>
+          <ActionButton key={v} variant={view === v ? 'primary' : 'ghost'} onClick={() => setView(v)}>
             {v === 'tamper' ? `Tamper Events${tamper ? ` (${tamper.total})` : ''}` : 'Log Evasion'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
-      <div className="g-card" style={{ padding: 0, overflowX: 'auto' }}>
-        {view === 'tamper' ? (
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead">
-              <tr>
-                <th className="g-tr">Time</th><th className="g-tr">Host</th>
-                <th className="g-tr">Target</th><th className="g-tr">Action</th>
-                <th className="g-tr">Actor</th><th className="g-tr">MITRE</th>
-                <th className="g-tr">Severity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e: any) => (
-                <tr key={e.id} style={{ background: 'rgba(239,68,68,0.04)' }}>
-                  <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</td>
-                  <td className="g-tr" style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{e.hostname}</td>
-                  <td className="g-tr" style={{ fontWeight: 600, fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.target}</td>
-                  <td className="g-tr" style={{ fontFamily: 'monospace', fontSize: '0.72rem', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-3)' }}>{e.action}</td>
-                  <td className="g-tr">{e.actor_name} <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>({e.actor_pid})</span></td>
-                  <td className="g-tr"><code style={{ color: '#818cf8', fontSize: '0.78rem' }}>{e.mitre_id}</code></td>
-                  <td className="g-tr">
-                    <span style={{ background: `${SEV_COLOR[e.severity]}18`, color: SEV_COLOR[e.severity], padding: '2px 6px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>
-                      {e.severity.toUpperCase()}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
+      {view === 'tamper' ? (
+        <DataTable<any>
+          rows={events}
+          rowKey={(e: any) => e.id}
+          rowStyle={() => ({ background: 'rgba(239,68,68,0.04)' })}
+          columns={[
+            { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</span> },
+            { key: 'hostname', header: 'Host', render: (e: any) => <span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{e.hostname}</span> },
+            { key: 'target', header: 'Target', render: (e: any) => <span style={{ fontWeight: 600, fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.target}</span> },
+            { key: 'action', header: 'Action', render: (e: any) => <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-3)', display: 'block' }}>{e.action}</span> },
+            { key: 'actor', header: 'Actor', render: (e: any) => <span>{e.actor_name} <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>({e.actor_pid})</span></span> },
+            { key: 'mitre_id', header: 'MITRE', render: (e: any) => <code style={{ color: '#818cf8', fontSize: '0.78rem' }}>{e.mitre_id}</code> },
+            { key: 'severity', header: 'Severity', render: (e: any) => (
+              <span style={{ background: `${SEV_COLOR[e.severity]}18`, color: SEV_COLOR[e.severity], padding: '2px 6px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>
+                {e.severity.toUpperCase()}
+              </span>
+            ) },
+          ]}
+        />
+      ) : (
+        <div className="g-card" style={{ padding: 0, overflowX: 'auto' }}>
           <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {logEvasion.map((e: any) => (
               <div key={e.id} className="g-card" style={{ padding: '1rem', borderLeft: `3px solid ${SEV_COLOR[e.severity] || '#666'}` }}>
@@ -197,8 +175,8 @@ function TamperTab() {
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -228,46 +206,37 @@ function EvasionTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
         {EVASION_CATEGORIES.map(c => (
-          <button key={c.key} className={`g-btn ${cat === c.key ? 'g-btn-primary' : 'g-btn-ghost'}`}
-            onClick={() => setCat(c.key)} style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}>
+          <ActionButton key={c.key} variant={cat === c.key ? 'primary' : 'ghost'} onClick={() => setCat(c.key)} style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}>
             {c.label}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       <div style={{ display: 'flex', gap: '1rem' }}>
-        <div className="g-card" style={{ flex: 1, padding: 0, overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead">
-              <tr>
-                <th className="g-tr">Time</th><th className="g-tr">Host</th>
-                <th className="g-tr">Technique</th><th className="g-tr">Category</th>
-                <th className="g-tr">MITRE</th><th className="g-tr">Severity</th>
-                <th className="g-tr">Process</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e: any) => (
-                <tr key={e.id} onClick={() => setSelected(e)} style={{ cursor: 'pointer', background: selected?.id === e.id ? 'rgba(99,102,241,0.08)' : undefined }}>
-                  <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</td>
-                  <td className="g-tr" style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{e.hostname}</td>
-                  <td className="g-tr" style={{ fontWeight: 600 }}>{e.technique}</td>
-                  <td className="g-tr" style={{ fontSize: '0.78rem' }}>
-                    <span style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 6px', borderRadius: '3px' }}>
-                      {e.category?.replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                  <td className="g-tr"><code style={{ color: '#818cf8', fontSize: '0.78rem' }}>{e.mitre_id}</code></td>
-                  <td className="g-tr">
-                    <span style={{ background: `${SEV_COLOR[e.severity]}18`, color: SEV_COLOR[e.severity], padding: '2px 6px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>
-                      {e.severity.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="g-tr" style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-3)' }}>{e.process_name}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ flex: 1 }}>
+          <DataTable<any>
+            rows={events}
+            rowKey={(e: any) => e.id}
+            onRowClick={e => setSelected(e)}
+            rowStyle={(e: any) => selected?.id === e.id ? { background: 'rgba(99,102,241,0.08)' } : undefined}
+            columns={[
+              { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</span> },
+              { key: 'hostname', header: 'Host', render: (e: any) => <span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{e.hostname}</span> },
+              { key: 'technique', header: 'Technique', render: (e: any) => <span style={{ fontWeight: 600 }}>{e.technique}</span> },
+              { key: 'category', header: 'Category', render: (e: any) => (
+                <span style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 6px', borderRadius: '3px', fontSize: '0.78rem' }}>
+                  {e.category?.replace(/_/g, ' ')}
+                </span>
+              ) },
+              { key: 'mitre_id', header: 'MITRE', render: (e: any) => <code style={{ color: '#818cf8', fontSize: '0.78rem' }}>{e.mitre_id}</code> },
+              { key: 'severity', header: 'Severity', render: (e: any) => (
+                <span style={{ background: `${SEV_COLOR[e.severity]}18`, color: SEV_COLOR[e.severity], padding: '2px 6px', borderRadius: '3px', fontSize: '0.75rem', fontWeight: 600 }}>
+                  {e.severity.toUpperCase()}
+                </span>
+              ) },
+              { key: 'process_name', header: 'Process', render: (e: any) => <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-3)' }}>{e.process_name}</span> },
+            ]}
+          />
         </div>
 
         {selected && (
@@ -307,8 +276,7 @@ function BehavioralTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Behavioral Detections</div>
+      <SectionCard title="Behavioral Detections">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {(behavioral?.detections || []).map((d: any) => (
             <div key={d.id} style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', borderLeft: `3px solid ${SEV_COLOR[d.severity] || '#666'}` }}>
@@ -325,10 +293,9 @@ function BehavioralTab() {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Correlated Incidents</div>
+      <SectionCard title="Correlated Incidents">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {correlation.map((inc: any) => (
             <div key={inc.id} style={{ padding: '1rem', background: 'rgba(239,68,68,0.05)', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -351,7 +318,7 @@ function BehavioralTab() {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -402,7 +369,9 @@ function MITRETab() {
                 </span>
               )}
               {t.sub_techniques?.length > 0 && (
-                <span style={{ color: 'var(--text-3)', fontSize: '0.8rem' }}>{expanded === t.id ? '▲' : '▼'} {t.sub_techniques.length}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--text-3)', fontSize: '0.8rem' }}>
+                  {expanded === t.id ? <ChevronUp style={{ width: 12, height: 12 }} /> : <ChevronDown style={{ width: 12, height: 12 }} />} {t.sub_techniques.length}
+                </span>
               )}
             </div>
             {expanded === t.id && t.sub_techniques?.length > 0 && (
@@ -434,8 +403,7 @@ function IntelligenceTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem', color: '#ef4444' }}>Malware Families — Evasion Matches</div>
+      <SectionCard title={<span style={{ color: '#ef4444' }}>Malware Families — Evasion Matches</span>}>
         {intel.malware_families?.map((m: any, i: number) => (
           <div key={i} style={{ padding: '0.85rem', background: 'rgba(239,68,68,0.06)', borderRadius: '6px', marginBottom: '0.5rem', border: '1px solid rgba(239,68,68,0.18)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
@@ -452,11 +420,10 @@ function IntelligenceTab() {
             </div>
           </div>
         ))}
-      </div>
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Threat Actors</div>
+        <SectionCard title="Threat Actors">
           {intel.threat_actors?.map((a: any, i: number) => (
             <div key={i} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 600, color: '#f97316', marginBottom: '0.25rem' }}>{a.name}</div>
@@ -468,9 +435,8 @@ function IntelligenceTab() {
               </div>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Active Campaigns</div>
+        </SectionCard>
+        <SectionCard title="Active Campaigns">
           {intel.campaigns?.map((c: any, i: number) => (
             <div key={i} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 600, marginBottom: '0.2rem' }}>{c.name}</div>
@@ -490,7 +456,7 @@ function IntelligenceTab() {
               <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.15rem' }}>{ioc.context}</div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -515,16 +481,15 @@ function AnalyticsTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <div style={{ display: 'flex', gap: '0.75rem' }}>
         {(['analytics', 'validation'] as const).map(v => (
-          <button key={v} className={`g-btn ${view === v ? 'g-btn-primary' : 'g-btn-ghost'}`} onClick={() => setView(v)}>
+          <ActionButton key={v} variant={view === v ? 'primary' : 'ghost'} onClick={() => setView(v)}>
             {v === 'analytics' ? 'Analytics' : 'Detection Validation'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {view === 'analytics' && (
         <>
-          <div className="g-card" style={{ padding: '1.25rem' }}>
-            <div style={{ fontWeight: 600, marginBottom: '1rem' }}>Evasion Trend (8d)</div>
+          <SectionCard title="Evasion Trend (8d)">
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
               {analytics.evasion_trend?.map((p: any, i: number) => (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
@@ -537,11 +502,10 @@ function AnalyticsTab() {
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="g-card" style={{ padding: '1.25rem' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Top Evasion Techniques</div>
+            <SectionCard title="Top Evasion Techniques">
               {analytics.top_techniques?.map((t: any) => (
                 <div key={t.technique} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
                   <span style={{ minWidth: '160px', fontSize: '0.82rem' }}>{t.technique}</span>
@@ -551,9 +515,8 @@ function AnalyticsTab() {
                   <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{t.count}</span>
                 </div>
               ))}
-            </div>
-            <div className="g-card" style={{ padding: '1.25rem' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Most Targeted Endpoints</div>
+            </SectionCard>
+            <SectionCard title="Most Targeted Endpoints">
               {analytics.most_targeted_endpoints?.map((e: any) => (
                 <div key={e.hostname} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
                   <span style={{ minWidth: '130px', fontSize: '0.82rem', fontFamily: 'monospace' }}>{e.hostname}</span>
@@ -563,11 +526,10 @@ function AnalyticsTab() {
                   <span style={{ fontSize: '0.8rem', color: e.risk >= 90 ? '#ef4444' : 'var(--text-2)', minWidth: '25px', textAlign: 'right' }}>{e.risk}</span>
                 </div>
               ))}
-            </div>
+            </SectionCard>
           </div>
 
-          <div className="g-card" style={{ padding: '1.25rem' }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Security Control Coverage</div>
+          <SectionCard title="Security Control Coverage">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {analytics.control_status?.map((c: any) => (
                 <div key={c.control} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -580,28 +542,20 @@ function AnalyticsTab() {
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
         </>
       )}
 
       {view === 'validation' && validation && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '0.75rem' }}>
-            {[
-              { label: 'Detection Success Rate', value: `${validation.detection_success_rate}%`, color: '#22c55e' },
-              { label: 'Missed Attempts',         value: validation.missed_attempts,              color: '#ef4444' },
-              { label: 'False Positives',         value: validation.false_positives,              color: '#eab308' },
-              { label: 'Avg Time to Detect',      value: `${validation.avg_time_to_detect_seconds}s`, color: '#3b82f6' },
-            ].map(c => (
-              <div key={c.label} className="g-card" style={{ padding: '1rem', textAlign: 'center', borderTop: `2px solid ${c.color}` }}>
-                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: c.color }}>{c.value}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>{c.label}</div>
-              </div>
-            ))}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <MetricCard label="Detection Success Rate" value={`${validation.detection_success_rate}%`} color="#22c55e" />
+            <MetricCard label="Missed Attempts" value={validation.missed_attempts} color="#ef4444" />
+            <MetricCard label="False Positives" value={validation.false_positives} color="#eab308" />
+            <MetricCard label="Avg Time to Detect" value={`${validation.avg_time_to_detect_seconds}s`} color="#3b82f6" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="g-card" style={{ padding: '1.25rem' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Coverage by Platform</div>
+            <SectionCard title="Coverage by Platform">
               {validation.coverage_by_platform?.map((p: any) => (
                 <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
                   <span style={{ minWidth: '80px', fontSize: '0.82rem' }}>{p.platform}</span>
@@ -611,9 +565,8 @@ function AnalyticsTab() {
                   <span style={{ fontSize: '0.8rem', minWidth: '35px', textAlign: 'right' }}>{p.coverage}%</span>
                 </div>
               ))}
-            </div>
-            <div className="g-card" style={{ padding: '1.25rem' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Coverage by Evasion Category</div>
+            </SectionCard>
+            <SectionCard title="Coverage by Evasion Category">
               {validation.technique_coverage?.map((t: any) => (
                 <div key={t.category} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
                   <span style={{ minWidth: '120px', fontSize: '0.82rem' }}>{t.category}</span>
@@ -623,7 +576,7 @@ function AnalyticsTab() {
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', minWidth: '40px', textAlign: 'right' }}>{t.covered}/{t.total}</span>
                 </div>
               ))}
-            </div>
+            </SectionCard>
           </div>
         </div>
       )}
@@ -692,23 +645,21 @@ function ResponseTab() {
           <div key={a.id} className="g-card" style={{ padding: '1rem', borderLeft: `3px solid ${a.color}` }}>
             <div style={{ fontWeight: 600, marginBottom: '0.2rem' }}>{a.label}</div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>{a.desc}</div>
-            <button className="g-btn g-btn-primary" style={{ background: a.color, border: 'none', width: '100%', opacity: loading[a.id] ? 0.7 : 1 }}
-              disabled={loading[a.id]} onClick={() => respond(a.id)}>
+            <ActionButton variant="primary" loading={loading[a.id]} onClick={() => respond(a.id)} style={{ background: a.color, border: 'none', width: '100%', justifyContent: 'center' }}>
               {loading[a.id] ? 'Executing…' : a.label}
-            </button>
+            </ActionButton>
           </div>
         ))}
       </div>
 
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>AI-Assisted Analysis</div>
+      <SectionCard title="AI-Assisted Analysis">
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
           <input className="g-input" style={{ flex: 1 }} placeholder="Describe an evasion event or ask about a technique…"
             value={aiQuery} onChange={e => setAiQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') runAI(); }} />
-          <button className="g-btn g-btn-primary" onClick={runAI} disabled={aiLoading}>
+          <ActionButton variant="primary" onClick={runAI} disabled={aiLoading}>
             {aiLoading ? 'Analyzing…' : 'Analyze'}
-          </button>
+          </ActionButton>
         </div>
         {aiResult && (
           <div style={{ background: 'rgba(99,102,241,0.07)', padding: '1rem', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.2)' }}>
@@ -745,15 +696,12 @@ function ResponseTab() {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <span style={{ fontWeight: 600 }}>Evasion Timeline</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>
-            PowerShell → AMSI Bypass → Defender Disabled → Logs Cleared → Payload
-          </span>
-        </div>
+      <SectionCard
+        title="Evasion Timeline"
+        actions={<span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>PowerShell → AMSI Bypass → Defender Disabled → Logs Cleared → Payload</span>}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
           {timeline.map((e: any, i: number) => (
             <div key={e.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
@@ -775,15 +723,12 @@ function ResponseTab() {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <span style={{ fontWeight: 600 }}>Defense Evasion Report</span>
-          <button className="g-btn g-btn-primary" onClick={generateReport} disabled={reportLoading}>
-            {reportLoading ? 'Generating…' : 'Generate Report'}
-          </button>
-        </div>
+      <SectionCard
+        title="Defense Evasion Report"
+        actions={<ActionButton variant="primary" onClick={generateReport} disabled={reportLoading}>{reportLoading ? 'Generating…' : 'Generate Report'}</ActionButton>}
+      >
         {report && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ fontWeight: 600, fontSize: '1rem' }}>{report.title}</div>
@@ -824,7 +769,7 @@ function ResponseTab() {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -842,29 +787,19 @@ export default function DefenseEvasionPage() {
   const tabs = Object.keys(TAB_LABELS) as Tab[];
 
   return (
-    <RootLayout>
+    <RootLayout title="Defense Evasion Detection"
+      subtitle="Security control monitoring, tamper detection, AMSI/log/process evasion — MITRE TA0005">
       <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Defense Evasion Detection</h1>
-          <p style={{ color: 'var(--text-3)', margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
-            Security control monitoring, tamper detection, AMSI/log/process evasion — MITRE TA0005
-          </p>
+        <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+          <TabBar
+            tabs={tabs.map(t => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t] }))}
+            active={tab}
+            onChange={t => setTab(t as Tab)}
+          />
         </div>
 
-        <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {tabs.map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              padding: '0.6rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap',
-              color: tab === t ? 'var(--accent)' : 'var(--text-3)',
-              borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}`,
-              marginBottom: '-1px', transition: 'all 0.15s',
-            }}>{TAB_LABELS[t]}</button>
-          ))}
-        </div>
-
-        <div style={{ display: loaded.current['overview'] ? 'block' : 'none' }}>
-          <OverviewTab dash={dash} />
+        <div style={{ display: loaded.current['overview'] && tab === 'overview' ? 'block' : 'none' }}>
+          {loaded.current['overview'] && <OverviewTab dash={dash} />}
         </div>
         <div style={{ display: loaded.current['controls'] && tab === 'controls' ? 'block' : 'none' }}>
           {loaded.current['controls'] && <ControlsTab />}

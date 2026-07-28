@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { ja3API } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, BarChart3, Bookmark, BookmarkPlus, Bot, CheckSquare, ChevronDown, ChevronUp, Copy, Download, Fingerprint, Globe, Grid, Hash, Layers, Plus, Search, Share2, Shield, Trash2, X, Zap, Lock } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertTriangle, BarChart3, Bookmark, BookmarkPlus, Bot, CheckSquare, ChevronDown, ChevronUp, Copy, Download, Fingerprint, Globe, Grid, Hash, Layers, Plus, Search, Share2, Shield, Trash2, X, Zap, Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -80,15 +81,6 @@ const emptyForm = { hash: '', threat_name: '', severity: 'high', source: 'manual
 
 // ── Micro-components ──────────────────────────────────────────────────────
 
-function KPICard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card p-4 flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</span>
-      <span className="text-2xl font-bold font-mono" style={{ color: color ?? 'var(--text-1)' }}>{value}</span>
-      {sub && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{sub}</span>}
-    </div>
-  );
-}
 
 function SevBadge({ sev }: { sev: string }) {
   const color = SEV_COLOR[sev?.toLowerCase()] ?? 'var(--text-3)';
@@ -388,14 +380,14 @@ export default function JA3FingerprintsPage() {
       {tab === 'dashboard' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            <KPICard label="Total Hashes" value={dash?.total ?? entries.length} />
-            <KPICard label="Platform" value={dash?.platform_count ?? entries.filter(e => e.is_platform).length} color="var(--text-3)" sub="built-in" />
-            <KPICard label="Custom" value={dash?.tenant_count ?? entries.filter(e => !e.is_platform).length} color="var(--accent)" sub="tenant" />
-            <KPICard label="Critical" value={dash?.critical_count ?? entries.filter(e => e.severity === 'critical').length} color="var(--red)" />
-            <KPICard label="New Today" value={dash?.new_today ?? 0} color="var(--green)" sub="last 24h" />
-            <KPICard label="TLS Alerts 24h" value={dash?.alerts_24h ?? 0} color="var(--orange)" />
-            <KPICard label="TLS Alerts 7d" value={dash?.alerts_7d ?? 0} color="var(--yellow)" />
-            <KPICard label="Agents Hit" value={dash?.agents_hit_24h ?? 0} color="var(--blue)" sub="24h" />
+            <MetricCard label="Total Hashes" value={dash?.total ?? entries.length} />
+            <MetricCard label="Platform" value={dash?.platform_count ?? entries.filter(e => e.is_platform).length} color="var(--text-3)" sub="built-in" />
+            <MetricCard label="Custom" value={dash?.tenant_count ?? entries.filter(e => !e.is_platform).length} color="var(--accent)" sub="tenant" />
+            <MetricCard label="Critical" value={dash?.critical_count ?? entries.filter(e => e.severity === 'critical').length} color="var(--red)" />
+            <MetricCard label="New Today" value={dash?.new_today ?? 0} color="var(--green)" sub="last 24h" />
+            <MetricCard label="TLS Alerts 24h" value={dash?.alerts_24h ?? 0} color="var(--orange)" />
+            <MetricCard label="TLS Alerts 7d" value={dash?.alerts_7d ?? 0} color="var(--yellow)" />
+            <MetricCard label="Agents Hit" value={dash?.agents_hit_24h ?? 0} color="var(--blue)" sub="24h" />
           </div>
 
           {dash && (
@@ -598,11 +590,11 @@ export default function JA3FingerprintsPage() {
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <KPICard label="Unique JA3" value={tlsData.unique_ja3} color="var(--accent)" />
-                <KPICard label="Unique JA3S" value={tlsData.unique_ja3s} color="var(--blue)" />
-                <KPICard label="Self-Signed" value={tlsData.self_signed} color="var(--orange)" sub="7d" />
-                <KPICard label="Expired Certs" value={tlsData.expired_certs} color="var(--red)" sub="7d" />
-                <KPICard label="Invalid Certs" value={tlsData.invalid_certs} color="var(--yellow)" sub="7d" />
+                <MetricCard label="Unique JA3" value={tlsData.unique_ja3} color="var(--accent)" />
+                <MetricCard label="Unique JA3S" value={tlsData.unique_ja3s} color="var(--blue)" />
+                <MetricCard label="Self-Signed" value={tlsData.self_signed} color="var(--orange)" sub="7d" />
+                <MetricCard label="Expired Certs" value={tlsData.expired_certs} color="var(--red)" sub="7d" />
+                <MetricCard label="Invalid Certs" value={tlsData.invalid_certs} color="var(--yellow)" sub="7d" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

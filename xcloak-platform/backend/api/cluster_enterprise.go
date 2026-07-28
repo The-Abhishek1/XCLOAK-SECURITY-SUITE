@@ -261,12 +261,17 @@ func GetClusterDetail(c *gin.Context) {
 	r.Confidence = clusterConfidence(r.AlertCount)
 	r.Campaign = campaignFromTechnique(r.MitreTechnique)
 
-	// Member alerts
+	// Member alerts. Previously selected `a.source_ip`, a column that does
+	// not exist anywhere on `alerts` — the query itself always failed
+	// outright (not merely a scan error), so this list has never once
+	// returned any member alerts. Also added COALESCE for the other
+	// nullable columns and now check each row's scan error instead of
+	// discarding it (a discarded scan error left the Go zero-value struct
+	// in the list — a blank/garbage row — instead of skipping it).
 	alertRows, _ := database.DB.Query(`
-		SELECT a.id, a.rule_name, a.severity, a.status,
+		SELECT a.id, COALESCE(a.rule_name,''), COALESCE(a.severity,''), COALESCE(a.status,'open'),
 		       COALESCE(ag.hostname,'unknown'), a.created_at,
-		       COALESCE(a.mitre_technique,''), COALESCE(a.mitre_tactic,''),
-		       COALESCE(a.source_ip,'')
+		       COALESCE(a.mitre_technique,''), COALESCE(a.mitre_tactic,'')
 		FROM alert_cluster_members acm
 		JOIN alerts a ON a.id=acm.alert_id
 		LEFT JOIN agents ag ON ag.id=a.agent_id
@@ -282,15 +287,15 @@ func GetClusterDetail(c *gin.Context) {
 		CreatedAt      time.Time `json:"created_at"`
 		MitreTechnique string    `json:"mitre_technique"`
 		MitreTactic    string    `json:"mitre_tactic"`
-		SourceIP       string    `json:"source_ip"`
 	}
 	alerts := []AlertMember{}
 	if alertRows != nil {
 		for alertRows.Next() {
 			var a AlertMember
-			alertRows.Scan(&a.ID, &a.RuleName, &a.Severity, &a.Status,
-				&a.Hostname, &a.CreatedAt, &a.MitreTechnique, &a.MitreTactic, &a.SourceIP)
-			alerts = append(alerts, a)
+			if err := alertRows.Scan(&a.ID, &a.RuleName, &a.Severity, &a.Status,
+				&a.Hostname, &a.CreatedAt, &a.MitreTechnique, &a.MitreTactic); err == nil {
+				alerts = append(alerts, a)
+			}
 		}
 		alertRows.Close()
 	}
@@ -390,10 +395,16 @@ func GetClusterTimeline(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	tid := tenantIDFromContext(c)
 
+	// Previously selected `a.source_ip` — a column that does not exist
+	// anywhere on `alerts` — so this endpoint always failed the query
+	// outright and returned a 500 (silently swallowed by the frontend's
+	// `.catch(() => ({ data: null }))`, so the cluster timeline just never
+	// rendered and nobody saw an error). Also added COALESCE for the other
+	// nullable columns and now check each row's scan error.
 	rows, err := database.DB.Query(`
-		SELECT a.id, a.rule_name, a.severity, COALESCE(ag.hostname,'unknown'),
+		SELECT a.id, COALESCE(a.rule_name,''), COALESCE(a.severity,''), COALESCE(ag.hostname,'unknown'),
 		       a.created_at, COALESCE(a.mitre_technique,''), COALESCE(a.mitre_tactic,''),
-		       COALESCE(a.source_ip,''), a.status
+		       COALESCE(a.status,'open')
 		FROM alert_cluster_members acm
 		JOIN alerts a ON a.id=acm.alert_id
 		LEFT JOIN agents ag ON ag.id=a.agent_id
@@ -413,14 +424,15 @@ func GetClusterTimeline(c *gin.Context) {
 		Time           time.Time `json:"time"`
 		MitreTechnique string    `json:"mitre_technique"`
 		MitreTactic    string    `json:"mitre_tactic"`
-		SourceIP       string    `json:"source_ip"`
 		Status         string    `json:"status"`
 	}
 	events := []TimelineEvent{}
 	for rows.Next() {
 		var e TimelineEvent
-		rows.Scan(&e.ID, &e.RuleName, &e.Severity, &e.Hostname,
-			&e.Time, &e.MitreTechnique, &e.MitreTactic, &e.SourceIP, &e.Status)
+		if err := rows.Scan(&e.ID, &e.RuleName, &e.Severity, &e.Hostname,
+			&e.Time, &e.MitreTechnique, &e.MitreTactic, &e.Status); err != nil {
+			continue
+		}
 		events = append(events, e)
 	}
 	if events == nil {
@@ -843,11 +855,12 @@ func PostClusterBulkAction(c *gin.Context) {
 			maxSev = "high"
 		}
 		var incidentID int
-		database.DB.QueryRow(`INSERT INTO incidents (tenant_id, title, severity, status, created_by) VALUES ($1,$2,$3,'open','manual-promote') RETURNING id`,
-			tid, title, maxSev).Scan(&incidentID)
-		if incidentID > 0 {
-			database.DB.Exec(`UPDATE alert_clusters SET auto_incident_id=$1, status='promoted' WHERE id=$2 AND tenant_id=$3`, incidentID, id, tid)
+		if err := database.DB.QueryRow(`INSERT INTO incidents (tenant_id, title, severity, status) VALUES ($1,$2,$3,'open') RETURNING id`,
+			tid, title, maxSev).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to promote cluster to incident: " + err.Error()})
+			return
 		}
+		database.DB.Exec(`UPDATE alert_clusters SET auto_incident_id=$1, status='promoted' WHERE id=$2 AND tenant_id=$3`, incidentID, id, tid)
 	default:
 		c.JSON(400, gin.H{"error": "unknown action"})
 		return

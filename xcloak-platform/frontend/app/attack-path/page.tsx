@@ -1,9 +1,8 @@
 'use client';
 
-import { createPortal } from 'react-dom';
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { attackPathAPI } from '@/lib/api';
+import { attackPathAPI, tasksAPI, dpiAPI } from '@/lib/api';
 import { AttackPathGraph, AttackPathNode, AttackPathEdge, RankedAttackPath } from '@/types';
 import { sevClass } from '@/lib/utils';
 import Link from 'next/link';
@@ -11,10 +10,10 @@ import {
   Crosshair, Globe, Skull, ShieldAlert, Cpu, Cloud, Box,
   Crown, Zap, Target, Shield, Activity, ArrowRight, ArrowDown,
   Filter, AlertTriangle, AlertCircle, Bug, Play, SkipBack,
-  SkipForward, Flame, Eye, Wrench, Lock, Users, Database,
+  SkipForward, Flame, Eye, Lock, Users, Database,
   Server, GitFork, Layers, Sliders, X, ChevronRight,
-  CheckCircle, ScanLine, Power, Send, Hash, Building,
-  TrendingUp, BarChart2, Crosshair as CrosshairIcon,
+  CheckCircle, Send, Hash, Building,
+  TrendingUp, BarChart2,
 } from 'lucide-react';
 
 // ── Layout constants ────────────────────────────────────────────────────────
@@ -50,55 +49,65 @@ const EDGE_LABEL: Record<string, string> = {
   kerberos:          'Kerberos Abuse',
 };
 
+// Real MITRE ATT&CK tactic for every technique ID attack_path_service.go can
+// actually emit (see portTechniques/kindTechniques in that file) — not a
+// generic per-technique API, just the bounded set this backend produces.
+const TACTIC_BY_TECHNIQUE: Record<string, string> = {
+  'T1021.001': 'Lateral Movement',
+  'T1021.002': 'Lateral Movement',
+  'T1021.003': 'Lateral Movement',
+  'T1021.004': 'Lateral Movement',
+  'T1021.005': 'Lateral Movement',
+  'T1021.006': 'Lateral Movement',
+  'T1021':     'Lateral Movement',
+  'T1047':     'Execution',
+  'T1059':     'Execution',
+  'T1190':     'Initial Access',
+  'T1068':     'Privilege Escalation',
+  'T1078.004': 'Initial Access',
+  'T1611':     'Privilege Escalation',
+};
+
 const LATERAL_METHODS = ['RDP', 'SMB', 'PsExec', 'WMI', 'WinRM', 'SSH', 'Remote PowerShell', 'VPN', 'K8s Exec', 'Cloud IAM'];
 const PRIV_ESC_TYPES  = ['Local Admin', 'Domain Admin', 'Azure AD Admin', 'AWS IAM', 'K8s RBAC', 'Docker Socket', 'Sudo Misconfig', 'SUID Binaries', 'Windows Token Abuse', 'Kerberos Abuse'];
 
-const KILL_CHAIN_MODELS = {
-  mitre: [
-    { id: 'reconnaissance',       label: 'Recon' },
-    { id: 'initial_access',       label: 'Initial Access' },
-    { id: 'execution',            label: 'Execution' },
-    { id: 'persistence',          label: 'Persistence' },
-    { id: 'privilege_escalation', label: 'Priv Esc' },
-    { id: 'lateral_movement',     label: 'Lateral Move' },
-    { id: 'collection',           label: 'Collection' },
-    { id: 'credential_access',    label: 'Cred Access' },
-    { id: 'impact',               label: 'Impact' },
-  ],
-  lockheed: [
-    { id: 'reconnaissance', label: 'Recon' },
-    { id: 'weaponization',  label: 'Weapon' },
-    { id: 'delivery',       label: 'Delivery' },
-    { id: 'exploitation',   label: 'Exploit' },
-    { id: 'installation',   label: 'Install' },
-    { id: 'c2',             label: 'C2' },
-    { id: 'actions',        label: 'Actions' },
-  ],
-  diamond: [
-    { id: 'adversary',       label: 'Adversary' },
-    { id: 'capability',      label: 'Capability' },
-    { id: 'infrastructure',  label: 'Infrastructure' },
-    { id: 'victim',          label: 'Victim' },
-  ],
-};
+// The only model with any real backing — services/attack_path_service.go's
+// inferKillChainPhase() can emit exactly these 7 phase strings (verified
+// against the Go source), nothing else. A prior "Lockheed Kill Chain" /
+// "Diamond Model" selector existed alongside this, but neither model's phase
+// IDs (weaponization/delivery/c2/... or adversary/capability/victim/...)
+// ever matched a real backend value, so selecting either always left every
+// phase circle permanently unlit — a control that looked functional but
+// could never do anything. Removed rather than left as dead UI. The MITRE
+// list itself also previously included 3 phases inferKillChainPhase() never
+// returns (privilege_escalation, credential_access, impact — permanently
+// dark) and was missing "exploitation" (a real value it does return, with
+// nowhere to display it) — both fixed here.
+const KILL_CHAIN_PHASES = [
+  { id: 'reconnaissance',   label: 'Recon' },
+  { id: 'initial_access',   label: 'Initial Access' },
+  { id: 'exploitation',     label: 'Exploitation' },
+  { id: 'execution',        label: 'Execution' },
+  { id: 'persistence',      label: 'Persistence' },
+  { id: 'lateral_movement', label: 'Lateral Move' },
+  { id: 'collection',       label: 'Collection' },
+];
 
+// RankedAttackPath.PathType is hard-limited to "lateral"|"priv_esc" (see
+// attack_path_service.go) — the previous Cloud/Container/Identity/VPN/
+// Hybrid/SaaS tabs could never match a single real path and always
+// rendered "No paths match this filter", a dead-end control rather than a
+// working filter.
 const PATH_TYPE_TABS = [
   { key: 'all',       label: 'All Paths'   },
   { key: 'lateral',   label: 'Lateral'     },
   { key: 'priv_esc',  label: 'Priv Esc'    },
-  { key: 'cloud',     label: 'Cloud'       },
-  { key: 'container', label: 'Container'   },
-  { key: 'identity',  label: 'Identity'    },
-  { key: 'vpn',       label: 'VPN'         },
-  { key: 'hybrid',    label: 'Hybrid'      },
-  { key: 'saas',      label: 'SaaS'        },
 ] as const;
 
 const SIDE_TABS = ['Paths', 'Chain', 'MITRE', 'Choke Points', 'Blast Radius', 'Remediation', 'Exposure', 'Simulation', 'AI'] as const;
 
 type PathTypeFilter = typeof PATH_TYPE_TABS[number]['key'];
 type SideTab = typeof SIDE_TABS[number];
-type KillChainModel = keyof typeof KILL_CHAIN_MODELS;
 
 interface Positioned extends AttackPathNode { x: number; y: number; }
 
@@ -152,24 +161,58 @@ function NodeDetail({ node, edges, graph, onClose, onToast }: {
   const inEdges  = edges.filter(e => e.target === node.id);
   const outEdges = edges.filter(e => e.source === node.id);
 
-  const tabs = [
-    { id: 'host',     label: 'Host',     icon: Server   },
-    { id: 'security', label: 'Security', icon: Shield   },
-    { id: 'identity', label: 'Identity', icon: Users    },
-    { id: 'actions',  label: 'Actions',  icon: Zap      },
-  ] as const;
+  // Only the internet node has no agent_id to dispatch a real task against
+  // (it isn't a host at all) — the Actions tab is hidden for it below.
+  const tabs = (node.type === 'agent'
+    ? [
+        { id: 'host',     label: 'Host',     icon: Server   },
+        { id: 'security', label: 'Security', icon: Shield   },
+        { id: 'identity', label: 'Identity', icon: Users    },
+        { id: 'actions',  label: 'Actions',  icon: Zap      },
+      ]
+    : [
+        { id: 'host',     label: 'Host',     icon: Server   },
+        { id: 'security', label: 'Security', icon: Shield   },
+        { id: 'identity', label: 'Identity', icon: Users    },
+      ]
+  ) as { id: 'host' | 'security' | 'identity' | 'actions'; label: string; icon: any }[];
 
+  // Every action dispatches a real backend call — this used to be 10 buttons
+  // that all just called onToast() with canned text and touched no API at
+  // all (the same fake-action pattern already found and fixed on UEBA,
+  // Insider Threat, and Network Map). tasksAPI.create dispatches real
+  // agent_tasks rows the agent executor genuinely handles; dpiAPI's
+  // response-action dispatcher (shared with NBA/DPI/Network Map despite the
+  // route name) handles create_incident. Buttons with no real backend
+  // capability anywhere in the codebase were removed rather than wired to
+  // something that would silently no-op: Disable User/Remove Privilege (no
+  // identity/AD integration exists), Block IP/Push FW Rule (this node has no
+  // IP field to act on — only external_ip-type nodes elsewhere carry one),
+  // Run Playbook (needs a playbook_id picker this compact drawer has no room
+  // for), Patch Host and Hunt IOC (no such task type or dispatch exists).
+  const dispatchTask = async (taskType: string, label: string) => {
+    if (!node.agent_id) return;
+    try {
+      await tasksAPI.create({ agent_id: node.agent_id, task_type: taskType, payload: {} });
+      onToast(`${label} dispatched`);
+    } catch {
+      onToast(`Failed to dispatch ${label.toLowerCase()}`);
+    }
+  };
   const actions = [
-    { label: 'Isolate Host',     icon: Lock,        color: 'var(--red)',    fn: () => onToast('Isolation command sent') },
-    { label: 'Scan Endpoint',    icon: ScanLine,    color: 'var(--accent)', fn: () => onToast('Scan queued') },
-    { label: 'Disable User',     icon: Power,       color: 'var(--orange)', fn: () => onToast('User disable request sent') },
-    { label: 'Block IP',         icon: Shield,      color: 'var(--red)',    fn: () => onToast('Firewall rule pushed') },
-    { label: 'Push FW Rule',     icon: Server,      color: 'var(--orange)', fn: () => onToast('Firewall rule created') },
-    { label: 'Run Playbook',     icon: Play,        color: 'var(--accent)', fn: () => onToast('Playbook triggered') },
-    { label: 'Open Incident',    icon: AlertCircle, color: 'var(--red)',    fn: () => onToast('Incident created') },
-    { label: 'Patch Host',       icon: Wrench,      color: 'var(--green)',  fn: () => onToast('Patch job scheduled') },
-    { label: 'Remove Privilege', icon: Crown,       color: 'var(--orange)', fn: () => onToast('Privilege removal queued') },
-    { label: 'Hunt IOC',         icon: Crosshair,   color: 'var(--accent)', fn: () => onToast('IOC hunt started') },
+    { label: 'Isolate Host',       icon: Lock,   color: 'var(--red)',    fn: () => dispatchTask('isolate_host', 'Isolation') },
+    { label: 'Vulnerability Scan', icon: Bug,    color: 'var(--orange)', fn: () => dispatchTask('vulnerability_scan', 'Vulnerability scan') },
+    {
+      label: 'Open Incident', icon: AlertCircle, color: 'var(--red)',
+      fn: async () => {
+        try {
+          const res = await dpiAPI.responseAction('create_incident', { reason: `Attack path escalation from ${node.hostname || node.id}` });
+          onToast(res.data?.result || 'Incident created');
+        } catch {
+          onToast('Failed to create incident');
+        }
+      },
+    },
   ] as { label: string; icon: any; color: string; fn: () => void }[];
 
   return (
@@ -351,7 +394,6 @@ export default function AttackPathPage() {
   const [pathTypeFilter, setPathTypeFilter] = useState<PathTypeFilter>('all');
   const [sideTab,        setSideTab]        = useState<SideTab>('Paths');
   const [clickedNode,    setClickedNode]    = useState<Positioned | null>(null);
-  const [kcModel,        setKcModel]        = useState<KillChainModel>('mitre');
   const [simMode,        setSimMode]        = useState(false);
   const [simStart,       setSimStart]       = useState<string | null>(null);
   const [simReachable,   setSimReachable]   = useState<Set<string>>(new Set());
@@ -500,12 +542,6 @@ export default function AttackPathPage() {
   const selectedPathData = graph?.top_paths[selectedPath];
   const activeKCPhases   = new Set(selectedPathData?.kill_chain_phases || []);
   const totalNodes       = graph ? graph.nodes.filter(n => n.type !== 'internet').length : 0;
-  const kcPhases         = KILL_CHAIN_MODELS[kcModel];
-
-  const getBusinessImpact = (n: AttackPathNode) => {
-    const mul = n.type === 'domain_controller' ? 5_000_000 : n.type === 'cloud' ? 3_000_000 : n.type === 'container' ? 1_500_000 : 750_000;
-    return ((n.blast_radius || 0) * mul);
-  };
 
   const sevColor: Record<string, string> = { critical: '#f85149', high: '#fb923c', medium: '#fbbf24', low: 'var(--green)' };
 
@@ -549,29 +585,14 @@ export default function AttackPathPage() {
           </div>
         )}
 
-        {/* Kill chain strip + model selector */}
+        {/* Kill chain strip */}
         <div className="g-panel px-4 py-3">
-          <div className="flex items-center justify-between mb-2.5 gap-3 flex-wrap">
-            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-              {kcModel === 'mitre' ? 'MITRE ATT&CK' : kcModel === 'lockheed' ? 'Lockheed Kill Chain' : 'Diamond Model'} —{' '}
-              {selectedPathData ? `Path ${selectedPath + 1}: ${selectedPathData.target_hostname}` : 'No path selected'}
-            </p>
-            <div className="flex gap-1">
-              {(['mitre', 'lockheed', 'diamond'] as KillChainModel[]).map(m => (
-                <button key={m} onClick={() => setKcModel(m)}
-                  className="px-2.5 py-1 rounded-lg text-[10px] font-medium capitalize"
-                  style={{
-                    background: kcModel === m ? 'var(--accent-glow)' : 'var(--glass-bg)',
-                    border: `1px solid ${kcModel === m ? 'var(--accent-border)' : 'var(--border)'}`,
-                    color: kcModel === m ? 'var(--accent)' : 'var(--text-3)',
-                  }}>
-                  {m === 'mitre' ? 'MITRE' : m === 'lockheed' ? 'Lockheed' : 'Diamond'}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-2.5" style={{ color: 'var(--text-3)' }}>
+            MITRE ATT&amp;CK —{' '}
+            {selectedPathData ? `Path ${selectedPath + 1}: ${selectedPathData.target_hostname}` : 'No path selected'}
+          </p>
           <div className="flex items-start gap-0 overflow-x-auto pb-1">
-            {kcPhases.map((phase, i) => {
+            {KILL_CHAIN_PHASES.map((phase, i) => {
               const active = activeKCPhases.has(phase.id);
               return (
                 <div key={phase.id} className="flex items-center shrink-0">
@@ -583,7 +604,7 @@ export default function AttackPathPage() {
                     }} />
                     <span className="text-[9px] whitespace-nowrap" style={{ color: active ? 'var(--text-1)' : 'var(--text-3)' }}>{phase.label}</span>
                   </div>
-                  {i < kcPhases.length - 1 && <div className="w-8 h-px shrink-0 mx-1 mb-4" style={{ background: 'var(--border)' }} />}
+                  {i < KILL_CHAIN_PHASES.length - 1 && <div className="w-8 h-px shrink-0 mx-1 mb-4" style={{ background: 'var(--border)' }} />}
                 </div>
               );
             })}
@@ -948,18 +969,9 @@ export default function AttackPathPage() {
                               style={{ background: '#a78bfa22', color: '#a78bfa' }}>{t.id}</span>
                             <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{t.name}</span>
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {[
-                              { label: 'Tactic',   val: 'Unknown' },
-                              { label: 'Sub-tech',  val: '—' },
-                              { label: 'Detection', val: 'Partial', ok: true },
-                              { label: 'Prevention',val: 'Partial', ok: true },
-                            ].map(({ label, val, ok }) => (
-                              <div key={label} className="rounded px-2 py-1" style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
-                                <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>{label}</p>
-                                <p className="text-[10px] font-medium" style={{ color: ok ? 'var(--green)' : 'var(--text-2)' }}>{val}</p>
-                              </div>
-                            ))}
+                          <div className="rounded px-2 py-1 w-fit" style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
+                            <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>Tactic</p>
+                            <p className="text-[10px] font-medium" style={{ color: 'var(--text-2)' }}>{TACTIC_BY_TECHNIQUE[t.id] ?? 'Unknown'}</p>
                           </div>
                         </div>
                       ))}
@@ -1013,11 +1025,10 @@ export default function AttackPathPage() {
               {sideTab === 'Blast Radius' && (
                 <div className="space-y-2">
                   <p className="text-[10px] mb-2" style={{ color: 'var(--text-3)' }}>
-                    Assets reachable if each host is compromised. Business impact estimated.
+                    Assets reachable if each host is compromised.
                   </p>
                   {blastRanking.map((n, i) => {
-                    const pct    = Math.min(100, ((n.blast_radius ?? 0) / Math.max(1, blastRanking[0]?.blast_radius ?? 1)) * 100);
-                    const impact = getBusinessImpact(n);
+                    const pct = Math.min(100, ((n.blast_radius ?? 0) / Math.max(1, blastRanking[0]?.blast_radius ?? 1)) * 100);
                     return (
                       <div key={n.id} className="rounded-xl p-3 cursor-pointer"
                         style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}
@@ -1034,14 +1045,6 @@ export default function AttackPathPage() {
                         <div className="h-1 rounded-full mb-1.5" style={{ background: 'var(--bg-1)' }}>
                           <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: RISK_FILL[n.risk_level] || RISK_FILL.unknown }} />
                         </div>
-                        {impact > 0 && (
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span style={{ color: 'var(--text-3)' }}>Est. impact</span>
-                            <span style={{ color: 'var(--red)', fontWeight: 600 }}>
-                              ₹{impact >= 1_000_000 ? `${(impact / 1_000_000).toFixed(1)}M` : `${(impact / 1000).toFixed(0)}K`}
-                            </span>
-                          </div>
-                        )}
                       </div>
                     );
                   })}

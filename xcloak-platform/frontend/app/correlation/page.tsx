@@ -7,7 +7,8 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { correlationAPI, playbooksAPI } from '@/lib/api';
 import { CorrelationMatch } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Cpu, Database, Filter, GitBranch, GitMerge, Layers, Network, Play, Plus, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, Zap, Lock } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Copy, Cpu, Database, Filter, GitBranch, GitMerge, Layers, Network, Play, Plus, Search, Shield, Target, ToggleLeft, ToggleRight, Trash2, Zap, Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,8 +52,7 @@ interface AlertGrouping {
 interface Performance {
   total_rules: number; active_rules: number; matches_last_hour: number;
   incidents_last_hour: number; total_matches_all: number;
-  queue_depth: number; avg_latency_ms: number; uptime_pct: number;
-  engines: Array<{ name: string; status: string; avg_ms: number; rules?: number }>;
+  engines: Array<{ name: string; rules?: number }>;
 }
 
 interface SimResult {
@@ -163,23 +163,6 @@ function CopyBtn({ text }: { text: string }) {
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KPICard({ label, value, sub, color, icon: Icon }: {
-  label: string; value: number | string; sub?: string; color: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="g-card p-4 flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider mb-0.5 font-medium" style={{ color: 'var(--text-3)' }}>{label}</p>
-        <p className="text-2xl font-bold leading-none" style={{ color }}>{value}</p>
-        {sub && <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
 
 // ── Trend Chart ────────────────────────────────────────────────────────────────
 
@@ -1393,14 +1376,14 @@ export default function CorrelationPage() {
           {overview ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <KPICard label="Active Rules"       value={overview.active_rules}         color="var(--accent)"   icon={Shield} />
-                <KPICard label="Matches (24h)"      value={overview.matches_24h}           color="#fbbf24"         icon={Activity} />
-                <KPICard label="Incidents Created"  value={overview.incidents_created_24h} color="var(--red)"      icon={AlertTriangle} />
-                <KPICard label="Avg Confidence"     value={`${overview.avg_confidence}%`}  color="var(--green)"    icon={Target} />
-                <KPICard label="Total Rules"        value={overview.total_rules}           color="var(--text-2)"   icon={GitMerge} />
-                <KPICard label="Suppression Rules"  value={overview.suppression_rules}     color="var(--text-3)"   icon={Lock} />
-                <KPICard label="FP Rate (proxy)"    value={`${overview.fp_rate}%`}         color="#fb923c"         icon={Activity} />
-                <KPICard label="High Conf Matches"  value={overview.high_conf_matches}     color="var(--accent)"   icon={CheckCircle2} />
+                <MetricCard layout="icon-chip" label="Active Rules"       value={overview.active_rules}         color="var(--accent)"   icon={Shield} />
+                <MetricCard layout="icon-chip" label="Matches (24h)"      value={overview.matches_24h}           color="#fbbf24"         icon={Activity} />
+                <MetricCard layout="icon-chip" label="Incidents Created"  value={overview.incidents_created_24h} color="var(--red)"      icon={AlertTriangle} />
+                <MetricCard layout="icon-chip" label="Avg Confidence"     value={`${overview.avg_confidence}%`}  color="var(--green)"    icon={Target} />
+                <MetricCard layout="icon-chip" label="Total Rules"        value={overview.total_rules}           color="var(--text-2)"   icon={GitMerge} />
+                <MetricCard layout="icon-chip" label="Suppression Rules"  value={overview.suppression_rules}     color="var(--text-3)"   icon={Lock} />
+                <MetricCard layout="icon-chip" label="FP Rate (proxy)"    value={`${overview.fp_rate}%`}         color="#fb923c"         icon={Activity} />
+                <MetricCard layout="icon-chip" label="High Conf Matches"  value={overview.high_conf_matches}     color="var(--accent)"   icon={CheckCircle2} />
               </div>
 
               {/* Trend */}
@@ -1640,10 +1623,7 @@ export default function CorrelationPage() {
                   { label: 'Active Rules',     val: performance.active_rules,      color: 'var(--accent)' },
                   { label: 'Matches / Hour',   val: performance.matches_last_hour, color: '#fbbf24' },
                   { label: 'Incidents / Hour', val: performance.incidents_last_hour, color: 'var(--red)' },
-                  { label: 'Avg Latency',      val: `${performance.avg_latency_ms}ms`, color: 'var(--green)' },
                   { label: 'Total Matches',    val: performance.total_matches_all, color: 'var(--text-2)' },
-                  { label: 'Queue Depth',      val: performance.queue_depth,       color: 'var(--text-3)' },
-                  { label: 'Uptime',           val: `${performance.uptime_pct}%`,  color: 'var(--green)' },
                   { label: 'Engine Count',     val: performance.engines.length,    color: 'var(--accent)' },
                 ].map(s => (
                   <div key={s.label} className="g-card p-4">
@@ -1656,27 +1636,13 @@ export default function CorrelationPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {performance.engines.map(e => (
                   <div key={e.name} className="g-card p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{e.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full"
-                        style={{ background: e.status === 'healthy' ? 'rgba(52,211,153,0.15)' : 'rgba(248,81,73,0.15)', color: e.status === 'healthy' ? 'var(--green)' : 'var(--red)' }}>
-                        {e.status}
-                      </span>
-                    </div>
-                    <div className="space-y-1 text-[11px]">
-                      <div className="flex justify-between">
-                        <span style={{ color: 'var(--text-3)' }}>Avg Latency</span>
-                        <span className="font-medium" style={{ color: e.avg_ms < 10 ? 'var(--green)' : e.avg_ms < 50 ? '#fbbf24' : 'var(--red)' }}>
-                          {e.avg_ms}ms
-                        </span>
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{e.name}</span>
+                    {e.rules !== undefined && (
+                      <div className="flex justify-between text-[11px] mt-2">
+                        <span style={{ color: 'var(--text-3)' }}>Rules</span>
+                        <span className="font-medium" style={{ color: 'var(--text-2)' }}>{e.rules}</span>
                       </div>
-                      {e.rules !== undefined && (
-                        <div className="flex justify-between">
-                          <span style={{ color: 'var(--text-3)' }}>Rules</span>
-                          <span className="font-medium" style={{ color: 'var(--text-2)' }}>{e.rules}</span>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>

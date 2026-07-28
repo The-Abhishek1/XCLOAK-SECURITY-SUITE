@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/models"
 	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
@@ -64,9 +65,9 @@ func GetIncidentAnalytics(c *gin.Context) {
 	// MTTR: avg time to resolve (hours) — using incidents resolved in last 30 days
 	var mttrHours float64
 	database.DB.QueryRow(`
-		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))/3600),0)
+		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600),0)
 		FROM incidents
-		WHERE tenant_id=$1 AND status IN ('resolved','closed') AND updated_at > NOW()-INTERVAL '30 days'
+		WHERE tenant_id=$1 AND status IN ('resolved','closed') AND resolved_at > NOW()-INTERVAL '30 days'
 	`, tenantID).Scan(&mttrHours)
 
 	// MTTD: avg time from first alert to incident creation (proxy)
@@ -113,7 +114,6 @@ func GetIncidentAnalytics(c *gin.Context) {
 		"by_status":    byStatus,
 		"mttr_hours":   fmt.Sprintf("%.1f", mttrHours),
 		"mttd_hours":   fmt.Sprintf("%.1f", mttdHours),
-		"mttc_hours":   fmt.Sprintf("%.1f", mttrHours*0.7),
 		"trend":        trend,
 		"total":        totalTotal,
 		"total_open":   totalOpen,
@@ -137,15 +137,11 @@ func GetIncidentByIDHandler(c *gin.Context) {
 		incident.Hostname = hostname
 	}
 
-	var updatedAt time.Time
-	database.DB.QueryRow(`SELECT updated_at FROM incidents WHERE id=$1`, incident.ID).Scan(&updatedAt)
-
 	c.JSON(200, gin.H{
-		"incident":    incident,
-		"ip_address":  ipAddr,
-		"os":          os,
+		"incident":     incident,
+		"ip_address":   ipAddr,
+		"os":           os,
 		"agent_status": status,
-		"updated_at":  updatedAt,
 	})
 }
 
@@ -297,37 +293,87 @@ func DispatchIncidentResponseAction(c *gin.Context) {
 		user = fmt.Sprintf("%v", username)
 	}
 
+	tenantID := tenantIDFromContext(c)
+
+	// dispatchAgentTask queues a real task for the incident's agent, routing
+	// destructive actions through the approval gate like alert_response.go.
+	dispatchAgentTask := func(taskType string, payload map[string]any) (string, error) {
+		payloadJSON, _ := json.Marshal(payload)
+		task := models.AgentTask{AgentID: incident.AgentID, TaskType: taskType, Payload: payloadJSON}
+		var err error
+		if services.IsDestructiveTask(taskType) {
+			err = repositories.CreateTaskPendingApproval(task)
+		} else {
+			err = repositories.CreateTask(task)
+		}
+		if err != nil {
+			return "", err
+		}
+		if services.IsDestructiveTask(taskType) {
+			return fmt.Sprintf("%s queued for agent %d, pending approval", taskType, incident.AgentID), nil
+		}
+		return fmt.Sprintf("%s dispatched to agent %d", taskType, incident.AgentID), nil
+	}
+
 	// Route to appropriate SOAR / EDR action
 	var result string
 	switch body.Action {
 	case "isolate_host":
-		result = fmt.Sprintf("Host isolation dispatched to agent %d", incident.AgentID)
+		r, err := dispatchAgentTask("isolate_host", map[string]any{"incident_id": incident.ID})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
 		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: isolate_host", incident.ID), user)
 	case "kill_process":
 		pid := ""
 		if p, ok := body.Params["pid"]; ok {
 			pid = fmt.Sprintf("%v", p)
 		}
-		result = fmt.Sprintf("Kill process PID=%s dispatched to agent %d", pid, incident.AgentID)
+		if pid == "" {
+			c.JSON(400, gin.H{"error": "pid required"})
+			return
+		}
+		r, err := dispatchAgentTask("kill_process", map[string]any{"incident_id": incident.ID, "pid": pid})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
 		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: kill_process pid=%s", incident.ID, pid), user)
 	case "quarantine_file":
 		path := ""
 		if p, ok := body.Params["path"]; ok {
 			path = fmt.Sprintf("%v", p)
 		}
-		result = fmt.Sprintf("File quarantine dispatched: %s", path)
+		if path == "" {
+			c.JSON(400, gin.H{"error": "path required"})
+			return
+		}
+		r, err := dispatchAgentTask("quarantine_file", map[string]any{"incident_id": incident.ID, "path": path})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
 		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: quarantine_file %s", incident.ID, path), user)
 	case "block_ip":
 		ip := ""
 		if p, ok := body.Params["ip"]; ok {
 			ip = fmt.Sprintf("%v", p)
 		}
-		if ip != "" {
-			database.DB.Exec(
-				`INSERT INTO firewall_rules (tenant_id,name,direction,action,ip_address,enabled,created_at)
-				 VALUES ($1,$2,'inbound','block',$3,true,NOW()) ON CONFLICT DO NOTHING`,
-				tenantIDFromContext(c), "Block: "+ip, ip,
-			)
+		if ip == "" {
+			c.JSON(400, gin.H{"error": "ip required"})
+			return
+		}
+		if _, err := database.DB.Exec(
+			`INSERT INTO firewall_rules (tenant_id,name,direction,action,source_ip,enabled)
+			 VALUES ($1,$2,'inbound','block',$3,true) ON CONFLICT DO NOTHING`,
+			tenantID, "Block: "+ip, ip,
+		); err != nil {
+			c.JSON(500, gin.H{"error": "failed to create firewall rule: " + err.Error()})
+			return
 		}
 		result = fmt.Sprintf("IP block rule created for %s", ip)
 		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: block_ip %s", incident.ID, ip), user)
@@ -336,35 +382,62 @@ func DispatchIncidentResponseAction(c *gin.Context) {
 		if p, ok := body.Params["domain"]; ok {
 			domain = fmt.Sprintf("%v", p)
 		}
-		result = fmt.Sprintf("Domain block dispatched: %s", domain)
+		if domain == "" {
+			c.JSON(400, gin.H{"error": "domain required"})
+			return
+		}
+		if _, err := database.DB.Exec(
+			`INSERT INTO iocs (tenant_id,indicator,type,severity,description,enabled)
+			 VALUES ($1,$2,'domain','high',$3,true)
+			 ON CONFLICT (indicator,type) DO UPDATE SET enabled=true`,
+			tenantID, domain, fmt.Sprintf("Blocked from incident #%d by %s", incident.ID, user),
+		); err != nil {
+			c.JSON(500, gin.H{"error": "failed to block domain: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Domain %s added to blocklist", domain)
 		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: block_domain %s", incident.ID, domain), user)
-	case "disable_user":
-		username2 := ""
-		if p, ok := body.Params["username"]; ok {
-			username2 = fmt.Sprintf("%v", p)
-		}
-		result = fmt.Sprintf("User disable dispatched: %s", username2)
-		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: disable_user %s", incident.ID, username2), user)
-	case "reset_password":
-		username2 := ""
-		if p, ok := body.Params["username"]; ok {
-			username2 = fmt.Sprintf("%v", p)
-		}
-		result = fmt.Sprintf("Password reset dispatched for %s", username2)
-		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: reset_password %s", incident.ID, username2), user)
+	case "disable_user", "reset_password":
+		c.JSON(501, gin.H{"error": "no identity provider integration configured — " + body.Action + " cannot be executed"})
+		return
 	case "collect_memory":
-		result = fmt.Sprintf("Memory collection dispatched to agent %d", incident.AgentID)
+		r, err := dispatchAgentTask("memory_dump", map[string]any{"incident_id": incident.ID, "pid": 0})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
 		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: collect_memory", incident.ID), user)
 	case "collect_disk":
-		result = fmt.Sprintf("Disk collection dispatched to agent %d", incident.AgentID)
-		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: collect_disk", incident.ID), user)
+		c.JSON(501, gin.H{"error": "disk collection is not supported by the agent yet"})
+		return
 	case "run_playbook":
-		playbookID := ""
+		playbookIDStr := ""
 		if p, ok := body.Params["playbook_id"]; ok {
-			playbookID = fmt.Sprintf("%v", p)
+			playbookIDStr = fmt.Sprintf("%v", p)
 		}
-		result = fmt.Sprintf("Playbook %s triggered", playbookID)
-		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: run_playbook %s", incident.ID, playbookID), user)
+		playbookID, convErr := strconv.Atoi(playbookIDStr)
+		if convErr != nil {
+			c.JSON(400, gin.H{"error": "valid playbook_id required"})
+			return
+		}
+		playbook, err := repositories.GetPlaybookByID(playbookID, tenantID)
+		if err != nil || playbook == nil {
+			c.JSON(404, gin.H{"error": "playbook not found"})
+			return
+		}
+		syntheticAlert := models.Alert{
+			AgentID:  incident.AgentID,
+			TenantID: tenantID,
+			Severity: incident.Severity,
+			RuleName: incident.Title,
+		}
+		if err := services.ExecutePlaybookByID(playbookID, tenantID, syntheticAlert); err != nil {
+			c.JSON(500, gin.H{"error": "playbook execution failed: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Playbook %q triggered", playbook.Name)
+		services.LogEvent("INCIDENT_RESPONSE", fmt.Sprintf("incident %d: run_playbook %d", incident.ID, playbookID), user)
 	default:
 		c.JSON(400, gin.H{"error": "unknown action: " + body.Action})
 		return

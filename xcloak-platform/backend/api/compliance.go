@@ -47,6 +47,18 @@ func GenerateReport(c *gin.Context) {
 	})
 }
 
+// GetLatestComplianceScores — GET /api/compliance/scores/latest
+func GetLatestComplianceScores(c *gin.Context) {
+
+	scores, err := services.GetLatestFrameworkScores(tenantIDFromContext(c))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, scores)
+}
+
 // GetReports — GET /api/compliance/reports
 func GetReports(c *gin.Context) {
 

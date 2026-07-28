@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { logSourcesAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, AppWindow, ArrowRight, BarChart2, Bell, Bot, Box, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, Cloud, Code2, Container, Copy, Database, DbIcon, Download, Eye, EyeOff, FileText, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, Lock, Mail, MonitorCheck, Network, Package, Play, PlugZap, Plus, Radio, Router, Search, Server, Settings, Shield, Square, SwitchCamera, Terminal, TestTube2, Trash2, Workflow, XCircle, Zap } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, AppWindow, ArrowRight, BarChart2, Bell, Bot, Box, Check, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, Cloud, Code2, Container, Copy, Database, Database as DbIcon, Download, Eye, EyeOff, FileText, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, Lock, Mail, MonitorCheck, Network, Package, Play, PlugZap, Plus, Radio, Router, Search, Server, Settings, Shield, Square, SwitchCamera, Terminal, TestTube2, Trash2, Workflow, XCircle, Zap } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -907,7 +907,7 @@ function PipelineView({ sources }: { sources: LogSource[] }) {
   return (
     <div className="p-6 space-y-4">
       <p className="text-xs font-semibold" style={{ color:'var(--text-2)' }}>Ingestion Pipeline</p>
-      <p className="text-[11px]" style={{ color:'var(--text-3)' }}>Log flow from source to alert. Delays or failures appear here in real-time.</p>
+      <p className="text-[11px]" style={{ color:'var(--text-3)' }}>How log data flows from source to alert.</p>
       <div className="flex flex-col items-center gap-0 max-w-md mx-auto">
         {stages.map((s, i) => (
           <div key={s.name} className="w-full flex flex-col items-center">
@@ -921,7 +921,6 @@ function PipelineView({ sources }: { sources: LogSource[] }) {
                 <p className="text-xs font-semibold" style={{ color:'var(--text-1)' }}>{s.name}</p>
                 <p className="text-[10px] truncate" style={{ color:'var(--text-3)' }}>{s.desc}</p>
               </div>
-              <span className="h-1.5 w-1.5 rounded-full shrink-0 animate-pulse" style={{ background:'var(--green)' }} />
             </div>
             {i < stages.length - 1 && (
               <div className="flex flex-col items-center py-1">

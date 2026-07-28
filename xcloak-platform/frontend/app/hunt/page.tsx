@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { threatHuntAPI, huntAPI, agentsAPI, huntWorkbenchAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, BookOpen, Brain, CheckCircle, ExternalLink, Eye, FileText, Grid3X3, Play, Plus, RefreshCw, Save, Search, Shield, Target, TrendingUp, Zap } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertTriangle, BookOpen, Brain, CheckCircle, ExternalLink, Eye, FileText, Grid3X3, Play, Plus, RefreshCw, Save, Search, Shield, Target, TrendingUp, Zap } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,15 +34,6 @@ interface Finding {
 
 const SEV: Record<string, string> = { critical: '#f85149', high: '#fb923c', medium: '#fbbf24', low: '#22c55e', info: '#60a5fa' };
 
-function KPICard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
-      <p className="text-2xl font-bold" style={{ color: color || 'var(--text-1)' }}>{value}</p>
-      {sub && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-    </div>
-  );
-}
 function SevBadge({ sev }: { sev: string }) {
   const c = SEV[sev] || '#60a5fa';
   return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${c}22`, color: c }}>{sev}</span>;
@@ -369,22 +361,22 @@ export default function ThreatHuntPage() {
       {tab === 'dashboard' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="Active Hunts"     value={dash?.active ?? '—'}       color="#22c55e" />
-            <KPICard label="Scheduled"        value={dash?.scheduled ?? '—'}    color="var(--accent)" />
-            <KPICard label="Continuous"       value={dash?.continuous ?? '—'}   color="#a855f7" />
-            <KPICard label="Total"            value={dash?.total ?? '—'} />
+            <MetricCard label="Active Hunts"     value={dash?.active ?? '—'}       color="#22c55e" />
+            <MetricCard label="Scheduled"        value={dash?.scheduled ?? '—'}    color="var(--accent)" />
+            <MetricCard label="Continuous"       value={dash?.continuous ?? '—'}   color="#a855f7" />
+            <MetricCard label="Total"            value={dash?.total ?? '—'} />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="IOC Hunts"        value={dash?.ioc_hunts ?? '—'} />
-            <KPICard label="TTP Hunts"        value={dash?.ttp_hunts ?? '—'} />
-            <KPICard label="Open Findings"    value={dash?.open_findings ?? '—'} color="#f85149" />
-            <KPICard label="Success Rate"     value={dash ? `${Math.round(dash.success_rate)}%` : '—'} color="#22c55e" />
+            <MetricCard label="IOC Hunts"        value={dash?.ioc_hunts ?? '—'} />
+            <MetricCard label="TTP Hunts"        value={dash?.ttp_hunts ?? '—'} />
+            <MetricCard label="Open Findings"    value={dash?.open_findings ?? '—'} color="#f85149" />
+            <MetricCard label="Success Rate"     value={dash ? `${Math.round(dash.success_rate)}%` : '—'} color="#22c55e" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="Total Findings"   value={dash?.findings ?? '—'} />
-            <KPICard label="New Findings 24h" value={dash?.new_findings ?? '—'} color="#fb923c" />
-            <KPICard label="Critical"         value={dash?.critical_finds ?? '—'} color="#f85149" />
-            <KPICard label="Completed"        value={dash?.completed ?? '—'} />
+            <MetricCard label="Total Findings"   value={dash?.findings ?? '—'} />
+            <MetricCard label="New Findings 24h" value={dash?.new_findings ?? '—'} color="#fb923c" />
+            <MetricCard label="Critical"         value={dash?.critical_finds ?? '—'} color="#f85149" />
+            <MetricCard label="Completed"        value={dash?.completed ?? '—'} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -867,9 +859,9 @@ export default function ThreatHuntPage() {
       {tab === 'mitre' && (
         <div className="space-y-3">
           <div className="flex items-center gap-4 mb-2">
-            <KPICard label="Coverage" value={mitre ? `${mitre.overall_coverage}%` : '—'} color="var(--accent)" />
-            <KPICard label="Covered" value={mitre?.covered_count ?? '—'} color="#22c55e" />
-            <KPICard label="Untested" value={mitre ? mitre.total_count - mitre.covered_count : '—'} />
+            <MetricCard label="Coverage" value={mitre ? `${mitre.overall_coverage}%` : '—'} color="var(--accent)" />
+            <MetricCard label="Covered" value={mitre?.covered_count ?? '—'} color="#22c55e" />
+            <MetricCard label="Untested" value={mitre ? mitre.total_count - mitre.covered_count : '—'} />
             <div className="flex items-center gap-3 text-[10px]" style={{ color: 'var(--text-3)' }}>
               <span style={{ color: '#22c55e' }}>■ Frequent</span>
               <span style={{ color: '#fbbf24' }}>■ Covered</span>

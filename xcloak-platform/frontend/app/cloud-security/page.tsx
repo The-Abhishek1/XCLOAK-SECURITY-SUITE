@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { cloudSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, Cloud, Database, Eye, FileText, GitBranch, Globe, Key, Plus, Server, Shield, XCircle, Zap, Lock } from '@/lib/icon-stubs';
+import { MetricCard, SectionCard, DataTable, TabBar, ActionButton } from '@/components/design-system';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, Cloud, Database, Eye, FileText, GitBranch, Globe, Key, Plus, RefreshCw, Server, Shield, XCircle, Zap, Lock } from 'lucide-react';
 
 const TABS = [
   { id: 'overview',     label: 'Overview',     icon: Activity },
@@ -35,15 +36,7 @@ const PROV_BG_STYLE: Record<string, React.CSSProperties> = {
   gcp:   { background: 'var(--green-bg)',  border: '1px solid var(--green-border)',  color: 'var(--green)' },
 };
 
-function StatCard({ label, value, sub, color = 'var(--text-1)' }: { label: string; value: number | string; sub?: string; color?: string }) {
-  return (
-    <div className="g-card p-4 space-y-1">
-      <div className="text-xs text-[var(--text-3)]">{label}</div>
-      <div className="text-2xl font-bold" style={{ color }}>{value}</div>
-      {sub && <div className="text-xs text-[var(--text-3)]">{sub}</div>}
-    </div>
-  );
-}
+const SELECTED_ROW_STYLE: React.CSSProperties = { background: 'var(--accent-glow)' };
 
 function ProviderBadge({ provider }: { provider: string }) {
   const baseStyle: React.CSSProperties = PROV_BG_STYLE[provider] ?? { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' };
@@ -73,23 +66,22 @@ function OverviewTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="AWS Accounts"     value={data.aws_accounts}     color="var(--orange)" />
-        <StatCard label="Azure Subs"       value={data.azure_subs}       color="var(--blue)" />
-        <StatCard label="GCP Projects"     value={data.gcp_projects}     color="var(--green)" />
-        <StatCard label="Multi-Cloud Risk" value={`${data.multi_cloud_risk}%`} color={riskColor} />
-        <StatCard label="Compliance Score" value={`${data.compliance_score}%`} color={compColor} />
+        <MetricCard label="AWS Accounts"     value={data.aws_accounts}     color="var(--orange)" />
+        <MetricCard label="Azure Subs"       value={data.azure_subs}       color="var(--blue)" />
+        <MetricCard label="GCP Projects"     value={data.gcp_projects}     color="var(--green)" />
+        <MetricCard label="Multi-Cloud Risk" value={`${data.multi_cloud_risk}%`} color={riskColor} />
+        <MetricCard label="Compliance Score" value={`${data.compliance_score}%`} color={compColor} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="Total Assets"    value={data.total_assets} />
-        <StatCard label="Public Assets"  value={data.public_assets}   color={data.public_assets > 0 ? 'var(--red)' : 'var(--green)'} />
-        <StatCard label="Critical Findings" value={data.critical_findings} color="var(--red)" />
-        <StatCard label="IAM Risks"      value={data.iam_risks}       color="var(--orange)" />
-        <StatCard label="Active Threats" value={data.active_threats}  color={data.active_threats > 0 ? 'var(--red)' : 'var(--green)'} />
+        <MetricCard label="Total Assets"    value={data.total_assets} />
+        <MetricCard label="Public Assets"  value={data.public_assets}   color={data.public_assets > 0 ? 'var(--red)' : 'var(--green)'} />
+        <MetricCard label="Critical Findings" value={data.critical_findings} color="var(--red)" />
+        <MetricCard label="IAM Risks"      value={data.iam_risks}       color="var(--orange)" />
+        <MetricCard label="Active Threats" value={data.active_threats}  color={data.active_threats > 0 ? 'var(--red)' : 'var(--green)'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Asset Inventory by Provider</div>
+        <SectionCard title="Asset Inventory by Provider">
           <div className="space-y-2">
             {(data.inventory ?? []).map((inv: any) => {
               const total = data.total_assets || 1;
@@ -107,10 +99,9 @@ function OverviewTab() {
               );
             })}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Recent Cloud Threats</div>
+        <SectionCard title="Recent Cloud Threats">
           <div className="space-y-2 max-h-52 overflow-y-auto">
             {(data.recent_threats ?? []).map((t: any) => (
               <div key={t.id} className="flex items-start justify-between gap-3 py-1.5 border-b border-[var(--border)] last:border-0">
@@ -128,7 +119,7 @@ function OverviewTab() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -193,32 +184,33 @@ function InventoryTab() {
       </div>
 
       {showAddAccount && (
-        <div className="g-card p-4 space-y-3 border border-[var(--accent-border)]">
-          <div className="text-sm font-semibold text-[var(--text-1)]">Connect Cloud Account</div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: 'Name', key: 'name', placeholder: 'AWS Production' },
-              { label: 'Provider', key: 'provider', options: ['aws', 'azure', 'gcp', 'digitalocean', 'oracle'] },
-              { label: 'Account/Subscription ID', key: 'account_id', placeholder: '123456789012' },
-              { label: 'Region', key: 'region', placeholder: 'us-east-1' },
-            ].map(({ label, key, placeholder, options }) => (
-              <div key={key}>
-                <label className="text-xs text-[var(--text-3)] mb-1 block">{label}</label>
-                {options ? (
-                  <select className="g-select text-xs w-full" value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}>
-                    {options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                ) : (
-                  <input className="g-input text-xs w-full" placeholder={placeholder} value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
-                )}
-              </div>
-            ))}
+        <SectionCard title="Connect Cloud Account" className="border border-[var(--accent-border)]">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Name', key: 'name', placeholder: 'AWS Production' },
+                { label: 'Provider', key: 'provider', options: ['aws', 'azure', 'gcp', 'digitalocean', 'oracle'] },
+                { label: 'Account/Subscription ID', key: 'account_id', placeholder: '123456789012' },
+                { label: 'Region', key: 'region', placeholder: 'us-east-1' },
+              ].map(({ label, key, placeholder, options }) => (
+                <div key={key}>
+                  <label className="text-xs text-[var(--text-3)] mb-1 block">{label}</label>
+                  {options ? (
+                    <select className="g-select text-xs w-full" value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}>
+                      {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input className="g-input text-xs w-full" placeholder={placeholder} value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <ActionButton variant="primary" className="text-xs" onClick={createAccount}>Connect</ActionButton>
+              <ActionButton variant="ghost" className="text-xs" onClick={() => setShowAddAccount(false)}>Cancel</ActionButton>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button className="g-btn-primary text-xs" onClick={createAccount}>Connect</button>
-            <button className="g-btn text-xs" onClick={() => setShowAddAccount(false)}>Cancel</button>
-          </div>
-        </div>
+        </SectionCard>
       )}
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -234,47 +226,37 @@ function InventoryTab() {
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
-        <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={reload} className="text-xs" title="Refresh" />
       </div>
 
-      {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>Resource</th><th>Type</th><th>Provider</th><th>Region</th><th>Owner</th>
-              <th>Risk</th><th>Exposed</th><th>Last Activity</th>
-            </tr></thead>
-            <tbody>
-              {assets.map((a: any) => (
-                <tr key={a.id} className="g-tr">
-                  <td>
-                    <div className="flex items-center gap-2">
-                      {RESOURCE_ICONS[a.resource_type] ?? <Cloud className="h-4 w-4 text-[var(--text-3)]" />}
-                      <span className="font-medium text-[var(--text-1)]">{a.name}</span>
-                    </div>
-                  </td>
-                  <td><span className="text-xs font-mono text-[var(--accent)]">{a.resource_type}</span></td>
-                  <td><ProviderBadge provider={a.provider} /></td>
-                  <td><span className="text-xs text-[var(--text-2)]">{a.region}</span></td>
-                  <td><span className="text-xs text-[var(--text-3)]">{a.owner || '—'}</span></td>
-                  <td>
-                    <div className="flex items-center gap-1">
-                      <div className="w-12 h-1.5 rounded-full bg-[var(--border)]">
-                        <div className="h-full rounded-full"
-                          style={{ width: `${a.risk_score}%`, background: a.risk_score > 75 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--yellow)' }} />
-                      </div>
-                      <span className="text-xs font-bold" style={{ color: a.risk_score > 75 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--text-2)' }}>{a.risk_score}</span>
-                    </div>
-                  </td>
-                  <td>{a.internet_exposed ? <Eye className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <Lock className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
-                  <td><span className="text-xs text-[var(--text-3)]">{a.last_activity ? timeAgo(a.last_activity) : '—'}</span></td>
-                </tr>
-              ))}
-              {assets.length === 0 && <tr><td colSpan={8} className="text-center text-[var(--text-3)] py-8">No assets found</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable<any>
+        loading={loading}
+        rows={assets}
+        rowKey={(a: any) => a.id}
+        columns={[
+          { key: 'name', header: 'Resource', render: (a: any) => (
+            <div className="flex items-center gap-2">
+              {RESOURCE_ICONS[a.resource_type] ?? <Cloud className="h-4 w-4 text-[var(--text-3)]" />}
+              <span className="font-medium text-[var(--text-1)]">{a.name}</span>
+            </div>
+          ) },
+          { key: 'type', header: 'Type', render: (a: any) => <span className="text-xs font-mono text-[var(--accent)]">{a.resource_type}</span> },
+          { key: 'provider', header: 'Provider', render: (a: any) => <ProviderBadge provider={a.provider} /> },
+          { key: 'region', header: 'Region', render: (a: any) => <span className="text-xs text-[var(--text-2)]">{a.region}</span> },
+          { key: 'owner', header: 'Owner', render: (a: any) => <span className="text-xs text-[var(--text-3)]">{a.owner || '—'}</span> },
+          { key: 'risk', header: 'Risk', render: (a: any) => (
+            <div className="flex items-center gap-1">
+              <div className="w-12 h-1.5 rounded-full bg-[var(--border)]">
+                <div className="h-full rounded-full"
+                  style={{ width: `${a.risk_score}%`, background: a.risk_score > 75 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--yellow)' }} />
+              </div>
+              <span className="text-xs font-bold" style={{ color: a.risk_score > 75 ? 'var(--red)' : a.risk_score > 50 ? 'var(--orange)' : 'var(--text-2)' }}>{a.risk_score}</span>
+            </div>
+          ) },
+          { key: 'exposed', header: 'Exposed', render: (a: any) => a.internet_exposed ? <Eye className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <Lock className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> },
+          { key: 'last_activity', header: 'Last Activity', render: (a: any) => <span className="text-xs text-[var(--text-3)]">{a.last_activity ? timeAgo(a.last_activity) : '—'}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -318,32 +300,33 @@ function PostureTab() {
     <div className="space-y-4">
       {exposure && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Public Buckets"  value={exposure.public_buckets}  color={exposure.public_buckets > 0 ? 'var(--red)' : 'var(--green)'} />
-          <StatCard label="Open Databases"  value={exposure.open_databases}  color={exposure.open_databases > 0 ? 'var(--red)' : 'var(--green)'} />
-          <StatCard label="Public APIs"     value={exposure.public_apis}     color={exposure.public_apis > 0 ? 'var(--orange)' : 'var(--green)'} />
-          <StatCard label="Weak Sec Groups" value={exposure.weak_security_groups} color="var(--orange)" />
+          <MetricCard label="Public Buckets"  value={exposure.public_buckets}  color={exposure.public_buckets > 0 ? 'var(--red)' : 'var(--green)'} />
+          <MetricCard label="Open Databases"  value={exposure.open_databases}  color={exposure.open_databases > 0 ? 'var(--red)' : 'var(--green)'} />
+          <MetricCard label="Public APIs"     value={exposure.public_apis}     color={exposure.public_apis > 0 ? 'var(--orange)' : 'var(--green)'} />
+          <MetricCard label="Weak Sec Groups" value={exposure.weak_security_groups} color="var(--orange)" />
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="g-card p-4 space-y-3">
-          <div className="text-sm font-medium text-[var(--text-1)]">Finding Categories</div>
-          {summary.map((s: any) => (
-            <div key={s.category} className="space-y-1 cursor-pointer" onClick={() => setFilterCat(filterCat === s.category ? '' : s.category)}>
-              <div className="flex justify-between text-xs">
-                <span className={`capitalize ${filterCat === s.category ? 'text-[var(--accent)]' : 'text-[var(--text-2)]'}`}>{s.category.replace(/_/g, ' ')}</span>
-                <div className="flex gap-1">
-                  {s.critical > 0 && <span className="font-bold" style={{ color: 'var(--red)' }}>{s.critical}C</span>}
-                  {s.high > 0 && <span className="font-bold" style={{ color: 'var(--orange)' }}>{s.high}H</span>}
-                  <span className="text-[var(--text-3)]">{s.total}</span>
+        <SectionCard title="Finding Categories">
+          <div className="space-y-3">
+            {summary.map((s: any) => (
+              <div key={s.category} className="space-y-1 cursor-pointer" onClick={() => setFilterCat(filterCat === s.category ? '' : s.category)}>
+                <div className="flex justify-between text-xs">
+                  <span className={`capitalize ${filterCat === s.category ? 'text-[var(--accent)]' : 'text-[var(--text-2)]'}`}>{s.category.replace(/_/g, ' ')}</span>
+                  <div className="flex gap-1">
+                    {s.critical > 0 && <span className="font-bold" style={{ color: 'var(--red)' }}>{s.critical}C</span>}
+                    {s.high > 0 && <span className="font-bold" style={{ color: 'var(--orange)' }}>{s.high}H</span>}
+                    <span className="text-[var(--text-3)]">{s.total}</span>
+                  </div>
+                </div>
+                <div className="h-1 rounded-full bg-[var(--border)]">
+                  <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(s.critical / (s.total || 1) * 100) + 10}%` }} />
                 </div>
               </div>
-              <div className="h-1 rounded-full bg-[var(--border)]">
-                <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(s.critical / (s.total || 1) * 100) + 10}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SectionCard>
 
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center gap-2">
@@ -353,7 +336,7 @@ function PostureTab() {
               <option value="high">High</option>
               <option value="medium">Medium</option>
             </select>
-            <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
+            <ActionButton variant="ghost" icon={RefreshCw} onClick={reload} className="text-xs" title="Refresh" />
           </div>
 
           {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
@@ -383,8 +366,8 @@ function PostureTab() {
                         {f.framework && <span className="px-1.5 py-0.5 rounded bg-[var(--glass-bg)] border border-[var(--border)]">{f.framework} {f.control_id}</span>}
                       </div>
                       <div className="flex gap-2">
-                        <button className="g-btn-primary text-xs" onClick={() => doResolve(f.id)} disabled={responding}>Mark Resolved</button>
-                        <button className="g-btn text-xs" onClick={e => { e.stopPropagation(); setSelected(null); }}>Close</button>
+                        <ActionButton variant="primary" className="text-xs" onClick={() => doResolve(f.id)} loading={responding}>Mark Resolved</ActionButton>
+                        <ActionButton variant="ghost" className="text-xs" onClick={e => { e.stopPropagation(); setSelected(null); }}>Close</ActionButton>
                       </div>
                     </div>
                   )}
@@ -396,32 +379,24 @@ function PostureTab() {
         </div>
       </div>
 
-      <div className="g-card p-4 space-y-3">
-        <div className="text-sm font-medium text-[var(--text-1)]">Infrastructure Drift</div>
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>Resource</th><th>Change</th><th>Previous</th><th>New State</th><th>Changed By</th><th>Provider</th><th>Severity</th><th>Time</th><th></th>
-            </tr></thead>
-            <tbody>
-              {drift.map((d: any) => (
-                <tr key={d.id} className={`g-tr ${d.acknowledged ? 'opacity-50' : ''}`}>
-                  <td><span className="text-xs font-mono text-[var(--text-1)]">{d.resource_id}</span></td>
-                  <td><span className="text-xs text-[var(--text-2)] capitalize">{d.change_type.replace(/_/g, ' ')}</span></td>
-                  <td><span className="text-xs font-mono" style={{ color: 'var(--green)' }}>{d.previous_state || '—'}</span></td>
-                  <td><span className="text-xs font-mono" style={{ color: 'var(--red)' }}>{d.new_state || '—'}</span></td>
-                  <td><span className="text-xs text-[var(--text-3)]">{d.changed_by || '—'}</span></td>
-                  <td><ProviderBadge provider={d.provider} /></td>
-                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[d.severity] ?? SEV_STYLE.medium}>{d.severity}</span></td>
-                  <td><span className="text-xs text-[var(--text-3)]">{timeAgo(d.created_at)}</span></td>
-                  <td>{!d.acknowledged && <button className="text-xs text-[var(--text-3)] hover:text-[var(--green)]" onClick={() => doAckDrift(d.id)}>Ack</button>}</td>
-                </tr>
-              ))}
-              {drift.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-6 text-xs">No drift detected</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard title="Infrastructure Drift">
+        <DataTable<any>
+          rows={drift}
+          rowKey={(d: any) => d.id}
+          rowStyle={(d: any) => d.acknowledged ? { opacity: 0.5 } : undefined}
+          columns={[
+            { key: 'resource', header: 'Resource', render: (d: any) => <span className="text-xs font-mono text-[var(--text-1)]">{d.resource_id}</span> },
+            { key: 'change', header: 'Change', render: (d: any) => <span className="text-xs text-[var(--text-2)] capitalize">{d.change_type.replace(/_/g, ' ')}</span> },
+            { key: 'previous', header: 'Previous', render: (d: any) => <span className="text-xs font-mono" style={{ color: 'var(--green)' }}>{d.previous_state || '—'}</span> },
+            { key: 'new_state', header: 'New State', render: (d: any) => <span className="text-xs font-mono" style={{ color: 'var(--red)' }}>{d.new_state || '—'}</span> },
+            { key: 'changed_by', header: 'Changed By', render: (d: any) => <span className="text-xs text-[var(--text-3)]">{d.changed_by || '—'}</span> },
+            { key: 'provider', header: 'Provider', render: (d: any) => <ProviderBadge provider={d.provider} /> },
+            { key: 'severity', header: 'Severity', render: (d: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[d.severity] ?? SEV_STYLE.medium}>{d.severity}</span> },
+            { key: 'time', header: 'Time', render: (d: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(d.created_at)}</span> },
+            { key: 'ack', header: '', render: (d: any) => !d.acknowledged && <button className="text-xs text-[var(--text-3)] hover:text-[var(--green)]" onClick={() => doAckDrift(d.id)}>Ack</button> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -449,11 +424,11 @@ function IdentityTab() {
     <div className="space-y-4">
       {risks && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <StatCard label="Dormant Accounts"      value={risks.dormant_accounts}      color="var(--orange)" />
-          <StatCard label="No MFA"                value={risks.no_mfa}                color="var(--red)" />
-          <StatCard label="Old Access Keys (90d)" value={risks.old_access_keys}       color="var(--orange)" />
-          <StatCard label="Excessive Permissions" value={risks.excessive_permissions} color="var(--red)" />
-          <StatCard label="Privilege Escalation"  value={risks.privilege_escalation}  color="var(--red)" />
+          <MetricCard label="Dormant Accounts"      value={risks.dormant_accounts}      color="var(--orange)" />
+          <MetricCard label="No MFA"                value={risks.no_mfa}                color="var(--red)" />
+          <MetricCard label="Old Access Keys (90d)" value={risks.old_access_keys}       color="var(--orange)" />
+          <MetricCard label="Excessive Permissions" value={risks.excessive_permissions} color="var(--red)" />
+          <MetricCard label="Privilege Escalation"  value={risks.privilege_escalation}  color="var(--red)" />
         </div>
       )}
 
@@ -473,35 +448,25 @@ function IdentityTab() {
           <option value="service_principal">Service Principal</option>
           <option value="oauth_app">OAuth App</option>
         </select>
-        <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={reload} className="text-xs" title="Refresh" />
       </div>
 
-      {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>Identity</th><th>Type</th><th>Provider</th><th>Permissions</th>
-              <th>MFA</th><th>Key Age</th><th>Dormant</th><th>Last Used</th><th>Risk</th>
-            </tr></thead>
-            <tbody>
-              {identities.map((id: any) => (
-                <tr key={id.id} className="g-tr">
-                  <td><span className="font-medium text-[var(--text-1)]">{id.name}</span></td>
-                  <td><span className="text-xs text-[var(--text-2)] capitalize">{id.identity_type.replace(/_/g, ' ')}</span></td>
-                  <td><ProviderBadge provider={id.provider} /></td>
-                  <td><span className="text-xs font-mono text-[var(--text-3)] truncate max-w-[160px] block">{id.permissions || '—'}</span></td>
-                  <td>{id.mfa_enabled ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : id.identity_type === 'iam_user' ? <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <span className="text-[10px] text-[var(--text-3)]">N/A</span>}</td>
-                  <td><span className="text-xs" style={{ color: id.access_key_age_days > 90 ? 'var(--red)' : 'var(--text-2)', fontWeight: id.access_key_age_days > 90 ? 700 : undefined }}>{id.access_key_age_days > 0 ? `${id.access_key_age_days}d` : '—'}</span></td>
-                  <td>{id.is_dormant ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} />}</td>
-                  <td><span className="text-xs text-[var(--text-3)]">{id.last_used ? timeAgo(id.last_used) : 'Never'}</span></td>
-                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[id.risk_level] ?? SEV_STYLE.low}>{id.risk_level}</span></td>
-                </tr>
-              ))}
-              {identities.length === 0 && <tr><td colSpan={9} className="text-center text-[var(--text-3)] py-8">No identities found</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable<any>
+        loading={loading}
+        rows={identities}
+        rowKey={(id: any) => id.id}
+        columns={[
+          { key: 'name', header: 'Identity', render: (id: any) => <span className="font-medium text-[var(--text-1)]">{id.name}</span> },
+          { key: 'type', header: 'Type', render: (id: any) => <span className="text-xs text-[var(--text-2)] capitalize">{id.identity_type.replace(/_/g, ' ')}</span> },
+          { key: 'provider', header: 'Provider', render: (id: any) => <ProviderBadge provider={id.provider} /> },
+          { key: 'permissions', header: 'Permissions', render: (id: any) => <span className="text-xs font-mono text-[var(--text-3)] truncate max-w-[160px] block">{id.permissions || '—'}</span> },
+          { key: 'mfa', header: 'MFA', render: (id: any) => id.mfa_enabled ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : id.identity_type === 'iam_user' ? <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> : <span className="text-[10px] text-[var(--text-3)]">N/A</span> },
+          { key: 'key_age', header: 'Key Age', render: (id: any) => <span className="text-xs" style={{ color: id.access_key_age_days > 90 ? 'var(--red)' : 'var(--text-2)', fontWeight: id.access_key_age_days > 90 ? 700 : undefined }}>{id.access_key_age_days > 0 ? `${id.access_key_age_days}d` : '—'}</span> },
+          { key: 'dormant', header: 'Dormant', render: (id: any) => id.is_dormant ? <AlertTriangle className="h-3.5 w-3.5" style={{ color: 'var(--orange)' }} /> : <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> },
+          { key: 'last_used', header: 'Last Used', render: (id: any) => <span className="text-xs text-[var(--text-3)]">{id.last_used ? timeAgo(id.last_used) : 'Never'}</span> },
+          { key: 'risk', header: 'Risk', render: (id: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[id.risk_level] ?? SEV_STYLE.low}>{id.risk_level}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -540,10 +505,9 @@ function DetectionTab() {
     <div className="space-y-4">
       <div className="flex gap-2">
         {(['threats', 'vulns'] as const).map(s => (
-          <button key={s} onClick={() => setSubTab(s)}
-            className={`text-xs px-3 py-1.5 rounded border transition-colors ${subTab === s ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/5' : 'border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)]'}`}>
+          <ActionButton key={s} variant={subTab === s ? 'primary' : 'ghost'} onClick={() => setSubTab(s)} className="text-xs">
             {s === 'threats' ? `Cloud Threats (${threats.length})` : `Vulnerabilities (${vulns.length})`}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
@@ -560,35 +524,28 @@ function DetectionTab() {
               <option value="azure">Azure</option>
               <option value="gcp">GCP</option>
             </select>
-            <button className="g-btn text-xs" onClick={reload} title="Refresh">↻</button>
+            <ActionButton variant="ghost" icon={RefreshCw} onClick={reload} className="text-xs" title="Refresh" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
-              {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-                <div className="g-card overflow-hidden">
-                  <table className="g-table w-full">
-                    <thead className="g-thead"><tr>
-                      <th>Threat Type</th><th>Resource</th><th>Source IP</th><th>User</th><th>Provider</th><th>MITRE</th><th>Severity</th><th>Time</th>
-                    </tr></thead>
-                    <tbody>
-                      {threats.map((t: any) => (
-                        <tr key={t.id} className={`g-tr cursor-pointer ${selected?.id === t.id ? 'bg-[var(--accent)]/5' : ''}`} onClick={() => setSelected(selected?.id === t.id ? null : t)}>
-                          <td><span className="text-xs text-[var(--text-1)] capitalize">{t.threat_type.replace(/_/g, ' ')}</span></td>
-                          <td><span className="text-xs font-mono text-[var(--text-2)] truncate max-w-[140px] block">{t.resource_id}</span></td>
-                          <td><span className="text-xs font-mono" style={{ color: 'var(--red)' }}>{t.source_ip || '—'}</span></td>
-                          <td><span className="text-xs text-[var(--text-3)]">{t.source_user || '—'}</span></td>
-                          <td><ProviderBadge provider={t.provider} /></td>
-                          <td><span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--accent-bg, var(--blue-bg))', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>{t.mitre_technique || '—'}</span></td>
-                          <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[t.severity] ?? SEV_STYLE.medium}>{t.severity}</span></td>
-                          <td><span className="text-xs text-[var(--text-3)]">{timeAgo(t.created_at)}</span></td>
-                        </tr>
-                      ))}
-                      {threats.length === 0 && <tr><td colSpan={8} className="text-center text-[var(--text-3)] py-8">No threats detected</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <DataTable<any>
+                loading={loading}
+                rows={threats}
+                rowKey={(t: any) => t.id}
+                onRowClick={t => setSelected(selected?.id === t.id ? null : t)}
+                rowStyle={(t: any) => selected?.id === t.id ? SELECTED_ROW_STYLE : undefined}
+                columns={[
+                  { key: 'type', header: 'Threat Type', render: (t: any) => <span className="text-xs text-[var(--text-1)] capitalize">{t.threat_type.replace(/_/g, ' ')}</span> },
+                  { key: 'resource', header: 'Resource', render: (t: any) => <span className="text-xs font-mono text-[var(--text-2)] truncate max-w-[140px] block">{t.resource_id}</span> },
+                  { key: 'source_ip', header: 'Source IP', render: (t: any) => <span className="text-xs font-mono" style={{ color: 'var(--red)' }}>{t.source_ip || '—'}</span> },
+                  { key: 'user', header: 'User', render: (t: any) => <span className="text-xs text-[var(--text-3)]">{t.source_user || '—'}</span> },
+                  { key: 'provider', header: 'Provider', render: (t: any) => <ProviderBadge provider={t.provider} /> },
+                  { key: 'mitre', header: 'MITRE', render: (t: any) => <span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--accent-bg, var(--blue-bg))', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}>{t.mitre_technique || '—'}</span> },
+                  { key: 'severity', header: 'Severity', render: (t: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[t.severity] ?? SEV_STYLE.medium}>{t.severity}</span> },
+                  { key: 'time', header: 'Time', render: (t: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(t.created_at)}</span> },
+                ]}
+              />
             </div>
 
             <div>
@@ -617,9 +574,9 @@ function DetectionTab() {
                   <div className="space-y-1.5">
                     <div className="text-xs text-[var(--text-3)] font-medium">Response Actions</div>
                     {(['block_ip', 'disable_iam_user', 'isolate_workload', 'rotate_access_key', 'stop_instance'] as string[]).map(action => (
-                      <button key={action} className="g-btn text-xs w-full text-left flex items-center gap-1.5" onClick={() => doRespond(action, selected)} disabled={responding}>
-                        <Zap className="h-3 w-3" />{action.replace(/_/g, ' ')}
-                      </button>
+                      <ActionButton key={action} variant="ghost" icon={Zap} className="text-xs w-full justify-start" onClick={() => doRespond(action, selected)} disabled={responding}>
+                        {action.replace(/_/g, ' ')}
+                      </ActionButton>
                     ))}
                   </div>
                 </div>
@@ -632,27 +589,24 @@ function DetectionTab() {
       )}
 
       {subTab === 'vulns' && (
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>CVE / Finding</th><th>Category</th><th>Resource</th><th>Provider</th><th>Severity</th><th>Scanner</th><th>Time</th>
-            </tr></thead>
-            <tbody>
-              {vulns.map((v: any) => (
-                <tr key={v.id} className="g-tr">
-                  <td><div className="text-xs font-medium text-[var(--text-1)]">{v.title}</div><div className="text-[10px] text-[var(--text-3)] line-clamp-1">{v.description}</div></td>
-                  <td><span className="text-xs text-[var(--text-2)] capitalize">{v.category.replace(/_/g, ' ')}</span></td>
-                  <td><span className="text-xs font-mono text-[var(--text-3)]">{v.resource_id}</span></td>
-                  <td><ProviderBadge provider={v.provider} /></td>
-                  <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[v.severity] ?? SEV_STYLE.medium}>{v.severity}</span></td>
-                  <td><span className="text-[10px] text-[var(--text-3)]">{v.framework}</span></td>
-                  <td><span className="text-xs text-[var(--text-3)]">{timeAgo(v.created_at)}</span></td>
-                </tr>
-              ))}
-              {vulns.length === 0 && <tr><td colSpan={7} className="text-center text-[var(--text-3)] py-8">No vulnerabilities found</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={vulns}
+          rowKey={(v: any) => v.id}
+          columns={[
+            { key: 'title', header: 'CVE / Finding', render: (v: any) => (
+              <div>
+                <div className="text-xs font-medium text-[var(--text-1)]">{v.title}</div>
+                <div className="text-[10px] text-[var(--text-3)] line-clamp-1">{v.description}</div>
+              </div>
+            ) },
+            { key: 'category', header: 'Category', render: (v: any) => <span className="text-xs text-[var(--text-2)] capitalize">{v.category.replace(/_/g, ' ')}</span> },
+            { key: 'resource', header: 'Resource', render: (v: any) => <span className="text-xs font-mono text-[var(--text-3)]">{v.resource_id}</span> },
+            { key: 'provider', header: 'Provider', render: (v: any) => <ProviderBadge provider={v.provider} /> },
+            { key: 'severity', header: 'Severity', render: (v: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[v.severity] ?? SEV_STYLE.medium}>{v.severity}</span> },
+            { key: 'scanner', header: 'Scanner', render: (v: any) => <span className="text-[10px] text-[var(--text-3)]">{v.framework}</span> },
+            { key: 'time', header: 'Time', render: (v: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(v.created_at)}</span> },
+          ]}
+        />
       )}
     </div>
   );
@@ -695,31 +649,23 @@ function ComplianceTab() {
         })}
       </div>
 
-      {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
-        <div className="g-card overflow-hidden">
-          <table className="g-table w-full">
-            <thead className="g-thead"><tr>
-              <th>Framework</th><th>Score</th><th>Passed</th><th>Failed</th><th>Total</th><th>Progress</th>
-            </tr></thead>
-            <tbody>
-              {compliance.map((c: any) => (
-                <tr key={c.framework} className="g-tr">
-                  <td><span className="font-medium text-[var(--text-1)]">{c.framework}</span></td>
-                  <td><span className="text-sm font-bold" style={{ color: c.score > 85 ? 'var(--green)' : c.score > 70 ? 'var(--yellow)' : 'var(--red)' }}>{Math.round(c.score)}%</span></td>
-                  <td><span className="text-xs" style={{ color: 'var(--green)' }}>{c.passed}</span></td>
-                  <td><span className="text-xs" style={{ color: 'var(--red)' }}>{c.failed}</span></td>
-                  <td><span className="text-xs text-[var(--text-2)]">{c.total}</span></td>
-                  <td>
-                    <div className="w-24 h-1.5 rounded-full bg-[var(--border)]">
-                      <div className="h-full rounded-full" style={{ width: `${c.score}%`, background: c.score > 85 ? 'var(--green)' : c.score > 70 ? 'var(--yellow)' : 'var(--red)' }} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable<any>
+        loading={loading}
+        rows={compliance}
+        rowKey={(c: any) => c.framework}
+        columns={[
+          { key: 'framework', header: 'Framework', render: (c: any) => <span className="font-medium text-[var(--text-1)]">{c.framework}</span> },
+          { key: 'score', header: 'Score', render: (c: any) => <span className="text-sm font-bold" style={{ color: c.score > 85 ? 'var(--green)' : c.score > 70 ? 'var(--yellow)' : 'var(--red)' }}>{Math.round(c.score)}%</span> },
+          { key: 'passed', header: 'Passed', render: (c: any) => <span className="text-xs" style={{ color: 'var(--green)' }}>{c.passed}</span> },
+          { key: 'failed', header: 'Failed', render: (c: any) => <span className="text-xs" style={{ color: 'var(--red)' }}>{c.failed}</span> },
+          { key: 'total', header: 'Total', render: (c: any) => <span className="text-xs text-[var(--text-2)]">{c.total}</span> },
+          { key: 'progress', header: 'Progress', render: (c: any) => (
+            <div className="w-24 h-1.5 rounded-full bg-[var(--border)]">
+              <div className="h-full rounded-full" style={{ width: `${c.score}%`, background: c.score > 85 ? 'var(--green)' : c.score > 70 ? 'var(--yellow)' : 'var(--red)' }} />
+            </div>
+          ) },
+        ]}
+      />
     </div>
   );
 }
@@ -757,42 +703,42 @@ function AttackPathsTab() {
     <div className="space-y-4">
       {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : (
         <>
-          <div className="g-card p-4 space-y-4">
-            <div className="text-sm font-medium text-[var(--text-1)]">Attack Path Visualization</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(nodesByType).map(([groupName, nodes]) => (
-                <div key={groupName} className="space-y-2">
-                  <div className="text-[10px] text-[var(--text-3)] font-medium uppercase tracking-wider">{groupName}</div>
-                  {nodes.map(n => (
-                    <div key={n.id} className="rounded-lg px-3 py-2 text-xs" style={NODE_STYLE[groupName] ?? { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                      <div className="font-medium">{n.label}</div>
-                      {n.permissions && <div className="text-[10px] opacity-70 truncate">{n.permissions}</div>}
-                      {n.risk && <div className="text-[10px] opacity-70">Risk: {n.risk}%</div>}
-                      {n.sensitive && <div className="text-[10px]" style={{ color: 'var(--yellow)' }}>Sensitive Data</div>}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-            {graph.edges.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs text-[var(--text-3)] font-medium">Attack Edges ({graph.edges.length})</div>
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {graph.edges.map((e: any, i: number) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-[var(--text-2)]">
-                      <span className="font-mono text-[10px]" style={{ color: 'var(--red)' }}>{e.source}</span>
-                      <span className="text-[var(--text-3)]">→ {e.label} →</span>
-                      <span className="text-[var(--accent)] font-mono text-[10px]">{e.target}</span>
-                      <span className="ml-auto text-[10px] px-1 py-0.5 rounded" style={SEV_STYLE[e.risk] ?? SEV_STYLE.medium}>{e.risk}</span>
-                    </div>
-                  ))}
-                </div>
+          <SectionCard title="Attack Path Visualization">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {Object.entries(nodesByType).map(([groupName, nodes]) => (
+                  <div key={groupName} className="space-y-2">
+                    <div className="text-[10px] text-[var(--text-3)] font-medium uppercase tracking-wider">{groupName}</div>
+                    {nodes.map(n => (
+                      <div key={n.id} className="rounded-lg px-3 py-2 text-xs" style={NODE_STYLE[groupName] ?? { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+                        <div className="font-medium">{n.label}</div>
+                        {n.permissions && <div className="text-[10px] opacity-70 truncate">{n.permissions}</div>}
+                        {n.risk && <div className="text-[10px] opacity-70">Risk: {n.risk}%</div>}
+                        {n.sensitive && <div className="text-[10px]" style={{ color: 'var(--yellow)' }}>Sensitive Data</div>}
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+              {graph.edges.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-[var(--text-3)] font-medium">Attack Edges ({graph.edges.length})</div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {graph.edges.map((e: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-[var(--text-2)]">
+                        <span className="font-mono text-[10px]" style={{ color: 'var(--red)' }}>{e.source}</span>
+                        <span className="text-[var(--text-3)]">→ {e.label} →</span>
+                        <span className="text-[var(--accent)] font-mono text-[10px]">{e.target}</span>
+                        <span className="ml-auto text-[10px] px-1 py-0.5 rounded" style={SEV_STYLE[e.risk] ?? SEV_STYLE.medium}>{e.risk}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </SectionCard>
 
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Cloud Security Timeline</div>
+          <SectionCard title="Cloud Security Timeline">
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {timeline.map((t: any, i: number) => (
                 <div key={i} className="flex gap-3">
@@ -811,7 +757,7 @@ function AttackPathsTab() {
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
         </>
       )}
     </div>
@@ -851,113 +797,112 @@ function IntelligenceTab() {
     <div className="space-y-4">
       {loading ? <div className="text-[var(--text-3)] text-sm">Loading...</div> : intel && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Top Attack Sources</div>
-            {(intel.top_source_ips ?? []).map((ip: any, i: number) => (
-              <div key={i} className="space-y-1">
-                <div className="flex justify-between text-xs"><span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span><span className="text-[var(--text-2)] font-bold">{ip.hits}</span></div>
-                <div className="text-[10px] text-[var(--text-3)] capitalize">{ip.threat_types}</div>
-              </div>
-            ))}
-          </div>
+          <SectionCard title="Top Attack Sources">
+            <div className="space-y-3">
+              {(intel.top_source_ips ?? []).map((ip: any, i: number) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-xs"><span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span><span className="text-[var(--text-2)] font-bold">{ip.hits}</span></div>
+                  <div className="text-[10px] text-[var(--text-3)] capitalize">{ip.threat_types}</div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
 
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Threat Type Distribution</div>
-            {(intel.by_threat_type ?? []).map((t: any) => (
-              <div key={t.threat_type} className="space-y-1">
-                <div className="flex justify-between text-xs"><span className="capitalize text-[var(--text-2)]">{t.threat_type.replace(/_/g, ' ')}</span><span className="text-[var(--accent)] font-bold">{t.count}</span></div>
-                <div className="h-1 rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(t.count / barMax * 100)}%` }} /></div>
-              </div>
-            ))}
-          </div>
+          <SectionCard title="Threat Type Distribution">
+            <div className="space-y-3">
+              {(intel.by_threat_type ?? []).map((t: any) => (
+                <div key={t.threat_type} className="space-y-1">
+                  <div className="flex justify-between text-xs"><span className="capitalize text-[var(--text-2)]">{t.threat_type.replace(/_/g, ' ')}</span><span className="text-[var(--accent)] font-bold">{t.count}</span></div>
+                  <div className="h-1 rounded-full bg-[var(--border)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(t.count / barMax * 100)}%` }} /></div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
 
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">Threats by Cloud Provider</div>
-            {(intel.by_provider ?? []).map((p: any) => (
-              <div key={p.provider} className="flex items-center justify-between text-xs">
-                <ProviderBadge provider={p.provider} />
-                <span className="text-[var(--text-2)] font-bold">{p.count} threats</span>
-              </div>
-            ))}
-          </div>
+          <SectionCard title="Threats by Cloud Provider">
+            <div className="space-y-2">
+              {(intel.by_provider ?? []).map((p: any) => (
+                <div key={p.provider} className="flex items-center justify-between text-xs">
+                  <ProviderBadge provider={p.provider} />
+                  <span className="text-[var(--text-2)] font-bold">{p.count} threats</span>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
         </div>
       )}
 
-      <div className="g-card p-4 space-y-3">
-        <div className="text-sm font-medium text-[var(--text-1)]">AI Cloud Security Assistant</div>
-        <div className="flex gap-2 flex-wrap">
-          <select className="g-select text-xs" value={aiMode} onChange={e => setAiMode(e.target.value)}>
-            <option value="answer">Ask a Question</option>
-            <option value="explain">Explain Finding</option>
-            <option value="remediate">Remediation Plan</option>
-            <option value="prioritize">Prioritize Risks</option>
-          </select>
-        </div>
-        <div className="space-y-2">
-          <textarea
-            className="g-input text-xs w-full resize-none"
-            rows={3}
-            placeholder={aiMode === 'answer' ? 'Ask anything about your cloud security posture...' : aiMode === 'explain' ? 'Describe the finding or paste the finding title...' : aiMode === 'remediate' ? 'Describe the misconfiguration to remediate...' : 'Describe your current environment context...'}
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-          />
-          <div className="flex flex-wrap gap-1.5">
-            {EXAMPLES.map((ex, i) => (
-              <button key={i} className="text-[10px] px-2 py-1 rounded bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)] hover:border-[var(--accent-border)] transition-colors" onClick={() => setQuestion(ex)}>
-                {ex.slice(0, 50)}...
-              </button>
-            ))}
+      <SectionCard title="AI Cloud Security Assistant">
+        <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            <select className="g-select text-xs" value={aiMode} onChange={e => setAiMode(e.target.value)}>
+              <option value="answer">Ask a Question</option>
+              <option value="explain">Explain Finding</option>
+              <option value="remediate">Remediation Plan</option>
+              <option value="prioritize">Prioritize Risks</option>
+            </select>
           </div>
-          <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={runAI} disabled={aiLoading}>
-            <Brain className="h-3.5 w-3.5" />{aiLoading ? 'Analyzing...' : 'Analyze'}
-          </button>
-        </div>
+          <div className="space-y-2">
+            <textarea
+              className="g-input text-xs w-full resize-none"
+              rows={3}
+              placeholder={aiMode === 'answer' ? 'Ask anything about your cloud security posture...' : aiMode === 'explain' ? 'Describe the finding or paste the finding title...' : aiMode === 'remediate' ? 'Describe the misconfiguration to remediate...' : 'Describe your current environment context...'}
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {EXAMPLES.map((ex, i) => (
+                <button key={i} className="text-[10px] px-2 py-1 rounded bg-[var(--glass-bg)] border border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)] hover:border-[var(--accent-border)] transition-colors" onClick={() => setQuestion(ex)}>
+                  {ex.slice(0, 50)}...
+                </button>
+              ))}
+            </div>
+            <ActionButton variant="primary" icon={Brain} onClick={runAI} loading={aiLoading} className="text-xs">
+              Analyze
+            </ActionButton>
+          </div>
 
-        {aiResult && (
-          <div className="space-y-3 border-t border-[var(--border)] pt-3">
-            {(aiResult.answer || aiResult.explanation || aiResult.summary) && (
-              <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{aiResult.answer || aiResult.explanation || aiResult.summary}</div>
-            )}
-            {aiResult.confidence !== undefined && <div className="text-xs text-[var(--text-3)]">Confidence: <span className="text-[var(--accent)]">{aiResult.confidence}%</span></div>}
-            {aiResult.cli_commands?.length > 0 && (
-              <div>
-                <div className="text-xs text-[var(--text-3)] mb-1">CLI Commands</div>
-                {aiResult.cli_commands.map((cmd: any, i: number) => (
-                  <div key={i} className="g-card p-2 mb-1 space-y-0.5">
-                    <div className="text-[10px] text-[var(--accent)]">{cmd.provider?.toUpperCase()} · {cmd.description}</div>
-                    <div className="text-xs font-mono text-[var(--text-1)] bg-black/20 px-2 py-1 rounded">{cmd.command}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {aiResult.recommended_actions?.length > 0 && (
-              <div>
-                <div className="text-xs text-[var(--text-3)] mb-1">Recommended Actions</div>
-                <ul className="space-y-1">{aiResult.recommended_actions.map((a: string, i: number) => (
-                  <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span className="text-[var(--accent)]">›</span>{a}</li>
-                ))}</ul>
-              </div>
-            )}
-            {aiResult.prioritized_actions?.length > 0 && (
-              <div className="g-card overflow-hidden">
-                <table className="g-table w-full">
-                  <thead className="g-thead"><tr><th>Action</th><th>Severity</th><th>Effort</th><th>Impact</th></tr></thead>
-                  <tbody>
-                    {aiResult.prioritized_actions.map((a: any, i: number) => (
-                      <tr key={i} className="g-tr">
-                        <td><span className="text-xs text-[var(--text-1)]">{a.action}</span></td>
-                        <td><span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[a.severity] ?? SEV_STYLE.medium}>{a.severity}</span></td>
-                        <td><span className="text-xs text-[var(--text-2)]">{a.effort}</span></td>
-                        <td><span className="text-xs text-[var(--text-2)]">{a.impact}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          {aiResult && (
+            <div className="space-y-3 border-t border-[var(--border)] pt-3">
+              {(aiResult.answer || aiResult.explanation || aiResult.summary) && (
+                <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{aiResult.answer || aiResult.explanation || aiResult.summary}</div>
+              )}
+              {aiResult.confidence !== undefined && <div className="text-xs text-[var(--text-3)]">Confidence: <span className="text-[var(--accent)]">{aiResult.confidence}%</span></div>}
+              {aiResult.cli_commands?.length > 0 && (
+                <div>
+                  <div className="text-xs text-[var(--text-3)] mb-1">CLI Commands</div>
+                  {aiResult.cli_commands.map((cmd: any, i: number) => (
+                    <div key={i} className="g-card p-2 mb-1 space-y-0.5">
+                      <div className="text-[10px] text-[var(--accent)]">{cmd.provider?.toUpperCase()} · {cmd.description}</div>
+                      <div className="text-xs font-mono text-[var(--text-1)] bg-black/20 px-2 py-1 rounded">{cmd.command}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {aiResult.recommended_actions?.length > 0 && (
+                <div>
+                  <div className="text-xs text-[var(--text-3)] mb-1">Recommended Actions</div>
+                  <ul className="space-y-1">{aiResult.recommended_actions.map((a: string, i: number) => (
+                    <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5 items-start"><ChevronRight className="h-3 w-3 shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />{a}</li>
+                  ))}</ul>
+                </div>
+              )}
+              {aiResult.prioritized_actions?.length > 0 && (
+                <DataTable<any>
+                  rows={aiResult.prioritized_actions}
+                  rowKey={(a: any, i: number) => i}
+                  columns={[
+                    { key: 'action', header: 'Action', render: (a: any) => <span className="text-xs text-[var(--text-1)]">{a.action}</span> },
+                    { key: 'severity', header: 'Severity', render: (a: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[a.severity] ?? SEV_STYLE.medium}>{a.severity}</span> },
+                    { key: 'effort', header: 'Effort', render: (a: any) => <span className="text-xs text-[var(--text-2)]">{a.effort}</span> },
+                    { key: 'impact', header: 'Impact', render: (a: any) => <span className="text-xs text-[var(--text-2)]">{a.impact}</span> },
+                  ]}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -988,45 +933,47 @@ function AnalyticsTab() {
       {analytics && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="g-card p-4 space-y-3">
-              <div className="text-sm font-medium text-[var(--text-1)]">Most Exposed Resources</div>
-              {(analytics.top_exposed ?? []).map((r: any, i: number) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <div><div className="text-[var(--text-1)]">{r.name}</div><div className="text-[10px] text-[var(--text-3)]">{r.resource_type} · {r.provider}</div></div>
-                  <span className="font-bold" style={{ color: r.risk_score > 75 ? 'var(--red)' : 'var(--orange)' }}>{r.risk_score}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="g-card p-4 space-y-3">
-              <div className="text-sm font-medium text-[var(--text-1)]">Top Misconfigurations</div>
-              {(analytics.top_misconfigs ?? []).map((m: any, i: number) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--text-2)] capitalize">{m.category.replace(/_/g, ' ')}</span>
-                  <div className="flex gap-1.5">
-                    {m.critical > 0 && <span className="font-bold" style={{ color: 'var(--red)' }}>{m.critical}C</span>}
-                    <span className="text-[var(--text-3)]">{m.total}</span>
+            <SectionCard title="Most Exposed Resources">
+              <div className="space-y-3">
+                {(analytics.top_exposed ?? []).map((r: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <div><div className="text-[var(--text-1)]">{r.name}</div><div className="text-[10px] text-[var(--text-3)]">{r.resource_type} · {r.provider}</div></div>
+                    <span className="font-bold" style={{ color: r.risk_score > 75 ? 'var(--red)' : 'var(--orange)' }}>{r.risk_score}</span>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </SectionCard>
 
-            <div className="g-card p-4 space-y-3">
-              <div className="text-sm font-medium text-[var(--text-1)]">Regions with Highest Risk</div>
-              {(analytics.by_region ?? []).map((r: any, i: number) => (
-                <div key={i} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[var(--text-2)]">{r.region}</span>
-                    <span className="font-bold" style={{ color: r.avg_risk > 60 ? 'var(--orange)' : 'var(--text-2)' }}>{r.avg_risk}% risk</span>
+            <SectionCard title="Top Misconfigurations">
+              <div className="space-y-3">
+                {(analytics.top_misconfigs ?? []).map((m: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--text-2)] capitalize">{m.category.replace(/_/g, ' ')}</span>
+                    <div className="flex gap-1.5">
+                      {m.critical > 0 && <span className="font-bold" style={{ color: 'var(--red)' }}>{m.critical}C</span>}
+                      <span className="text-[var(--text-3)]">{m.total}</span>
+                    </div>
                   </div>
-                  <div className="h-1 rounded-full bg-[var(--border)]"><div className="h-full rounded-full" style={{ width: `${r.avg_risk}%`, background: r.avg_risk > 60 ? 'var(--orange)' : 'var(--accent)' }} /></div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Regions with Highest Risk">
+              <div className="space-y-3">
+                {(analytics.by_region ?? []).map((r: any, i: number) => (
+                  <div key={i} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[var(--text-2)]">{r.region}</span>
+                      <span className="font-bold" style={{ color: r.avg_risk > 60 ? 'var(--orange)' : 'var(--text-2)' }}>{r.avg_risk}% risk</span>
+                    </div>
+                    <div className="h-1 rounded-full bg-[var(--border)]"><div className="h-full rounded-full" style={{ width: `${r.avg_risk}%`, background: r.avg_risk > 60 ? 'var(--orange)' : 'var(--accent)' }} /></div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
           </div>
 
-          <div className="g-card p-4 space-y-3">
-            <div className="text-sm font-medium text-[var(--text-1)]">14-Day Threat Trend</div>
+          <SectionCard title="14-Day Threat Trend">
             <div className="flex items-end gap-1 h-20">
               {(analytics.threat_trend ?? []).map((d: any, i: number) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
@@ -1035,13 +982,13 @@ function AnalyticsTab() {
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
         </>
       )}
 
-      <div className="g-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-[var(--text-1)]">Security Reports</div>
+      <SectionCard
+        title="Security Reports"
+        actions={
           <div className="flex items-center gap-2">
             <select className="g-select text-xs" value={reportType} onChange={e => setReportType(e.target.value)}>
               <option value="executive">Executive Summary</option>
@@ -1050,27 +997,25 @@ function AnalyticsTab() {
               <option value="compliance">Compliance Report</option>
               <option value="exposure">Exposure Report</option>
             </select>
-            <button className="g-btn-primary text-xs flex items-center gap-1.5" onClick={generateReport} disabled={generating}>
-              <FileText className="h-3.5 w-3.5" />{generating ? 'Generating...' : 'Generate'}
-            </button>
+            <ActionButton variant="primary" icon={FileText} onClick={generateReport} loading={generating} className="text-xs">Generate</ActionButton>
           </div>
-        </div>
-
+        }
+      >
         {reportResult && (
           <div className="space-y-4">
             <div className="text-base font-semibold text-[var(--text-1)]">{reportResult.title}</div>
             <div className="g-card p-3 text-sm text-[var(--text-2)] leading-relaxed">{reportResult.executive_summary}</div>
             {reportResult.risk_breakdown && (
               <div className="grid grid-cols-4 gap-3">
-                <StatCard label="Critical" value={reportResult.risk_breakdown.critical} color="var(--red)" />
-                <StatCard label="High"     value={reportResult.risk_breakdown.high}     color="var(--orange)" />
-                <StatCard label="Medium"   value={reportResult.risk_breakdown.medium}   color="var(--yellow)" />
-                <StatCard label="Low"      value={reportResult.risk_breakdown.low}      color="var(--blue)" />
+                <MetricCard label="Critical" value={reportResult.risk_breakdown.critical} color="var(--red)" />
+                <MetricCard label="High"     value={reportResult.risk_breakdown.high}     color="var(--orange)" />
+                <MetricCard label="Medium"   value={reportResult.risk_breakdown.medium}   color="var(--yellow)" />
+                <MetricCard label="Low"      value={reportResult.risk_breakdown.low}      color="var(--blue)" />
               </div>
             )}
             {reportResult.key_findings?.length > 0 && (
               <div><div className="text-xs text-[var(--text-3)] mb-1">Key Findings</div>
-                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5"><span style={{ color: 'var(--red)' }}>!</span>{f}</li>)}</ul>
+                <ul className="space-y-1">{reportResult.key_findings.map((f: string, i: number) => <li key={i} className="text-xs text-[var(--text-2)] flex gap-1.5 items-start"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" style={{ color: 'var(--red)' }} />{f}</li>)}</ul>
               </div>
             )}
             {reportResult.top_recommendations?.length > 0 && (
@@ -1085,7 +1030,7 @@ function AnalyticsTab() {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -1111,20 +1056,14 @@ export default function CloudSecurityPage() {
   };
 
   return (
-    <RootLayout>
+    <RootLayout title="Cloud Security" subtitle="CSPM · CIEM · CWPP · Multi-Cloud Asset Security">
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Cloud Security</h1>
-          <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>CSPM · CIEM · CWPP · Multi-Cloud Asset Security</div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {TABS.map(({ id, label }) => (
-            <button key={id} onClick={() => setTab(id)}
-              style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === id ? 600 : 400, color: tab === id ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === id ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {label}
-            </button>
-          ))}
+        <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
+          <TabBar
+            tabs={TABS.map(t => ({ key: t.id, label: t.label, icon: t.icon }))}
+            active={tab}
+            onChange={setTab}
+          />
         </div>
 
         <div>

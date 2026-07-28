@@ -4,11 +4,21 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { qeAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, ListChecks, Sparkles, CheckCircle2, BarChart3, ScrollText, FileText,
+  RefreshCw, AlertTriangle, Clock, Download, Check, X, FolderOpen, Brain, Lock,
+  Monitor, Cpu, User, Mail, Network,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'queue' | 'ai' | 'approvals' | 'analytics' | 'audit' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
   dashboard: 'Dashboard', queue: 'Queue', ai: 'AI Analysis',
   approvals: 'Approvals', analytics: 'Analytics', audit: 'Audit Trail', reports: 'Reports',
+};
+const TAB_ICONS: Record<Tab, any> = {
+  dashboard: LayoutDashboard, queue: ListChecks, ai: Sparkles, approvals: CheckCircle2,
+  analytics: BarChart3, audit: ScrollText, reports: FileText,
 };
 
 const SEV_COLOR: Record<string, string> = {
@@ -17,8 +27,8 @@ const SEV_COLOR: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   active: '#ef4444', released: '#22c55e', escalated: '#a855f7', pending: '#3b82f6',
 };
-const ASSET_ICON: Record<string, string> = {
-  endpoint: '💻', file: '📄', process: '⚙️', user: '👤', email: '✉️', network: '🌐',
+const ASSET_ICON: Record<string, any> = {
+  endpoint: Monitor, file: FileText, process: Cpu, user: User, email: Mail, network: Network,
 };
 const QTYPE_LABEL: Record<string, string> = {
   full_network_isolation: 'Full Network Isolation',
@@ -39,14 +49,9 @@ const APPROVAL_COLOR: Record<string, string> = {
   not_required: '#22c55e', pending: '#f97316', approved: '#22c55e', rejected: '#ef4444',
 };
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
+function AssetIcon({ type, size = 14 }: { type: string; size?: number }) {
+  const Icon = ASSET_ICON[type] || Lock;
+  return <Icon style={{ width: size, height: size }} />;
 }
 
 function SevPill({ s }: { s: string }) {
@@ -65,44 +70,47 @@ function DashboardTab({ dash }: { dash: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Endpoints" value={dash.quarantined_endpoints} color="#ef4444" sub="quarantined" />
-        <StatCard label="Files" value={dash.quarantined_files} color="#f97316" sub="quarantined" />
-        <StatCard label="Processes" value={dash.quarantined_processes} color="#a855f7" sub="quarantined" />
-        <StatCard label="Users" value={dash.quarantined_users} color="#eab308" sub="quarantined" />
-        <StatCard label="Emails" value={dash.quarantined_emails} color="#3b82f6" sub="quarantined" />
-        <StatCard label="Network" value={dash.quarantined_network_connections} color="#06b6d4" sub="quarantined" />
-        <StatCard label="Active Sessions" value={dash.active_quarantine_sessions} color="#ef4444" />
-        <StatCard label="Released" value={dash.released_assets} color="#22c55e" sub="total" />
+        <MetricCard label="Endpoints" value={dash.quarantined_endpoints} color="#ef4444" sub="quarantined" />
+        <MetricCard label="Files" value={dash.quarantined_files} color="#f97316" sub="quarantined" />
+        <MetricCard label="Processes" value={dash.quarantined_processes} color="#a855f7" sub="quarantined" />
+        <MetricCard label="Users" value={dash.quarantined_users} color="#eab308" sub="quarantined" />
+        <MetricCard label="Emails" value={dash.quarantined_emails} color="#3b82f6" sub="quarantined" />
+        <MetricCard label="Network" value={dash.quarantined_network_connections} color="#06b6d4" sub="quarantined" />
+        <MetricCard label="Active Sessions" value={dash.active_quarantine_sessions} color="#ef4444" />
+        <MetricCard label="Released" value={dash.released_assets} color="#22c55e" sub="total" />
       </div>
 
       {dash.pending_approvals > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608' }}>
-          <span style={{ fontWeight: 700, color: '#f97316' }}>⚠ {dash.pending_approvals} quarantine action{dash.pending_approvals !== 1 ? 's' : ''} pending approval.</span>
-          <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>Review in the Approvals tab.</span>
+        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #f97316', background: '#f9731608', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertTriangle style={{ width: 15, height: 15, color: '#f97316', flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, color: '#f97316' }}>{dash.pending_approvals} quarantine action{dash.pending_approvals !== 1 ? 's' : ''} pending approval.</span>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Review in the Approvals tab.</span>
         </div>
       )}
       {dash.expiring_soon > 0 && (
-        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #eab308', background: '#eab30808' }}>
-          <span style={{ fontWeight: 700, color: '#eab308' }}>⏰ {dash.expiring_soon} quarantine{dash.expiring_soon !== 1 ? 's' : ''} expiring within 24 hours.</span>
+        <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #eab308', background: '#eab30808', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Clock style={{ width: 15, height: 15, color: '#eab308', flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, color: '#eab308' }}>{dash.expiring_soon} quarantine{dash.expiring_soon !== 1 ? 's' : ''} expiring within 24 hours.</span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Quarantined by Asset Type</div>
+        <SectionCard title="Quarantined by Asset Type">
           {[
-            ['💻 Endpoint', dash.quarantined_endpoints, '#ef4444'],
-            ['📄 File', dash.quarantined_files, '#f97316'],
-            ['⚙️ Process', dash.quarantined_processes, '#a855f7'],
-            ['👤 User', dash.quarantined_users, '#eab308'],
-            ['✉️ Email', dash.quarantined_emails, '#3b82f6'],
-            ['🌐 Network', dash.quarantined_network_connections, '#06b6d4'],
-          ].map(([label, val, color]) => {
+            ['endpoint', 'Endpoint', dash.quarantined_endpoints, '#ef4444'],
+            ['file', 'File', dash.quarantined_files, '#f97316'],
+            ['process', 'Process', dash.quarantined_processes, '#a855f7'],
+            ['user', 'User', dash.quarantined_users, '#eab308'],
+            ['email', 'Email', dash.quarantined_emails, '#3b82f6'],
+            ['network', 'Network', dash.quarantined_network_connections, '#06b6d4'],
+          ].map(([key, label, val, color]) => {
             const total = dash.active_quarantine_sessions || 1;
             return (
-              <div key={label as string} style={{ marginBottom: 8 }}>
+              <div key={key as string} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                  <span style={{ color: 'var(--text-2)' }}>{label}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-2)' }}>
+                    <AssetIcon type={key as string} /> {label}
+                  </span>
                   <span style={{ fontWeight: 700, color: color as string }}>{val}</span>
                 </div>
                 <div style={{ background: 'var(--border)', borderRadius: 2, height: 5 }}>
@@ -111,10 +119,9 @@ function DashboardTab({ dash }: { dash: any }) {
               </div>
             );
           })}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Quarantine Status</div>
+        <SectionCard title="Quarantine Status">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
               ['Active Quarantines', dash.active_quarantine_sessions, '#ef4444'],
@@ -128,7 +135,7 @@ function DashboardTab({ dash }: { dash: any }) {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -213,19 +220,20 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input className="g-input" placeholder="Search asset, ID, detection…" value={search} onChange={e => setSearch(e.target.value)} style={{ fontSize: 12 }} />
           <div style={{ display: 'flex', gap: 4 }}>
-            <select className="g-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 11, flex: 1 }}>
+            <select className="g-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 11, flex: 1, minWidth: 0 }}>
               <option value="">All Status</option>
               {['active','released','escalated'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <select className="g-select" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ fontSize: 11, flex: 1 }}>
+            <select className="g-select" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ fontSize: 11, flex: 1, minWidth: 0 }}>
               <option value="">All Types</option>
               {['endpoint','file','process','user','email','network'].map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onRefresh}>↻</button>
+            <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} style={{ fontSize: 11, flexShrink: 0 }} />
           </div>
           {pendingApprovals.length > 0 && (
-            <div style={{ fontSize: 11, color: '#f97316', background: '#f9731610', padding: '4px 8px', borderRadius: 4, border: '1px solid #f9731630' }}>
-              ⚠ {pendingApprovals.length} pending approval{pendingApprovals.length !== 1 ? 's' : ''}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f97316', background: '#f9731610', padding: '4px 8px', borderRadius: 4, border: '1px solid #f9731630' }}>
+              <AlertTriangle style={{ width: 11, height: 11 }} />
+              {pendingApprovals.length} pending approval{pendingApprovals.length !== 1 ? 's' : ''}
             </div>
           )}
         </div>
@@ -237,7 +245,7 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
               <div key={r.id} onClick={() => selectItem(r)}
                 style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSelected ? 'var(--accent)10' : 'transparent', borderLeft: isSelected ? '3px solid var(--accent)' : '3px solid transparent' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <span style={{ fontSize: 14 }}>{ASSET_ICON[r.asset_type] || '🔒'}</span>
+                  <AssetIcon type={r.asset_type} />
                   <span style={{ fontWeight: 600, fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.asset_name}</span>
                   <SevPill s={r.severity} />
                 </div>
@@ -259,7 +267,7 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
       {/* Right detail */}
       {!selected ? (
         <div className="g-card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 40 }}>🔒</div>
+          <Lock style={{ width: 40, height: 40, color: 'var(--text-3)' }} />
           <div style={{ color: 'var(--text-3)', fontSize: 14 }}>Select a quarantine item to inspect</div>
         </div>
       ) : (
@@ -267,7 +275,7 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
           {/* Header */}
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 18 }}>{ASSET_ICON[selected.asset_type]}</span>
+              <AssetIcon type={selected.asset_type} size={18} />
               <span style={{ fontWeight: 700, fontSize: 15 }}>{selected.asset_name}</span>
               <SevPill s={selected.severity} />
               <StatusPill s={selected.status} />
@@ -279,23 +287,23 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
             {/* Actions */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {selected.status === 'active' && (
-                <button className="g-btn g-btn-primary" style={{ fontSize: 11, background: '#22c55e' }} onClick={() => doAction('release')} disabled={actionLoading}>Release</button>
+                <ActionButton variant="primary" onClick={() => doAction('release')} disabled={actionLoading} style={{ fontSize: 11, background: '#22c55e' }}>Release</ActionButton>
               )}
               {selected.status === 'active' && (
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => doAction('extend')} disabled={actionLoading}>Extend 24h</button>
+                <ActionButton variant="ghost" onClick={() => doAction('extend')} disabled={actionLoading} style={{ fontSize: 11 }}>Extend 24h</ActionButton>
               )}
               {!selected.evidence_collected && (
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={doCollectEvidence} disabled={collectingEvidence}>
-                  {collectingEvidence ? 'Collecting…' : '📥 Collect Evidence'}
-                </button>
+                <ActionButton variant="ghost" icon={Download} onClick={doCollectEvidence} disabled={collectingEvidence} style={{ fontSize: 11 }}>
+                  {collectingEvidence ? 'Collecting…' : 'Collect Evidence'}
+                </ActionButton>
               )}
               {selected.status === 'active' && (
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 11, color: '#a855f7' }} onClick={() => doAction('escalate')} disabled={actionLoading}>Escalate</button>
+                <ActionButton variant="ghost" onClick={() => doAction('escalate')} disabled={actionLoading} style={{ fontSize: 11, color: '#a855f7' }}>Escalate</ActionButton>
               )}
               {selected.approval_status === 'pending' && (
                 <>
-                  <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => approve('approve')} disabled={actionLoading}>✓ Approve</button>
-                  <button className="g-btn g-btn-ghost" style={{ fontSize: 11, color: '#ef4444' }} onClick={() => approve('reject')} disabled={actionLoading}>✗ Reject</button>
+                  <ActionButton variant="primary" icon={Check} onClick={() => approve('approve')} disabled={actionLoading} style={{ fontSize: 11 }}>Approve</ActionButton>
+                  <ActionButton variant="ghost" icon={X} onClick={() => approve('reject')} disabled={actionLoading} style={{ fontSize: 11, color: '#ef4444' }}>Reject</ActionButton>
                 </>
               )}
             </div>
@@ -378,7 +386,7 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
                 <div className="g-card" style={{ padding: 12 }}>
                   <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 6 }}>Analyst Notes</div>
                   <textarea className="g-input" rows={3} value={notes || selected.analyst_notes || ''} onChange={e => setNotes(e.target.value)} placeholder="Add analyst notes…" style={{ width: '100%', resize: 'none', fontSize: 12 }} />
-                  {notes && <button className="g-btn g-btn-ghost" style={{ fontSize: 11, marginTop: 6 }} onClick={() => doAction('update_notes')}>Save Notes</button>}
+                  {notes && <ActionButton variant="ghost" onClick={() => doAction('update_notes')} style={{ fontSize: 11, marginTop: 6 }}>Save Notes</ActionButton>}
                 </div>
               </div>
             )}
@@ -388,13 +396,15 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
                 {evidenceLoading ? (
                   <div style={{ color: 'var(--text-3)', padding: 20, textAlign: 'center' }}>Loading evidence…</div>
                 ) : evidence.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 30 }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>📁</div>
-                    <div style={{ color: 'var(--text-3)', marginBottom: 12 }}>No evidence collected yet</div>
-                    <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={doCollectEvidence} disabled={collectingEvidence}>
-                      {collectingEvidence ? 'Collecting…' : 'Collect Evidence Now'}
-                    </button>
-                  </div>
+                  <EmptyState
+                    icon={FolderOpen}
+                    title="No evidence collected yet"
+                    action={
+                      <ActionButton variant="primary" onClick={doCollectEvidence} disabled={collectingEvidence} style={{ fontSize: 12 }}>
+                        {collectingEvidence ? 'Collecting…' : 'Collect Evidence Now'}
+                      </ActionButton>
+                    }
+                  />
                 ) : evidence.map(ev => {
                   let parsed: any = {};
                   try { parsed = JSON.parse(ev.data); } catch { parsed = {}; }
@@ -472,16 +482,15 @@ function AITab({ items }: { items: any[] }) {
   return (
     <div style={{ display: 'flex', gap: 16, minHeight: 500 }}>
       <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Select Quarantine Item</div>
+        <SectionCard title="Select Quarantine Item">
           <select className="g-select" value={selectedId || ''} onChange={e => setSelectedId(Number(e.target.value))} style={{ width: '100%', marginBottom: 10 }}>
             <option value="">Choose an active item…</option>
-            {activeItems.map(i => <option key={i.id} value={i.id}>{ASSET_ICON[i.asset_type]} {i.asset_name} ({i.severity})</option>)}
+            {activeItems.map(i => <option key={i.id} value={i.id}>{i.asset_name} ({i.severity})</option>)}
           </select>
-          <button className="g-btn g-btn-primary" style={{ width: '100%', fontSize: 13 }} onClick={analyze} disabled={!selectedId || loading}>
-            {loading ? 'Analyzing…' : '🧠 Run AI Analysis'}
-          </button>
-        </div>
+          <ActionButton variant="primary" icon={Brain} onClick={analyze} disabled={!selectedId || loading} style={{ width: '100%', fontSize: 13, justifyContent: 'center' }}>
+            {loading ? 'Analyzing…' : 'Run AI Analysis'}
+          </ActionButton>
+        </SectionCard>
         {selected && (
           <div className="g-card" style={{ padding: 12 }}>
             <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8 }}>Selected Item</div>
@@ -498,7 +507,7 @@ function AITab({ items }: { items: any[] }) {
       <div style={{ flex: 1 }}>
         {!result ? (
           <div className="g-card" style={{ flex: 1, padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 400 }}>
-            <div style={{ fontSize: 36 }}>🧠</div>
+            <Brain style={{ width: 36, height: 36, color: 'var(--text-3)' }} />
             <div style={{ fontWeight: 600, fontSize: 14 }}>AI Quarantine Analysis</div>
             <div style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center', maxWidth: 400, lineHeight: 1.5 }}>
               Select an active quarantine item and click "Run AI Analysis" to get threat summary, root cause, recommended actions, business impact, and similar historical cases.
@@ -571,18 +580,14 @@ function ApprovalsTab({ items, onRefresh }: { items: any[]; onRefresh: () => voi
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 900 }}>
       {pending.length === 0 && (
-        <div className="g-card" style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>No pending approvals</div>
-          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>All quarantine actions have been reviewed</div>
-        </div>
+        <EmptyState icon={CheckCircle2} title="No pending approvals" message="All quarantine actions have been reviewed" />
       )}
       {pending.map(item => (
         <div key={item.id} className="g-card" style={{ padding: 16, borderLeft: '3px solid #f97316' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 16 }}>{ASSET_ICON[item.asset_type]}</span>
+                <AssetIcon type={item.asset_type} size={16} />
                 <span style={{ fontWeight: 700, fontSize: 15 }}>{item.asset_name}</span>
                 <SevPill s={item.severity} />
               </div>
@@ -602,8 +607,8 @@ function ApprovalsTab({ items, onRefresh }: { items: any[]; onRefresh: () => voi
           </div>
           <textarea className="g-input" rows={2} placeholder="Approval notes (optional)…" value={notes[item.id] || ''} onChange={e => setNotes(n => ({ ...n, [item.id]: e.target.value }))} style={{ width: '100%', resize: 'none', marginBottom: 10, fontSize: 12 }} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 12, background: '#22c55e' }} onClick={() => decide(item.id, 'approve')} disabled={loading === item.id}>✓ Approve &amp; Activate</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12, color: '#ef4444' }} onClick={() => decide(item.id, 'reject')} disabled={loading === item.id}>✗ Reject</button>
+            <ActionButton variant="primary" icon={Check} onClick={() => decide(item.id, 'approve')} disabled={loading === item.id} style={{ fontSize: 12, background: '#22c55e' }}>Approve &amp; Activate</ActionButton>
+            <ActionButton variant="ghost" icon={X} onClick={() => decide(item.id, 'reject')} disabled={loading === item.id} style={{ fontSize: 12, color: '#ef4444' }}>Reject</ActionButton>
           </div>
         </div>
       ))}
@@ -618,16 +623,15 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Quarantined" value={analytics.total_quarantined} color="var(--accent)" />
-        <StatCard label="Active" value={analytics.active} color="#ef4444" />
-        <StatCard label="Released" value={analytics.released} color="#22c55e" />
-        <StatCard label="Release Success" value={`${analytics.release_success_rate}%`} color="#22c55e" sub="of all releases" />
-        <StatCard label="Avg Duration" value={`${analytics.avg_duration_hours}h`} color="#f97316" sub="quarantine time" />
+        <MetricCard label="Total Quarantined" value={analytics.total_quarantined} color="var(--accent)" />
+        <MetricCard label="Active" value={analytics.active} color="#ef4444" />
+        <MetricCard label="Released" value={analytics.released} color="#22c55e" />
+        <MetricCard label="Release Success" value={`${analytics.release_success_rate || 0}%`} color="#22c55e" sub="of all releases" />
+        <MetricCard label="Avg Duration" value={`${analytics.avg_duration_hours || 0}h`} color="#f97316" sub="quarantine time" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Quarantine Trend (7d)</div>
+        <SectionCard title="Quarantine Trend (7d)">
           <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 80 }}>
             {analytics.quarantine_trend?.map((d: any) => (
               <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -636,14 +640,15 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>By Asset Type</div>
+        <SectionCard title="By Asset Type">
           {analytics.by_type && Object.entries(analytics.by_type).map(([type, count]) => (
             <div key={type} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
-                <span style={{ color: 'var(--text-2)' }}>{ASSET_ICON[type]} {type}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-2)' }}>
+                  <AssetIcon type={type} /> {type}
+                </span>
                 <span style={{ fontWeight: 700, color: '#ef4444' }}>{String(count)}</span>
               </div>
               <div style={{ background: 'var(--border)', borderRadius: 2, height: 5 }}>
@@ -651,12 +656,11 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Top Detection Sources</div>
+        <SectionCard title="Top Detection Sources">
           {analytics.top_detection_sources?.map((d: any) => (
             <div key={d.source} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
@@ -668,10 +672,9 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Repeat Offenders</div>
+        <SectionCard title="Repeat Offenders">
           {analytics.repeat_offenders?.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 13 }}>No repeat offenders</div>}
           {analytics.repeat_offenders?.map((r: any) => (
             <div key={r.asset} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
@@ -682,7 +685,7 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               <span style={{ fontSize: 18, fontWeight: 700, color: '#ef4444' }}>{r.quarantine_count}×</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -696,36 +699,27 @@ function AuditTab({ entries }: { entries: any[] }) {
     extended: '#f97316', approval_required: '#f97316',
   };
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600 }}>Quarantine Audit Trail</span>
-        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Immutable — all actions recorded</span>
-      </div>
-      {entries.length === 0 && <div style={{ padding: 24, color: 'var(--text-3)', textAlign: 'center' }}>No audit entries</div>}
-      <div style={{ overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Time', 'ID', 'Asset', 'Action', 'Actor', 'Details'].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {entries.map(e => (
-              <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '9px 14px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</td>
-                <td style={{ padding: '9px 14px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.quarantine_id}</td>
-                <td style={{ padding: '9px 14px', fontSize: 12, fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.asset_name}</td>
-                <td style={{ padding: '9px 14px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: (ACTION_COLOR[e.action] || '#6b7280') + '22', color: ACTION_COLOR[e.action] || '#6b7280', textTransform: 'capitalize' }}>{e.action?.replace(/_/g, ' ')}</span>
-                </td>
-                <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</td>
-                <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.details}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <SectionCard
+      title="Quarantine Audit Trail"
+      subtitle="Immutable — all actions recorded"
+      padded={false}
+    >
+      <DataTable<any>
+        rows={entries}
+        rowKey={(e: any) => e.id}
+        emptyState={<EmptyState title="No audit entries" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.created_at)}</span> },
+          { key: 'quarantine_id', header: 'ID', render: (e: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.quarantine_id}</span> },
+          { key: 'asset_name', header: 'Asset', render: (e: any) => <span style={{ fontSize: 12, fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.asset_name}</span> },
+          { key: 'action', header: 'Action', render: (e: any) => (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: (ACTION_COLOR[e.action] || '#6b7280') + '22', color: ACTION_COLOR[e.action] || '#6b7280', textTransform: 'capitalize' }}>{e.action?.replace(/_/g, ' ')}</span>
+          ) },
+          { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</span> },
+          { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.details}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -750,8 +744,7 @@ function ReportsTab() {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 800 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Report Type</label>
@@ -759,9 +752,9 @@ function ReportsTab() {
               {REPORT_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <button className="g-btn g-btn-primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</button>
+          <ActionButton variant="primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</ActionButton>
         </div>
-      </div>
+      </SectionCard>
       {result && (
         <div className="g-card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -769,7 +762,7 @@ function ReportsTab() {
               <div style={{ fontWeight: 700, fontSize: 15 }}>{result.title}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}</div>
             </div>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>⬇ Export PDF</button>
+            <ActionButton variant="ghost" icon={Download} style={{ fontSize: 12 }}>Export PDF</ActionButton>
           </div>
           <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
@@ -777,7 +770,7 @@ function ReportsTab() {
           </div>
           {result.key_metrics && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-              {Object.entries(result.key_metrics).map(([k, v]) => <StatCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />)}
+              {Object.entries(result.key_metrics).map(([k, v]) => <MetricCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />)}
             </div>
           )}
           {result.by_type_summary && (
@@ -785,7 +778,9 @@ function ReportsTab() {
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>By Asset Type</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {Object.entries(result.by_type_summary).map(([type, count]) => (
-                  <span key={type} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--border)', color: 'var(--text-2)' }}>{ASSET_ICON[type]} {type}: <strong>{String(count)}</strong></span>
+                  <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--border)', color: 'var(--text-2)' }}>
+                    <AssetIcon type={type} /> {type}: <strong>{String(count)}</strong>
+                  </span>
                 ))}
               </div>
             </div>
@@ -844,35 +839,29 @@ export default function QuarantinePage() {
   const pendingCount = items.filter(i => i.approval_status === 'pending').length;
 
   return (
-    <RootLayout>
-      <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Quarantine</h1>
-            <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
-              Endpoint isolation · File containment · User lockout · Network blocking · AI analysis · Release workflow
+    <RootLayout title="Quarantine"
+      subtitle="Endpoint isolation · File containment · User lockout · Network blocking · AI analysis · Release workflow"
+      actions={
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {pendingCount > 0 && (
+            <div style={{ padding: '6px 12px', borderRadius: 6, background: '#f9731622', color: '#f97316', fontSize: 12, fontWeight: 700, border: '1px solid #f9731644' }}>
+              {pendingCount} pending approval{pendingCount !== 1 ? 's' : ''}
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {pendingCount > 0 && (
-              <div style={{ padding: '6px 12px', borderRadius: 6, background: '#f9731622', color: '#f97316', fontSize: 12, fontWeight: 700, border: '1px solid #f9731644' }}>
-                {pendingCount} pending approval{pendingCount !== 1 ? 's' : ''}
-              </div>
-            )}
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={refreshAll}>↻ Refresh</button>
-          </div>
+          )}
+          <ActionButton variant="ghost" icon={RefreshCw} onClick={refreshAll} style={{ fontSize: 12 }}>Refresh</ActionButton>
         </div>
-
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-            <button key={t} onClick={() => switchTab(t)}
-              style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap', position: 'relative' }}>
-              {TAB_LABELS[t]}
-              {t === 'queue' && items.length > 0 && <span style={{ marginLeft: 5, fontSize: 10, background: 'var(--border)', padding: '1px 5px', borderRadius: 8, color: 'var(--text-3)' }}>{items.length}</span>}
-              {t === 'approvals' && pendingCount > 0 && <span style={{ marginLeft: 5, fontSize: 10, background: '#f9731622', color: '#f97316', padding: '1px 5px', borderRadius: 8, fontWeight: 700 }}>{pendingCount}</span>}
-            </button>
-          ))}
-        </div>
+      }>
+      <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
+        <TabBar
+          tabs={(Object.keys(TAB_LABELS) as Tab[]).map(t => ({
+            key: t,
+            label: TAB_LABELS[t],
+            icon: TAB_ICONS[t],
+            count: t === 'queue' ? (items.length > 0 ? items.length : undefined) : t === 'approvals' ? (pendingCount > 0 ? pendingCount : undefined) : undefined,
+          }))}
+          active={tab}
+          onChange={t => switchTab(t as Tab)}
+        />
 
         <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}><DashboardTab dash={dash} /></div>
         <div style={{ display: tab === 'queue' ? 'block' : 'none' }}>

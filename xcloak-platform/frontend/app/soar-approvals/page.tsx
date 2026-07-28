@@ -4,6 +4,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { aqAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Inbox, Scale, BarChart3, ScrollText, FileText,
+  Monitor, User, Globe, Mail, Cloud, Check, X, HelpCircle, CornerUpRight, ArrowUp, Pause, Flame,
+  AlertTriangle, Square, Download, CornerDownRight,
+} from 'lucide-react';
 
 type Tab = 'overview' | 'queue' | 'policies' | 'analytics' | 'audit' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
@@ -13,6 +19,9 @@ const TAB_LABELS: Record<Tab, string> = {
   analytics: 'Analytics',
   audit: 'Audit Trail',
   reports: 'Reports',
+};
+const TAB_ICONS: Record<Tab, any> = {
+  overview: LayoutDashboard, queue: Inbox, policies: Scale, analytics: BarChart3, audit: ScrollText, reports: FileText,
 };
 
 const SEV_COLOR: Record<string, string> = {
@@ -30,16 +39,6 @@ const POLICY_LABEL: Record<string, string> = {
   automatic: 'Auto-Approved', soc_lead: 'SOC Lead', manager_approval: 'Manager',
   dual_approval: 'Dual Approval', executive_approval: 'Executive',
 };
-
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '16px 20px', minWidth: 140 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
-}
 
 function SevBadge({ sev }: { sev: string }) {
   return (
@@ -83,24 +82,30 @@ function DueTag({ dueAt, status }: { dueAt?: string; status: string }) {
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 function OverviewTab({ dash }: { dash: any }) {
   if (!dash) return <div style={{ color: 'var(--text-3)', padding: 40, textAlign: 'center' }}>Loading dashboard…</div>;
+  const REQUEST_TYPES = [
+    { label: 'Endpoint Actions', icon: Monitor, pct: 32 },
+    { label: 'Identity Actions', icon: User, pct: 24 },
+    { label: 'Network Actions', icon: Globe, pct: 21 },
+    { label: 'Email Actions', icon: Mail, pct: 15 },
+    { label: 'Cloud Actions', icon: Cloud, pct: 8 },
+  ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Pending" value={dash.pending} color="#f97316" />
-        <StatCard label="Approved" value={dash.approved} color="#22c55e" />
-        <StatCard label="Rejected" value={dash.rejected} color="#ef4444" />
-        <StatCard label="Expired" value={dash.expired} color="#6b7280" />
-        <StatCard label="High Risk" value={dash.high_risk} color="#ef4444" sub="critical + high severity" />
-        <StatCard label="Emergency" value={dash.emergency} color="#ef4444" sub="break-glass events" />
-        <StatCard label="Avg Approval" value={`${dash.avg_approval_time_min}m`} color="var(--accent)" />
-        <StatCard label="SLA Compliance" value={`${dash.sla_compliance}%`} color={dash.sla_compliance >= 95 ? '#22c55e' : '#f97316'} />
-        <StatCard label="Auto-Approved" value={dash.auto_approved} color="#22c55e" sub="no human required" />
-        <StatCard label="Total Requests" value={dash.total_requests} />
+        <MetricCard label="Pending" value={dash.pending} color="#f97316" />
+        <MetricCard label="Approved" value={dash.approved} color="#22c55e" />
+        <MetricCard label="Rejected" value={dash.rejected} color="#ef4444" />
+        <MetricCard label="Expired" value={dash.expired} color="#6b7280" />
+        <MetricCard label="High Risk" value={dash.high_risk} color="#ef4444" sub="critical + high severity" />
+        <MetricCard label="Emergency" value={dash.emergency} color="#ef4444" sub="break-glass events" />
+        <MetricCard label="Avg Approval" value={`${dash.avg_approval_time_min}m`} color="var(--accent)" />
+        <MetricCard label="SLA Compliance" value={`${dash.sla_compliance}%`} color={dash.sla_compliance >= 95 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="Auto-Approved" value={dash.auto_approved} color="#22c55e" sub="no human required" />
+        <MetricCard label="Total Requests" value={dash.total_requests} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Approval Flow</div>
+        <SectionCard title="Approval Flow">
           {[
             { label: 'Auto-Approved (no action required)', count: dash.auto_approved, color: '#22c55e' },
             { label: 'Approved by SOC Lead', count: Math.floor(dash.approved * 0.25), color: '#3b82f6' },
@@ -118,27 +123,23 @@ function OverviewTab({ dash }: { dash: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>By Request Type</div>
-          {[
-            { label: 'Endpoint Actions', icon: '💻', pct: 32 },
-            { label: 'Identity Actions', icon: '👤', pct: 24 },
-            { label: 'Network Actions', icon: '🌐', pct: 21 },
-            { label: 'Email Actions', icon: '📧', pct: 15 },
-            { label: 'Cloud Actions', icon: '☁️', pct: 8 },
-          ].map(item => (
-            <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 14, width: 20 }}>{item.icon}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1 }}>{item.label}</span>
-              <div style={{ width: 100, background: 'var(--border)', borderRadius: 2, height: 6 }}>
-                <div style={{ background: 'var(--accent)', borderRadius: 2, height: 6, width: `${item.pct}%` }} />
+        <SectionCard title="By Request Type">
+          {REQUEST_TYPES.map(item => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Icon style={{ width: 14, height: 14, color: 'var(--text-3)' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1 }}>{item.label}</span>
+                <div style={{ width: 100, background: 'var(--border)', borderRadius: 2, height: 6 }}>
+                  <div style={{ background: 'var(--accent)', borderRadius: 2, height: 6, width: `${item.pct}%` }} />
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', width: 30, textAlign: 'right' }}>{item.pct}%</span>
               </div>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', width: 30, textAlign: 'right' }}>{item.pct}%</span>
-            </div>
-          ))}
-        </div>
+            );
+          })}
+        </SectionCard>
       </div>
 
       {dash.pending > 0 && (
@@ -209,12 +210,12 @@ function QueueTab({
           />
           <div style={{ display: 'flex', gap: 4 }}>
             {(['pending', 'approved', 'rejected', 'all'] as const).map(f => (
-              <button key={f} onClick={() => setQueueFilter(f)} className={queueFilter === f ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 10, padding: '3px 8px' }}>
+              <ActionButton key={f} variant={queueFilter === f ? 'primary' : 'ghost'} onClick={() => setQueueFilter(f)} style={{ fontSize: 10, padding: '3px 8px' }}>
                 {f.charAt(0).toUpperCase() + f.slice(1)}
                 {f !== 'all' && <span style={{ marginLeft: 3, opacity: 0.7 }}>({requests.filter(r => r.status === f).length})</span>}
-              </button>
+              </ActionButton>
             ))}
-            <button onClick={onRefresh} className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '3px 8px', marginLeft: 'auto' }}>↻</button>
+            <ActionButton variant="ghost" onClick={onRefresh} style={{ fontSize: 10, padding: '3px 8px', marginLeft: 'auto' }}>↻</ActionButton>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -236,7 +237,11 @@ function QueueTab({
                 {r.due_at && <DueTag dueAt={r.due_at} status={r.status} />}
                 <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{timeAgo(r.created_at)}</span>
               </div>
-              {r.incident_id && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>↳ {r.incident_id}</div>}
+              {r.incident_id && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>
+                  <CornerDownRight style={{ width: 10, height: 10 }} /> {r.incident_id}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -245,7 +250,7 @@ function QueueTab({
       {/* Right panel */}
       {!requestDetail ? (
         <div className="g-card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontSize: 32 }}>⏳</div>
+          <Inbox style={{ width: 32, height: 32, color: 'var(--text-3)' }} />
           <div style={{ color: 'var(--text-3)', fontSize: 14 }}>Select a request from the queue to review</div>
         </div>
       ) : (
@@ -462,7 +467,7 @@ function QueueTab({
                         <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Suggested Conditions</div>
                         {aiResult.suggested_conditions.map((cond: string, i: number) => (
                           <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-2)', marginBottom: 5 }}>
-                            <span style={{ color: '#eab308' }}>☐</span>
+                            <Square style={{ width: 12, height: 12, color: '#eab308', flexShrink: 0, marginTop: 1 }} />
                             <span>{cond}</span>
                           </div>
                         ))}
@@ -498,13 +503,13 @@ function QueueTab({
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {(['note', 'evidence', 'justification'] as const).map(t => (
-                      <button key={t} onClick={() => setCommentType(t)} className={commentType === t ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 10, padding: '3px 8px', textTransform: 'capitalize' }}>{t}</button>
+                      <ActionButton key={t} variant={commentType === t ? 'primary' : 'ghost'} onClick={() => setCommentType(t)} style={{ fontSize: 10, padding: '3px 8px', textTransform: 'capitalize' }}>{t}</ActionButton>
                     ))}
                   </div>
                   <textarea className="g-input" rows={3} placeholder="Add a note, evidence link, or justification…" value={newComment} onChange={e => setNewComment(e.target.value)} style={{ resize: 'vertical', fontSize: 12 }} />
-                  <button className="g-btn g-btn-primary" style={{ alignSelf: 'flex-end', fontSize: 12 }} onClick={() => { onAddComment(newComment, commentType); setNewComment(''); }}>
+                  <ActionButton variant="primary" onClick={() => { onAddComment(newComment, commentType); setNewComment(''); }} style={{ alignSelf: 'flex-end', fontSize: 12 }}>
                     Add Comment
-                  </button>
+                  </ActionButton>
                 </div>
               </div>
             )}
@@ -520,8 +525,8 @@ function QueueTab({
                   </div>
                   <textarea className="g-input" rows={2} placeholder="Decision notes / justification…" value={decisionNotes} onChange={e => setDecisionNotes(e.target.value)} style={{ fontSize: 12, resize: 'none' }} />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => { onDecide(pendingDecision); setPendingDecision(null); setDecisionNotes(''); }}>Confirm</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => { setPendingDecision(null); setDecisionNotes(''); }}>Cancel</button>
+                    <ActionButton variant="primary" onClick={() => { onDecide(pendingDecision); setPendingDecision(null); setDecisionNotes(''); }} style={{ fontSize: 12 }}>Confirm</ActionButton>
+                    <ActionButton variant="ghost" onClick={() => { setPendingDecision(null); setDecisionNotes(''); }} style={{ fontSize: 12 }}>Cancel</ActionButton>
                   </div>
                 </div>
               ) : showDelegateForm ? (
@@ -533,29 +538,31 @@ function QueueTab({
                   </select>
                   <input className="g-input" placeholder="Reason for delegation…" value={delegateNotes} onChange={e => setDelegateNotes(e.target.value)} style={{ fontSize: 12 }} />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => { onDelegate(delegateeInput, delegateNotes); setShowDelegateForm(false); setDelegateeInput(''); setDelegateNotes(''); }}>Delegate</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowDelegateForm(false)}>Cancel</button>
+                    <ActionButton variant="primary" onClick={() => { onDelegate(delegateeInput, delegateNotes); setShowDelegateForm(false); setDelegateeInput(''); setDelegateNotes(''); }} style={{ fontSize: 12 }}>Delegate</ActionButton>
+                    <ActionButton variant="ghost" onClick={() => setShowDelegateForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
                   </div>
                 </div>
               ) : showEmergencyForm ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>⚠ BREAK GLASS — Emergency Override</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>
+                    <AlertTriangle style={{ width: 13, height: 13 }} /> BREAK GLASS — Emergency Override
+                  </div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Bypasses standard approval. Fully audited. Executive notification sent.</div>
                   <textarea className="g-input" rows={2} placeholder="Justification (required)…" value={emergencyText} onChange={e => setEmergencyText(e.target.value)} style={{ fontSize: 12, resize: 'none' }} />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="g-btn" style={{ fontSize: 12, background: '#ef4444', color: '#fff' }} onClick={() => { onEmergency(emergencyText); setShowEmergencyForm(false); setEmergencyText(''); }}>Execute Emergency Override</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowEmergencyForm(false)}>Cancel</button>
+                    <ActionButton variant="primary" onClick={() => { onEmergency(emergencyText); setShowEmergencyForm(false); setEmergencyText(''); }} style={{ fontSize: 12, background: '#ef4444', color: '#fff' }}>Execute Emergency Override</ActionButton>
+                    <ActionButton variant="ghost" onClick={() => setShowEmergencyForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
                   </div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button className="g-btn" onClick={() => setPendingDecision('approve')} style={{ fontSize: 12, background: '#22c55e', color: '#fff', fontWeight: 600 }}>✓ Approve</button>
-                  <button className="g-btn" onClick={() => setPendingDecision('reject')} style={{ fontSize: 12, background: '#ef4444', color: '#fff', fontWeight: 600 }}>✗ Reject</button>
-                  <button className="g-btn g-btn-ghost" onClick={() => setPendingDecision('more_info')} style={{ fontSize: 12 }}>? Request Info</button>
-                  <button className="g-btn g-btn-ghost" onClick={() => setShowDelegateForm(true)} style={{ fontSize: 12 }}>↗ Delegate</button>
-                  <button className="g-btn g-btn-ghost" onClick={() => setPendingDecision('escalate')} style={{ fontSize: 12 }}>↑ Escalate</button>
-                  <button className="g-btn g-btn-ghost" onClick={() => setPendingDecision('postpone')} style={{ fontSize: 12 }}>⏸ Postpone</button>
-                  <button className="g-btn" onClick={() => setShowEmergencyForm(true)} style={{ fontSize: 12, background: '#7f1d1d', color: '#fca5a5', marginLeft: 'auto' }}>🔴 Break Glass</button>
+                  <ActionButton variant="primary" icon={Check} onClick={() => setPendingDecision('approve')} style={{ fontSize: 12, background: '#22c55e', color: '#fff', fontWeight: 600 }}>Approve</ActionButton>
+                  <ActionButton variant="primary" icon={X} onClick={() => setPendingDecision('reject')} style={{ fontSize: 12, background: '#ef4444', color: '#fff', fontWeight: 600 }}>Reject</ActionButton>
+                  <ActionButton variant="ghost" icon={HelpCircle} onClick={() => setPendingDecision('more_info')} style={{ fontSize: 12 }}>Request Info</ActionButton>
+                  <ActionButton variant="ghost" icon={CornerUpRight} onClick={() => setShowDelegateForm(true)} style={{ fontSize: 12 }}>Delegate</ActionButton>
+                  <ActionButton variant="ghost" icon={ArrowUp} onClick={() => setPendingDecision('escalate')} style={{ fontSize: 12 }}>Escalate</ActionButton>
+                  <ActionButton variant="ghost" icon={Pause} onClick={() => setPendingDecision('postpone')} style={{ fontSize: 12 }}>Postpone</ActionButton>
+                  <ActionButton variant="primary" icon={Flame} onClick={() => setShowEmergencyForm(true)} style={{ fontSize: 12, background: '#7f1d1d', color: '#fca5a5', marginLeft: 'auto' }}>Break Glass</ActionButton>
                 </div>
               )}
             </div>
@@ -572,85 +579,55 @@ function PoliciesTab({ policies, matrix }: { policies: any[]; matrix: any[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => setActiveSection('policies')} className={activeSection === 'policies' ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 12 }}>Approval Policies</button>
-        <button onClick={() => setActiveSection('matrix')} className={activeSection === 'matrix' ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 12 }}>Approval Matrix</button>
+        <ActionButton variant={activeSection === 'policies' ? 'primary' : 'ghost'} onClick={() => setActiveSection('policies')} style={{ fontSize: 12 }}>Approval Policies</ActionButton>
+        <ActionButton variant={activeSection === 'matrix' ? 'primary' : 'ghost'} onClick={() => setActiveSection('matrix')} style={{ fontSize: 12 }}>Approval Matrix</ActionButton>
       </div>
 
       {activeSection === 'policies' && (
-        <div className="g-card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600 }}>Approval Policies</span>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 12 }}>+ Add Policy</button>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead className="g-thead">
-                <tr>
-                  {['Name', 'Action Type', 'Asset Criticality', 'Policy', 'Auto-Approve Conditions', 'Approvers', 'Status'].map(h => (
-                    <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {policies.map(p => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>{p.name}</td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-2)' }}>{p.action_type.replace(/_/g, ' ')}</td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-2)', textTransform: 'capitalize' }}>{p.asset_criticality}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (POLICY_COLOR[p.policy] || '#6b7280') + '22', color: POLICY_COLOR[p.policy] || '#6b7280', border: `1px solid ${(POLICY_COLOR[p.policy] || '#6b7280')}44` }}>
-                        {POLICY_LABEL[p.policy] || p.policy}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 14px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{p.auto_conditions || '—'}</td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-2)' }}>{p.approvers}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: p.enabled ? '#22c55e22' : '#ef444422', color: p.enabled ? '#22c55e' : '#ef4444' }}>
-                        {p.enabled ? 'Active' : 'Disabled'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SectionCard title="Approval Policies" actions={<ActionButton variant="primary" style={{ fontSize: 12 }}>+ Add Policy</ActionButton>} padded={false}>
+          <DataTable<any>
+            rows={policies}
+            rowKey={(p: any) => p.id}
+            columns={[
+              { key: 'name', header: 'Name', render: (p: any) => <span style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</span> },
+              { key: 'action_type', header: 'Action Type', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.action_type.replace(/_/g, ' ')}</span> },
+              { key: 'asset_criticality', header: 'Asset Criticality', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', textTransform: 'capitalize' }}>{p.asset_criticality}</span> },
+              { key: 'policy', header: 'Policy', render: (p: any) => (
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (POLICY_COLOR[p.policy] || '#6b7280') + '22', color: POLICY_COLOR[p.policy] || '#6b7280', border: `1px solid ${(POLICY_COLOR[p.policy] || '#6b7280')}44` }}>
+                  {POLICY_LABEL[p.policy] || p.policy}
+                </span>
+              ) },
+              { key: 'auto_conditions', header: 'Auto-Approve Conditions', render: (p: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{p.auto_conditions || '—'}</span> },
+              { key: 'approvers', header: 'Approvers', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.approvers}</span> },
+              { key: 'enabled', header: 'Status', render: (p: any) => (
+                <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: p.enabled ? '#22c55e22' : '#ef444422', color: p.enabled ? '#22c55e' : '#ef4444' }}>
+                  {p.enabled ? 'Active' : 'Disabled'}
+                </span>
+              ) },
+            ]}
+          />
+        </SectionCard>
       )}
 
       {activeSection === 'matrix' && (
-        <div className="g-card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-            <span style={{ fontWeight: 600 }}>Approval Matrix</span>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Approval requirement per action type and asset criticality</div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead className="g-thead">
-                <tr>
-                  {['Action', 'Category', 'Asset Criticality', 'Approval Requirement', 'Approvers', 'Risk'].map(h => (
-                    <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {matrix.map((row: any, i: number) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '9px 14px', fontSize: 12, fontWeight: 500 }}>{row.action}</td>
-                    <td style={{ padding: '9px 14px', fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{row.category.replace(/_/g, ' ')}</td>
-                    <td style={{ padding: '9px 14px', fontSize: 11, textTransform: 'capitalize', color: row.asset_criticality === 'critical' ? '#ef4444' : row.asset_criticality === 'high' ? '#f97316' : row.asset_criticality === 'medium' ? '#eab308' : 'var(--text-2)' }}>{row.asset_criticality}</td>
-                    <td style={{ padding: '9px 14px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (POLICY_COLOR[row.requirement] || '#6b7280') + '22', color: POLICY_COLOR[row.requirement] || '#6b7280', border: `1px solid ${(POLICY_COLOR[row.requirement] || '#6b7280')}44`, whiteSpace: 'nowrap' }}>
-                        {POLICY_LABEL[row.requirement] || row.requirement}
-                      </span>
-                    </td>
-                    <td style={{ padding: '9px 14px', fontSize: 11, color: 'var(--text-2)' }}>{row.approvers}</td>
-                    <td style={{ padding: '9px 14px' }}><SevBadge sev={row.risk} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SectionCard title="Approval Matrix" subtitle="Approval requirement per action type and asset criticality" padded={false}>
+          <DataTable<any>
+            rows={matrix}
+            rowKey={(row: any, i: number) => row.action ?? i}
+            columns={[
+              { key: 'action', header: 'Action', render: (row: any) => <span style={{ fontSize: 12, fontWeight: 500 }}>{row.action}</span> },
+              { key: 'category', header: 'Category', render: (row: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{row.category.replace(/_/g, ' ')}</span> },
+              { key: 'asset_criticality', header: 'Asset Criticality', render: (row: any) => <span style={{ fontSize: 11, textTransform: 'capitalize', color: row.asset_criticality === 'critical' ? '#ef4444' : row.asset_criticality === 'high' ? '#f97316' : row.asset_criticality === 'medium' ? '#eab308' : 'var(--text-2)' }}>{row.asset_criticality}</span> },
+              { key: 'requirement', header: 'Approval Requirement', render: (row: any) => (
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (POLICY_COLOR[row.requirement] || '#6b7280') + '22', color: POLICY_COLOR[row.requirement] || '#6b7280', border: `1px solid ${(POLICY_COLOR[row.requirement] || '#6b7280')}44`, whiteSpace: 'nowrap' }}>
+                  {POLICY_LABEL[row.requirement] || row.requirement}
+                </span>
+              ) },
+              { key: 'approvers', header: 'Approvers', render: (row: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{row.approvers}</span> },
+              { key: 'risk', header: 'Risk', render: (row: any) => <SevBadge sev={row.risk} /> },
+            ]}
+          />
+        </SectionCard>
       )}
     </div>
   );
@@ -662,25 +639,24 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Avg Approval Time" value={`${analytics.avg_approval_time_min}m`} color="var(--accent)" />
-        <StatCard label="Total Requests" value={analytics.total} />
-        <StatCard label="Approved" value={analytics.approved} color="#22c55e" />
-        <StatCard label="Rejected" value={analytics.rejected} color="#ef4444" />
-        <StatCard label="SLA Violations" value={analytics.sla_violations} color="#f97316" />
-        <StatCard label="Emergency" value={analytics.emergency_requests} color="#ef4444" />
-        <StatCard label="Auto-Approved" value={analytics.auto_approved} color="#22c55e" sub="no human action" />
+        <MetricCard label="Avg Approval Time" value={`${analytics.avg_approval_time_min}m`} color="var(--accent)" />
+        <MetricCard label="Total Requests" value={analytics.total} />
+        <MetricCard label="Approved" value={analytics.approved} color="#22c55e" />
+        <MetricCard label="Rejected" value={analytics.rejected} color="#ef4444" />
+        <MetricCard label="SLA Violations" value={analytics.sla_violations} color="#f97316" />
+        <MetricCard label="Emergency" value={analytics.emergency_requests} color="#ef4444" />
+        <MetricCard label="Auto-Approved" value={analytics.auto_approved} color="#22c55e" sub="no human action" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>By Category</div>
+        <SectionCard title="By Category">
           {analytics.by_category?.map((cat: any) => (
             <div key={cat.category} style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
                 <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{cat.category}</span>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <span style={{ color: '#22c55e', fontSize: 11 }}>✓ {cat.approved}</span>
-                  <span style={{ color: '#ef4444', fontSize: 11 }}>✗ {cat.rejected}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: '#22c55e', fontSize: 11 }}><Check style={{ width: 10, height: 10 }} /> {cat.approved}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: '#ef4444', fontSize: 11 }}><X style={{ width: 10, height: 10 }} /> {cat.rejected}</span>
                   <span style={{ color: 'var(--text-3)', fontSize: 11 }}>auto {cat.auto}</span>
                 </div>
               </div>
@@ -690,33 +666,22 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>By Team</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                {['Team', 'Approved', 'Avg Time'].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '4px 8px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {analytics.by_team?.map((t: any) => (
-                <tr key={t.team} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '8px', fontSize: 12 }}>{t.team}</td>
-                  <td style={{ padding: '8px', fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{t.approved}</td>
-                  <td style={{ padding: '8px', fontSize: 12, color: 'var(--text-2)' }}>{t.avg_time_min}m</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SectionCard title="By Team" padded={false}>
+          <DataTable<any>
+            rows={analytics.by_team || []}
+            rowKey={(t: any) => t.team}
+            columns={[
+              { key: 'team', header: 'Team', render: (t: any) => <span style={{ fontSize: 12 }}>{t.team}</span> },
+              { key: 'approved', header: 'Approved', render: (t: any) => <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{t.approved}</span> },
+              { key: 'avg_time_min', header: 'Avg Time', render: (t: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{t.avg_time_min}m</span> },
+            ]}
+          />
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Daily Request Trend</div>
+      <SectionCard title="Daily Request Trend">
         <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 100 }}>
           {analytics.trend?.map((d: any) => {
             const max = Math.max(...analytics.trend.map((x: any) => x.requests), 1);
@@ -737,7 +702,7 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: 'var(--border)', borderRadius: 2, display: 'inline-block' }} /> Total</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, display: 'inline-block', opacity: 0.8 }} /> Approved</span>
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -745,39 +710,24 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
 // ─── Audit Tab ────────────────────────────────────────────────────────────────
 function AuditTab({ audit }: { audit: any[] }) {
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontWeight: 600 }}>Immutable Audit Trail</div>
-        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>All approval lifecycle events. Cryptographically signed and tamper-evident.</div>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>
-              {['Time', 'Approval ID', 'Actor', 'Action', 'Details', 'IP'].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {audit.map(e => (
-              <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{new Date(e.created_at).toLocaleString()}</td>
-                <td style={{ padding: '8px 14px', fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.approval_id || '—'}</td>
-                <td style={{ padding: '8px 14px', fontSize: 12, fontWeight: 500 }}>{e.actor}</td>
-                <td style={{ padding: '8px 14px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: e.action === 'approved' ? '#22c55e22' : e.action === 'rejected' ? '#ef444422' : e.action === 'emergency_override' ? '#ef444422' : e.action === 'created' ? '#3b82f622' : 'var(--border)', color: e.action === 'approved' ? '#22c55e' : e.action === 'rejected' || e.action === 'emergency_override' ? '#ef4444' : e.action === 'created' ? '#3b82f6' : 'var(--text-2)', textTransform: 'capitalize' }}>
-                    {e.action.replace(/_/g, ' ')}
-                  </span>
-                </td>
-                <td style={{ padding: '8px 14px', fontSize: 12, color: 'var(--text-2)', maxWidth: 320 }}>{e.details}</td>
-                <td style={{ padding: '8px 14px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{e.ip_address || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <SectionCard title="Immutable Audit Trail" subtitle="All approval lifecycle events. Cryptographically signed and tamper-evident." padded={false}>
+      <DataTable<any>
+        rows={audit}
+        rowKey={(e: any) => e.id}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{new Date(e.created_at).toLocaleString()}</span> },
+          { key: 'approval_id', header: 'Approval ID', render: (e: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.approval_id || '—'}</span> },
+          { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, fontWeight: 500 }}>{e.actor}</span> },
+          { key: 'action', header: 'Action', render: (e: any) => (
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: e.action === 'approved' ? '#22c55e22' : e.action === 'rejected' ? '#ef444422' : e.action === 'emergency_override' ? '#ef444422' : e.action === 'created' ? '#3b82f622' : 'var(--border)', color: e.action === 'approved' ? '#22c55e' : e.action === 'rejected' || e.action === 'emergency_override' ? '#ef4444' : e.action === 'created' ? '#3b82f6' : 'var(--text-2)', textTransform: 'capitalize' }}>
+              {e.action.replace(/_/g, ' ')}
+            </span>
+          ) },
+          { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 320, display: 'block' }}>{e.details}</span> },
+          { key: 'ip_address', header: 'IP', render: (e: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{e.ip_address || '—'}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -797,8 +747,7 @@ function ReportsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 800 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }}>
           <div>
             <label style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Report Type</label>
@@ -819,11 +768,11 @@ function ReportsTab() {
               <option value="ytd">Year to Date</option>
             </select>
           </div>
-          <button className="g-btn g-btn-primary" onClick={generate} disabled={loading}>
+          <ActionButton variant="primary" onClick={generate} disabled={loading}>
             {loading ? 'Generating…' : 'Generate'}
-          </button>
+          </ActionButton>
         </div>
-      </div>
+      </SectionCard>
 
       {result && (
         <div className="g-card" style={{ padding: 20 }}>
@@ -834,7 +783,7 @@ function ReportsTab() {
                 Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}
               </div>
             </div>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>⬇ Export PDF</button>
+            <ActionButton variant="ghost" icon={Download} style={{ fontSize: 12 }}>Export PDF</ActionButton>
           </div>
           <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
@@ -843,7 +792,7 @@ function ReportsTab() {
           {result.statistics && (
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
               {Object.entries(result.statistics).map(([k, v]) => (
-                <StatCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
+                <MetricCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
               ))}
             </div>
           )}
@@ -968,33 +917,24 @@ export default function SoarApprovalsPage() {
   };
 
   return (
-    <RootLayout>
+    <RootLayout title="Approval Queue"
+      subtitle="Human-in-the-loop approval for high-risk SOAR actions · AI-assisted risk assessment · Immutable audit trail"
+      actions={dash?.pending > 0 ? (
+        <div style={{ padding: '6px 14px', borderRadius: 6, background: '#f9731622', color: '#f97316', fontSize: 12, fontWeight: 700, border: '1px solid #f9731644' }}>
+          {dash.pending} pending approval{dash.pending !== 1 ? 's' : ''}
+        </div>
+      ) : undefined}>
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Approval Queue</h1>
-            <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
-              Human-in-the-loop approval for high-risk SOAR actions · AI-assisted risk assessment · Immutable audit trail
-            </div>
-          </div>
-          {dash?.pending > 0 && (
-            <div style={{ padding: '6px 14px', borderRadius: 6, background: '#f9731622', color: '#f97316', fontSize: 12, fontWeight: 700, border: '1px solid #f9731644' }}>
-              {dash.pending} pending approval{dash.pending !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)' }}>
-          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-            <button key={t} onClick={() => switchTab(t)}
-              style={{ padding: '8px 16px', fontSize: 13, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {TAB_LABELS[t]}
-              {t === 'queue' && dash?.pending > 0 && (
-                <span style={{ marginLeft: 6, fontSize: 10, background: '#f97316', color: '#fff', borderRadius: 10, padding: '1px 5px', fontWeight: 700 }}>{dash.pending}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          tabs={(Object.keys(TAB_LABELS) as Tab[]).map(t => ({
+            key: t,
+            label: TAB_LABELS[t],
+            icon: TAB_ICONS[t],
+            count: t === 'queue' ? (dash?.pending > 0 ? dash.pending : undefined) : undefined,
+          }))}
+          active={tab}
+          onChange={t => switchTab(t as Tab)}
+        />
 
         <div style={{ display: tab === 'overview' ? 'block' : 'none' }}>
           <OverviewTab dash={dash} />

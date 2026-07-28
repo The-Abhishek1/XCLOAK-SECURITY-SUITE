@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { huntWorkbenchAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertCircle, AlertTriangle, BookOpen, Brain, CheckCircle, ChevronDown, ChevronRight, Clock, Download, Eye, FileText, Globe, Grid3X3, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, TrendingUp, X } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertCircle, AlertTriangle, BookOpen, Brain, CheckCircle, ChevronDown, ChevronRight, Clock, Download, Eye, FileText, Globe, Grid3X3, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, TrendingUp, X } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,15 +31,6 @@ interface NoteEntry { id: number; run_id: number; content: string; content_type:
 
 const SEV_COLOR: Record<string, string> = { critical: '#f85149', high: '#fb923c', medium: '#fbbf24', low: '#22c55e', info: '#60a5fa' };
 
-function KPICard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
-      <p className="text-2xl font-bold" style={{ color: color || 'var(--text-1)' }}>{value}</p>
-      {sub && <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-    </div>
-  );
-}
 
 function SevBadge({ sev }: { sev: string }) {
   return (
@@ -417,16 +409,16 @@ export default function HuntWorkbenchPage() {
       {tab === 'dashboard' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
-            <KPICard label="Active Hunts"   value={dash?.active ?? '—'}       color="#fbbf24" />
-            <KPICard label="Completed"      value={dash?.completed ?? '—'}     />
-            <KPICard label="IOC Matches"    value={dash?.ioc_matches ?? '—'}   color="#f85149" />
-            <KPICard label="Success Rate"   value={dash ? `${Math.round(dash.success_rate)}%` : '—'} color="#22c55e" />
+            <MetricCard label="Active Hunts"   value={dash?.active ?? '—'}       color="#fbbf24" />
+            <MetricCard label="Completed"      value={dash?.completed ?? '—'}     />
+            <MetricCard label="IOC Matches"    value={dash?.ioc_matches ?? '—'}   color="#f85149" />
+            <MetricCard label="Success Rate"   value={dash ? `${Math.round(dash.success_rate)}%` : '—'} color="#22c55e" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="Saved Templates" value={dash?.saved ?? '—'} />
-            <KPICard label="Total Runs"      value={dash?.total ?? '—'} />
-            <KPICard label="Failed"          value={dash?.failed ?? '—'} color="#f85149" />
-            <KPICard label="Techniques Hunted" value={dash?.top_techniques?.length ?? '—'} color="var(--accent)" />
+            <MetricCard label="Saved Templates" value={dash?.saved ?? '—'} />
+            <MetricCard label="Total Runs"      value={dash?.total ?? '—'} />
+            <MetricCard label="Failed"          value={dash?.failed ?? '—'} color="#f85149" />
+            <MetricCard label="Techniques Covered" value={dash?.top_techniques?.length ?? '—'} color="var(--accent)" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -460,7 +452,7 @@ export default function HuntWorkbenchPage() {
                 <SparkTrend data={dash?.trend || []} key1="runs" />
               </div>
               <div className="g-card p-4">
-                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>Top MITRE Techniques</p>
+                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>MITRE Coverage — Saved Templates</p>
                 <div className="space-y-1.5">
                   {(dash?.top_techniques || []).map((t: any) => (
                     <div key={t.technique} className="flex items-center gap-2">
@@ -977,9 +969,9 @@ export default function HuntWorkbenchPage() {
       {tab === 'analytics' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <KPICard label="Total Runs"  value={analytics?.total_runs ?? '—'} />
-            <KPICard label="Total Hits"  value={analytics?.total_hits ?? '—'} color="#f85149" />
-            <KPICard label="Analysts"    value={analytics?.analysts?.length ?? '—'} />
+            <MetricCard label="Total Runs"  value={analytics?.total_runs ?? '—'} />
+            <MetricCard label="Total Hits"  value={analytics?.total_hits ?? '—'} color="#f85149" />
+            <MetricCard label="Analysts"    value={analytics?.analysts?.length ?? '—'} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

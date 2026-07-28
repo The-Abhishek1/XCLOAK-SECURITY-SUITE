@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 func InitFWETables() { createFWETables() }
@@ -227,8 +229,6 @@ func GetFWEDashboard(c *gin.Context) {
 		"unread_notifications":  unreadNotif,
 		"top_source_ips":        topSrc,
 		"top_dest_ips":          topDst,
-		"firewall_health":       "healthy",
-		"policy_compliance":     94,
 	})
 }
 
@@ -892,24 +892,102 @@ func GetFWEAudit(c *gin.Context) {
 
 // POST /api/fwe/ai
 func PostFWEAI(c *gin.Context) {
+	tid := tenantIDFromContext(c)
 	var b struct {
 		Action  string `json:"action"`
 		Context string `json:"context"`
 	}
 	c.ShouldBindJSON(&b)
-	responses := map[string]string{
-		"recommend_rules":         "Based on your traffic patterns, I recommend: (1) Block outbound traffic to port 4444/tcp — common C2 beacon port with 23 hits in the last 7 days. (2) Rate-limit inbound SSH to 10 connections/minute from external IPs — brute force attempts detected. (3) Create an allow rule for your monitoring subnet 10.10.0.0/24 to all servers on port 9090 — currently hitting the default-deny policy. (4) Block ICMP type 8 from unknown external ranges — ping sweep activity detected.",
-		"detect_redundant":        "Found 4 redundant rules: Rule FW-045 (Allow TCP 443 from ANY) is shadowed by Rule FW-012 (Allow HTTPS from WAN). Rule FW-088 (Deny TCP 23) duplicates Rule FW-031 (Block Telnet). Rules FW-067 and FW-068 have identical source/destination but different priorities — only FW-067 ever matches. Removing these would reduce rule evaluation time by ~18%.",
-		"identify_shadowed":       "Shadowed rules detected: Rule FW-072 (Allow RDP from 192.168.1.0/24) is completely shadowed by Rule FW-010 (Deny TCP 3389 inbound ANY) which has higher priority. Rule FW-091 (Allow SMB from FileServer) is shadowed by Rule FW-028 (Deny TCP 445 inbound). These rules will never match — consider removing or reordering them.",
-		"optimize_rule_order":     "Optimization recommendations: Move your most-hit rules to the top 10 positions — Rule FW-089 (Allow HTTPS) has 847K hits/day but sits at priority 450. Move high-confidence threat blocks (FW-030 to FW-045) above the default allow rules. Group related rules by zone for faster evaluation. Estimated throughput improvement: 22% reduction in rule evaluation cycles.",
-		"explain_traffic":         "Traffic decision for 203.0.113.45:54321 → 10.0.1.10:22: DENIED. Matched Rule FW-028 'Block External SSH' (priority 50, inbound, source: 0.0.0.0/0, destination: DMZ, port 22/tcp, action: deny). This rule was created 2024-01-15 by admin@corp.com as part of the security baseline policy. The connection was from an IP flagged in 3 threat intelligence feeds (AbuseIPDB score: 87/100).",
-		"recommend_improvements":  "Policy improvement recommendations: (1) Your default policy is ALLOW — switch to DENY-all with explicit allows for better security posture. (2) 12 rules have no expiry set for temporary access — add 30-day expiry. (3) Geo-blocking is not configured — recommend blocking high-risk countries (CN, KP, RU) for RDP and SSH ports. (4) No IDS/IPS integration detected — enable DPI on external-facing zones. (5) Logging is disabled on 34 allow rules — enable to improve forensic coverage.",
+
+	// ── Gather real firewall context for this tenant ────────────────────────
+	var ctx strings.Builder
+	ruleRows, _ := database.DB.Query(`SELECT id, name, source_ip, destination_ip, protocol, port_range, action, priority
+		FROM firewall_rules WHERE tenant_id=$1 AND enabled=TRUE ORDER BY priority ASC LIMIT 30`, tid)
+	if ruleRows != nil {
+		ctx.WriteString("Active firewall rules (ordered by priority):\n")
+		for ruleRows.Next() {
+			var id, priority int
+			var name, action string
+			var srcIP, dstIP, protocol, portRange *string
+			ruleRows.Scan(&id, &name, &srcIP, &dstIP, &protocol, &portRange, &action, &priority)
+			fmt.Fprintf(&ctx, "- [P%d] #%d %s: %s %s→%s %s/%s\n", priority, id, name, action,
+				strOrDefault(srcIP, "any"), strOrDefault(dstIP, "any"), strOrDefault(protocol, "any"), strOrDefault(portRange, "any"))
+		}
+		ruleRows.Close()
 	}
-	resp := responses[b.Action]
-	if resp == "" {
-		resp = "I can help with: recommend_rules, detect_redundant, identify_shadowed, optimize_rule_order, explain_traffic, recommend_improvements. Please specify an action."
+
+	threatRows, _ := database.DB.Query(`SELECT threat_type, src_ip, dst_ip, protocol, dst_port, severity, action_taken, COUNT(*) as hits
+		FROM fwe_threats WHERE tenant_id=$1 GROUP BY threat_type, src_ip, dst_ip, protocol, dst_port, severity, action_taken
+		ORDER BY hits DESC LIMIT 15`, tid)
+	if threatRows != nil {
+		ctx.WriteString("\nRecent threat patterns (grouped, most frequent first):\n")
+		for threatRows.Next() {
+			var threatType, action string
+			var srcIP, dstIP, protocol *string
+			var dstPort *int
+			var severity string
+			var hits int
+			threatRows.Scan(&threatType, &srcIP, &dstIP, &protocol, &dstPort, &severity, &action, &hits)
+			port := "any"
+			if dstPort != nil {
+				port = fmt.Sprintf("%d", *dstPort)
+			}
+			fmt.Fprintf(&ctx, "- %s (%s): %s→%s %s/%s, %d hits, %s\n", threatType, severity,
+				strOrDefault(srcIP, "unknown"), strOrDefault(dstIP, "unknown"), strOrDefault(protocol, "any"), port, hits, action)
+		}
+		threatRows.Close()
 	}
-	c.JSON(http.StatusOK, gin.H{"response": resp, "action": b.Action})
+
+	var activeConns, totalRules int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM fwe_connections WHERE tenant_id=$1 AND state='established'`, tid).Scan(&activeConns)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM firewall_rules WHERE tenant_id=$1`, tid).Scan(&totalRules)
+	fmt.Fprintf(&ctx, "\nActive established connections: %d\nTotal configured rules: %d\n", activeConns, totalRules)
+
+	if b.Context != "" {
+		fmt.Fprintf(&ctx, "\nAnalyst-provided context: %s\n", b.Context)
+	}
+	firewallCtx := ctx.String()
+
+	var task string
+	switch b.Action {
+	case "recommend_rules":
+		task = "Based on the observed threat patterns and existing rules, recommend specific new firewall rules to add (source/destination/protocol/port/action)."
+	case "detect_redundant":
+		task = "Analyze the active rules and identify any that are redundant or duplicate each other, explaining why."
+	case "identify_shadowed":
+		task = "Analyze the active rules ordered by priority and identify any that are shadowed (never evaluated) by a higher-priority rule."
+	case "optimize_rule_order":
+		task = "Recommend a better priority ordering for the active rules to improve both security posture and evaluation efficiency."
+	case "explain_traffic":
+		task = "Using the threat and connection data, explain what traffic patterns are being seen and how the current ruleset is (or isn't) handling them."
+	case "recommend_improvements":
+		task = "Give a prioritized list of firewall policy improvements based on the current rules, threat activity, and connection volume."
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
+	}
+
+	prompt := fmt.Sprintf(`You are a network security analyst reviewing this organization's real firewall configuration and traffic data.
+
+%s
+
+Task: %s
+
+Base your answer strictly on the data above — do not invent specific rule names, IPs, or figures not present in the data. If data is sparse, say so rather than inventing specifics. Respond in plain text (no markdown headers), suitable for direct display to the user.`, firewallCtx, task)
+
+	resp, err := services.CallLLM(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"response": strings.TrimSpace(resp), "action": b.Action})
+}
+
+func strOrDefault(s *string, def string) string {
+	if s == nil || *s == "" {
+		return def
+	}
+	return *s
 }
 
 // POST /api/fwe/validate

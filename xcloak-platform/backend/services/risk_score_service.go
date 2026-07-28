@@ -71,6 +71,16 @@ func CalculateRiskScore(
 		}
 	}
 
+	// Alert/vuln/incident counts are unbounded (a host can easily accumulate
+	// dozens of alerts over time), but this score is displayed everywhere as
+	// an "X/100" figure and as a percentage-width bar — without a clamp a
+	// busy host's score sails past 100 (e.g. 20+ alerts alone exceeds it),
+	// which both looks broken and makes every such host register as
+	// "critical" regardless of how much worse one host is than another.
+	if score > 100 {
+		score = 100
+	}
+
 	level := "low"
 
 	switch {

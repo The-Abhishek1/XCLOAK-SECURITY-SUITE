@@ -6,7 +6,7 @@ import { incidentsAPI, aiAPI } from '@/lib/api';
 import { Incident } from '@/types';
 import { sevClass, formatDate, timeAgo } from '@/lib/utils';
 import Link from 'next/link';
-import { Activity, AlertTriangle, BarChart2, Bell, BookOpen, Bot, Check, CheckCheck, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Clock, Copy, Cpu, Crosshair, Database, Download, Eye, FileSearch, FileText, Filter, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, MessageSquare, Network, Package, Play, Plus, Search, Send, Server, Shield, ShieldAlert, Square, Target, Terminal, TrendingUp, User, Users, X, XCircle, Zap, Lock } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, BarChart2, Bell, BookOpen, Bot, Check, CheckCheck, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight, Clock, Copy, Cpu, Crosshair, Database, Download, Eye, FileSearch, FileText, Filter, Flame, GitBranch, Globe2, HardDrive, Info, Layers, Loader2, MessageSquare, Network, Package, Play, Plus, Search, Send, Server, Shield, ShieldAlert, Square, Target, Terminal, TrendingUp, User, Users, X, XCircle, Zap, Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ interface SimilarIncident {
 interface Analytics {
   by_severity: Array<{severity: string; count: number}>;
   by_status: Array<{status: string; count: number}>;
-  mttr_hours: string; mttd_hours: string; mttc_hours: string;
+  mttr_hours: string; mttd_hours: string;
   trend: Array<{day: string; count: number}>;
   total: number; total_open: number;
 }
@@ -277,7 +277,13 @@ function ResponseActions({ incidentId, onAction }: { incidentId: number; onActio
       const r = await incidentsAPI.responseAction(incidentId, key, params);
       onAction((r.data as any)?.result ?? `${key} dispatched`);
       setActiveKey(null); setParam('');
-    } catch { onAction('Action failed — check permissions'); }
+    } catch (err) {
+      // Surface the backend's actual reason (e.g. "no identity provider
+      // integration configured") instead of a generic message that reads
+      // like an RBAC/permissions problem when it's really a capability gap.
+      const msg = (err as any)?.response?.data?.error;
+      onAction(msg || 'Action failed — check permissions');
+    }
     finally { setRunning(null); }
   };
 
@@ -940,46 +946,14 @@ function IncidentDetail({
           </div>
         </div>
 
-        {/* ── Row 9: SLA Tracking | Risk Assessment ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <div className={SEC_CARD}>
-            <SectionHeader icon={Clock} title="SLA Tracking" />
-            <div className="p-4 space-y-3">
-              {[
-                { label:'Time to Acknowledge', slaH:0.5,  color:'var(--green)' },
-                { label:'Time to Assign',       slaH:1,    color:'var(--green)' },
-                { label:'Time to Investigate',  slaH:INCIDENT_SLA[incident.severity]*0.3, color:'var(--yellow)' },
-                { label:'Time to Contain',      slaH:INCIDENT_SLA[incident.severity]*0.7, color:'var(--orange)' },
-                { label:'Time to Resolve',      slaH:INCIDENT_SLA[incident.severity],     color:'var(--red)' },
-              ].map(s => {
-                const ageH = (Date.now() - new Date(incident.created_at).getTime()) / 3_600_000;
-                const pct = Math.min(100, (ageH / s.slaH) * 100);
-                const done = incident.status === 'resolved' || incident.status === 'closed';
-                return (
-                  <div key={s.label}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ color:'var(--text-2)' }}>{s.label}</span>
-                      <span className="text-[10px] font-mono" style={{ color: done ? 'var(--green)' : pct >= 100 ? 'var(--red)' : 'var(--text-3)' }}>
-                        {done ? '✓ Done' : pct >= 100 ? 'Breached' : `${(s.slaH - ageH).toFixed(1)}h left`}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background:'var(--border)' }}>
-                      <div className="h-full rounded-full transition-all"
-                        style={{ width:`${done?100:pct}%`, background: done ? 'var(--green)' : pct >= 100 ? 'var(--red)' : s.color }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
+        {/* ── Row 9: Risk Assessment ── */}
+        <div className="grid grid-cols-1 gap-3">
           <div className={SEC_CARD}>
             <SectionHeader icon={BarChart2} title="Risk Assessment" />
             <div className="p-4 space-y-3">
               {[
                 { label:'Incident Risk',   val: incident.severity,    color: SEV_COLOR[incident.severity] },
                 { label:'Threat Level',    val: incident.severity === 'critical' ? 'Critical' : incident.severity === 'high' ? 'High' : 'Elevated', color: SEV_COLOR[incident.severity] },
-                { label:'Exploitability',  val: incident.severity === 'critical' ? 'Active' : 'Moderate', color: 'var(--orange)' },
                 { label:'Exposure',        val: deepDive?.affected_asset.status === 'online' ? 'Actively Exposed' : 'Limited', color: 'var(--yellow)' },
                 { label:'Business Risk',   val: deepDive?.affected_asset.risk_level || 'Medium', color: 'var(--text-2)' },
                 { label:'Active Attack',   val: incident.status === 'open' || incident.status === 'investigating' ? 'Yes' : 'No', color: incident.status === 'open' ? 'var(--red)' : 'var(--green)' },
@@ -1023,11 +997,10 @@ function IncidentDetail({
               {!analytics ? <Spinner />
                 : (
                   <>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {[
                         { label:'MTTD', val:`${analytics.mttd_hours}h`, desc:'Mean detect time' },
                         { label:'MTTR', val: hasResolvedIncidents(analytics) ? `${analytics.mttr_hours}h` : '—', desc:'Mean resolve time' },
-                        { label:'MTTC', val: hasResolvedIncidents(analytics) ? `${analytics.mttc_hours}h` : '—', desc:'Mean contain time' },
                       ].map(m => (
                         <div key={m.label} className="rounded-xl px-3 py-2.5 text-center"
                           style={{ background:'var(--glass-bg)', border:'1px solid var(--border)' }}>
@@ -1087,23 +1060,28 @@ function IncidentDetail({
             <div className="p-4 space-y-2">
               {[
                 { label:'Export Incidents CSV',      href:'/api/export/incidents',      icon:Download, desc:'All incidents for this tenant' },
-                { label:'Executive PDF Report',      href:'#',                          icon:FileText, desc:'High-level overview' },
-                { label:'Technical DFIR Report',     href:'#',                          icon:BookOpen, desc:'Detailed forensic export' },
-                { label:'STIX / TAXII Export',       href:'#',                          icon:Package,  desc:'Machine-readable IOCs' },
+                { label:'Executive PDF Report',      href:null,                          icon:FileText, desc:'High-level overview' },
+                { label:'Technical DFIR Report',     href:null,                          icon:BookOpen, desc:'Detailed forensic export' },
+                { label:'STIX / TAXII Export',       href:null,                          icon:Package,  desc:'Machine-readable IOCs' },
                 { label:'Open in Compliance',        href:'/risk-posture',              icon:Shield,   desc:'Check compliance impact' },
                 { label:'Open Attack Path',          href:'/attack-path',               icon:GitBranch,desc:'View lateral movement graph' },
-              ].map(item => (
-                <Link key={item.label} href={item.href}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[var(--glass-hover)] transition-colors"
-                  style={{ background:'var(--glass-bg)', border:'1px solid var(--border)' }}>
-                  <item.icon className="h-3.5 w-3.5 shrink-0" style={{ color:'var(--accent)' }} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium" style={{ color:'var(--text-1)' }}>{item.label}</p>
-                    <p className="text-[10px]" style={{ color:'var(--text-3)' }}>{item.desc}</p>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 ml-auto" style={{ color:'var(--text-3)' }} />
-                </Link>
-              ))}
+              ].map(item => {
+                const content = (
+                  <>
+                    <item.icon className="h-3.5 w-3.5 shrink-0" style={{ color:'var(--accent)' }} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium" style={{ color:'var(--text-1)' }}>{item.label}</p>
+                      <p className="text-[10px]" style={{ color:'var(--text-3)' }}>{item.desc}</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 ml-auto" style={{ color:'var(--text-3)' }} />
+                  </>
+                );
+                const cls = "flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[var(--glass-hover)] transition-colors w-full text-left";
+                const style = { background:'var(--glass-bg)', border:'1px solid var(--border)' };
+                return item.href
+                  ? <Link key={item.label} href={item.href} className={cls} style={style}>{content}</Link>
+                  : <button key={item.label} onClick={() => notify(`${item.label} — coming soon`)} className={cls} style={style}>{content}</button>;
+              })}
             </div>
           </div>
         </div>

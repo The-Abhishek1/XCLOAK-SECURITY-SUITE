@@ -20,11 +20,6 @@ interface LogEntry {
   id: number; agent_id: number; log_source: string;
   log_message: string; parsed_fields: string; collected_at: string;
 }
-interface LogStats {
-  total: number; search_time_ms?: number; docs_scanned?: number;
-  hourly_volume: { hour: string; count: number }[];
-  top_sources?: { name: string; count: number }[];
-}
 interface SavedLogSearch {
   id: number; name: string; query: string; time_range: string;
   run_count: number; last_run_at?: string; created_by?: string;
@@ -772,7 +767,6 @@ export default function LogSearchPage() {
 
   // Meta
   const [agents,     setAgents]     = useState<Agent[]>([]);
-  const [stats,      setStats]      = useState<LogStats | null>(null);
   const [saved,      setSaved]      = useState<SavedLogSearch[]>([]);
   const [fields,     setFields]     = useState<FieldMeta[]>([]);
   const [templates,  setTemplates]  = useState<SearchTemplate[]>([]);
@@ -810,7 +804,6 @@ export default function LogSearchPage() {
     setHistory(loadHistory());
     setBookmarks(loadBookmarks());
     agentsAPI.getAll().then(r => setAgents(r.data || [])).catch(() => {});
-    logSearchAPI.stats().then(r => setStats(r.data)).catch(() => {});
     logSearchAPI.getSavedSearches().then(r => setSaved(r.data || [])).catch(() => {});
     logSearchAPI.getTemplates().then(r => setTemplates((r as any).data?.templates || [])).catch(() => {});
     logSearchAPI.getFields().then(r => setFields((r as any).data?.fields || [])).catch(() => {});
@@ -845,8 +838,32 @@ export default function LogSearchPage() {
     finally { setLoading(false); }
   }, [query, agentID, timeRange, source]);
 
+  // /api/logs/stats' hourly_volume is a fixed last-24h backend query,
+  // decoupled from whatever range the user actually searched — for anything
+  // other than a "last 24h" search over fresh data it silently comes back
+  // empty even with real results on screen. Derive real per-hour counts
+  // from the results we already have instead; same {hour,count} shape so
+  // the drillIdx filter below keeps working unchanged.
+  const derivedHourlyVolume = useMemo(() => {
+    if (allLogs.length === 0) return [];
+    const times = allLogs.map(l => new Date(l.collected_at).getTime());
+    const minHour = Math.floor(Math.min(...times) / 3600000) * 3600000;
+    const maxHour = Math.floor(Math.max(...times) / 3600000) * 3600000;
+    const hourCount = Math.min(200, Math.round((maxHour - minHour) / 3600000) + 1);
+    const startHour = maxHour - (hourCount - 1) * 3600000;
+    const buckets = new Map<number, number>();
+    for (const t of times) {
+      const h = Math.floor(t / 3600000) * 3600000;
+      if (h >= startHour) buckets.set(h, (buckets.get(h) ?? 0) + 1);
+    }
+    return Array.from({ length: hourCount }, (_, i) => {
+      const h = startHour + i * 3600000;
+      return { hour: new Date(h).toISOString(), count: buckets.get(h) ?? 0 };
+    });
+  }, [allLogs]);
+
   const filteredLogs = useMemo(() => {
-    const drillHour = drillIdx !== null && stats?.hourly_volume[drillIdx];
+    const drillHour = drillIdx !== null && derivedHourlyVolume[drillIdx];
     return allLogs.filter(log => {
       if (!matchLog(log, parsedQ.terms)) return false;
       if (pivots.length > 0) {
@@ -863,7 +880,7 @@ export default function LogSearchPage() {
       }
       return true;
     });
-  }, [allLogs, parsedQ.terms, pivots, drillIdx, stats]);
+  }, [allLogs, parsedQ.terms, pivots, drillIdx, derivedHourlyVolume]);
 
   const aggPipe    = parsedQ.pipes.find(p => p.type === 'stats' || p.type === 'top');
   const corrPipe   = parsedQ.pipes.find(p => p.type === 'correlate');
@@ -1371,9 +1388,9 @@ export default function LogSearchPage() {
           )}
 
           {/* Histogram */}
-          {stats && allLogs.length > 0 && (
+          {allLogs.length > 0 && (
             <div className="px-3 py-2 rounded-xl shrink-0" style={{ background: 'var(--bg-1)', border: '1px solid var(--border)' }}>
-              <Histogram volume={stats.hourly_volume} drillIdx={drillIdx} onDrill={setDrillIdx} />
+              <Histogram volume={derivedHourlyVolume} drillIdx={drillIdx} onDrill={setDrillIdx} />
             </div>
           )}
 

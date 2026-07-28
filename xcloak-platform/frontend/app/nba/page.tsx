@@ -55,7 +55,7 @@ interface LateralAnomaly {
 interface LateralData { lateral_events: LateralEvent[]; lateral_anomalies: LateralAnomaly[]; total: number; }
 interface TIHit {
   agent_id: number; hostname: string; remote_address: string; process: string;
-  ioc_type: string; ioc_value: string; threat_type: string; confidence: number; first_seen: string;
+  ioc_type: string; ioc_value: string; threat_type: string; severity: string; first_seen: string;
 }
 interface IOCBlock { ip: string; hit_count: number; blocked_at: string; }
 interface ThreatIntelData { threat_intel_hits: TIHit[]; ioc_blocks: IOCBlock[]; total_hits: number; }
@@ -81,6 +81,9 @@ interface AIInsight {
 }
 
 // ── Helpers / constants ───────────────────────────────────────────────────
+
+const WINDOW_OPTIONS: [number, string][] = [[15,'15m'],[30,'30m'],[60,'1h'],[360,'6h'],[1440,'24h'],[10080,'7d']];
+const formatWindow = (m: number) => WINDOW_OPTIONS.find(([v]) => v === m)?.[1] ?? `${m}m`;
 
 const RISK_COLOR = (s: number) => s >= 80 ? 'var(--red)' : s >= 60 ? 'var(--orange)' : s >= 30 ? 'var(--yellow)' : 'var(--green)';
 const RL: Record<string, string> = { critical: 'var(--red)', high: 'var(--orange)', medium: 'var(--yellow)', low: 'var(--green)' };
@@ -569,7 +572,7 @@ function ThreatIntelPanel({ data, loading }: { data: ThreatIntelData | null; loa
             <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{h.hostname}</span>
             <div className="flex items-center gap-1.5">
               <Tag text={h.ioc_type.toUpperCase()} color="var(--red)" />
-              <Tag text={`${h.confidence}%`} color="var(--orange)" />
+              <Tag text={h.severity?.toUpperCase()} color={RISK_COLOR(h.severity === 'critical' ? 90 : h.severity === 'high' ? 70 : h.severity === 'medium' ? 40 : 10)} />
             </div>
           </div>
           <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--red)' }}>{h.remote_address}</p>
@@ -766,24 +769,25 @@ function AnalyticsPanel({ data, loading }: { data: AnalyticsData | null; loading
 // ── Response Actions ───────────────────────────────────────────────────────
 
 const RESPONSE_ACTIONS = [
-  { key: 'block_ip',          label: 'Block IP',           icon: Ban,       color: 'var(--red)',    needs: 'ip',      placeholder: 'IP address' },
-  { key: 'block_domain',      label: 'Block Domain',       icon: Globe,     color: 'var(--red)',    needs: 'domain',  placeholder: 'domain.com' },
-  { key: 'block_asn',         label: 'Block ASN',          icon: Layers,    color: 'var(--orange)', needs: 'asn',     placeholder: 'AS12345' },
-  { key: 'push_firewall_rule',label: 'Push Firewall Rule', icon: Shield,    color: 'var(--orange)', needs: 'ip',      placeholder: 'Target IP' },
-  { key: 'isolate_endpoint',  label: 'Isolate Endpoint',   icon: Server,    color: 'var(--red)',    needs: 'agent_id',placeholder: 'Agent ID' },
-  { key: 'kill_process',      label: 'Kill Process',       icon: XCircle,   color: 'var(--orange)', needs: 'pid',     placeholder: 'PID' },
-  { key: 'create_incident',   label: 'Create Incident',    icon: ShieldAlert,color: 'var(--accent)',needs: 'reason',  placeholder: 'Description' },
-  { key: 'start_pcap',        label: 'Start PCAP',         icon: FlaskConical,color:'var(--accent)',needs: 'agent_id',placeholder: 'Agent ID' },
-  { key: 'run_playbook',      label: 'Run SOAR Playbook',  icon: Play,      color: 'var(--accent)', needs: null,      placeholder: '' },
-];
+  { key: 'block_ip',          label: 'Block IP',           icon: Ban,       color: 'var(--red)',    needs: 'ip',        placeholder: 'IP address' },
+  { key: 'block_domain',      label: 'Block Domain',       icon: Globe,     color: 'var(--red)',    needs: 'domain',    placeholder: 'domain.com' },
+  { key: 'block_asn',         label: 'Block ASN',          icon: Layers,    color: 'var(--orange)', needs: 'asn',       placeholder: 'AS12345' },
+  { key: 'push_firewall_rule',label: 'Push Firewall Rule', icon: Shield,    color: 'var(--orange)', needs: 'ip',        placeholder: 'Target IP' },
+  { key: 'isolate_endpoint',  label: 'Isolate Endpoint',   icon: Server,    color: 'var(--red)',    needs: 'agent_id',  placeholder: 'Agent ID' },
+  { key: 'kill_process',      label: 'Kill Process',       icon: XCircle,   color: 'var(--orange)', needs: 'pid',       placeholder: 'PID', needs2: 'agent_id', placeholder2: 'Agent ID' },
+  { key: 'create_incident',   label: 'Create Incident',    icon: ShieldAlert,color: 'var(--accent)',needs: 'reason',    placeholder: 'Description' },
+  { key: 'start_pcap',        label: 'Start PCAP',         icon: FlaskConical,color:'var(--accent)',needs: 'agent_id',  placeholder: 'Agent ID' },
+  { key: 'run_playbook',      label: 'Run SOAR Playbook',  icon: Play,      color: 'var(--accent)', needs: 'playbook_id', placeholder: 'Playbook ID' },
+] as const;
 
 function ResponseActionsPanel({ onToast }: { onToast: (m: string) => void }) {
   const [active, setActive] = useState<string | null>(null);
   const [param, setParam] = useState('');
+  const [param2, setParam2] = useState('');
   const [reason, setReason] = useState('');
   const [running, setRunning] = useState<string | null>(null);
 
-  const dispatch = async (key: string, a: typeof RESPONSE_ACTIONS[0]) => {
+  const dispatch = async (key: string, a: typeof RESPONSE_ACTIONS[number]) => {
     setRunning(key);
     try {
       const body: Record<string, unknown> = { reason };
@@ -792,11 +796,19 @@ function ResponseActionsPanel({ onToast }: { onToast: (m: string) => void }) {
       else if (a.needs === 'asn') body.asn = param;
       else if (a.needs === 'agent_id') body.agent_id = parseInt(param) || 0;
       else if (a.needs === 'pid') body.pid = parseInt(param) || 0;
+      else if (a.needs === 'playbook_id') body.playbook_id = parseInt(param) || 0;
       else if (a.needs === 'reason') body.reason = param;
+      if ('needs2' in a && a.needs2 === 'agent_id') body.agent_id = parseInt(param2) || 0;
       const r = await nbaAPI.responseAction(key, body);
       onToast((r.data as any)?.result ?? `${key} executed`);
-      setActive(null); setParam('');
-    } catch { onToast('Action failed'); }
+      setActive(null); setParam(''); setParam2('');
+    } catch (err) {
+      // Surface the backend's actual reason (e.g. "packet capture is not
+      // supported by the agent yet") instead of a generic message — same
+      // fix as the Incidents page.
+      const msg = (err as any)?.response?.data?.error;
+      onToast(msg || 'Action failed');
+    }
     finally { setRunning(null); }
   };
 
@@ -804,18 +816,25 @@ function ResponseActionsPanel({ onToast }: { onToast: (m: string) => void }) {
     <div className="p-3 space-y-3">
       {active && (() => {
         const a = RESPONSE_ACTIONS.find(x => x.key === active)!;
+        const needs2 = 'needs2' in a ? a.needs2 : undefined;
+        const placeholder2 = 'placeholder2' in a ? a.placeholder2 : undefined;
         return a.needs && (
           <div className="flex items-center gap-2 rounded-lg px-3 py-2.5"
             style={{ background: 'var(--glass-bg)', border: '1px solid var(--accent-border)' }}>
             <input value={param} onChange={e => setParam(e.target.value)}
               placeholder={a.placeholder} className="g-input flex-1 text-xs"
-              onKeyDown={e => e.key === 'Enter' && param && dispatch(active, a)} />
+              onKeyDown={e => e.key === 'Enter' && param && (!needs2 || param2) && dispatch(active, a)} />
+            {needs2 && (
+              <input value={param2} onChange={e => setParam2(e.target.value)}
+                placeholder={placeholder2} className="g-input flex-1 text-xs"
+                onKeyDown={e => e.key === 'Enter' && param && param2 && dispatch(active, a)} />
+            )}
             <input value={reason} onChange={e => setReason(e.target.value)}
               placeholder="Reason…" className="g-input flex-1 text-xs" />
-            <button onClick={() => dispatch(active, a)} disabled={!param || running !== null} className="g-btn g-btn-primary text-xs px-3">
+            <button onClick={() => dispatch(active, a)} disabled={!param || (!!needs2 && !param2) || running !== null} className="g-btn g-btn-primary text-xs px-3">
               {running === active ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Execute'}
             </button>
-            <button onClick={() => { setActive(null); setParam(''); }} className="g-btn g-btn-ghost text-xs px-2">
+            <button onClick={() => { setActive(null); setParam(''); setParam2(''); }} className="g-btn g-btn-ghost text-xs px-2">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -824,7 +843,7 @@ function ResponseActionsPanel({ onToast }: { onToast: (m: string) => void }) {
       <div className="grid grid-cols-3 gap-1.5">
         {RESPONSE_ACTIONS.map(a => (
           <button key={a.key}
-            onClick={() => a.needs ? (setActive(a.key), setParam('')) : dispatch(a.key, a)}
+            onClick={() => { setActive(a.key); setParam(''); setParam2(''); }}
             disabled={running !== null}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--glass-hover)] transition-colors"
             style={{ background: 'var(--glass-bg)', border: `1px solid ${a.color}33` }}>
@@ -1027,7 +1046,10 @@ function PCAPPanel({ onToast }: { onToast: (m: string) => void }) {
     try {
       const r = await nbaAPI.responseAction('start_pcap', { agent_id: parseInt(agentId), reason: `PCAP capture for ${duration}s` });
       onToast((r.data as any)?.result ?? 'PCAP capture started');
-    } catch { onToast('PCAP capture failed'); }
+    } catch (err) {
+      const msg = (err as any)?.response?.data?.error;
+      onToast(msg || 'PCAP capture failed');
+    }
     finally { setRunning(false); }
   };
 
@@ -1124,26 +1146,41 @@ export default function NBAPage() {
     return s;
   }, [overview]);
 
+  // Guards against an in-flight request for a stale `minutes` window
+  // resolving after a newer one and clobbering the UI with outdated numbers
+  // (e.g. switching the window selector right after page load).
+  const minutesRef = useRef(minutes);
+  minutesRef.current = minutes;
+
   const loadOverview = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
     setLoadingO(true);
+    const requestedFor = minutes;
     const r = await nbaAPI.getOverview(minutes);
-    if (r.data) setOverview(r.data as Overview);
-    setLoadingO(false); setRefreshing(false);
+    if (requestedFor === minutesRef.current) {
+      if (r.data) setOverview(r.data as Overview);
+      setLoadingO(false); setRefreshing(false);
+    }
   }, [minutes]);
 
   const loadFlows = useCallback(async () => {
     setLoadingF(true);
+    const requestedFor = minutes;
     const r = await nbaAPI.getFlows({ minutes });
-    setFlows((r.data as any)?.flows ?? []);
-    setLoadingF(false);
+    if (requestedFor === minutesRef.current) {
+      setFlows((r.data as any)?.flows ?? []);
+      setLoadingF(false);
+    }
   }, [minutes]);
 
   const loadTraffic = useCallback(async () => {
     setLoadingT(true);
+    const requestedFor = minutes;
     const r = await nbaAPI.getTrafficAnalysis(Math.ceil(minutes / 60));
-    if (r.data) setTraffic(r.data as TrafficAnalysis);
-    setLoadingT(false);
+    if (requestedFor === minutesRef.current) {
+      if (r.data) setTraffic(r.data as TrafficAnalysis);
+      setLoadingT(false);
+    }
   }, [minutes]);
 
   useEffect(() => {
@@ -1215,7 +1252,7 @@ export default function NBAPage() {
               { l: 'C2 Comms',        v: overview.c2_communications,                     c: overview.c2_communications > 0 ? 'var(--red)' : 'var(--text-3)',       i: Crosshair },
               { l: 'High Risk Hosts', v: overview.high_risk_hosts,                       c: overview.high_risk_hosts > 0 ? 'var(--orange)' : 'var(--text-3)',      i: Server },
               { l: 'Net Risk Score',  v: `${overview.network_risk_score}/100`,           c: RISK_COLOR(overview.network_risk_score),                                i: Shield },
-              { l: 'Window',          v: `${overview.window_minutes}m`,                  c: 'var(--text-3)',    i: Clock },
+              { l: 'Window',          v: formatWindow(overview.window_minutes),          c: 'var(--text-3)',    i: Clock },
             ].map(({ l, v, c, i: Icon }) => (
               <div key={l} className="g-card p-2.5 flex items-center gap-2">
                 <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: c }} />
@@ -1237,7 +1274,7 @@ export default function NBAPage() {
             {searchQ && <button onClick={() => setSearchQ('')} className="absolute right-2.5 top-1/2 -translate-y-1/2"><X className="h-3 w-3" style={{ color: 'var(--text-3)' }} /></button>}
           </div>
           <select value={minutes} onChange={e => setMinutes(+e.target.value)} className="g-select text-xs">
-            {[[15,'15m'],[30,'30m'],[60,'1h'],[360,'6h'],[1440,'24h'],[10080,'7d']].map(([v, l]) => (
+            {WINDOW_OPTIONS.map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
           </select>

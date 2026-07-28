@@ -162,8 +162,8 @@ func promoteClusterToIncident(clusterID, tenantID int, c interface{}) {
 
 	var incidentID int
 	err := database.DB.QueryRow(`
-		INSERT INTO incidents (tenant_id, title, severity, status, created_by)
-		VALUES ($1,$2,$3,'open','auto-cluster')
+		INSERT INTO incidents (tenant_id, title, severity, status)
+		VALUES ($1,$2,$3,'open')
 		RETURNING id`, tenantID, title, maxSev,
 	).Scan(&incidentID)
 	if err != nil {
@@ -173,12 +173,13 @@ func promoteClusterToIncident(clusterID, tenantID int, c interface{}) {
 
 	database.DB.Exec(`UPDATE alert_clusters SET auto_incident_id=$1, status='promoted' WHERE id=$2`, incidentID, clusterID)
 
-	// Link all cluster alerts to the new incident
+	// alerts has no incident_id column to link individual member alerts, so
+	// record the promotion (and which alerts triggered it) as a real
+	// incident_events entry instead of the no-op UPDATE this used to be.
 	database.DB.Exec(`
-		UPDATE alerts SET incident_id=$1
-		FROM alert_cluster_members
-		WHERE alert_cluster_members.cluster_id=$2
-		  AND alerts.id=alert_cluster_members.alert_id`, incidentID, clusterID)
+		INSERT INTO incident_events (incident_id, event_type, details, tenant_id)
+		VALUES ($1,'cluster_promoted',$2,$3)`,
+		incidentID, fmt.Sprintf("Auto-promoted from alert cluster #%d (%d alerts, rule: %s)", clusterID, alertCount, ruleName), tenantID)
 
 	log.Printf("[Cluster] promoted cluster #%d to incident #%d (%s, %d alerts)", clusterID, incidentID, maxSev, alertCount)
 }

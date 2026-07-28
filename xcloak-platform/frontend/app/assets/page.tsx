@@ -2,6 +2,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { cmdbAPI } from '@/lib/api';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Boxes, LayoutGrid, Share2, Radar, HeartPulse, ShieldAlert,
+  ShieldCheck, BarChart3, Sparkles, FileBarChart2, ScrollText, X, Check, FilePlus2, Bell,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'inventory' | 'categories' | 'relationships' | 'discovery' | 'health' | 'risk' | 'compliance' | 'analytics' | 'ai' | 'reports' | 'audit';
 
@@ -25,16 +30,6 @@ function pill(label: string, color: string) {
       borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600,
       display: 'inline-block', whiteSpace: 'nowrap',
     }}>{label}</span>
-  );
-}
-
-function StatCard({ label, value, sub, color }: { label: string; value: any; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '16px 20px', minWidth: 140 }}>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color ?? 'var(--text-1)' }}>{value}</div>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 2 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{sub}</div>}
-    </div>
   );
 }
 
@@ -115,18 +110,21 @@ function AIPanel({ onClose, selectedAsset }: { onClose: () => void; selectedAsse
   return (
     <div style={{ position: 'fixed', inset: '0 0 0 auto', width: 420, background: 'var(--bg-1)', borderLeft: '1px solid var(--border)', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>✦ AI Asset Advisor</div>
-          {selectedAsset && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{selectedAsset.name}</div>}
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>AI Asset Advisor</div>
+            {selectedAsset && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{selectedAsset.name}</div>}
+          </div>
         </div>
-        <button className="g-btn-ghost" onClick={onClose} style={{ fontSize: 18, padding: '4px 8px' }}>✕</button>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '4px 8px' }} />
       </div>
       <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {AI_ACTIONS.map(a => (
-          <button key={a.id} className={action === a.id ? 'g-btn' : 'g-btn-ghost'}
+          <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'}
             onClick={() => run(a.id)} style={{ fontSize: 12, padding: '6px 12px' }}>
             {a.label}
-          </button>
+          </ActionButton>
         ))}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
@@ -147,7 +145,6 @@ function AIPanel({ onClose, selectedAsset }: { onClose: () => void; selectedAsse
 function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () => void }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tlTab, setTlTab] = useState<'overview' | 'timeline' | 'security'>('overview');
 
   useEffect(() => {
     setLoading(true);
@@ -161,7 +158,7 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
           <div style={{ fontWeight: 700, fontSize: 15 }}>{loading ? '…' : data?.name}</div>
           {data && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{data.hostname} · {data.asset_type} · {data.category}</div>}
         </div>
-        <button className="g-btn-ghost" onClick={onClose} style={{ fontSize: 18, padding: '4px 8px' }}>✕</button>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '4px 8px' }} />
       </div>
 
       {loading && <div style={{ padding: 32, color: 'var(--text-2)', textAlign: 'center' }}>Loading…</div>}
@@ -190,8 +187,7 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
           </div>
 
           {/* info grid */}
-          <div className="g-card" style={{ padding: 16, marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Asset Information</div>
+          <SectionCard title="Asset Information" className="mb-4">
             {[
               ['Asset ID', data.asset_id],
               ['Owner', data.owner],
@@ -214,11 +210,10 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
                 <span style={{ color: 'var(--text-1)', maxWidth: 220, textAlign: 'right' }}>{v}</span>
               </div>
             ) : null)}
-          </div>
+          </SectionCard>
 
           {/* security controls */}
-          <div className="g-card" style={{ padding: 16, marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Security Controls</div>
+          <SectionCard title="Security Controls" className="mb-4">
             {[
               ['Patch Status', data.patch_status],
               ['Antivirus', data.antivirus_status],
@@ -232,23 +227,21 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
                 <span>{pill(String(v), String(v).toLowerCase())}</span>
               </div>
             ))}
-          </div>
+          </SectionCard>
 
           {/* IP addresses */}
           {data.ip_addresses && data.ip_addresses !== '[]' && (
-            <div className="g-card" style={{ padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>IP Addresses</div>
+            <SectionCard title="IP Addresses" className="mb-4">
               <div style={{ fontSize: 13, color: 'var(--text-1)', fontFamily: 'monospace' }}>
                 {(() => { try { return (JSON.parse(data.ip_addresses) as string[]).join(', ') || '—'; } catch { return data.ip_addresses; } })()}
               </div>
               {data.mac_address && <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>MAC: {data.mac_address}</div>}
-            </div>
+            </SectionCard>
           )}
 
           {/* related assets */}
           {data.related_assets?.length > 0 && (
-            <div className="g-card" style={{ padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Related Assets</div>
+            <SectionCard title="Related Assets" className="mb-4">
               {data.related_assets.map((r: any) => (
                 <div key={r.asset_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                   <div>
@@ -258,13 +251,12 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
                   {pill(r.status, r.status)}
                 </div>
               ))}
-            </div>
+            </SectionCard>
           )}
 
           {/* timeline */}
           {data.timeline?.length > 0 && (
-            <div className="g-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recent Timeline</div>
+            <SectionCard title="Recent Timeline">
               {data.timeline.slice(0, 10).map((t: any, i: number) => (
                 <div key={i} style={{ display: 'flex', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.severity === 'critical' ? '#ef4444' : t.severity === 'high' ? '#f97316' : t.severity === 'medium' ? '#eab308' : '#22c55e', marginTop: 5, flexShrink: 0 }} />
@@ -274,7 +266,7 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
                   </div>
                 </div>
               ))}
-            </div>
+            </SectionCard>
           )}
         </div>
       )}
@@ -289,69 +281,62 @@ function DashboardTab({ d }: { d: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-        <StatCard label="Total Assets" value={d.total?.toLocaleString() ?? 0} />
-        <StatCard label="Online" value={d.online?.toLocaleString() ?? 0} color="#22c55e" />
-        <StatCard label="Offline" value={d.offline?.toLocaleString() ?? 0} color="#6b7280" />
-        <StatCard label="Critical Assets" value={d.critical?.toLocaleString() ?? 0} color="#ef4444" />
-        <StatCard label="Internet Facing" value={d.internet_facing?.toLocaleString() ?? 0} color="#f97316" />
-        <StatCard label="Unmanaged" value={d.unmanaged?.toLocaleString() ?? 0} color="#f97316" />
-        <StatCard label="Retired" value={d.retired?.toLocaleString() ?? 0} color="#6b7280" />
-        <StatCard label="New (7d)" value={d.new_last_7d?.toLocaleString() ?? 0} color="#6366f1" />
+        <MetricCard label="Total Assets" value={d.total?.toLocaleString() ?? 0} />
+        <MetricCard label="Online" value={d.online?.toLocaleString() ?? 0} color="#22c55e" />
+        <MetricCard label="Offline" value={d.offline?.toLocaleString() ?? 0} color="#6b7280" />
+        <MetricCard label="Critical Assets" value={d.critical?.toLocaleString() ?? 0} color="#ef4444" />
+        <MetricCard label="Internet Facing" value={d.internet_facing?.toLocaleString() ?? 0} color="#f97316" />
+        <MetricCard label="Unmanaged" value={d.unmanaged?.toLocaleString() ?? 0} color="#f97316" />
+        <MetricCard label="Retired" value={d.retired?.toLocaleString() ?? 0} color="#6b7280" />
+        <MetricCard label="New (7d)" value={d.new_last_7d?.toLocaleString() ?? 0} color="#6366f1" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>CMDB Coverage</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: '#22c55e' }}>{d.cmdb_coverage ?? 0}%</div>
           <ProgressBar pct={d.cmdb_coverage ?? 0} color="#22c55e" />
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
+        </SectionCard>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Agent Coverage</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: '#6366f1' }}>{Math.round(d.agent_coverage ?? 0)}%</div>
           <ProgressBar pct={d.agent_coverage ?? 0} color="#6366f1" />
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
+        </SectionCard>
+        <SectionCard>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Avg Risk Score</div>
           <div style={{ fontSize: 32, fontWeight: 700, color: '#f97316' }}>{Math.round(d.avg_risk_score ?? 0)}</div>
           <ProgressBar pct={d.avg_risk_score ?? 0} color="#f97316" />
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>By Asset Type</div>
+        <SectionCard title="By Asset Type">
           {(d.by_type ?? []).map((t: any) => (
             <HorizBar key={t.type} label={t.type} value={t.count} max={d.total}
               color={TYPE_COLORS[t.type] ?? '#6b7280'} />
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>By Criticality</div>
+        </SectionCard>
+        <SectionCard title="By Criticality">
           {(d.by_criticality ?? []).map((c: any) => (
             <HorizBar key={c.criticality} label={c.criticality} value={c.count} max={d.total}
               color={c.criticality === 'critical' ? '#ef4444' : c.criticality === 'high' ? '#f97316' : c.criticality === 'medium' ? '#eab308' : '#22c55e'} />
           ))}
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Recent Discoveries</div>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr>
-            <th>Name</th><th>Type</th><th>Source</th><th>Discovered</th>
-          </tr></thead>
-          <tbody>
-            {(d.recent_discoveries ?? []).map((r: any) => (
-              <tr key={r.asset_id}>
-                <td style={{ fontWeight: 500 }}>{r.name}</td>
-                <td>{pill(r.asset_type, r.asset_type)}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.discovery_source}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard title="Recent Discoveries" padded={false}>
+        <DataTable<any>
+          columns={[
+            { key: 'name', header: 'Name', render: (r: any) => <span style={{ fontWeight: 500 }}>{r.name}</span> },
+            { key: 'asset_type', header: 'Type', render: (r: any) => pill(r.asset_type, r.asset_type) },
+            { key: 'discovery_source', header: 'Source', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.discovery_source}</span> },
+            { key: 'created_at', header: 'Discovered', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span> },
+          ]}
+          rows={d.recent_discoveries ?? []}
+          rowKey={(r: any) => r.asset_id}
+          emptyState={<EmptyState title="No recent discoveries" />}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -414,64 +399,66 @@ function InventoryTab({ assets, onSelect }: { assets: any[]; onSelect: (a: any) 
 
       {/* bulk bar */}
       {selected.size > 0 && (
-        <div className="g-card" style={{ padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{selected.size} selected</span>
-          <select className="g-input" value={bulkOp} onChange={e => setBulkOp(e.target.value)} style={{ width: 180 }}>
-            <option value="assign_owner">Assign Owner</option>
-            <option value="update_criticality">Update Criticality</option>
-          </select>
-          <input className="g-input" value={bulkVal} onChange={e => setBulkVal(e.target.value)}
-            placeholder="New value…" style={{ width: 160 }} />
-          <button className="g-btn" onClick={doBulk} style={{ fontSize: 13 }}>Apply</button>
-          <button className="g-btn-ghost" onClick={() => setSelected(new Set())} style={{ fontSize: 13 }}>Clear</button>
-          {bulkDone && <span style={{ fontSize: 12, color: '#22c55e' }}>{bulkDone}</span>}
-        </div>
+        <SectionCard>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{selected.size} selected</span>
+            <select className="g-input" value={bulkOp} onChange={e => setBulkOp(e.target.value)} style={{ width: 180 }}>
+              <option value="assign_owner">Assign Owner</option>
+              <option value="update_criticality">Update Criticality</option>
+            </select>
+            <input className="g-input" value={bulkVal} onChange={e => setBulkVal(e.target.value)}
+              placeholder="New value…" style={{ width: 160 }} />
+            <ActionButton variant="primary" icon={Check} onClick={doBulk} style={{ fontSize: 13 }}>Apply</ActionButton>
+            <ActionButton variant="ghost" icon={X} onClick={() => setSelected(new Set())} style={{ fontSize: 13 }}>Clear</ActionButton>
+            {bulkDone && <span style={{ fontSize: 12, color: 'var(--green)' }}>{bulkDone}</span>}
+          </div>
+        </SectionCard>
       )}
 
-      <div className="g-card" style={{ padding: 0, overflow: 'auto', maxHeight: '62vh' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr>
-            <th><input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0}
-              onChange={toggleAll} /></th>
-            <th>Name</th><th>Type</th><th>Status</th><th>Criticality</th>
-            <th>Risk</th><th>Owner</th><th>OS</th><th>Agent</th><th>Patch</th><th>Last Seen</th>
-          </tr></thead>
-          <tbody>
-            {filtered.map(a => (
-              <tr key={a.asset_id} onClick={() => onSelect(a)} style={{ cursor: 'pointer' }}>
-                <td onClick={e => { e.stopPropagation(); toggleSelect(a.asset_id); }}>
-                  <input type="checkbox" checked={selected.has(a.asset_id)} onChange={() => {}} />
-                </td>
-                <td>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.hostname}</div>
-                </td>
-                <td>{pill(a.asset_type, a.asset_type)}</td>
-                <td>{pill(a.status, a.status)}</td>
-                <td>{pill(a.criticality, a.criticality)}</td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 36, height: 6, background: 'var(--border)', borderRadius: 3 }}>
-                      <div style={{ width: `${a.risk_score}%`, height: '100%', borderRadius: 3, background: a.risk_score >= 70 ? '#ef4444' : a.risk_score >= 40 ? '#f97316' : '#22c55e' }} />
-                    </div>
-                    <span style={{ fontSize: 12 }}>{a.risk_score}</span>
-                  </div>
-                </td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.owner || '—'}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.os_name}</td>
-                <td>{pill(a.agent_status, a.agent_status)}</td>
-                <td>{pill(a.patch_status, a.patch_status)}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                  {a.last_seen_at ? new Date(a.last_seen_at).toLocaleDateString() : '—'}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>No assets match filters</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard padded={false} className="max-h-[62vh] overflow-auto">
+        <DataTable<any>
+          rows={filtered}
+          rowKey={(a: any) => a.asset_id}
+          onRowClick={a => onSelect(a)}
+          rowStyle={(a: any) => selected.has(a.asset_id) ? { background: 'var(--accent-glow)' } : undefined}
+          emptyState={<EmptyState title="No assets match filters" />}
+          columns={[
+            { key: 'select', header: (
+              <input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleAll} />
+            ), render: (a: any) => (
+              <span onClick={e => { e.stopPropagation(); toggleSelect(a.asset_id); }}>
+                <input type="checkbox" checked={selected.has(a.asset_id)} onChange={() => {}} />
+              </span>
+            ) },
+            { key: 'name', header: 'Name', render: (a: any) => (
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.hostname}</div>
+              </div>
+            ) },
+            { key: 'asset_type', header: 'Type', render: (a: any) => pill(a.asset_type, a.asset_type) },
+            { key: 'status', header: 'Status', render: (a: any) => pill(a.status, a.status) },
+            { key: 'criticality', header: 'Criticality', render: (a: any) => pill(a.criticality, a.criticality) },
+            { key: 'risk_score', header: 'Risk', render: (a: any) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 36, height: 6, background: 'var(--border)', borderRadius: 3 }}>
+                  <div style={{ width: `${a.risk_score}%`, height: '100%', borderRadius: 3, background: a.risk_score >= 70 ? '#ef4444' : a.risk_score >= 40 ? '#f97316' : '#22c55e' }} />
+                </div>
+                <span style={{ fontSize: 12 }}>{a.risk_score}</span>
+              </div>
+            ) },
+            { key: 'owner', header: 'Owner', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.owner || '—'}</span> },
+            { key: 'os_name', header: 'OS', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.os_name}</span> },
+            { key: 'agent_status', header: 'Agent', render: (a: any) => pill(a.agent_status, a.agent_status) },
+            { key: 'patch_status', header: 'Patch', render: (a: any) => pill(a.patch_status, a.patch_status) },
+            { key: 'last_seen_at', header: 'Last Seen', render: (a: any) => (
+              <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                {a.last_seen_at ? new Date(a.last_seen_at).toLocaleDateString() : '—'}
+              </span>
+            ) },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -492,26 +479,25 @@ function CategoriesTab({ assets }: { assets: any[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className={activeType === null ? 'g-btn' : 'g-btn-ghost'} onClick={() => setActiveType(null)} style={{ fontSize: 12 }}>All</button>
+        <ActionButton variant={activeType === null ? 'primary' : 'ghost'} onClick={() => setActiveType(null)} style={{ fontSize: 12 }}>All</ActionButton>
         {types.map(t => (
-          <button key={t} className={activeType === t ? 'g-btn' : 'g-btn-ghost'} onClick={() => setActiveType(t)} style={{ fontSize: 12 }}>
+          <ActionButton key={t} variant={activeType === t ? 'primary' : 'ghost'} onClick={() => setActiveType(t)} style={{ fontSize: 12 }}>
             {t} ({(assets ?? []).filter(a => a.asset_type === t).length})
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {shown.map(b => b.items.length === 0 ? null : (
-        <div key={b.type} className="g-card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <SectionCard key={b.type}
+          title={
+            <span className="inline-flex items-center gap-2">
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: TYPE_COLORS[b.type] ?? '#6b7280', display: 'inline-block' }} />
               {b.type.charAt(0).toUpperCase() + b.type.slice(1).replace('-', ' / ')}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{b.items.length} assets</div>
-          </div>
-
-          {/* summary stats */}
-          <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+            </span>
+          }
+          subtitle={`${b.items.length} assets`}
+          padded={false}>
+          <div style={{ display: 'flex', gap: 16, padding: '14px 16px 0', flexWrap: 'wrap' }}>
             {(['online', 'offline', 'critical', 'in-maintenance'] as const).map(st => {
               const cnt = st === 'critical'
                 ? b.items.filter(a => a.criticality === 'critical').length
@@ -528,30 +514,27 @@ function CategoriesTab({ assets }: { assets: any[] }) {
             </div>
           </div>
 
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr><th>Name</th><th>Status</th><th>Criticality</th><th>Risk</th><th>Patch</th><th>Owner</th></tr></thead>
-            <tbody>
-              {b.items.slice(0, 10).map(a => (
-                <tr key={a.asset_id}>
-                  <td>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{a.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.os_name}</div>
-                  </td>
-                  <td>{pill(a.status, a.status)}</td>
-                  <td>{pill(a.criticality, a.criticality)}</td>
-                  <td style={{ fontSize: 13 }}>{a.risk_score}</td>
-                  <td>{pill(a.patch_status, a.patch_status)}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.owner || '—'}</td>
-                </tr>
-              ))}
-              {b.items.length > 10 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-3)', padding: 10 }}>
-                  +{b.items.length - 10} more in Inventory tab
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+          <DataTable<any>
+            rows={b.items.slice(0, 10)}
+            rowKey={(a: any) => a.asset_id}
+            columns={[
+              { key: 'name', header: 'Name', render: (a: any) => (
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{a.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.os_name}</div>
+                </div>
+              ) },
+              { key: 'status', header: 'Status', render: (a: any) => pill(a.status, a.status) },
+              { key: 'criticality', header: 'Criticality', render: (a: any) => pill(a.criticality, a.criticality) },
+              { key: 'risk_score', header: 'Risk', render: (a: any) => <span style={{ fontSize: 13 }}>{a.risk_score}</span> },
+              { key: 'patch_status', header: 'Patch', render: (a: any) => pill(a.patch_status, a.patch_status) },
+              { key: 'owner', header: 'Owner', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.owner || '—'}</span> },
+            ]}
+            footer={b.items.length > 10 ? (
+              <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-3)' }}>+{b.items.length - 10} more in Inventory tab</div>
+            ) : undefined}
+          />
+        </SectionCard>
       ))}
     </div>
   );
@@ -567,49 +550,50 @@ function RelationshipsTab({ rel }: { rel: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Nodes" value={nodes.length} />
-        <StatCard label="Relationships" value={edges.length} />
-        <StatCard label="Unique Types" value={new Set(edges.map(e => e.type)).size} />
+        <MetricCard label="Nodes" value={nodes.length} />
+        <MetricCard label="Relationships" value={edges.length} />
+        <MetricCard label="Unique Types" value={new Set(edges.map(e => e.type)).size} />
       </div>
 
       {/* relationship type breakdown */}
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Relationship Types</div>
+      <SectionCard title="Relationship Types">
         {Array.from(new Set(edges.map(e => e.type))).map(t => {
           const cnt = edges.filter(e => e.type === t).length;
           return <HorizBar key={t} label={t} value={cnt} max={edges.length} color="#6366f1" />;
         })}
         {edges.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 13 }}>No relationships mapped yet</div>}
-      </div>
+      </SectionCard>
 
       {/* edge list */}
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Asset Relationships</div>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr><th>Source</th><th>Type</th><th>Target</th><th>Description</th></tr></thead>
-          <tbody>
-            {edges.map((e, i) => {
+      <SectionCard title="Asset Relationships" padded={false}>
+        <DataTable<any>
+          rows={edges}
+          rowKey={(_e: any, i: number) => i}
+          emptyState={<EmptyState title="No relationship data" />}
+          columns={[
+            { key: 'source', header: 'Source', render: (e: any) => {
               const src = nodes.find(n => n.id === e.source);
+              return (
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{src?.name ?? e.source}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{src?.asset_type}</div>
+                </div>
+              );
+            } },
+            { key: 'type', header: 'Type', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', fontStyle: 'italic' }}>{e.type}</span> },
+            { key: 'target', header: 'Target', render: (e: any) => {
               const tgt = nodes.find(n => n.id === e.target);
               return (
-                <tr key={i}>
-                  <td>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{src?.name ?? e.source}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{src?.asset_type}</div>
-                  </td>
-                  <td><span style={{ fontSize: 12, color: 'var(--text-2)', fontStyle: 'italic' }}>{e.type}</span></td>
-                  <td>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{tgt?.name ?? e.target}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{tgt?.asset_type}</div>
-                  </td>
-                  <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.description ?? '—'}</td>
-                </tr>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{tgt?.name ?? e.target}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{tgt?.asset_type}</div>
+                </div>
               );
-            })}
-            {edges.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 24 }}>No relationship data</td></tr>}
-          </tbody>
-        </table>
-      </div>
+            } },
+            { key: 'description', header: 'Description', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.description ?? '—'}</span> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -624,33 +608,28 @@ function DiscoveryTab({ d }: { d: any }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Discovery Sources</div>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr><th>Source</th><th>Status</th><th>Assets Found</th><th>Last Run</th></tr></thead>
-          <tbody>
-            {sources.map(s => (
-              <tr key={s.source}>
-                <td style={{ fontWeight: 500, fontSize: 13 }}>{s.source}</td>
-                <td>{pill(s.status, s.status)}</td>
-                <td style={{ fontWeight: 600 }}>{s.discovered?.toLocaleString()}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.last_run ? new Date(s.last_run).toLocaleString() : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard title="Discovery Sources" padded={false}>
+        <DataTable<any>
+          rows={sources}
+          rowKey={(s: any) => s.source}
+          emptyState={<EmptyState title="No discovery sources configured" />}
+          columns={[
+            { key: 'source', header: 'Source', render: (s: any) => <span style={{ fontWeight: 500, fontSize: 13 }}>{s.source}</span> },
+            { key: 'status', header: 'Status', render: (s: any) => pill(s.status, s.status) },
+            { key: 'discovered', header: 'Assets Found', render: (s: any) => <span style={{ fontWeight: 600 }}>{s.discovered?.toLocaleString()}</span> },
+            { key: 'last_run', header: 'Last Run', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.last_run ? new Date(s.last_run).toLocaleString() : '—'}</span> },
+          ]}
+        />
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Assets by Source</div>
+        <SectionCard title="Assets by Source">
           {bySource.map(s => (
             <HorizBar key={s.source} label={s.source} value={s.count}
               max={Math.max(...bySource.map(x => x.count))} color="#6366f1" />
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Unmanaged Assets <span style={{ color: '#ef4444', fontWeight: 700 }}>({unmanaged.length})</span></div>
+        </SectionCard>
+        <SectionCard title={<>Unmanaged Assets <span style={{ color: '#ef4444', fontWeight: 700 }}>({unmanaged.length})</span></>}>
           {unmanaged.slice(0, 8).map(a => (
             <div key={a.asset_id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
               <div style={{ fontWeight: 500 }}>{a.name}</div>
@@ -658,7 +637,7 @@ function DiscoveryTab({ d }: { d: any }) {
             </div>
           ))}
           {unmanaged.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 13 }}>No unmanaged assets detected</div>}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -674,7 +653,7 @@ function HealthTab({ d }: { d: any }) {
     const pos = data[positiveKey] ?? 0;
     const pct = total > 0 ? Math.round(pos / total * 100) : 0;
     return (
-      <div className="g-card" style={{ padding: 20 }}>
+      <SectionCard key={title}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
           <span style={{ fontWeight: 600 }}>{title}</span>
           <span style={{ fontSize: 20, fontWeight: 700, color: pct >= 80 ? '#22c55e' : pct >= 60 ? '#eab308' : '#ef4444' }}>{pct}%</span>
@@ -687,7 +666,7 @@ function HealthTab({ d }: { d: any }) {
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
     );
   };
 
@@ -702,19 +681,17 @@ function HealthTab({ d }: { d: any }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Certificate Expiring Soon</div>
+        <SectionCard title="Certificate Expiring Soon">
           {(d.cert_expiring_soon ?? []).map((c: any) => (
             <div key={c.asset_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
               <span>{c.name}</span>
               <span style={{ color: c.days_remaining <= 14 ? '#ef4444' : '#f97316', fontWeight: 600 }}>{c.days_remaining}d</span>
             </div>
           ))}
-          {(d.cert_expiring_soon ?? []).length === 0 && <div style={{ color: '#22c55e', fontSize: 13 }}>No certs expiring soon</div>}
-        </div>
+          {(d.cert_expiring_soon ?? []).length === 0 && <div style={{ color: 'var(--green)', fontSize: 13 }}>No certs expiring soon</div>}
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>High Disk Usage</div>
+        <SectionCard title="High Disk Usage">
           {(d.high_disk_usage ?? []).map((a: any) => (
             <div key={a.asset_id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -724,8 +701,8 @@ function HealthTab({ d }: { d: any }) {
               <ProgressBar pct={a.disk_used_pct} color="#ef4444" />
             </div>
           ))}
-          {(d.high_disk_usage ?? []).length === 0 && <div style={{ color: '#22c55e', fontSize: 13 }}>No high disk usage</div>}
-        </div>
+          {(d.high_disk_usage ?? []).length === 0 && <div style={{ color: 'var(--green)', fontSize: 13 }}>No high disk usage</div>}
+        </SectionCard>
       </div>
     </div>
   );
@@ -738,37 +715,34 @@ function RiskTab({ d }: { d: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Top Risky Assets</div>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr><th>Asset</th><th>Criticality</th><th>Risk</th><th>Internet</th><th>Patch</th></tr></thead>
-            <tbody>
-              {(d.top_risky_assets ?? []).map((a: any) => (
-                <tr key={a.asset_id}>
-                  <td>
-                    <div style={{ fontWeight: 500 }}>{a.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.asset_type}</div>
-                  </td>
-                  <td>{pill(a.criticality, a.criticality)}</td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 36, height: 6, background: 'var(--border)', borderRadius: 3 }}>
-                        <div style={{ width: `${a.risk_score}%`, height: '100%', borderRadius: 3, background: a.risk_score >= 70 ? '#ef4444' : '#f97316' }} />
-                      </div>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>{a.risk_score}</span>
-                    </div>
-                  </td>
-                  <td>{a.internet_facing ? pill('yes', 'critical') : pill('no', 'low')}</td>
-                  <td>{pill(a.patch_status, a.patch_status)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SectionCard title="Top Risky Assets" padded={false}>
+          <DataTable<any>
+            rows={d.top_risky_assets ?? []}
+            rowKey={(a: any) => a.asset_id}
+            columns={[
+              { key: 'name', header: 'Asset', render: (a: any) => (
+                <div>
+                  <div style={{ fontWeight: 500 }}>{a.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.asset_type}</div>
+                </div>
+              ) },
+              { key: 'criticality', header: 'Criticality', render: (a: any) => pill(a.criticality, a.criticality) },
+              { key: 'risk_score', header: 'Risk', render: (a: any) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 36, height: 6, background: 'var(--border)', borderRadius: 3 }}>
+                    <div style={{ width: `${a.risk_score}%`, height: '100%', borderRadius: 3, background: a.risk_score >= 70 ? '#ef4444' : '#f97316' }} />
+                  </div>
+                  <span style={{ fontWeight: 700, color: '#ef4444' }}>{a.risk_score}</span>
+                </div>
+              ) },
+              { key: 'internet_facing', header: 'Internet', render: (a: any) => a.internet_facing ? pill('yes', 'critical') : pill('no', 'low') },
+              { key: 'patch_status', header: 'Patch', render: (a: any) => pill(a.patch_status, a.patch_status) },
+            ]}
+          />
+        </SectionCard>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Risk Factors</div>
+          <SectionCard title="Risk Factors">
             {(d.risk_factors ?? []).map((f: any) => (
               <div key={f.factor} style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
@@ -778,10 +752,9 @@ function RiskTab({ d }: { d: any }) {
                 <ProgressBar pct={f.weight} color="#ef4444" />
               </div>
             ))}
-          </div>
+          </SectionCard>
 
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Risk by Business Unit</div>
+          <SectionCard title="Risk by Business Unit">
             {(d.by_business_unit ?? []).slice(0, 6).map((b: any) => (
               <div key={b.business_unit} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
@@ -791,12 +764,11 @@ function RiskTab({ d }: { d: any }) {
                 <ProgressBar pct={b.avg_risk} color={b.avg_risk >= 70 ? '#ef4444' : b.avg_risk >= 40 ? '#f97316' : '#22c55e'} />
               </div>
             ))}
-          </div>
+          </SectionCard>
         </div>
       </div>
 
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Attack Paths</div>
+      <SectionCard title="Attack Paths">
         {(d.attack_paths ?? []).map((p: any, i: number) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--text-1)' }}>{p.path}</div>
@@ -806,7 +778,7 @@ function RiskTab({ d }: { d: any }) {
             </div>
           </div>
         ))}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -817,8 +789,8 @@ function ComplianceTab({ d }: { d: any }) {
   if (!d) return <div style={{ color: 'var(--text-3)' }}>Loading…</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="g-card" style={{ padding: 20, display: 'flex', gap: 20, alignItems: 'center' }}>
+      <SectionCard>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <ScoreRing score={d.compliance_score ?? 0} size={80} label="Compliance" />
           <div>
             <div style={{ fontWeight: 700, fontSize: 20 }}>{d.compliance_score ?? 0}/100</div>
@@ -826,11 +798,10 @@ function ComplianceTab({ d }: { d: any }) {
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{(d.total ?? 0).toLocaleString()} assets assessed</div>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Security Controls</div>
+        <SectionCard title="Security Controls">
           {(d.controls ?? []).map((c: any) => (
             <div key={c.control} style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
@@ -843,11 +814,10 @@ function ComplianceTab({ d }: { d: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Policy Violations</div>
+          <SectionCard title="Policy Violations">
             {(d.policy_violations ?? []).map((v: any, i: number) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                 <span>{v.policy}</span>
@@ -857,17 +827,16 @@ function ComplianceTab({ d }: { d: any }) {
                 </div>
               </div>
             ))}
-          </div>
+          </SectionCard>
 
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>Audit Findings</div>
+          <SectionCard title="Audit Findings">
             {(d.audit_findings ?? []).map((f: any, i: number) => (
               <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>{pill(f.severity, f.severity)}</div>
                 <div style={{ color: 'var(--text-1)' }}>{f.finding}</div>
               </div>
             ))}
-          </div>
+          </SectionCard>
         </div>
       </div>
     </div>
@@ -881,32 +850,29 @@ function AnalyticsTab({ d }: { d: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-        <StatCard label="No Agent" value={d.missing_agents?.no_agent ?? 0} color="#ef4444" sub="immediate action" />
-        <StatCard label="Inactive Agent" value={d.missing_agents?.inactive ?? 0} color="#f97316" sub="needs investigation" />
-        <StatCard label="Unsupported OS Types" value={(d.unsupported_os ?? []).length} color="#f97316" sub="end-of-life" />
+        <MetricCard label="No Agent" value={d.missing_agents?.no_agent ?? 0} color="#ef4444" sub="immediate action" />
+        <MetricCard label="Inactive Agent" value={d.missing_agents?.inactive ?? 0} color="#f97316" sub="needs investigation" />
+        <MetricCard label="Unsupported OS Types" value={(d.unsupported_os ?? []).length} color="#f97316" sub="end-of-life" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>OS Distribution</div>
+        <SectionCard title="OS Distribution">
           {(d.os_distribution ?? []).map((o: any) => (
             <HorizBar key={o.os} label={o.os} value={o.count}
               max={Math.max(...(d.os_distribution ?? [{ count: 1 }]).map((x: any) => x.count))} color="#6366f1" />
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Asset Type Distribution</div>
+        </SectionCard>
+        <SectionCard title="Asset Type Distribution">
           {(d.type_distribution ?? []).map((t: any) => (
             <HorizBar key={t.type} label={t.type} value={t.count}
               max={Math.max(...(d.type_distribution ?? [{ count: 1 }]).map((x: any) => x.count))}
               color={TYPE_COLORS[t.type] ?? '#6b7280'} />
           ))}
-        </div>
+        </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Asset Growth (6 months)</div>
+        <SectionCard title="Asset Growth (6 months)">
           <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 80 }}>
             {(d.asset_growth ?? []).map((g: any) => {
               const maxTotal = Math.max(...(d.asset_growth ?? []).map((x: any) => x.total));
@@ -928,23 +894,20 @@ function AnalyticsTab({ d }: { d: any }) {
               </React.Fragment>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>Unsupported OS (EOL)</div>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead><tr><th>OS Version</th><th>Count</th><th>Risk</th></tr></thead>
-            <tbody>
-              {(d.unsupported_os ?? []).map((u: any) => (
-                <tr key={u.os}>
-                  <td style={{ fontSize: 13 }}>{u.os}</td>
-                  <td style={{ fontWeight: 600 }}>{u.count}</td>
-                  <td>{pill(u.risk, u.risk)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SectionCard title="Unsupported OS (EOL)" padded={false}>
+          <DataTable<any>
+            rows={d.unsupported_os ?? []}
+            rowKey={(u: any) => u.os}
+            emptyState={<EmptyState title="No unsupported OS versions" />}
+            columns={[
+              { key: 'os', header: 'OS Version', render: (u: any) => <span style={{ fontSize: 13 }}>{u.os}</span> },
+              { key: 'count', header: 'Count', render: (u: any) => <span style={{ fontWeight: 600 }}>{u.count}</span> },
+              { key: 'risk', header: 'Risk', render: (u: any) => pill(u.risk, u.risk) },
+            ]}
+          />
+        </SectionCard>
       </div>
     </div>
   );
@@ -971,7 +934,7 @@ function AIInsightsTab({ selectedAsset }: { selectedAsset: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {selectedAsset && (
-        <div className="g-card" style={{ padding: '12px 16px', background: 'var(--accent)1a', display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div className="g-card" style={{ padding: '12px 16px', background: 'var(--accent-glow)', display: 'flex', gap: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 13 }}>Context asset:</span>
           <strong>{selectedAsset.name}</strong>
           {pill(selectedAsset.criticality, selectedAsset.criticality)}
@@ -986,10 +949,10 @@ function AIInsightsTab({ selectedAsset }: { selectedAsset: any }) {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {AI_ACTIONS.map(a => (
-          <button key={a.id} className={action === a.id ? 'g-btn' : 'g-btn-ghost'}
+          <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'}
             onClick={() => run(a.id)} style={{ fontSize: 13 }}>
             {a.label}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
@@ -1031,8 +994,7 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <input className="g-input" value={title} onChange={e => setTitle(e.target.value)}
             placeholder="Report title…" style={{ minWidth: 240 }} />
@@ -1051,37 +1013,28 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
             <option value="json">JSON</option>
             <option value="xlsx">XLSX</option>
           </select>
-          <button className="g-btn" onClick={generate} disabled={!title || gen}>
+          <ActionButton variant="primary" icon={FilePlus2} onClick={generate} disabled={!title || gen}>
             {gen ? 'Generating…' : 'Generate'}
-          </button>
+          </ActionButton>
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: 0, overflow: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead><tr>
-            <th>Title</th><th>Type</th><th>Generated By</th><th>Assets</th><th>Format</th><th>Size</th><th>Date</th>
-          </tr></thead>
-          <tbody>
-            {(reports ?? []).map(r => (
-              <tr key={r.report_id}>
-                <td style={{ fontWeight: 500 }}>{r.title}</td>
-                <td><span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.report_type}</span></td>
-                <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.generated_by}</td>
-                <td style={{ fontWeight: 600 }}>{r.asset_count?.toLocaleString()}</td>
-                <td>{pill(r.format, 'info')}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                  {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}
-                </td>
-              </tr>
-            ))}
-            {(reports ?? []).length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>No reports yet</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard padded={false}>
+        <DataTable<any>
+          rows={reports ?? []}
+          rowKey={(r: any) => r.report_id}
+          emptyState={<EmptyState title="No reports yet" />}
+          columns={[
+            { key: 'title', header: 'Title', render: (r: any) => <span style={{ fontWeight: 500 }}>{r.title}</span> },
+            { key: 'report_type', header: 'Type', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.report_type}</span> },
+            { key: 'generated_by', header: 'Generated By', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.generated_by}</span> },
+            { key: 'asset_count', header: 'Assets', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.asset_count?.toLocaleString()}</span> },
+            { key: 'format', header: 'Format', render: (r: any) => pill(r.format, 'info') },
+            { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</span> },
+            { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -1090,48 +1043,39 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
 
 function AuditTab({ entries }: { entries: any[] }) {
   return (
-    <div className="g-card" style={{ padding: 0, overflow: 'auto' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead><tr>
-          <th>Time</th><th>Action</th><th>Object</th><th>Name</th><th>Actor</th><th>Details</th>
-        </tr></thead>
-        <tbody>
-          {(entries ?? []).map((e, i) => (
-            <tr key={i}>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                {e.created_at ? new Date(e.created_at).toLocaleString() : '—'}
-              </td>
-              <td>{pill(e.action?.replace(/_/g, ' '), 'info')}</td>
-              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.object_type}</td>
-              <td style={{ fontSize: 12 }}>{e.object_name ?? e.object_id ?? '—'}</td>
-              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.details ?? '—'}</td>
-            </tr>
-          ))}
-          {(entries ?? []).length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>No audit entries</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <SectionCard padded={false}>
+      <DataTable<any>
+        rows={entries ?? []}
+        rowKey={(_e: any, i: number) => i}
+        emptyState={<EmptyState title="No audit entries" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.created_at ? new Date(e.created_at).toLocaleString() : '—'}</span> },
+          { key: 'action', header: 'Action', render: (e: any) => pill(e.action?.replace(/_/g, ' '), 'info') },
+          { key: 'object_type', header: 'Object', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.object_type}</span> },
+          { key: 'object_name', header: 'Name', render: (e: any) => <span style={{ fontSize: 12 }}>{e.object_name ?? e.object_id ?? '—'}</span> },
+          { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.actor}</span> },
+          { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.details ?? '—'}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',     label: 'Dashboard' },
-  { id: 'inventory',     label: 'Inventory' },
-  { id: 'categories',    label: 'Categories' },
-  { id: 'relationships', label: 'Relationships' },
-  { id: 'discovery',     label: 'Discovery' },
-  { id: 'health',        label: 'Health' },
-  { id: 'risk',          label: 'Risk' },
-  { id: 'compliance',    label: 'Compliance' },
-  { id: 'analytics',     label: 'Analytics' },
-  { id: 'ai',            label: '✦ AI Advisor' },
-  { id: 'reports',       label: 'Reports' },
-  { id: 'audit',         label: 'Audit Trail' },
+const TABS: { key: Tab; label: string; icon: any }[] = [
+  { key: 'dashboard',     label: 'Dashboard',     icon: LayoutDashboard },
+  { key: 'inventory',     label: 'Inventory',     icon: Boxes },
+  { key: 'categories',    label: 'Categories',    icon: LayoutGrid },
+  { key: 'relationships', label: 'Relationships', icon: Share2 },
+  { key: 'discovery',     label: 'Discovery',     icon: Radar },
+  { key: 'health',        label: 'Health',        icon: HeartPulse },
+  { key: 'risk',          label: 'Risk',          icon: ShieldAlert },
+  { key: 'compliance',    label: 'Compliance',    icon: ShieldCheck },
+  { key: 'analytics',     label: 'Analytics',     icon: BarChart3 },
+  { key: 'ai',            label: 'AI Advisor',    icon: Sparkles },
+  { key: 'reports',       label: 'Reports',       icon: FileBarChart2 },
+  { key: 'audit',         label: 'Audit Trail',   icon: ScrollText },
 ];
 
 export default function AssetsPage() {
@@ -1197,31 +1141,24 @@ export default function AssetsPage() {
   return (
     <RootLayout
       title="Assets & CMDB"
+      onRefresh={loadAll}
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="g-btn-ghost" style={{ position: 'relative' }}
-            onClick={() => { setTab('audit'); markRead(); }}>
-            🔔{unread > 0 && (
-              <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <ActionButton variant="ghost" icon={Bell} onClick={() => { setTab('audit'); markRead(); }} />
+            {unread > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                 {unread}
               </span>
             )}
-          </button>
-          <button className="g-btn-ghost" onClick={() => { setShowAI(v => !v); }}>✦ AI Advisor</button>
-          <button className="g-btn" onClick={loadAll}>Refresh</button>
+          </div>
+          <ActionButton variant="ghost" icon={Sparkles} onClick={() => setShowAI(v => !v)}>AI Advisor</ActionButton>
         </div>
       }
     >
       {/* tab bar */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400,
-            color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-            background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-            borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-          }}>{t.label}</button>
-        ))}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, marginBottom: 24, overflowX: 'auto' }}>
+        <TabBar tabs={TABS} active={tab} onChange={k => setTab(k as Tab)} />
       </div>
 
       {tab === 'dashboard'     && <DashboardTab d={dashboard} />}

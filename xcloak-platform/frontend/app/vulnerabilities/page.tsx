@@ -4,6 +4,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { vmAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Bug, Server, Radar, Wrench, Crosshair, ClipboardCheck, BarChart3, ScanLine, ShieldOff, FileText,
+  ShieldAlert, Zap, Bomb, Globe, Star, AlertTriangle, Shield, RefreshCw, ClipboardList, ArrowLeftRight, Crown, Target,
+  Check, Package, CheckCircle2, CheckSquare, Download, Plus, Play, Mail,
+} from 'lucide-react';
 
 type Tab = 'overview' | 'inventory' | 'assets' | 'surface' | 'patches' | 'threat-intel' | 'compliance' | 'analytics' | 'scans' | 'exceptions' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
@@ -12,20 +18,16 @@ const TAB_LABELS: Record<Tab, string> = {
   compliance: 'Compliance', analytics: 'Analytics', scans: 'Scan Management',
   exceptions: 'Exceptions', reports: 'Reports',
 };
+const TAB_ICONS: Record<Tab, any> = {
+  overview: LayoutDashboard, inventory: Bug, assets: Server, surface: Radar, patches: Wrench,
+  'threat-intel': Crosshair, compliance: ClipboardCheck, analytics: BarChart3, scans: ScanLine,
+  exceptions: ShieldOff, reports: FileText,
+};
 
 const SEV_COLOR: Record<string, string> = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e' };
 const RISK_COLOR = (s: number) => s >= 90 ? '#ef4444' : s >= 70 ? '#f97316' : s >= 50 ? '#eab308' : '#22c55e';
 const PATCH_COLOR: Record<string, string> = { pending: '#f97316', installed: '#22c55e', failed: '#ef4444', deferred: '#6b7280' };
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
 
 function SevBadge({ sev }: { sev: string }) {
   return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3, background: SEV_COLOR[sev] || '#6b7280', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{sev}</span>;
@@ -51,27 +53,33 @@ function EPSSBar({ score }: { score: number }) {
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 function OverviewTab({ dash }: { dash: any }) {
   if (!dash) return <div style={{ color: 'var(--text-3)', padding: 40, textAlign: 'center' }}>Loading…</div>;
+  const RISK_FACTORS = [
+    { label: 'CISA KEV Listed', value: dash.kev_findings, color: '#ef4444', icon: ShieldAlert },
+    { label: 'Actively Exploited', value: dash.actively_exploited, color: '#ef4444', icon: Zap },
+    { label: 'Exploit Available', value: dash.exploitable, color: '#f97316', icon: Bomb },
+    { label: 'Internet-Facing Asset', value: 4, color: '#f97316', icon: Globe },
+    { label: 'Critical Asset', value: 2, color: '#eab308', icon: Star },
+  ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total" value={dash.total} />
-        <StatCard label="Critical" value={dash.critical} color="#ef4444" />
-        <StatCard label="High" value={dash.high} color="#f97316" />
-        <StatCard label="Medium" value={dash.medium} color="#eab308" />
-        <StatCard label="Low" value={dash.low} color="#22c55e" />
-        <StatCard label="Exploitable" value={dash.exploitable} color="#f97316" sub="exploit available" />
-        <StatCard label="Actively Exploited" value={dash.actively_exploited} color="#ef4444" sub="confirmed in-the-wild" />
-        <StatCard label="KEV Listed" value={dash.kev_findings} color="#ef4444" sub="CISA catalog" />
-        <StatCard label="Patched" value={dash.patched} color="#22c55e" />
-        <StatCard label="Overdue" value={dash.overdue} color="#ef4444" sub="beyond SLA" />
-        <StatCard label="Risk Score" value={dash.risk_score} color={RISK_COLOR(dash.risk_score)} />
-        <StatCard label="MTTR" value={`${dash.mttr_days}d`} color="var(--accent)" sub="mean time to remediate" />
-        <StatCard label="Patch SLA" value={`${dash.patch_sla_compliance}%`} color={dash.patch_sla_compliance >= 90 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="Total" value={dash.total} />
+        <MetricCard label="Critical" value={dash.critical} color="#ef4444" />
+        <MetricCard label="High" value={dash.high} color="#f97316" />
+        <MetricCard label="Medium" value={dash.medium} color="#eab308" />
+        <MetricCard label="Low" value={dash.low} color="#22c55e" />
+        <MetricCard label="Exploitable" value={dash.exploitable} color="#f97316" sub="exploit available" />
+        <MetricCard label="Actively Exploited" value={dash.actively_exploited} color="#ef4444" sub="confirmed in-the-wild" />
+        <MetricCard label="KEV Listed" value={dash.kev_findings} color="#ef4444" sub="CISA catalog" />
+        <MetricCard label="Patched" value={dash.patched} color="#22c55e" />
+        <MetricCard label="Overdue" value={dash.overdue} color="#ef4444" sub="beyond SLA" />
+        <MetricCard label="Risk Score" value={dash.risk_score} color={RISK_COLOR(dash.risk_score)} />
+        <MetricCard label="MTTR" value={`${dash.mttr_days}d`} color="var(--accent)" sub="mean time to remediate" />
+        <MetricCard label="Patch SLA" value={`${dash.patch_sla_compliance}%`} color={dash.patch_sla_compliance >= 90 ? '#22c55e' : '#f97316'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Severity Breakdown</div>
+        <SectionCard title="Severity Breakdown">
           {[{ l: 'Critical', c: dash.critical, col: '#ef4444' }, { l: 'High', c: dash.high, col: '#f97316' }, { l: 'Medium', c: dash.medium, col: '#eab308' }, { l: 'Low', c: dash.low, col: '#22c55e' }].map(item => (
             <div key={item.l} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
@@ -83,30 +91,28 @@ function OverviewTab({ dash }: { dash: any }) {
               </div>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Risk Prioritization Factors</div>
-          {[
-            { label: 'CISA KEV Listed', value: dash.kev_findings, color: '#ef4444', icon: '🔴' },
-            { label: 'Actively Exploited', value: dash.actively_exploited, color: '#ef4444', icon: '⚡' },
-            { label: 'Exploit Available', value: dash.exploitable, color: '#f97316', icon: '💣' },
-            { label: 'Internet-Facing Asset', value: 4, color: '#f97316', icon: '🌐' },
-            { label: 'Critical Asset', value: 2, color: '#eab308', icon: '⭐' },
-          ].map(item => (
-            <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
-              <span>{item.icon} {item.label}</span>
-              <span style={{ fontWeight: 700, color: item.color }}>{item.value}</span>
-            </div>
-          ))}
+        </SectionCard>
+        <SectionCard title="Risk Prioritization Factors">
+          {RISK_FACTORS.map(item => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon style={{ width: 13, height: 13, color: item.color }} /> {item.label}</span>
+                <span style={{ fontWeight: 700, color: item.color }}>{item.value}</span>
+              </div>
+            );
+          })}
           <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>
             Risk prioritization uses CVSS + EPSS + KEV + Asset Exposure — not CVSS alone.
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       {dash.kev_findings > 0 && (
         <div className="g-card" style={{ padding: 14, borderLeft: '3px solid #ef4444', background: '#ef444408' }}>
-          <div style={{ fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>⚠ CISA KEV Alert</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>
+            <AlertTriangle style={{ width: 14, height: 14 }} /> CISA KEV Alert
+          </div>
           <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
             {dash.kev_findings} vulnerabilities are listed in the CISA Known Exploited Vulnerabilities catalog. Federal agencies are required to remediate these immediately. Apply patches or implement mitigations now.
           </div>
@@ -159,13 +165,13 @@ function InventoryTab({
         <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)' }}>
           <input className="g-input" placeholder="CVE, vendor, product, asset…" value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ width: '100%', marginBottom: 6, fontSize: 12 }} />
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <select className="g-select" value={filterSev} onChange={e => setFilterSev(e.target.value)} style={{ fontSize: 10, padding: '3px 6px', flex: 1 }}>
+            <select className="g-select" value={filterSev} onChange={e => setFilterSev(e.target.value)} style={{ fontSize: 10, padding: '3px 6px', flex: 1, minWidth: 0 }}>
               <option value="">All Severity</option>
               {['critical','high','medium','low'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
             </select>
-            <button onClick={() => setFilterKev(!filterKev)} className={filterKev ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 10, padding: '3px 8px' }}>KEV</button>
-            <button onClick={() => setFilterExploit(!filterExploit)} className={filterExploit ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 10, padding: '3px 8px' }}>Exploit</button>
-            <button onClick={onRefresh} className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '3px 6px' }}>↻</button>
+            <ActionButton variant={filterKev ? 'primary' : 'ghost'} onClick={() => setFilterKev(!filterKev)} style={{ fontSize: 10, padding: '3px 8px' }}>KEV</ActionButton>
+            <ActionButton variant={filterExploit ? 'primary' : 'ghost'} onClick={() => setFilterExploit(!filterExploit)} style={{ fontSize: 10, padding: '3px 8px' }}>Exploit</ActionButton>
+            <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} style={{ fontSize: 10, padding: '3px 6px' }} />
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -185,7 +191,11 @@ function InventoryTab({
                 <EPSSBar score={f.epss_score} />
                 <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{f.asset_name}</span>
               </div>
-              {f.internet_facing && <span style={{ fontSize: 9, color: '#3b82f6', fontWeight: 600 }}>🌐 Internet-facing</span>}
+              {f.internet_facing && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, color: '#3b82f6', fontWeight: 600 }}>
+                  <Globe style={{ width: 9, height: 9 }} /> Internet-facing
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -194,7 +204,7 @@ function InventoryTab({
       {/* Right panel */}
       {!findingDetail ? (
         <div className="g-card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 32 }}>🛡</div>
+          <Shield style={{ width: 32, height: 32, color: 'var(--text-3)' }} />
           <div style={{ color: 'var(--text-3)', fontSize: 14 }}>Select a finding to review</div>
         </div>
       ) : (
@@ -215,7 +225,11 @@ function InventoryTab({
               <span>Vendor: <strong>{findingDetail.vendor}</strong></span>
               <span>Product: <strong>{findingDetail.product}</strong></span>
               <span>Asset: <strong style={{ color: 'var(--accent)' }}>{findingDetail.asset_name}</strong></span>
-              {findingDetail.internet_facing && <span style={{ color: '#3b82f6', fontWeight: 600 }}>🌐 Internet-facing</span>}
+              {findingDetail.internet_facing && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#3b82f6', fontWeight: 600 }}>
+                  <Globe style={{ width: 12, height: 12 }} /> Internet-facing
+                </span>
+              )}
             </div>
           </div>
 
@@ -308,15 +322,15 @@ function InventoryTab({
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>Exploitation Status</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                     <div style={{ textAlign: 'center', padding: 10, background: findingDetail.actively_exploited ? '#ef444422' : 'var(--bg)', borderRadius: 6, border: `1px solid ${findingDetail.actively_exploited ? '#ef4444' : 'var(--border)'}` }}>
-                      <div style={{ fontSize: 20 }}>{findingDetail.actively_exploited ? '⚡' : '—'}</div>
+                      {findingDetail.actively_exploited ? <Zap style={{ width: 20, height: 20, margin: '0 auto', color: '#ef4444' }} /> : <span style={{ fontSize: 20, color: 'var(--text-3)' }}>—</span>}
                       <div style={{ fontSize: 11, fontWeight: 600, color: findingDetail.actively_exploited ? '#ef4444' : 'var(--text-3)' }}>In-the-Wild</div>
                     </div>
                     <div style={{ textAlign: 'center', padding: 10, background: findingDetail.exploit_available ? '#f9731622' : 'var(--bg)', borderRadius: 6, border: `1px solid ${findingDetail.exploit_available ? '#f97316' : 'var(--border)'}` }}>
-                      <div style={{ fontSize: 20 }}>{findingDetail.exploit_available ? '💣' : '—'}</div>
+                      {findingDetail.exploit_available ? <Bomb style={{ width: 20, height: 20, margin: '0 auto', color: '#f97316' }} /> : <span style={{ fontSize: 20, color: 'var(--text-3)' }}>—</span>}
                       <div style={{ fontSize: 11, fontWeight: 600, color: findingDetail.exploit_available ? '#f97316' : 'var(--text-3)' }}>Public Exploit</div>
                     </div>
                     <div style={{ textAlign: 'center', padding: 10, background: findingDetail.kev_listed ? '#ef444422' : 'var(--bg)', borderRadius: 6, border: `1px solid ${findingDetail.kev_listed ? '#ef4444' : 'var(--border)'}` }}>
-                      <div style={{ fontSize: 20 }}>{findingDetail.kev_listed ? '📋' : '—'}</div>
+                      {findingDetail.kev_listed ? <ClipboardList style={{ width: 20, height: 20, margin: '0 auto', color: '#ef4444' }} /> : <span style={{ fontSize: 20, color: 'var(--text-3)' }}>—</span>}
                       <div style={{ fontSize: 11, fontWeight: 600, color: findingDetail.kev_listed ? '#ef4444' : 'var(--text-3)' }}>CISA KEV</div>
                     </div>
                   </div>
@@ -347,20 +361,23 @@ function InventoryTab({
                 <div className="g-card" style={{ padding: 14 }}>
                   <div style={{ fontWeight: 600, marginBottom: 12 }}>Attack Path: Internet → {findingDetail.asset_name} → Internal</div>
                   {[
-                    { node: 'Internet', type: 'source', icon: '🌐', desc: 'Attacker on public internet' },
-                    { node: findingDetail.asset_name, type: 'entry', icon: '🎯', desc: `Exploit ${findingDetail.cve_id} — CVSS ${findingDetail.cvss_score.toFixed(1)}, ${findingDetail.exploit_maturity} exploit available` },
-                    { node: 'Internal Network', type: 'pivot', icon: '↔', desc: 'Lateral movement across network segments' },
-                    { node: 'Domain Admin / Data', type: 'objective', icon: '👑', desc: 'Credential theft, data exfiltration, or ransomware deployment' },
-                  ].map((step, i, arr) => (
-                    <div key={step.node} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: i < arr.length - 1 ? 0 : 0 }}>
-                      <div style={{ padding: '10px 16px', border: `2px solid ${step.type === 'source' ? '#6b7280' : step.type === 'entry' ? '#ef4444' : step.type === 'pivot' ? '#f97316' : '#a855f7'}`, borderRadius: 8, background: step.type === 'entry' ? '#ef444408' : step.type === 'objective' ? '#a855f708' : 'var(--bg)', width: '100%', maxWidth: 440, textAlign: 'center' }}>
-                        <div style={{ fontSize: 18, marginBottom: 4 }}>{step.icon}</div>
-                        <div style={{ fontWeight: 700, fontSize: 13 }}>{step.node}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3 }}>{step.desc}</div>
+                    { node: 'Internet', type: 'source', icon: Globe, desc: 'Attacker on public internet' },
+                    { node: findingDetail.asset_name, type: 'entry', icon: Target, desc: `Exploit ${findingDetail.cve_id} — CVSS ${findingDetail.cvss_score.toFixed(1)}, ${findingDetail.exploit_maturity} exploit available` },
+                    { node: 'Internal Network', type: 'pivot', icon: ArrowLeftRight, desc: 'Lateral movement across network segments' },
+                    { node: 'Domain Admin / Data', type: 'objective', icon: Crown, desc: 'Credential theft, data exfiltration, or ransomware deployment' },
+                  ].map((step, i, arr) => {
+                    const Icon = step.icon;
+                    return (
+                      <div key={step.node} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: i < arr.length - 1 ? 0 : 0 }}>
+                        <div style={{ padding: '10px 16px', border: `2px solid ${step.type === 'source' ? '#6b7280' : step.type === 'entry' ? '#ef4444' : step.type === 'pivot' ? '#f97316' : '#a855f7'}`, borderRadius: 8, background: step.type === 'entry' ? '#ef444408' : step.type === 'objective' ? '#a855f708' : 'var(--bg)', width: '100%', maxWidth: 440, textAlign: 'center' }}>
+                          <Icon style={{ width: 18, height: 18, margin: '0 auto 4px' }} />
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{step.node}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3 }}>{step.desc}</div>
+                        </div>
+                        {i < arr.length - 1 && <div style={{ fontSize: 20, color: 'var(--text-3)', margin: '4px 0' }}>↓</div>}
                       </div>
-                      {i < arr.length - 1 && <div style={{ fontSize: 20, color: 'var(--text-3)', margin: '4px 0' }}>↓</div>}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -421,22 +438,21 @@ function InventoryTab({
                     {findingDetail.patch_url && <><strong>Patch URL:</strong> <span style={{ color: 'var(--accent)' }}>{findingDetail.patch_url}</span></>}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => onAction(findingDetail.id, 'mark_patched')}>Mark as Patched</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>Launch Patch Job</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>Create Ticket</button>
+                    <ActionButton variant="primary" onClick={() => onAction(findingDetail.id, 'mark_patched')} style={{ fontSize: 12 }}>Mark as Patched</ActionButton>
+                    <ActionButton variant="ghost" style={{ fontSize: 12 }}>Launch Patch Job</ActionButton>
+                    <ActionButton variant="ghost" style={{ fontSize: 12 }}>Create Ticket</ActionButton>
                   </div>
                 </div>
-                <div className="g-card" style={{ padding: 14 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Response Actions</div>
+                <SectionCard title="Response Actions">
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>📋 Create Incident</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>▶ Run SOAR Playbook</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>📧 Notify Asset Owner</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>✓ Verify Remediation</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => onAction(findingDetail.id, 'accept_risk')}>Accept Risk</button>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => onAction(findingDetail.id, 'defer')}>Defer</button>
+                    <ActionButton variant="ghost" icon={ClipboardList} style={{ fontSize: 12 }}>Create Incident</ActionButton>
+                    <ActionButton variant="ghost" icon={Play} style={{ fontSize: 12 }}>Run SOAR Playbook</ActionButton>
+                    <ActionButton variant="ghost" icon={Mail} style={{ fontSize: 12 }}>Notify Asset Owner</ActionButton>
+                    <ActionButton variant="ghost" icon={Check} style={{ fontSize: 12 }}>Verify Remediation</ActionButton>
+                    <ActionButton variant="ghost" onClick={() => onAction(findingDetail.id, 'accept_risk')} style={{ fontSize: 12 }}>Accept Risk</ActionButton>
+                    <ActionButton variant="ghost" onClick={() => onAction(findingDetail.id, 'defer')} style={{ fontSize: 12 }}>Defer</ActionButton>
                   </div>
-                </div>
+                </SectionCard>
                 {findingDetail.cisa_advisory && (
                   <div className="g-card" style={{ padding: 14 }}>
                     <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Vendor Advisory</div>
@@ -450,24 +466,29 @@ function InventoryTab({
             {detailSub === 'timeline' && (
               <div>
                 {[
-                  { label: 'CVE Published', date: findingDetail.published_at, icon: '📄', done: !!findingDetail.published_at },
-                  { label: 'Asset Scanned', date: findingDetail.detected_at, icon: '🔍', done: true },
-                  { label: 'Detected', date: findingDetail.detected_at, icon: '⚠', done: true },
-                  { label: 'Patch Released', date: findingDetail.patch_released_at, icon: '📦', done: !!findingDetail.patch_released_at },
-                  { label: 'Patched', date: findingDetail.patched_at, icon: '✅', done: !!findingDetail.patched_at },
-                  { label: 'Verified', date: findingDetail.verified_at, icon: '☑', done: !!findingDetail.verified_at },
-                ].map((step, i, arr) => (
-                  <div key={step.label} style={{ display: 'flex', gap: 12, paddingBottom: 16 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 32 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: step.done ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>{step.icon}</div>
-                      {i < arr.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--border)', marginTop: 4 }} />}
+                  { label: 'CVE Published', date: findingDetail.published_at, icon: FileText, done: !!findingDetail.published_at },
+                  { label: 'Asset Scanned', date: findingDetail.detected_at, icon: ScanLine, done: true },
+                  { label: 'Detected', date: findingDetail.detected_at, icon: AlertTriangle, done: true },
+                  { label: 'Patch Released', date: findingDetail.patch_released_at, icon: Package, done: !!findingDetail.patch_released_at },
+                  { label: 'Patched', date: findingDetail.patched_at, icon: CheckCircle2, done: !!findingDetail.patched_at },
+                  { label: 'Verified', date: findingDetail.verified_at, icon: CheckSquare, done: !!findingDetail.verified_at },
+                ].map((step, i, arr) => {
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.label} style={{ display: 'flex', gap: 12, paddingBottom: 16 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 32 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: step.done ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Icon style={{ width: 14, height: 14, color: step.done ? '#fff' : 'var(--text-3)' }} />
+                        </div>
+                        {i < arr.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--border)', marginTop: 4 }} />}
+                      </div>
+                      <div style={{ paddingTop: 4 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: step.done ? 'var(--text-1)' : 'var(--text-3)' }}>{step.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{step.date ? new Date(step.date).toLocaleDateString() + ' · ' + timeAgo(step.date) : 'Pending'}</div>
+                      </div>
                     </div>
-                    <div style={{ paddingTop: 4 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: step.done ? 'var(--text-1)' : 'var(--text-3)' }}>{step.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{step.date ? new Date(step.date).toLocaleDateString() + ' · ' + timeAgo(step.date) : 'Pending'}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -481,40 +502,26 @@ function InventoryTab({
 function AssetsTab({ assets }: { assets: any[] }) {
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600 }}>Asset Exposure ({assets.length} assets)</span>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>
-              {['Host', 'IP', 'OS', 'Owner', 'Business Unit', 'Internet', 'Risk', 'Criticality', 'Vulns', 'Critical', 'Last Scanned'].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {assets.map(a => (
-              <tr key={a.id} onClick={() => setSelectedAsset(selectedAsset?.id === a.id ? null : a)} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selectedAsset?.id === a.id ? 'var(--accent)08' : 'transparent' }}>
-                <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{a.hostname}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{a.ip_address}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)' }}>{a.os} {a.os_version}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)' }}>{a.owner?.split('@')[0]}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)' }}>{a.business_unit}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'center' }}>{a.internet_facing ? <span style={{ color: '#ef4444', fontWeight: 700, fontSize: 12 }}>YES</span> : <span style={{ color: 'var(--text-3)', fontSize: 12 }}>No</span>}</td>
-                <td style={{ padding: '9px 12px' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: RISK_COLOR(a.risk_score) }}>{a.risk_score.toFixed(0)}</span>
-                </td>
-                <td style={{ padding: '9px 12px' }}><SevBadge sev={a.criticality} /></td>
-                <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>{a.vuln_count}</td>
-                <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700, color: a.critical_count > 0 ? '#ef4444' : 'var(--text-2)', textAlign: 'center' }}>{a.critical_count}</td>
-                <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.last_scanned_at ? timeAgo(a.last_scanned_at) : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <SectionCard title={`Asset Exposure (${assets.length} assets)`} padded={false}>
+      <DataTable<any>
+        rows={assets}
+        rowKey={(a: any) => a.id}
+        onRowClick={a => setSelectedAsset(selectedAsset?.id === a.id ? null : a)}
+        rowStyle={(a: any) => selectedAsset?.id === a.id ? { background: 'var(--accent)08' } : undefined}
+        columns={[
+          { key: 'hostname', header: 'Host', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{a.hostname}</span> },
+          { key: 'ip_address', header: 'IP', render: (a: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{a.ip_address}</span> },
+          { key: 'os', header: 'OS', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{a.os} {a.os_version}</span> },
+          { key: 'owner', header: 'Owner', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{a.owner?.split('@')[0]}</span> },
+          { key: 'business_unit', header: 'Business Unit', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{a.business_unit}</span> },
+          { key: 'internet_facing', header: 'Internet', align: 'center', render: (a: any) => a.internet_facing ? <span style={{ color: '#ef4444', fontWeight: 700, fontSize: 12 }}>YES</span> : <span style={{ color: 'var(--text-3)', fontSize: 12 }}>No</span> },
+          { key: 'risk_score', header: 'Risk', render: (a: any) => <span style={{ fontSize: 12, fontWeight: 700, color: RISK_COLOR(a.risk_score) }}>{a.risk_score.toFixed(0)}</span> },
+          { key: 'criticality', header: 'Criticality', render: (a: any) => <SevBadge sev={a.criticality} /> },
+          { key: 'vuln_count', header: 'Vulns', align: 'center', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 600 }}>{a.vuln_count}</span> },
+          { key: 'critical_count', header: 'Critical', align: 'center', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 700, color: a.critical_count > 0 ? '#ef4444' : 'var(--text-2)' }}>{a.critical_count}</span> },
+          { key: 'last_scanned_at', header: 'Last Scanned', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{a.last_scanned_at ? timeAgo(a.last_scanned_at) : '—'}</span> },
+        ]}
+      />
       {selectedAsset && (
         <div style={{ padding: '16px', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
           <div style={{ fontWeight: 600, marginBottom: 10 }}>Asset Context: {selectedAsset.hostname}</div>
@@ -525,7 +532,7 @@ function AssetsTab({ assets }: { assets: any[] }) {
           </div>
         </div>
       )}
-    </div>
+    </SectionCard>
   );
 }
 
@@ -535,38 +542,33 @@ function SurfaceTab({ surface }: { surface: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <StatCard label="Internet Exposed" value={surface.internet_exposed_assets} color="#ef4444" sub="assets" />
-        <StatCard label="Open Ports" value={surface.open_ports_total} />
-        <StatCard label="Expired Certs" value={surface.certificates?.filter((c: any) => c.expired).length || 0} color="#ef4444" />
-        <StatCard label="Critical FW Rules" value={surface.firewall_exposure?.filter((r: any) => r.risk === 'critical').length || 0} color="#ef4444" />
+        <MetricCard label="Internet Exposed" value={surface.internet_exposed_assets} color="#ef4444" sub="assets" />
+        <MetricCard label="Open Ports" value={surface.open_ports_total} />
+        <MetricCard label="Expired Certs" value={surface.certificates?.filter((c: any) => c.expired).length || 0} color="#ef4444" />
+        <MetricCard label="Critical FW Rules" value={surface.firewall_exposure?.filter((r: any) => r.risk === 'critical').length || 0} color="#ef4444" />
       </div>
 
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Exposed Services</div>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead"><tr>
-            {['Service', 'Port', 'Assets', 'Risk', 'Notes'].map(h => <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {surface.exposed_services?.map((s: any, i: number) => (
-              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '9px 14px', fontSize: 12, fontWeight: 600 }}>{s.service}</td>
-                <td style={{ padding: '9px 14px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{s.port}</td>
-                <td style={{ padding: '9px 14px', fontSize: 12 }}>{s.assets}</td>
-                <td style={{ padding: '9px 14px' }}>
-                  {s.vulnerable_version && <span style={{ fontSize: 10, background: '#ef4444', color: '#fff', padding: '2px 6px', borderRadius: 3, fontWeight: 700 }}>VULNERABLE</span>}
-                  {s.risk && !s.vulnerable_version && <SevBadge sev={s.risk} />}
-                </td>
-                <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)' }}>{s.notes || (s.cve ? `CVE: ${s.cve}` : '—')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <SectionCard title="Exposed Services" padded={false}>
+        <DataTable<any>
+          rows={surface.exposed_services ?? []}
+          rowKey={(s: any, i: number) => i}
+          columns={[
+            { key: 'service', header: 'Service', render: (s: any) => <span style={{ fontSize: 12, fontWeight: 600 }}>{s.service}</span> },
+            { key: 'port', header: 'Port', render: (s: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{s.port}</span> },
+            { key: 'assets', header: 'Assets', render: (s: any) => <span style={{ fontSize: 12 }}>{s.assets}</span> },
+            { key: 'risk', header: 'Risk', render: (s: any) => (
+              <>
+                {s.vulnerable_version && <span style={{ fontSize: 10, background: '#ef4444', color: '#fff', padding: '2px 6px', borderRadius: 3, fontWeight: 700 }}>VULNERABLE</span>}
+                {s.risk && !s.vulnerable_version && <SevBadge sev={s.risk} />}
+              </>
+            ) },
+            { key: 'notes', header: 'Notes', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.notes || (s.cve ? `CVE: ${s.cve}` : '—')}</span> },
+          ]}
+        />
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>TLS Certificates</div>
+        <SectionCard title="TLS Certificates">
           {surface.certificates?.map((cert: any, i: number) => (
             <div key={i} style={{ padding: '8px 0', borderBottom: i < surface.certificates.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -578,9 +580,8 @@ function SurfaceTab({ surface }: { surface: any }) {
               <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{cert.issuer} · {cert.strength}</div>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Firewall Exposure</div>
+        </SectionCard>
+        <SectionCard title="Firewall Exposure">
           {surface.firewall_exposure?.map((r: any, i: number) => (
             <div key={i} style={{ padding: '8px 0', borderBottom: i < surface.firewall_exposure.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -590,7 +591,7 @@ function SurfaceTab({ surface }: { surface: any }) {
               <div style={{ fontSize: 11, color: '#22c55e' }}>→ {r.recommendation}</div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -602,48 +603,44 @@ function PatchesTab({ patches, onPatchAction }: { patches: any[]; onPatchAction:
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {['pending', 'installed', 'failed', 'deferred'].map(s => (
-          <StatCard key={s} label={s.charAt(0).toUpperCase()+s.slice(1)} value={patches.filter(p => p.patch_status === s).length} color={PATCH_COLOR[s]} />
+          <MetricCard key={s} label={s.charAt(0).toUpperCase()+s.slice(1)} value={patches.filter(p => p.patch_status === s).length} color={PATCH_COLOR[s]} />
         ))}
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Patch Tracking</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead"><tr>
-              {['CVE', 'Asset', 'Patch', 'Status', 'Restart', 'Downtime', 'Assigned To', 'Scheduled', 'Actions'].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {patches.map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '9px 12px', fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent)' }}>{p.cve_id}</td>
-                  <td style={{ padding: '9px 12px', fontSize: 12 }}>{p.asset_name}</td>
-                  <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)' }}>{p.patch_version || '—'}</td>
-                  <td style={{ padding: '9px 12px' }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (PATCH_COLOR[p.patch_status] || '#6b7280') + '22', color: PATCH_COLOR[p.patch_status] || '#6b7280', border: `1px solid ${(PATCH_COLOR[p.patch_status]||'#6b7280')}44`, textTransform: 'capitalize' }}>
-                      {p.patch_status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '9px 12px', fontSize: 12, textAlign: 'center' }}>{p.restart_required ? '⚠ Yes' : 'No'}</td>
-                  <td style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-2)' }}>{p.estimated_downtime ? `${p.estimated_downtime}m` : '—'}</td>
-                  <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)' }}>{p.assigned_to?.split('@')[0] || '—'}</td>
-                  <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-3)' }}>{p.scheduled_at ? new Date(p.scheduled_at).toLocaleDateString() : '—'}</td>
-                  <td style={{ padding: '9px 12px' }}>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {p.patch_status === 'pending' && <button className="g-btn g-btn-primary" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => onPatchAction(p.id, 'install')}>Install</button>}
-                      {p.patch_status === 'pending' && <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => onPatchAction(p.id, 'defer')}>Defer</button>}
-                      {p.patch_status === 'failed' && <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => onPatchAction(p.id, 'install')}>Retry</button>}
-                      {p.rollback_available && <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 7px' }} onClick={() => onPatchAction(p.id, 'rollback')}>Rollback</button>}
-                    </div>
-                    {p.failure_reason && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3 }}>{p.failure_reason.substring(0, 40)}…</div>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard title="Patch Tracking" padded={false}>
+        <DataTable<any>
+          rows={patches}
+          rowKey={(p: any) => p.id}
+          columns={[
+            { key: 'cve_id', header: 'CVE', render: (p: any) => <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: 'var(--accent)' }}>{p.cve_id}</span> },
+            { key: 'asset_name', header: 'Asset', render: (p: any) => <span style={{ fontSize: 12 }}>{p.asset_name}</span> },
+            { key: 'patch_version', header: 'Patch', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{p.patch_version || '—'}</span> },
+            { key: 'patch_status', header: 'Status', render: (p: any) => (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (PATCH_COLOR[p.patch_status] || '#6b7280') + '22', color: PATCH_COLOR[p.patch_status] || '#6b7280', border: `1px solid ${(PATCH_COLOR[p.patch_status]||'#6b7280')}44`, textTransform: 'capitalize' }}>
+                {p.patch_status}
+              </span>
+            ) },
+            { key: 'restart_required', header: 'Restart', align: 'center', render: (p: any) => (
+              p.restart_required
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12 }}><AlertTriangle style={{ width: 11, height: 11, color: '#f97316' }} /> Yes</span>
+                : <span style={{ fontSize: 12 }}>No</span>
+            ) },
+            { key: 'estimated_downtime', header: 'Downtime', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.estimated_downtime ? `${p.estimated_downtime}m` : '—'}</span> },
+            { key: 'assigned_to', header: 'Assigned To', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{p.assigned_to?.split('@')[0] || '—'}</span> },
+            { key: 'scheduled_at', header: 'Scheduled', render: (p: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.scheduled_at ? new Date(p.scheduled_at).toLocaleDateString() : '—'}</span> },
+            { key: 'actions', header: 'Actions', render: (p: any) => (
+              <div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {p.patch_status === 'pending' && <ActionButton variant="primary" onClick={() => onPatchAction(p.id, 'install')} style={{ fontSize: 10, padding: '2px 7px' }}>Install</ActionButton>}
+                  {p.patch_status === 'pending' && <ActionButton variant="ghost" onClick={() => onPatchAction(p.id, 'defer')} style={{ fontSize: 10, padding: '2px 7px' }}>Defer</ActionButton>}
+                  {p.patch_status === 'failed' && <ActionButton variant="ghost" onClick={() => onPatchAction(p.id, 'install')} style={{ fontSize: 10, padding: '2px 7px' }}>Retry</ActionButton>}
+                  {p.rollback_available && <ActionButton variant="ghost" onClick={() => onPatchAction(p.id, 'rollback')} style={{ fontSize: 10, padding: '2px 7px' }}>Rollback</ActionButton>}
+                </div>
+                {p.failure_reason && <div style={{ fontSize: 10, color: '#ef4444', marginTop: 3 }}>{p.failure_reason.substring(0, 40)}…</div>}
+              </div>
+            ) },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -653,8 +650,7 @@ function ThreatIntelTab({ ti }: { ti: any }) {
   if (!ti) return <div style={{ color: 'var(--text-3)', padding: 40, textAlign: 'center' }}>Loading…</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="g-card" style={{ padding: 14 }}>
-        <div style={{ fontWeight: 600, marginBottom: 10 }}>CISA KEV Catalog — Matched Findings</div>
+      <SectionCard title="CISA KEV Catalog — Matched Findings">
         {ti.kev_catalog?.map((k: any) => (
           <div key={k.cve} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -666,9 +662,8 @@ function ThreatIntelTab({ ti }: { ti: any }) {
             <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{k.notes}</div>
           </div>
         ))}
-      </div>
-      <div className="g-card" style={{ padding: 14 }}>
-        <div style={{ fontWeight: 600, marginBottom: 10 }}>Active Exploitation — Confirmed Threat Actor Activity</div>
+      </SectionCard>
+      <SectionCard title="Active Exploitation — Confirmed Threat Actor Activity">
         {ti.active_exploitation?.map((e: any) => (
           <div key={e.cve} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -679,10 +674,9 @@ function ThreatIntelTab({ ti }: { ti: any }) {
             <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Campaign: {e.campaign} · First observed: {e.first_observed}</div>
           </div>
         ))}
-      </div>
+      </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Exploit Availability</div>
+        <SectionCard title="Exploit Availability">
           {ti.exploit_availability?.map((e: any) => (
             <div key={e.cve} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -690,15 +684,14 @@ function ThreatIntelTab({ ti }: { ti: any }) {
                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: e.maturity === 'weaponized' ? '#ef444422' : '#f9731622', color: e.maturity === 'weaponized' ? '#ef4444' : '#f97316', fontWeight: 600, textTransform: 'capitalize' }}>{e.maturity}</span>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                {e.public_poc && <span style={{ fontSize: 10, color: '#22c55e' }}>✓ Public PoC</span>}
-                {e.metasploit && <span style={{ fontSize: 10, color: '#ef4444' }}>✓ Metasploit</span>}
-                {e.exploit_db && <span style={{ fontSize: 10, color: '#f97316' }}>✓ Exploit-DB</span>}
+                {e.public_poc && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#22c55e' }}><Check style={{ width: 9, height: 9 }} /> Public PoC</span>}
+                {e.metasploit && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#ef4444' }}><Check style={{ width: 9, height: 9 }} /> Metasploit</span>}
+                {e.exploit_db && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#f97316' }}><Check style={{ width: 9, height: 9 }} /> Exploit-DB</span>}
               </div>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Threat Actors</div>
+        </SectionCard>
+        <SectionCard title="Threat Actors">
           {ti.threat_actors?.map((a: any) => (
             <div key={a.name} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
@@ -709,7 +702,7 @@ function ThreatIntelTab({ ti }: { ti: any }) {
               <div style={{ fontSize: 11, color: 'var(--text-2)' }}>Targets: {a.target_sectors}</div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -722,47 +715,40 @@ function ComplianceTab({ compliance }: { compliance: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Overall Score" value={`${compliance.overall_score}%`} color={compliance.overall_score >= 80 ? '#22c55e' : '#f97316'} />
-        <StatCard label="Failed Controls" value={compliance.failed_controls} color="#ef4444" />
-        <StatCard label="Missing Patches" value={compliance.missing_patches} color="#f97316" />
-        <StatCard label="SLA Violations" value={compliance.sla_violations} color="#f97316" />
+        <MetricCard label="Overall Score" value={`${compliance.overall_score}%`} color={compliance.overall_score >= 80 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="Failed Controls" value={compliance.failed_controls} color="#ef4444" />
+        <MetricCard label="Missing Patches" value={compliance.missing_patches} color="#f97316" />
+        <MetricCard label="SLA Violations" value={compliance.sla_violations} color="#f97316" />
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {compliance.frameworks?.map((fw: any, i: number) => (
-          <button key={fw.name} onClick={() => setActiveFramework(i)} className={activeFramework === i ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} style={{ fontSize: 12 }}>
+          <ActionButton key={fw.name} variant={activeFramework === i ? 'primary' : 'ghost'} onClick={() => setActiveFramework(i)} style={{ fontSize: 12 }}>
             {fw.name}
             <span style={{ marginLeft: 6, fontSize: 11, color: activeFramework === i ? 'inherit' : fw.status === 'failing' ? '#ef4444' : '#f97316' }}>{fw.score.toFixed(0)}%</span>
-          </button>
+          </ActionButton>
         ))}
       </div>
       {compliance.frameworks?.[activeFramework] && (
-        <div className="g-card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600 }}>{compliance.frameworks[activeFramework].name}</span>
-            <span style={{ fontSize: 12, color: compliance.frameworks[activeFramework].status === 'failing' ? '#ef4444' : '#f97316', fontWeight: 700 }}>{compliance.frameworks[activeFramework].score.toFixed(0)}% · {compliance.frameworks[activeFramework].status}</span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead className="g-thead"><tr>
-                {['Control ID', 'Title', 'Status', 'Finding'].map(h => <th key={h} className="g-tr" style={{ padding: '8px 14px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left' }}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {compliance.frameworks[activeFramework].controls?.map((ctrl: any) => (
-                  <tr key={ctrl.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '9px 14px', fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>{ctrl.id}</td>
-                    <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)', maxWidth: 280 }}>{ctrl.title}</td>
-                    <td style={{ padding: '9px 14px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: ctrl.status === 'passing' ? '#22c55e22' : ctrl.status === 'failing' ? '#ef444422' : '#f9731622', color: ctrl.status === 'passing' ? '#22c55e' : ctrl.status === 'failing' ? '#ef4444' : '#f97316', border: `1px solid ${ctrl.status === 'passing' ? '#22c55e44' : ctrl.status === 'failing' ? '#ef444444' : '#f9731644'}` }}>
-                        {ctrl.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '9px 14px', fontSize: 12, color: 'var(--text-2)' }}>{ctrl.finding || ctrl.last_scan ? `Last scan: ${ctrl.last_scan}` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SectionCard
+          title={compliance.frameworks[activeFramework].name}
+          actions={<span style={{ fontSize: 12, color: compliance.frameworks[activeFramework].status === 'failing' ? '#ef4444' : '#f97316', fontWeight: 700 }}>{compliance.frameworks[activeFramework].score.toFixed(0)}% · {compliance.frameworks[activeFramework].status}</span>}
+          padded={false}
+        >
+          <DataTable<any>
+            rows={compliance.frameworks[activeFramework].controls ?? []}
+            rowKey={(ctrl: any) => ctrl.id}
+            columns={[
+              { key: 'id', header: 'Control ID', render: (ctrl: any) => <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace' }}>{ctrl.id}</span> },
+              { key: 'title', header: 'Title', render: (ctrl: any) => <span style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 280, display: 'block' }}>{ctrl.title}</span> },
+              { key: 'status', header: 'Status', render: (ctrl: any) => (
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: ctrl.status === 'passing' ? '#22c55e22' : ctrl.status === 'failing' ? '#ef444422' : '#f9731622', color: ctrl.status === 'passing' ? '#22c55e' : ctrl.status === 'failing' ? '#ef4444' : '#f97316', border: `1px solid ${ctrl.status === 'passing' ? '#22c55e44' : ctrl.status === 'failing' ? '#ef444444' : '#f9731644'}` }}>
+                  {ctrl.status}
+                </span>
+              ) },
+              { key: 'finding', header: 'Finding', render: (ctrl: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{ctrl.finding ? ctrl.finding : ctrl.last_scan ? `Last scan: ${ctrl.last_scan}` : '—'}</span> },
+            ]}
+          />
+        </SectionCard>
       )}
     </div>
   );
@@ -774,18 +760,17 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total" value={analytics.total} />
-        <StatCard label="Critical" value={analytics.critical} color="#ef4444" />
-        <StatCard label="High" value={analytics.high} color="#f97316" />
-        <StatCard label="Patched" value={analytics.patched} color="#22c55e" />
-        <StatCard label="KEV" value={analytics.kev} color="#ef4444" />
-        <StatCard label="MTTR" value={`${analytics.mttr_days}d`} color="var(--accent)" />
-        <StatCard label="Patch SLA" value={`${analytics.patch_sla}%`} color={analytics.patch_sla >= 90 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="Total" value={analytics.total} />
+        <MetricCard label="Critical" value={analytics.critical} color="#ef4444" />
+        <MetricCard label="High" value={analytics.high} color="#f97316" />
+        <MetricCard label="Patched" value={analytics.patched} color="#22c55e" />
+        <MetricCard label="KEV" value={analytics.kev} color="#ef4444" />
+        <MetricCard label="MTTR" value={`${analytics.mttr_days}d`} color="var(--accent)" />
+        <MetricCard label="Patch SLA" value={`${analytics.patch_sla}%`} color={analytics.patch_sla >= 90 ? '#22c55e' : '#f97316'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Top Vulnerable Assets</div>
+        <SectionCard title="Top Vulnerable Assets">
           {analytics.top_vulnerable_assets?.map((a: any) => (
             <div key={a.asset} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, flex: 1, fontFamily: 'monospace' }}>{a.asset}</span>
@@ -796,9 +781,8 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               <span style={{ fontSize: 11, color: 'var(--text-3)', width: 32 }}>{a.risk_score.toFixed(0)}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Top CVEs by Risk</div>
+        </SectionCard>
+        <SectionCard title="Top CVEs by Risk">
           {analytics.top_cves?.map((c: any) => (
             <div key={c.cve} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 12 }}>
               <span style={{ fontFamily: 'monospace', color: 'var(--accent)', width: 120 }}>{c.cve}</span>
@@ -808,15 +792,13 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
               <span style={{ color: 'var(--text-3)', fontSize: 11, marginLeft: 'auto' }}>{c.affected_assets} assets</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Risk Trend (Weekly)</div>
+      <SectionCard title="Risk Trend (Weekly)">
         <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 80 }}>
           {analytics.risk_trend?.map((d: any) => {
             const max = Math.max(...analytics.risk_trend.map((x: any) => x.critical + x.high + x.medium), 1);
-            const total = d.critical + d.high + d.medium;
             return (
               <div key={d.week} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 <div style={{ position: 'relative', width: '100%', height: 64, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
@@ -829,31 +811,25 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
             );
           })}
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Patch SLA Compliance by Severity</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead><tr>{['Severity', 'SLA (days)', 'Avg Days', 'On-Time %', 'Progress'].map(h => <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
-            <tbody>
-              {analytics.patch_sla_breakdown?.map((s: any) => (
-                <tr key={s.severity} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '8px 10px' }}><SevBadge sev={s.severity} /></td>
-                  <td style={{ padding: '8px 10px' }}>{s.sla_days}</td>
-                  <td style={{ padding: '8px 10px', color: s.avg_days > s.sla_days ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{s.avg_days}</td>
-                  <td style={{ padding: '8px 10px', color: s.on_time_pct >= 90 ? '#22c55e' : '#f97316', fontWeight: 700 }}>{s.on_time_pct}%</td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <div style={{ width: 100, background: 'var(--border)', borderRadius: 2, height: 6 }}>
-                      <div style={{ background: s.on_time_pct >= 90 ? '#22c55e' : '#f97316', borderRadius: 2, height: 6, width: `${s.on_time_pct}%` }} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard title="Patch SLA Compliance by Severity" padded={false}>
+        <DataTable<any>
+          rows={analytics.patch_sla_breakdown ?? []}
+          rowKey={(s: any) => s.severity}
+          columns={[
+            { key: 'severity', header: 'Severity', render: (s: any) => <SevBadge sev={s.severity} /> },
+            { key: 'sla_days', header: 'SLA (days)', render: (s: any) => <span>{s.sla_days}</span> },
+            { key: 'avg_days', header: 'Avg Days', render: (s: any) => <span style={{ color: s.avg_days > s.sla_days ? '#ef4444' : '#22c55e', fontWeight: 700 }}>{s.avg_days}</span> },
+            { key: 'on_time_pct', header: 'On-Time %', render: (s: any) => <span style={{ color: s.on_time_pct >= 90 ? '#22c55e' : '#f97316', fontWeight: 700 }}>{s.on_time_pct}%</span> },
+            { key: 'progress', header: 'Progress', render: (s: any) => (
+              <div style={{ width: 100, background: 'var(--border)', borderRadius: 2, height: 6 }}>
+                <div style={{ background: s.on_time_pct >= 90 ? '#22c55e' : '#f97316', borderRadius: 2, height: 6, width: `${s.on_time_pct}%` }} />
+              </div>
+            ) },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -868,14 +844,13 @@ function ScansTab({ scans, onLaunchScan }: { scans: any[]; onLaunchScan: (data: 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {SCAN_TYPES.map(t => (
-          <button key={t} className="g-btn g-btn-ghost" style={{ fontSize: 11, textTransform: 'capitalize' }} onClick={() => { setForm(f => ({ ...f, scan_type: t })); setShowForm(true); }}>
-            + {t.charAt(0).toUpperCase()+t.slice(1)} Scan
-          </button>
+          <ActionButton key={t} variant="ghost" icon={Plus} onClick={() => { setForm(f => ({ ...f, scan_type: t })); setShowForm(true); }} style={{ fontSize: 11, textTransform: 'capitalize' }}>
+            {t.charAt(0).toUpperCase()+t.slice(1)} Scan
+          </ActionButton>
         ))}
       </div>
       {showForm && (
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Launch Scan</div>
+        <SectionCard title="Launch Scan">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Name</label>
@@ -892,44 +867,34 @@ function ScansTab({ scans, onLaunchScan }: { scans: any[]; onLaunchScan: (data: 
               <input className="g-input" value={form.target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))} placeholder="IP/CIDR/host…" style={{ fontSize: 12 }} />
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => { onLaunchScan(form); setShowForm(false); setForm({ name: '', scan_type: 'network', target: '', profile: 'full' }); }}>Launch</button>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowForm(false)}>Cancel</button>
+              <ActionButton variant="primary" onClick={() => { onLaunchScan(form); setShowForm(false); setForm({ name: '', scan_type: 'network', target: '', profile: 'full' }); }} style={{ fontSize: 12 }}>Launch</ActionButton>
+              <ActionButton variant="ghost" onClick={() => setShowForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
             </div>
           </div>
-        </div>
+        </SectionCard>
       )}
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Scan History</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead"><tr>
-              {['Name', 'Type', 'Target', 'Profile', 'Status', 'Findings', 'Duration', 'Created By', 'Started'].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {scans.map(s => {
-                const dur = s.started_at && s.finished_at ? Math.round((new Date(s.finished_at).getTime() - new Date(s.started_at).getTime()) / 60000) : null;
-                return (
-                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '9px 12px', fontSize: 12, fontWeight: 600 }}>{s.name}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{s.scan_type}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.target}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{s.profile}</td>
-                    <td style={{ padding: '9px 12px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (STATUS_COLOR[s.status]||'#6b7280')+'22', color: STATUS_COLOR[s.status]||'#6b7280', textTransform: 'capitalize' }}>{s.status}</span>
-                    </td>
-                    <td style={{ padding: '9px 12px', fontSize: 12, fontWeight: 700, color: s.findings_count > 0 ? '#f97316' : 'var(--text-3)', textAlign: 'center' }}>{s.findings_count || '—'}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-3)' }}>{dur ? `${dur}m` : s.status === 'running' ? 'Running…' : '—'}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-2)' }}>{s.created_by}</td>
-                    <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-3)' }}>{s.started_at ? timeAgo(s.started_at) : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SectionCard title="Scan History" padded={false}>
+        <DataTable<any>
+          rows={scans}
+          rowKey={(s: any) => s.id}
+          columns={[
+            { key: 'name', header: 'Name', render: (s: any) => <span style={{ fontSize: 12, fontWeight: 600 }}>{s.name}</span> },
+            { key: 'scan_type', header: 'Type', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{s.scan_type}</span> },
+            { key: 'target', header: 'Target', render: (s: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{s.target}</span> },
+            { key: 'profile', header: 'Profile', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'capitalize' }}>{s.profile}</span> },
+            { key: 'status', header: 'Status', render: (s: any) => (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (STATUS_COLOR[s.status]||'#6b7280')+'22', color: STATUS_COLOR[s.status]||'#6b7280', textTransform: 'capitalize' }}>{s.status}</span>
+            ) },
+            { key: 'findings_count', header: 'Findings', align: 'center', render: (s: any) => <span style={{ fontSize: 12, fontWeight: 700, color: s.findings_count > 0 ? '#f97316' : 'var(--text-3)' }}>{s.findings_count || '—'}</span> },
+            { key: 'duration', header: 'Duration', render: (s: any) => {
+              const dur = s.started_at && s.finished_at ? Math.round((new Date(s.finished_at).getTime() - new Date(s.started_at).getTime()) / 60000) : null;
+              return <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{dur ? `${dur}m` : s.status === 'running' ? 'Running…' : '—'}</span>;
+            } },
+            { key: 'created_by', header: 'Created By', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{s.created_by}</span> },
+            { key: 'started_at', header: 'Started', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.started_at ? timeAgo(s.started_at) : '—'}</span> },
+          ]}
+        />
+      </SectionCard>
     </div>
   );
 }
@@ -943,16 +908,15 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: { exceptions: any[];
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 10 }}>
-          <StatCard label="Total" value={exceptions.length} />
-          <StatCard label="Approved" value={exceptions.filter(e => e.status === 'approved').length} color="#22c55e" />
-          <StatCard label="Pending" value={exceptions.filter(e => e.status === 'pending').length} color="#f97316" />
+          <MetricCard label="Total" value={exceptions.length} />
+          <MetricCard label="Approved" value={exceptions.filter(e => e.status === 'approved').length} color="#22c55e" />
+          <MetricCard label="Pending" value={exceptions.filter(e => e.status === 'pending').length} color="#f97316" />
         </div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => setShowForm(true)}>+ Add Exception</button>
+        <ActionButton variant="primary" icon={Plus} onClick={() => setShowForm(true)} style={{ fontSize: 12 }}>Add Exception</ActionButton>
       </div>
 
       {showForm && (
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>New Exception Request</div>
+        <SectionCard title="New Exception Request">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>CVE ID</label>
@@ -974,15 +938,14 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: { exceptions: any[];
             <input className="g-input" placeholder="What controls reduce the risk…" style={{ fontSize: 12 }} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => setShowForm(false)}>Submit</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowForm(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={() => setShowForm(false)} style={{ fontSize: 12 }}>Submit</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Exception Register</div>
-        {exceptions.length === 0 && <div style={{ padding: 24, color: 'var(--text-3)', textAlign: 'center' }}>No exceptions</div>}
+      <SectionCard title="Exception Register" padded={false}>
+        {exceptions.length === 0 && <EmptyState title="No exceptions" />}
         {exceptions.map(e => (
           <div key={e.id} style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -996,12 +959,12 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: { exceptions: any[];
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 10, color: 'var(--text-3)' }}>By {e.created_by} · {timeAgo(e.created_at)}</span>
               {e.approved_by && <span style={{ fontSize: 10, color: '#22c55e' }}>Approved by {e.approved_by}</span>}
-              {e.status === 'pending' && <button className="g-btn g-btn-primary" style={{ fontSize: 10, padding: '2px 8px', marginLeft: 'auto' }} onClick={() => onApprove(e.id)}>Approve</button>}
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px', marginLeft: e.status !== 'pending' ? 'auto' : 0 }} onClick={() => onDelete(e.id)}>Delete</button>
+              {e.status === 'pending' && <ActionButton variant="primary" onClick={() => onApprove(e.id)} style={{ fontSize: 10, padding: '2px 8px', marginLeft: 'auto' }}>Approve</ActionButton>}
+              <ActionButton variant="ghost" onClick={() => onDelete(e.id)} style={{ fontSize: 10, padding: '2px 8px', marginLeft: e.status !== 'pending' ? 'auto' : 0 }}>Delete</ActionButton>
             </div>
           </div>
         ))}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -1015,8 +978,7 @@ function ReportsTab() {
   const generate = async () => { setLoading(true); const r = await vmAPI.generateReport({ report_type: reportType }); setResult(r.data); setLoading(false); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 800 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: 10, alignItems: 'end' }}>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Report Type</label>
@@ -1024,9 +986,9 @@ function ReportsTab() {
               {REPORT_TYPES.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <button className="g-btn g-btn-primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</button>
+          <ActionButton variant="primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</ActionButton>
         </div>
-      </div>
+      </SectionCard>
       {result && (
         <div className="g-card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -1034,7 +996,7 @@ function ReportsTab() {
               <div style={{ fontWeight: 700, fontSize: 15 }}>{result.title}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}</div>
             </div>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>⬇ Export PDF</button>
+            <ActionButton variant="ghost" icon={Download} style={{ fontSize: 12 }}>Export PDF</ActionButton>
           </div>
           <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
@@ -1042,7 +1004,7 @@ function ReportsTab() {
           </div>
           {result.key_metrics && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-              {Object.entries(result.key_metrics).map(([k,v]) => <StatCard key={k} label={k.replace(/_/g,' ')} value={String(v)} />)}
+              {Object.entries(result.key_metrics).map(([k,v]) => <MetricCard key={k} label={k.replace(/_/g,' ')} value={String(v)} />)}
             </div>
           )}
           {result.top_risks && (
@@ -1140,30 +1102,24 @@ export default function VulnerabilitiesPage() {
   };
 
   return (
-    <RootLayout>
+    <RootLayout title="Vulnerability Management"
+      subtitle="CVSS · EPSS · KEV · Asset Exposure · Attack Path — enterprise risk prioritization"
+      actions={dash?.kev_findings > 0 ? (
+        <div style={{ padding: '6px 14px', borderRadius: 6, background: '#ef444422', color: '#ef4444', fontSize: 12, fontWeight: 700, border: '1px solid #ef444444' }}>
+          {dash.kev_findings} KEV finding{dash.kev_findings !== 1 ? 's' : ''} require immediate action
+        </div>
+      ) : undefined}>
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Vulnerability Management</h1>
-            <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
-              CVSS · EPSS · KEV · Asset Exposure · Attack Path — enterprise risk prioritization
-            </div>
-          </div>
-          {dash?.kev_findings > 0 && (
-            <div style={{ padding: '6px 14px', borderRadius: 6, background: '#ef444422', color: '#ef4444', fontSize: 12, fontWeight: 700, border: '1px solid #ef444444' }}>
-              {dash.kev_findings} KEV finding{dash.kev_findings !== 1 ? 's' : ''} require immediate action
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-            <button key={t} onClick={() => switchTab(t)}
-              style={{ padding: '8px 14px', fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          tabs={(Object.keys(TAB_LABELS) as Tab[]).map(t => ({
+            key: t,
+            label: TAB_LABELS[t],
+            icon: TAB_ICONS[t],
+            count: t === 'inventory' ? (findings.length > 0 ? findings.length : undefined) : t === 'exceptions' ? (exceptions.length > 0 ? exceptions.length : undefined) : undefined,
+          }))}
+          active={tab}
+          onChange={t => switchTab(t as Tab)}
+        />
 
         <div style={{ display: tab === 'overview' ? 'block' : 'none' }}><OverviewTab dash={dash} /></div>
         <div style={{ display: tab === 'inventory' ? 'block' : 'none' }}>

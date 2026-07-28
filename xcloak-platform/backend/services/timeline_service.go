@@ -24,15 +24,29 @@ type TimelineFilter struct {
 
 // timelineUnionSQL is the UNION ALL pulling from all event sources for a tenant.
 // $1 = tenantID.  All other filter params are appended by GetTenantTimeline.
+//
+// The alert/incident branches must COALESCE every nullable column they scan
+// (agent_id, severity, rule_name/title) — models.TimelineEvent's fields are
+// plain non-nullable Go types, and scanRows() below silently `continue`s on
+// any row that fails to Scan(). Combined with `ORDER BY created_at DESC
+// LIMIT N`, a single recent alert with a NULL agent_id (a legitimate real
+// case — e.g. a tenant-wide alert not tied to one host) sitting anywhere in
+// the requested page can make that ENTIRE row vanish, and because it's one
+// of the most *recent* rows, it silently eats into the LIMIT window meant
+// for real results — small enough limits can return a fully empty page even
+// though the underlying tenant has plenty of real events (confirmed live:
+// this tenant's accumulated test-generated NULL-agent_id alerts made
+// `?limit=10` return zero rows while `/timeline/stats`, which counts rather
+// than scans, correctly reported hundreds of real events).
 const timelineUnionSQL = `
 SELECT id, agent_id, event_type, message, severity, created_at,
        hostname, username, process_name, mitre_technique, mitre_name, source, details_json
 FROM (
     -- Alerts (detection engine)
-    SELECT a.id, a.agent_id,
+    SELECT a.id, COALESCE(a.agent_id,0) AS agent_id,
            'alert'            AS event_type,
-           a.rule_name        AS message,
-           a.severity,
+           COALESCE(a.rule_name,'')  AS message,
+           COALESCE(a.severity,'')   AS severity,
            a.created_at,
            COALESCE(ag.hostname,'')      AS hostname,
            ''                            AS username,
@@ -53,10 +67,10 @@ FROM (
     UNION ALL
 
     -- Incidents
-    SELECT inc.id, inc.agent_id,
+    SELECT inc.id, COALESCE(inc.agent_id,0) AS agent_id,
            'incident' AS event_type,
-           inc.title  AS message,
-           inc.severity,
+           COALESCE(inc.title,'')    AS message,
+           COALESCE(inc.severity,'') AS severity,
            inc.created_at,
            COALESCE(ag.hostname,'') AS hostname,
            '' AS username, '' AS process_name,
@@ -73,8 +87,8 @@ FROM (
     SELECT pe.id, pe.agent_id,
            'playbook_action' AS event_type,
            CASE WHEN COALESCE(pe.alert_rule,'') <> ''
-                THEN pe.alert_rule || ' → ' || pe.action_type
-                ELSE pe.action_type
+                THEN pe.alert_rule || ' → ' || COALESCE(pe.action_type,'')
+                ELSE COALESCE(pe.action_type,'')
            END AS message,
            '' AS severity,
            pe.created_at,
@@ -288,7 +302,7 @@ func GetAgentTimeline(agentID int) ([]models.TimelineEvent, error) {
 SELECT id, agent_id, event_type, message, severity, created_at,
        hostname, username, process_name, mitre_technique, mitre_name, source, details_json
 FROM (
-    SELECT a.id, a.agent_id, 'alert' AS event_type, a.rule_name AS message, a.severity, a.created_at,
+    SELECT a.id, a.agent_id, 'alert' AS event_type, COALESCE(a.rule_name,'') AS message, COALESCE(a.severity,'') AS severity, a.created_at,
            COALESCE(ag.hostname,'') AS hostname, '' AS username, '' AS process_name,
            COALESCE(a.mitre_technique,'') AS mitre_technique, COALESCE(a.mitre_name,'') AS mitre_name,
            'detection_engine' AS source,
@@ -297,7 +311,7 @@ FROM (
 
     UNION ALL
 
-    SELECT inc.id, inc.agent_id, 'incident', inc.title, inc.severity, inc.created_at,
+    SELECT inc.id, inc.agent_id, 'incident', COALESCE(inc.title,''), COALESCE(inc.severity,''), inc.created_at,
            COALESCE(ag.hostname,''), '', '', '', '', 'incident_engine',
            json_build_object('status', inc.status)::text
     FROM incidents inc LEFT JOIN agents ag ON ag.id = inc.agent_id WHERE inc.agent_id = $1
@@ -305,7 +319,7 @@ FROM (
     UNION ALL
 
     SELECT pe.id, pe.agent_id, 'playbook_action',
-           CASE WHEN COALESCE(pe.alert_rule,'') <> '' THEN pe.alert_rule || ' → ' || pe.action_type ELSE pe.action_type END,
+           CASE WHEN COALESCE(pe.alert_rule,'') <> '' THEN pe.alert_rule || ' → ' || COALESCE(pe.action_type,'') ELSE COALESCE(pe.action_type,'') END,
            '', pe.created_at, COALESCE(ag.hostname,''), '', '', '', '', 'playbook_engine',
            json_build_object('action_type', pe.action_type)::text
     FROM playbook_executions pe JOIN agents ag ON ag.id = pe.agent_id WHERE pe.agent_id = $1

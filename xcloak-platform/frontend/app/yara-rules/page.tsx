@@ -6,7 +6,8 @@ import { yaraAPI, agentsAPI, schedulerAPI } from '@/lib/api';
 import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
 import { Agent } from '@/types';
-import { AlertTriangle, BarChart, Bot, CheckSquare, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Download, Edit2, FileWarning, Grid, Hash, Layers, Plus, Search, Shield, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { AlertTriangle, BarChart, Bot, CheckSquare, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Download, Edit2, FileWarning, Grid, Hash, Layers, Plus, Search, Shield, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -88,16 +89,6 @@ const AI_ACTIONS = [
 ];
 
 // ── Shared micro-components ───────────────────────────────────────────────
-
-function KPICard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card p-4 flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</span>
-      <span className="text-2xl font-bold font-mono" style={{ color: color ?? 'var(--text-1)' }}>{value}</span>
-      {sub && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{sub}</span>}
-    </div>
-  );
-}
 
 function MiniBar({ value, max, color = 'var(--accent)' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
@@ -467,14 +458,14 @@ export default function YaraRulesPage() {
       {tab === 'dashboard' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            <KPICard label="Total Rules" value={dash?.total ?? rules.length} />
-            <KPICard label="Enabled" value={dash?.enabled ?? rules.filter(r => r.enabled).length} color="var(--green)" />
-            <KPICard label="Disabled" value={dash?.disabled ?? rules.filter(r => !r.enabled).length} color="var(--text-3)" />
-            <KPICard label="Matches Today" value={dash?.matches_today ?? '—'} color="var(--orange)" sub="24h" />
-            <KPICard label="Matches 7d" value={dash?.matches_week ?? '—'} color="var(--accent)" />
-            <KPICard label="Total Matches" value={dash?.matches_total ?? matches.length} color="var(--accent)" />
-            <KPICard label="Files Detected" value={dash?.files_detected ?? '—'} color="var(--yellow)" sub="7d" />
-            <KPICard label="Agents" value={dash?.agents_triggered ?? '—'} color="var(--blue)" sub="triggered 7d" />
+            <MetricCard label="Total Rules" value={dash?.total ?? rules.length} />
+            <MetricCard label="Enabled" value={dash?.enabled ?? rules.filter(r => r.enabled).length} color="var(--green)" />
+            <MetricCard label="Disabled" value={dash?.disabled ?? rules.filter(r => !r.enabled).length} color="var(--text-3)" />
+            <MetricCard label="Matches Today" value={dash?.matches_today ?? '—'} color="var(--orange)" sub="24h" />
+            <MetricCard label="Matches 7d" value={dash?.matches_week ?? '—'} color="var(--accent)" />
+            <MetricCard label="Total Matches" value={dash?.matches_total ?? matches.length} color="var(--accent)" />
+            <MetricCard label="Files Detected" value={dash?.files_detected ?? '—'} color="var(--yellow)" sub="7d" />
+            <MetricCard label="Agents" value={dash?.agents_triggered ?? '—'} color="var(--blue)" sub="triggered 7d" />
           </div>
 
           {dash && (

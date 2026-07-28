@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  useState, useEffect, useCallback, useMemo, useRef,
+  Fragment, useState, useEffect, useCallback, useMemo, useRef,
 } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import {
@@ -9,7 +9,8 @@ import {
   suppressionAPI, threatAPI,
 } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, BarChart2, BookOpen, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Code2, Copy, Cpu, Database, Eye, FileText, FlaskConical, GitBranch, Globe, Layers, Play, Plus, RefreshCw, Search, Settings, Shield, Target, ToggleLeft, ToggleRight, Trash2, Upload, Zap, Lock } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertTriangle, BarChart2, BookOpen, Brain, Check, CheckCircle2, ChevronDown, ChevronUp, Code2, Copy, Cpu, Database, Eye, FileText, FlaskConical, GitBranch, Globe, Layers, Play, Plus, RefreshCw, Search, Settings, Shield, Target, ToggleLeft, ToggleRight, Trash2, Upload, Zap, Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,6 @@ interface Overview {
   suppression_rules: number;
   total_alerts_24h: number;
   critical_alerts_24h: number;
-  engine_health: string;
   rule_breakdown: Array<{
     type: string; active: number; disabled: number; total: number; triggered: number;
   }>;
@@ -61,15 +61,13 @@ interface Analytics {
 }
 
 interface Engine {
-  name: string; rules: number; status: string; avg_ms: number; hits_1h?: number;
+  name: string; rules: number; hits_1h?: number;
 }
 interface Performance {
   engines: Engine[];
   total_active: number;
   hits_last_hour: number;
   failed_rules: number;
-  queue_depth: number;
-  uptime_pct: number;
 }
 
 interface SigmaRule {
@@ -81,7 +79,7 @@ interface SigmaRule {
 
 interface CorrelationRule {
   id: number; name: string; description: string; severity: string;
-  enabled: boolean; match_count?: number; window_seconds?: number; sequence?: string[];
+  enabled: boolean; match_count?: number; window_minutes?: number; sequence?: string[];
 }
 
 interface AnomalyFinding {
@@ -90,7 +88,7 @@ interface AnomalyFinding {
 }
 
 interface IOC {
-  id: number; type: string; value: string; severity: string;
+  id: number; type: string; indicator: string; severity: string;
   description: string; enabled: boolean; created_at: string;
 }
 
@@ -174,26 +172,6 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
   );
 }
 
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-
-function KPICard({ label, value, sub, color, icon: Icon }: {
-  label: string; value: number | string; sub?: string;
-  color: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="g-card p-4 flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider mb-0.5 font-medium" style={{ color: 'var(--text-3)' }}>{label}</p>
-        <p className="text-2xl font-bold leading-none" style={{ color }}>{value}</p>
-        {sub && <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
 
 // ── Trend Sparkline ───────────────────────────────────────────────────────────
 
@@ -325,22 +303,12 @@ function PipelineView({ engines }: { engines: Engine[] }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         {engines.map(e => (
-          <div key={e.name} className="g-card p-4 flex items-start gap-3">
-            <StatusDot ok={e.status === 'healthy'} />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{e.name}</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
-                {e.rules} rules · avg {e.avg_ms}ms
-                {e.hits_1h !== undefined && ` · ${e.hits_1h} hits/h`}
-              </p>
-            </div>
-            <span className="text-[10px] capitalize px-2 py-0.5 rounded-full"
-              style={{
-                background: e.status === 'healthy' ? 'rgba(52,211,153,0.15)' : 'rgba(248,81,73,0.15)',
-                color: e.status === 'healthy' ? 'var(--green)' : 'var(--red)',
-              }}>
-              {e.status}
-            </span>
+          <div key={e.name} className="g-card p-4">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{e.name}</p>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>
+              {e.rules} rules
+              {e.hits_1h !== undefined && ` · ${e.hits_1h} hits/h`}
+            </p>
           </div>
         ))}
       </div>
@@ -670,8 +638,8 @@ function SigmaRulesTable({ rules, onToggle, onDelete }: {
             {filtered.map(r => {
               const exp = expanded.has(r.id);
               return (
-                <>
-                  <tr key={r.id}
+                <Fragment key={r.id}>
+                  <tr
                     className="cursor-pointer transition-colors"
                     style={{ borderBottom: '1px solid var(--border)' }}
                     onClick={() => toggle(r.id)}>
@@ -716,7 +684,7 @@ function SigmaRulesTable({ rules, onToggle, onDelete }: {
                     </td>
                   </tr>
                   {exp && (
-                    <tr key={`${r.id}-detail`}>
+                    <tr>
                       <td colSpan={7} className="p-0">
                         <div className="px-4 py-4 space-y-2"
                           style={{ background: 'var(--glass-bg)', borderBottom: '1px solid var(--border)' }}>
@@ -763,7 +731,7 @@ function SigmaRulesTable({ rules, onToggle, onDelete }: {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
@@ -797,7 +765,7 @@ function LibraryPanel() {
             onClick={() => toggle(cat.id)}>
             <span className="text-sm font-medium" style={{ color: 'var(--text-1)' }}>{cat.label}</span>
             <div className="flex items-center gap-2">
-              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{cat.items.length} categories</span>
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{cat.items.length} types</span>
               {expanded === cat.id ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--text-3)' }} />
                                    : <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-3)' }} />}
             </div>
@@ -806,7 +774,7 @@ function LibraryPanel() {
             <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 gap-2"
               style={{ borderTop: '1px solid var(--border)' }}>
               {cat.items.map(item => (
-                <div key={item} className="flex items-center gap-2 p-2.5 rounded-lg cursor-pointer transition-colors"
+                <div key={item} className="flex items-center gap-2 p-2.5 rounded-lg"
                   style={{ background: 'var(--glass-bg-2)', border: '1px solid var(--border)' }}>
                   <Shield className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent)' }} />
                   <span className="text-xs" style={{ color: 'var(--text-2)' }}>{item}</span>
@@ -988,14 +956,14 @@ export default function ThreatDetectionPage() {
           {overview ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <KPICard label="Total Rules"        value={overview.total_rules}         color="var(--accent)"   icon={Shield} />
-                <KPICard label="Active Rules"       value={overview.active_rules}        color="var(--green)"    icon={CheckCircle2} />
-                <KPICard label="Triggered (24h)"   value={overview.triggered_last_24h}  color="#fbbf24"         icon={Zap} />
-                <KPICard label="Alerts Fired"       value={overview.total_alerts_24h}    color="var(--red)"      icon={AlertTriangle} />
-                <KPICard label="MITRE Techniques"   value={overview.mitre_covered}       color="#a78bfa"         icon={Target} sub="techniques covered" />
-                <KPICard label="FP Rate (proxy)"    value={`${overview.fp_rate}%`}       color="#fb923c"         icon={Activity} />
-                <KPICard label="Suppression Rules"  value={overview.suppression_rules}   color="var(--text-3)"   icon={Lock} />
-                <KPICard label="Engine Health"      value={overview.engine_health}       color="var(--green)"    icon={Cpu} />
+                <MetricCard layout="icon-chip" label="Total Rules"        value={overview.total_rules}         color="var(--accent)"   icon={Shield} />
+                <MetricCard layout="icon-chip" label="Active Rules"       value={overview.active_rules}        color="var(--green)"    icon={CheckCircle2} />
+                <MetricCard layout="icon-chip" label="Triggered (24h)"   value={overview.triggered_last_24h}  color="#fbbf24"         icon={Zap} />
+                <MetricCard layout="icon-chip" label="Alerts Fired"       value={overview.total_alerts_24h}    color="var(--red)"      icon={AlertTriangle} />
+                <MetricCard layout="icon-chip" label="MITRE Techniques"   value={overview.mitre_covered}       color="#a78bfa"         icon={Target} sub="techniques covered" />
+                <MetricCard layout="icon-chip" label="FP Rate (proxy)"    value={`${overview.fp_rate}%`}       color="#fb923c"         icon={Activity} />
+                <MetricCard layout="icon-chip" label="Suppression Rules"  value={overview.suppression_rules}   color="var(--text-3)"   icon={Lock} />
+                <MetricCard layout="icon-chip" label="Critical (24h)"     value={overview.critical_alerts_24h} color={overview.critical_alerts_24h > 0 ? 'var(--red)' : 'var(--green)'} icon={Cpu} />
               </div>
 
               {/* Rule type breakdown */}
@@ -1162,10 +1130,10 @@ export default function ThreatDetectionPage() {
                         </button>
                       </div>
                     </div>
-                    {r.sequence && r.sequence.length > 0 && <CorrelationSequence rule={r} />}
-                    {r.window_seconds && (
+                    <CorrelationSequence rule={r} />
+                    {r.window_minutes != null && (
                       <p className="text-[10px] mt-2" style={{ color: 'var(--text-3)' }}>
-                        Window: {r.window_seconds}s · Matches: {r.match_count ?? 0}
+                        Window: {r.window_minutes}m · Matches: {r.match_count ?? 0}
                       </p>
                     )}
                   </div>
@@ -1275,8 +1243,8 @@ export default function ThreatDetectionPage() {
                     </td>
                     <td className="px-4 py-3 max-w-[200px]">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[11px] truncate" style={{ color: 'var(--text-1)' }}>{ioc.value}</span>
-                        <CopyBtn text={ioc.value} />
+                        <span className="font-mono text-[11px] truncate" style={{ color: 'var(--text-1)' }}>{ioc.indicator}</span>
+                        <CopyBtn text={ioc.indicator} />
                       </div>
                     </td>
                     <td className="px-4 py-3">{sevBadge(ioc.severity)}</td>
@@ -1391,9 +1359,7 @@ export default function ThreatDetectionPage() {
                   { label: 'Active Rules',    val: performance.total_active,    color: 'var(--accent)' },
                   { label: 'Hits / Hour',     val: performance.hits_last_hour,  color: '#fbbf24' },
                   { label: 'Failed Rules',    val: performance.failed_rules,    color: performance.failed_rules > 0 ? 'var(--red)' : 'var(--green)' },
-                  { label: 'Queue Depth',     val: performance.queue_depth,     color: 'var(--text-2)' },
                   { label: 'Engine Count',    val: performance.engines.length,  color: 'var(--accent)' },
-                  { label: 'Uptime',          val: `${performance.uptime_pct}%`, color: 'var(--green)' },
                 ].map(s => (
                   <div key={s.label} className="g-card p-4">
                     <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{s.label}</p>
@@ -1405,26 +1371,13 @@ export default function ThreatDetectionPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {performance.engines.map(e => (
                   <div key={e.name} className="g-card p-4">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="mb-2">
                       <span className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{e.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full capitalize"
-                        style={{
-                          background: e.status === 'healthy' ? 'rgba(52,211,153,0.15)' : 'rgba(248,81,73,0.15)',
-                          color: e.status === 'healthy' ? 'var(--green)' : 'var(--red)',
-                        }}>
-                        {e.status}
-                      </span>
                     </div>
                     <div className="space-y-1.5 text-[11px]">
                       <div className="flex justify-between">
                         <span style={{ color: 'var(--text-3)' }}>Rules</span>
                         <span className="font-medium" style={{ color: 'var(--text-2)' }}>{e.rules}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span style={{ color: 'var(--text-3)' }}>Avg Latency</span>
-                        <span className="font-medium" style={{ color: e.avg_ms < 10 ? 'var(--green)' : e.avg_ms < 50 ? '#fbbf24' : 'var(--red)' }}>
-                          {e.avg_ms}ms
-                        </span>
                       </div>
                       {e.hits_1h !== undefined && (
                         <div className="flex justify-between">
@@ -1459,11 +1412,11 @@ export default function ThreatDetectionPage() {
       {/* ── Pipeline ── */}
       {tab === 'pipeline' && (
         <PipelineView engines={performance?.engines ?? [
-          { name: 'Sigma Engine', rules: 0, status: 'healthy', avg_ms: 2 },
-          { name: 'YARA Engine', rules: 0, status: 'healthy', avg_ms: 8 },
-          { name: 'IOC Matcher', rules: 0, status: 'healthy', avg_ms: 1 },
-          { name: 'Correlation Engine', rules: 0, status: 'healthy', avg_ms: 15 },
-          { name: 'ML/Behavioral', rules: 0, status: 'healthy', avg_ms: 45 },
+          { name: 'Sigma Engine', rules: 0 },
+          { name: 'YARA Engine', rules: 0 },
+          { name: 'IOC Matcher', rules: 0 },
+          { name: 'Correlation Engine', rules: 0 },
+          { name: 'ML/Behavioral', rules: 0 },
         ]} />
       )}
 

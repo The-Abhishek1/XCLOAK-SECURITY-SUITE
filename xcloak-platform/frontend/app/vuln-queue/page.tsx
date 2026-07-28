@@ -4,11 +4,19 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { vqAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, Wrench, ShieldOff, BarChart3, FileText,
+  AlertTriangle, Ban, Check, X, Download, Plus, ClipboardList, User, CalendarClock, Search, CheckCircle2, RefreshCw,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'queue' | 'exceptions' | 'analytics' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
   dashboard: 'Dashboard', queue: 'Remediation Queue',
   exceptions: 'Exceptions', analytics: 'Analytics', reports: 'Reports',
+};
+const TAB_ICONS: Record<Tab, any> = {
+  dashboard: LayoutDashboard, queue: Wrench, exceptions: ShieldOff, analytics: BarChart3, reports: FileText,
 };
 
 const PRIORITY_COLOR: Record<string, string> = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e' };
@@ -24,15 +32,6 @@ const ACTIONS = [
 const BLOCKERS = ['maintenance_window', 'vendor_patch_unavailable', 'business_approval_pending', 'system_offline', 'requires_reboot', 'change_request_pending'];
 const EX_TYPES = ['risk_acceptance', 'temporary', 'permanent', 'false_positive', 'compensating_control'];
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 110 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
 
 function PriBadge({ p }: { p: string }) {
   return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 3, background: PRIORITY_COLOR[p] || '#6b7280', color: '#fff', textTransform: 'uppercase' }}>{p}</span>;
@@ -63,21 +62,23 @@ function DashboardTab({ dash }: { dash: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Active" value={dash.total} />
-        <StatCard label="Unassigned" value={dash.unassigned} color={dash.unassigned > 0 ? '#ef4444' : 'var(--text-1)'} />
-        <StatCard label="Assigned" value={dash.assigned} color="#3b82f6" />
-        <StatCard label="In Progress" value={dash.in_progress} color="#a855f7" />
-        <StatCard label="Awaiting Verify" value={dash.awaiting_verification} color="#f97316" />
-        <StatCard label="Verified" value={dash.verified} color="#22c55e" />
-        <StatCard label="Closed" value={dash.closed} color="var(--text-3)" />
-        <StatCard label="Overdue" value={dash.overdue} color={dash.overdue > 0 ? '#ef4444' : 'var(--text-1)'} sub="beyond SLA" />
-        <StatCard label="SLA Compliance" value={`${(dash.sla_compliance || 0).toFixed(1)}%`} color={dash.sla_compliance >= 90 ? '#22c55e' : '#f97316'} />
-        <StatCard label="MTTR" value={`${dash.mttr_days}d`} color="var(--accent)" sub="mean time to remediate" />
+        <MetricCard label="Total Active" value={dash.total} />
+        <MetricCard label="Unassigned" value={dash.unassigned} color={dash.unassigned > 0 ? '#ef4444' : 'var(--text-1)'} />
+        <MetricCard label="Assigned" value={dash.assigned} color="#3b82f6" />
+        <MetricCard label="In Progress" value={dash.in_progress} color="#a855f7" />
+        <MetricCard label="Awaiting Verify" value={dash.awaiting_verification} color="#f97316" />
+        <MetricCard label="Verified" value={dash.verified} color="#22c55e" />
+        <MetricCard label="Closed" value={dash.closed} color="var(--text-3)" />
+        <MetricCard label="Overdue" value={dash.overdue} color={dash.overdue > 0 ? '#ef4444' : 'var(--text-1)'} sub="beyond SLA" />
+        <MetricCard label="SLA Compliance" value={`${(dash.sla_compliance || 0).toFixed(1)}%`} color={dash.sla_compliance >= 90 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="MTTR" value={`${dash.mttr_days}d`} color="var(--accent)" sub="mean time to remediate" />
       </div>
 
       {dash.overdue > 0 && (
         <div className="g-card" style={{ padding: 14, borderLeft: '3px solid #ef4444', background: '#ef444408' }}>
-          <div style={{ fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>⚠ SLA Breach — Action Required</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>
+            <AlertTriangle style={{ width: 14, height: 14 }} /> SLA Breach — Action Required
+          </div>
           <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
             {dash.overdue} remediation task{dash.overdue !== 1 ? 's are' : ' is'} past due date. Escalate immediately — SLA breach may trigger compliance findings.
           </div>
@@ -85,8 +86,7 @@ function DashboardTab({ dash }: { dash: any }) {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Queue by Status</div>
+        <SectionCard title="Queue by Status">
           {[
             { label: 'Unassigned', count: dash.unassigned, color: '#6b7280' },
             { label: 'Assigned', count: dash.assigned, color: '#3b82f6' },
@@ -104,10 +104,9 @@ function DashboardTab({ dash }: { dash: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Team Workload</div>
+        <SectionCard title="Team Workload">
           {dash.team_breakdown?.map((t: any) => (
             <div key={t.team} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
               <span style={{ flex: 1, fontWeight: 500 }}>{t.team}</span>
@@ -115,11 +114,10 @@ function DashboardTab({ dash }: { dash: any }) {
               {t.overdue > 0 && <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 700 }}>{t.overdue} overdue</span>}
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Workflow</div>
+      <SectionCard title="Workflow">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
           {[
             { label: 'Scanner', color: '#6b7280' }, { label: 'Vulnerability', color: '#ef4444' },
@@ -136,7 +134,7 @@ function DashboardTab({ dash }: { dash: any }) {
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, fontStyle: 'italic' }}>
           Vuln Queue is the operational remediation work queue — separate from Vulnerability discovery and analysis.
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -245,30 +243,29 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="g-input" placeholder="CVE, asset, owner…" value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ fontSize: 12, width: 180 }} />
-        <select className="g-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 11 }}>
+        <select className="g-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 11, width: 150, flexShrink: 0 }}>
           <option value="">All Status</option>
           {['unassigned','assigned','in_progress','awaiting_verification','verified','closed','overdue','blocked'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
         </select>
-        <select className="g-select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={{ fontSize: 11 }}>
+        <select className="g-select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={{ fontSize: 11, width: 120, flexShrink: 0 }}>
           <option value="">All Priority</option>
           {['critical','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        <select className="g-select" value={filterTeam} onChange={e => setFilterTeam(e.target.value)} style={{ fontSize: 11 }}>
+        <select className="g-select" value={filterTeam} onChange={e => setFilterTeam(e.target.value)} style={{ fontSize: 11, width: 150, flexShrink: 0 }}>
           <option value="">All Teams</option>
           {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onRefresh}>↻</button>
+        <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} style={{ fontSize: 11 }} />
         {selectedIds.size > 0 && (
-          <button className="g-btn g-btn-primary" style={{ fontSize: 11, marginLeft: 'auto' }} onClick={() => setShowBulk(true)}>
+          <ActionButton variant="primary" onClick={() => setShowBulk(true)} style={{ fontSize: 11, marginLeft: 'auto' }}>
             Bulk ({selectedIds.size})
-          </button>
+          </ActionButton>
         )}
       </div>
 
       {/* Bulk form */}
       {showBulk && (
-        <div className="g-card" style={{ padding: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Bulk Action — {selectedIds.size} items</div>
+        <SectionCard title={`Bulk Action — ${selectedIds.size} items`}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 3 }}>Action</label>
@@ -297,10 +294,10 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                 </select>
               </div>
             )}
-            <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={doBulk}>Apply</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowBulk(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={doBulk} style={{ fontSize: 12 }}>Apply</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowBulk(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       {/* Main split panel */}
@@ -336,7 +333,9 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                     {item.due_date && <SLADueTag dueDate={item.due_date} status={item.status} />}
                   </div>
                   {item.blocker_type && (
-                    <div style={{ marginTop: 4, fontSize: 10, color: '#ef4444', fontWeight: 600 }}>⛔ {item.blocker_type.replace(/_/g,' ')}</div>
+                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#ef4444', fontWeight: 600 }}>
+                      <Ban style={{ width: 10, height: 10 }} /> {item.blocker_type.replace(/_/g,' ')}
+                    </div>
                   )}
                 </div>
               );
@@ -347,7 +346,7 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
         {/* Right panel */}
         {!selected ? (
           <div className="g-card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
-            <div style={{ fontSize: 36 }}>🔧</div>
+            <Wrench style={{ width: 36, height: 36, color: 'var(--text-3)' }} />
             <div style={{ color: 'var(--text-3)', fontSize: 14 }}>Select a queue item to review</div>
           </div>
         ) : (
@@ -411,24 +410,23 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                       <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{selected.notes}</div>
                     </div>
                   )}
-                  <div className="g-card" style={{ padding: 14 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 12 }}>Remediation Actions</div>
+                  <SectionCard title="Remediation Actions">
                     {!showActionForm ? (
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {selected.status === 'unassigned' && <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => { setShowAssignForm(true); setPanel('assign'); }}>Assign</button>}
-                        {['assigned','in_progress','blocked'].includes(selected.status) && <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => setShowActionForm(true)}>Start / Update</button>}
-                        {selected.status === 'in_progress' && <button className="g-btn g-btn-primary" style={{ fontSize: 12, background: '#22c55e' }} onClick={() => vqAPI.action(selected.id, { action: 'complete' }).then(onRefresh)}>Mark Complete</button>}
+                        {selected.status === 'unassigned' && <ActionButton variant="primary" onClick={() => { setShowAssignForm(true); setPanel('assign'); }} style={{ fontSize: 12 }}>Assign</ActionButton>}
+                        {['assigned','in_progress','blocked'].includes(selected.status) && <ActionButton variant="primary" onClick={() => setShowActionForm(true)} style={{ fontSize: 12 }}>Start / Update</ActionButton>}
+                        {selected.status === 'in_progress' && <ActionButton variant="primary" onClick={() => vqAPI.action(selected.id, { action: 'complete' }).then(onRefresh)} style={{ fontSize: 12, background: '#22c55e' }}>Mark Complete</ActionButton>}
                         {selected.status === 'awaiting_verification' && (
                           <>
-                            <button className="g-btn g-btn-primary" style={{ fontSize: 12, background: '#22c55e' }} onClick={() => doVerify(true)}>✓ Verification Passed</button>
-                            <button className="g-btn g-btn-ghost" style={{ fontSize: 12, color: '#ef4444' }} onClick={() => doVerify(false)}>✗ Verification Failed</button>
+                            <ActionButton variant="primary" icon={Check} onClick={() => doVerify(true)} style={{ fontSize: 12, background: '#22c55e' }}>Verification Passed</ActionButton>
+                            <ActionButton variant="ghost" icon={X} onClick={() => doVerify(false)} style={{ fontSize: 12, color: '#ef4444' }}>Verification Failed</ActionButton>
                           </>
                         )}
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={loadAI}>AI Guidance</button>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowBlocker(true); setPanel('dependencies'); }}>Add Blocker</button>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>Create Ticket</button>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>Create Incident</button>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>Notify Owner</button>
+                        <ActionButton variant="ghost" onClick={loadAI} style={{ fontSize: 12 }}>AI Guidance</ActionButton>
+                        <ActionButton variant="ghost" onClick={() => { setShowBlocker(true); setPanel('dependencies'); }} style={{ fontSize: 12 }}>Add Blocker</ActionButton>
+                        <ActionButton variant="ghost" style={{ fontSize: 12 }}>Create Ticket</ActionButton>
+                        <ActionButton variant="ghost" style={{ fontSize: 12 }}>Create Incident</ActionButton>
+                        <ActionButton variant="ghost" style={{ fontSize: 12 }}>Notify Owner</ActionButton>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -444,30 +442,28 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                             <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 3 }}>Notes</label>
                             <input className="g-input" value={actionForm.notes} onChange={e => setActionForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes…" style={{ fontSize: 12, width: '100%' }} />
                           </div>
-                          <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={doAction}>Update</button>
-                          <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowActionForm(false)}>Cancel</button>
+                          <ActionButton variant="primary" onClick={doAction} style={{ fontSize: 12 }}>Update</ActionButton>
+                          <ActionButton variant="ghost" onClick={() => setShowActionForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
                         </div>
                       </div>
                     )}
-                  </div>
-                  <div className="g-card" style={{ padding: 14 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 12 }}>Integration Actions</div>
+                  </SectionCard>
+                  <SectionCard title="Integration Actions">
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Jira</button>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>ServiceNow</button>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Azure DevOps</button>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>GitHub Issues</button>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Email</button>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Webhook</button>
+                      <ActionButton variant="ghost" style={{ fontSize: 11 }}>Jira</ActionButton>
+                      <ActionButton variant="ghost" style={{ fontSize: 11 }}>ServiceNow</ActionButton>
+                      <ActionButton variant="ghost" style={{ fontSize: 11 }}>Azure DevOps</ActionButton>
+                      <ActionButton variant="ghost" style={{ fontSize: 11 }}>GitHub Issues</ActionButton>
+                      <ActionButton variant="ghost" style={{ fontSize: 11 }}>Email</ActionButton>
+                      <ActionButton variant="ghost" style={{ fontSize: 11 }}>Webhook</ActionButton>
                     </div>
-                  </div>
+                  </SectionCard>
                 </div>
               )}
 
               {panel === 'assign' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div className="g-card" style={{ padding: 16 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 12 }}>Assign Remediation Task</div>
+                  <SectionCard title="Assign Remediation Task">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Assign to Team</label>
@@ -485,11 +481,11 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                         <textarea className="g-input" rows={2} value={assignForm.notes} onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))} placeholder="Assignment notes…" style={{ width: '100%', resize: 'none' }} />
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="g-btn g-btn-primary" style={{ fontSize: 13 }} onClick={doAssign}>Assign</button>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 13 }} onClick={() => setPanel('detail')}>Cancel</button>
+                        <ActionButton variant="primary" onClick={doAssign} style={{ fontSize: 13 }}>Assign</ActionButton>
+                        <ActionButton variant="ghost" onClick={() => setPanel('detail')} style={{ fontSize: 13 }}>Cancel</ActionButton>
                       </div>
                     </div>
-                  </div>
+                  </SectionCard>
                 </div>
               )}
 
@@ -498,7 +494,7 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                   {aiLoading && <div style={{ color: 'var(--text-3)', padding: 24, textAlign: 'center' }}>AI analyzing remediation…</div>}
                   {!aiLoading && !aiResult && (
                     <div style={{ textAlign: 'center', padding: 24 }}>
-                      <button className="g-btn g-btn-primary" onClick={loadAI}>Get AI Remediation Guidance</button>
+                      <ActionButton variant="primary" onClick={loadAI}>Get AI Remediation Guidance</ActionButton>
                     </div>
                   )}
                   {aiResult && (
@@ -545,10 +541,9 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
               {panel === 'dependencies' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {!showBlocker ? (
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 12, alignSelf: 'flex-start' }} onClick={() => setShowBlocker(true)}>+ Add Blocker</button>
+                    <ActionButton variant="ghost" icon={Plus} onClick={() => setShowBlocker(true)} style={{ fontSize: 12, alignSelf: 'flex-start' }}>Add Blocker</ActionButton>
                   ) : (
-                    <div className="g-card" style={{ padding: 14 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 10 }}>Add Dependency / Blocker</div>
+                    <SectionCard title="Add Dependency / Blocker">
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
                         <div>
                           <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 3 }}>Blocker Type</label>
@@ -561,16 +556,18 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
                           <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 3 }}>Notes</label>
                           <input className="g-input" value={blockerForm.notes} onChange={e => setBlockerForm(f => ({ ...f, notes: e.target.value }))} placeholder="Details…" style={{ fontSize: 12, width: '100%' }} />
                         </div>
-                        <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={doAddBlocker}>Add</button>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowBlocker(false)}>Cancel</button>
+                        <ActionButton variant="primary" onClick={doAddBlocker} style={{ fontSize: 12 }}>Add</ActionButton>
+                        <ActionButton variant="ghost" onClick={() => setShowBlocker(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
                       </div>
-                    </div>
+                    </SectionCard>
                   )}
                   {deps.length === 0 && <div style={{ color: 'var(--text-3)', fontSize: 13 }}>No dependencies / blockers</div>}
                   {deps.map(d => (
                     <div key={d.id} className="g-card" style={{ padding: 12, borderLeft: '3px solid #ef4444' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>⛔ {d.blocker_type.replace(/_/g,' ')}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>
+                          <Ban style={{ width: 12, height: 12 }} /> {d.blocker_type.replace(/_/g,' ')}
+                        </span>
                         <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: '#6b728022', color: '#6b7280' }}>{d.status}</span>
                         <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{timeAgo(d.created_at)}</span>
                       </div>
@@ -583,25 +580,30 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
               {panel === 'timeline' && (
                 <div>
                   {[
-                    { label: 'Vulnerability Detected', date: selected.created_at, icon: '⚠', done: true },
-                    { label: 'Added to Queue', date: selected.created_at, icon: '📋', done: true },
-                    { label: 'Assigned', date: selected.assigned_team ? selected.updated_at : null, icon: '👤', done: !!selected.assigned_team },
-                    { label: 'Patch Scheduled', date: null, icon: '📅', done: ['in_progress','awaiting_verification','verified','closed'].includes(selected.status) },
-                    { label: 'Patched / Remediated', date: null, icon: '🔧', done: ['awaiting_verification','verified','closed'].includes(selected.status) },
-                    { label: 'Verification Scan', date: null, icon: '🔍', done: ['verified','closed'].includes(selected.status) },
-                    { label: 'Closed', date: selected.status === 'closed' ? selected.updated_at : null, icon: '✅', done: selected.status === 'closed' },
-                  ].map((step, i, arr) => (
-                    <div key={step.label} style={{ display: 'flex', gap: 12, paddingBottom: 16 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 32 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: step.done ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>{step.icon}</div>
-                        {i < arr.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--border)', marginTop: 4 }} />}
+                    { label: 'Vulnerability Detected', date: selected.created_at, icon: AlertTriangle, done: true },
+                    { label: 'Added to Queue', date: selected.created_at, icon: ClipboardList, done: true },
+                    { label: 'Assigned', date: selected.assigned_team ? selected.updated_at : null, icon: User, done: !!selected.assigned_team },
+                    { label: 'Patch Scheduled', date: null, icon: CalendarClock, done: ['in_progress','awaiting_verification','verified','closed'].includes(selected.status) },
+                    { label: 'Patched / Remediated', date: null, icon: Wrench, done: ['awaiting_verification','verified','closed'].includes(selected.status) },
+                    { label: 'Verification Scan', date: null, icon: Search, done: ['verified','closed'].includes(selected.status) },
+                    { label: 'Closed', date: selected.status === 'closed' ? selected.updated_at : null, icon: CheckCircle2, done: selected.status === 'closed' },
+                  ].map((step, i, arr) => {
+                    const Icon = step.icon;
+                    return (
+                      <div key={step.label} style={{ display: 'flex', gap: 12, paddingBottom: 16 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 32 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: step.done ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Icon style={{ width: 14, height: 14, color: step.done ? '#fff' : 'var(--text-3)' }} />
+                          </div>
+                          {i < arr.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--border)', marginTop: 4 }} />}
+                        </div>
+                        <div style={{ paddingTop: 4 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: step.done ? 'var(--text-1)' : 'var(--text-3)' }}>{step.label}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{step.date ? `${new Date(step.date).toLocaleDateString()} · ${timeAgo(step.date)}` : step.done ? 'Completed' : 'Pending'}</div>
+                        </div>
                       </div>
-                      <div style={{ paddingTop: 4 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: step.done ? 'var(--text-1)' : 'var(--text-3)' }}>{step.label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{step.date ? `${new Date(step.date).toLocaleDateString()} · ${timeAgo(step.date)}` : step.done ? 'Completed' : 'Pending'}</div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -624,15 +626,14 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 10 }}>
           {['approved','pending','expired'].map(s => (
-            <StatCard key={s} label={s} value={exceptions.filter(e => e.status === s).length} color={EX_STATUS_COLOR[s]} />
+            <MetricCard key={s} label={s} value={exceptions.filter(e => e.status === s).length} color={EX_STATUS_COLOR[s]} />
           ))}
         </div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={() => setShowForm(true)}>+ New Exception</button>
+        <ActionButton variant="primary" icon={Plus} onClick={() => setShowForm(true)} style={{ fontSize: 12 }}>New Exception</ActionButton>
       </div>
 
       {showForm && (
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Exception Request</div>
+        <SectionCard title="Exception Request">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>CVE ID</label>
@@ -660,15 +661,14 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: {
             </select>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="g-btn g-btn-primary" style={{ fontSize: 12 }} onClick={async () => { await vqAPI.createException(form); setShowForm(false); }}>Submit</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowForm(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={async () => { await vqAPI.createException(form); setShowForm(false); }} style={{ fontSize: 12 }}>Submit</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Exception Register</div>
-        {exceptions.length === 0 && <div style={{ padding: 24, color: 'var(--text-3)', textAlign: 'center' }}>No exceptions</div>}
+      <SectionCard title="Exception Register" padded={false}>
+        {exceptions.length === 0 && <EmptyState title="No exceptions" />}
         {exceptions.map(e => (
           <div key={e.id} style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -683,12 +683,12 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 10, color: 'var(--text-3)' }}>By {e.created_by} · {timeAgo(e.created_at)}</span>
               {e.approver && <span style={{ fontSize: 10, color: '#22c55e' }}>Approved by {e.approver}</span>}
-              {e.status === 'pending' && <button className="g-btn g-btn-primary" style={{ fontSize: 10, padding: '2px 8px', marginLeft: 'auto' }} onClick={() => onApprove(e.id)}>Approve</button>}
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px', marginLeft: e.status !== 'pending' ? 'auto' : 0, color: '#ef4444' }} onClick={() => onDelete(e.id)}>Delete</button>
+              {e.status === 'pending' && <ActionButton variant="primary" onClick={() => onApprove(e.id)} style={{ fontSize: 10, padding: '2px 8px', marginLeft: 'auto' }}>Approve</ActionButton>}
+              <ActionButton variant="ghost" onClick={() => onDelete(e.id)} style={{ fontSize: 10, padding: '2px 8px', marginLeft: e.status !== 'pending' ? 'auto' : 0, color: '#ef4444' }}>Delete</ActionButton>
             </div>
           </div>
         ))}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -699,33 +699,28 @@ function AnalyticsTab({ analytics, sla }: { analytics: any; sla: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="MTTR" value={`${analytics.mttr_days}d`} color="var(--accent)" sub="mean time to remediate" />
-        <StatCard label="SLA Compliance" value={`${analytics.sla_compliance}%`} color={analytics.sla_compliance >= 90 ? '#22c55e' : '#f97316'} />
-        <StatCard label="Overdue" value={analytics.overdue_count} color={analytics.overdue_count > 0 ? '#ef4444' : 'var(--text-1)'} />
-        <StatCard label="Closed" value={analytics.closed_count} color="#22c55e" sub="all time" />
+        <MetricCard label="MTTR" value={`${analytics.mttr_days}d`} color="var(--accent)" sub="mean time to remediate" />
+        <MetricCard label="SLA Compliance" value={`${analytics.sla_compliance}%`} color={analytics.sla_compliance >= 90 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="Overdue" value={analytics.overdue_count} color={analytics.overdue_count > 0 ? '#ef4444' : 'var(--text-1)'} />
+        <MetricCard label="Closed" value={analytics.closed_count} color="#22c55e" sub="all time" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Team Performance</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead><tr>{['Team', 'Assigned', 'Closed', 'Overdue', 'Avg Days'].map(h => <th key={h} style={{ textAlign: 'left', padding: '5px 8px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
-            <tbody>
-              {analytics.team_performance?.map((t: any) => (
-                <tr key={t.team} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '7px 8px', fontWeight: 500 }}>{t.team}</td>
-                  <td style={{ padding: '7px 8px', textAlign: 'center' }}>{t.assigned}</td>
-                  <td style={{ padding: '7px 8px', textAlign: 'center', color: '#22c55e', fontWeight: 700 }}>{t.closed}</td>
-                  <td style={{ padding: '7px 8px', textAlign: 'center', color: t.overdue > 0 ? '#ef4444' : 'var(--text-3)', fontWeight: t.overdue > 0 ? 700 : 400 }}>{t.overdue}</td>
-                  <td style={{ padding: '7px 8px', textAlign: 'center', color: t.avg_days > 14 ? '#ef4444' : t.avg_days > 7 ? '#f97316' : '#22c55e', fontWeight: 700 }}>{t.avg_days}d</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SectionCard title="Team Performance" padded={false}>
+          <DataTable<any>
+            rows={analytics.team_performance || []}
+            rowKey={(t: any) => t.team}
+            columns={[
+              { key: 'team', header: 'Team', render: (t: any) => <span style={{ fontSize: 12, fontWeight: 500 }}>{t.team}</span> },
+              { key: 'assigned', header: 'Assigned', render: (t: any) => <span style={{ fontSize: 12, textAlign: 'center', display: 'block' }}>{t.assigned}</span> },
+              { key: 'closed', header: 'Closed', render: (t: any) => <span style={{ fontSize: 12, textAlign: 'center', display: 'block', color: '#22c55e', fontWeight: 700 }}>{t.closed}</span> },
+              { key: 'overdue', header: 'Overdue', render: (t: any) => <span style={{ fontSize: 12, textAlign: 'center', display: 'block', color: t.overdue > 0 ? '#ef4444' : 'var(--text-3)', fontWeight: t.overdue > 0 ? 700 : 400 }}>{t.overdue}</span> },
+              { key: 'avg_days', header: 'Avg Days', render: (t: any) => <span style={{ fontSize: 12, textAlign: 'center', display: 'block', color: t.avg_days > 14 ? '#ef4444' : t.avg_days > 7 ? '#f97316' : '#22c55e', fontWeight: 700 }}>{t.avg_days}d</span> },
+            ]}
+          />
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Remediation Trend (Weekly)</div>
+        <SectionCard title="Remediation Trend (Weekly)">
           <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 80 }}>
             {analytics.remediation_trend?.map((d: any) => {
               const max = Math.max(...analytics.remediation_trend.map((x: any) => Math.max(x.opened, x.closed)), 1);
@@ -744,12 +739,11 @@ function AnalyticsTab({ analytics, sla }: { analytics: any; sla: any }) {
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#ef444466', display: 'inline-block', borderRadius: 2 }} /> Opened</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#22c55e88', display: 'inline-block', borderRadius: 2 }} /> Closed</span>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       {analytics.top_delayed_assets?.length > 0 && (
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>Top Delayed Assets</div>
+        <SectionCard title="Top Delayed Assets">
           {analytics.top_delayed_assets.map((a: any) => (
             <div key={a.asset} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
               <span style={{ fontFamily: 'monospace', fontWeight: 600, flex: 1 }}>{a.asset}</span>
@@ -757,41 +751,35 @@ function AnalyticsTab({ analytics, sla }: { analytics: any; sla: any }) {
               <span style={{ color: '#ef4444', fontWeight: 700 }}>{a.overdue_days}d overdue</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       )}
 
       {sla && (
-        <div className="g-card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>SLA Policy & Compliance</div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead><tr>{['Priority', 'Assign', 'Start', 'Patch', 'Verify', 'Close', 'Compliance'].map(h => <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
-              <tbody>
-                {sla.policies?.map((p: any) => {
-                  const comp = sla.current_compliance?.[p.priority];
-                  return (
-                    <tr key={p.priority} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 3, background: PRIORITY_COLOR[p.priority]+'22', color: PRIORITY_COLOR[p.priority], textTransform: 'capitalize' }}>{p.priority}</span></td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-2)' }}>{p.time_to_assign_h}h</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-2)' }}>{p.time_to_start_h}h</td>
-                      <td style={{ padding: '9px 12px', fontWeight: 700 }}>{p.time_to_patch_h}h</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-2)' }}>{p.time_to_verify_h}h</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-2)' }}>{p.time_to_close_h}h</td>
-                      <td style={{ padding: '9px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 80, background: 'var(--border)', borderRadius: 2, height: 6 }}>
-                            <div style={{ background: comp >= 95 ? '#22c55e' : comp >= 80 ? '#f97316' : '#ef4444', borderRadius: 2, height: 6, width: `${comp}%` }} />
-                          </div>
-                          <span style={{ fontWeight: 700, color: comp >= 95 ? '#22c55e' : comp >= 80 ? '#f97316' : '#ef4444' }}>{comp}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SectionCard title="SLA Policy &amp; Compliance" padded={false}>
+          <DataTable<any>
+            rows={sla.policies || []}
+            rowKey={(p: any) => p.priority}
+            columns={[
+              { key: 'priority', header: 'Priority', render: (p: any) => <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 3, background: PRIORITY_COLOR[p.priority]+'22', color: PRIORITY_COLOR[p.priority], textTransform: 'capitalize' }}>{p.priority}</span> },
+              { key: 'assign', header: 'Assign', render: (p: any) => <span style={{ color: 'var(--text-2)' }}>{p.time_to_assign_h}h</span> },
+              { key: 'start', header: 'Start', render: (p: any) => <span style={{ color: 'var(--text-2)' }}>{p.time_to_start_h}h</span> },
+              { key: 'patch', header: 'Patch', render: (p: any) => <span style={{ fontWeight: 700 }}>{p.time_to_patch_h}h</span> },
+              { key: 'verify', header: 'Verify', render: (p: any) => <span style={{ color: 'var(--text-2)' }}>{p.time_to_verify_h}h</span> },
+              { key: 'close', header: 'Close', render: (p: any) => <span style={{ color: 'var(--text-2)' }}>{p.time_to_close_h}h</span> },
+              { key: 'compliance', header: 'Compliance', render: (p: any) => {
+                const comp = sla.current_compliance?.[p.priority];
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 80, background: 'var(--border)', borderRadius: 2, height: 6 }}>
+                      <div style={{ background: comp >= 95 ? '#22c55e' : comp >= 80 ? '#f97316' : '#ef4444', borderRadius: 2, height: 6, width: `${comp}%` }} />
+                    </div>
+                    <span style={{ fontWeight: 700, color: comp >= 95 ? '#22c55e' : comp >= 80 ? '#f97316' : '#ef4444' }}>{comp}%</span>
+                  </div>
+                );
+              } },
+            ]}
+          />
+        </SectionCard>
       )}
     </div>
   );
@@ -814,8 +802,7 @@ function ReportsTab() {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 800 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 14 }}>Generate Report</div>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: 10, alignItems: 'end' }}>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Report Type</label>
@@ -823,9 +810,9 @@ function ReportsTab() {
               {REPORT_TYPES.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <button className="g-btn g-btn-primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</button>
+          <ActionButton variant="primary" onClick={generate} disabled={loading}>{loading ? 'Generating…' : 'Generate'}</ActionButton>
         </div>
-      </div>
+      </SectionCard>
       {result && (
         <div className="g-card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -833,7 +820,7 @@ function ReportsTab() {
               <div style={{ fontWeight: 700, fontSize: 15 }}>{result.title}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}</div>
             </div>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }}>⬇ Export PDF</button>
+            <ActionButton variant="ghost" icon={Download} style={{ fontSize: 12 }}>Export PDF</ActionButton>
           </div>
           <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
@@ -841,7 +828,7 @@ function ReportsTab() {
           </div>
           {result.key_metrics && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-              {Object.entries(result.key_metrics).map(([k,v]) => <StatCard key={k} label={k.replace(/_/g,' ')} value={String(v)} />)}
+              {Object.entries(result.key_metrics).map(([k,v]) => <MetricCard key={k} label={k.replace(/_/g,' ')} value={String(v)} />)}
             </div>
           )}
           {result.overdue_items && result.overdue_items.length > 0 && (
@@ -903,33 +890,24 @@ export default function VulnQueuePage() {
   };
 
   return (
-    <RootLayout>
+    <RootLayout title="Vulnerability Remediation Queue"
+      subtitle="Operational remediation tracking — assign, patch, verify, and close vulnerabilities across teams"
+      actions={dash?.overdue > 0 ? (
+        <div style={{ padding: '6px 14px', borderRadius: 6, background: '#ef444422', color: '#ef4444', fontSize: 12, fontWeight: 700, border: '1px solid #ef444444' }}>
+          {dash.overdue} item{dash.overdue !== 1 ? 's' : ''} overdue
+        </div>
+      ) : undefined}>
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Vulnerability Remediation Queue</h1>
-            <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>
-              Operational remediation tracking — assign, patch, verify, and close vulnerabilities across teams
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {dash?.overdue > 0 && (
-              <div style={{ padding: '6px 14px', borderRadius: 6, background: '#ef444422', color: '#ef4444', fontSize: 12, fontWeight: 700, border: '1px solid #ef444444' }}>
-                {dash.overdue} item{dash.overdue !== 1 ? 's' : ''} overdue
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-            <button key={t} onClick={() => switchTab(t)}
-              style={{ padding: '8px 16px', fontSize: 12, fontWeight: tab === t ? 600 : 400, color: tab === t ? 'var(--accent)' : 'var(--text-3)', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {TAB_LABELS[t]}
-              {t === 'queue' && items.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--border)', padding: '1px 5px', borderRadius: 8, color: 'var(--text-3)' }}>{items.length}</span>}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          tabs={(Object.keys(TAB_LABELS) as Tab[]).map(t => ({
+            key: t,
+            label: TAB_LABELS[t],
+            icon: TAB_ICONS[t],
+            count: t === 'queue' ? (items.length > 0 ? items.length : undefined) : undefined,
+          }))}
+          active={tab}
+          onChange={t => switchTab(t as Tab)}
+        />
 
         <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}><DashboardTab dash={dash} /></div>
         <div style={{ display: tab === 'queue' ? 'block' : 'none' }}>

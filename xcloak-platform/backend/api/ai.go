@@ -44,7 +44,18 @@ func TriageAlertHandler(c *gin.Context) {
 	// Run triage synchronously for on-demand requests (async for auto-triage).
 	services.TriageAlert(*target)
 
-	c.JSON(200, gin.H{"message": "Triage complete"})
+	summary, action, triagedAt, err := services.GetTriageResult(alertID)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "Triage complete"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message":       "Triage complete",
+		"ai_summary":    summary,
+		"ai_action":     action,
+		"ai_triaged_at": triagedAt,
+	})
 }
 
 // SummarizeIncident — POST /api/ai/incidents/:id/summarize

@@ -338,15 +338,15 @@ func GetDashboardMetrics(tenantID int, rangeStr string) (*DashboardMetrics, erro
 		m.AnomalyScore = math.Round(todayCount/sevenDayAvg*100) / 100
 	}
 
-	// ── Compliance posture (average of latest report scores) ──────────────────
+	// ── Compliance posture (average of each framework's latest score) ─────────
 
 	db.QueryRow(`
-		SELECT COALESCE(AVG(CAST(details->>'overall_score' AS NUMERIC)), 0)
-		FROM compliance_reports
-		WHERE tenant_id=$1
-		  AND created_at = (
-		      SELECT MAX(created_at) FROM compliance_reports cr2
-		      WHERE cr2.framework = compliance_reports.framework AND cr2.tenant_id=$1
+		SELECT COALESCE(AVG(cs.score), 0)
+		FROM compliance_scores cs
+		WHERE cs.tenant_id=$1
+		  AND cs.report_id = (
+		      SELECT MAX(cs2.report_id) FROM compliance_scores cs2
+		      WHERE cs2.framework = cs.framework AND cs2.tenant_id=$1
 		  )
 	`, tenantID).Scan(&m.ComplianceScore)
 

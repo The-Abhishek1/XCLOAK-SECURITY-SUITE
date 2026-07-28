@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -538,22 +539,20 @@ func PostCorrelationSimulate(c *gin.Context) {
 
 	matches := []SimMatch{}
 	for _, rule := range temporalRules {
-		// Fetch stages for this rule
-		stageRows, err := database.DB.Query(`
-			SELECT pattern FROM correlation_rule_stages WHERE rule_id=$1 ORDER BY position`, rule.ID)
-		if err != nil {
+		// Fetch stages for this rule via the same repository function the
+		// real correlation engine and rule editor use. This previously
+		// hand-rolled a raw query against columns (`pattern`, `position`)
+		// that don't exist on correlation_rule_stages (real: `rule_name_pattern`,
+		// `stage_order`) — every call errored and `continue`d immediately, so
+		// the Testing tab's simulator always reported 0 rules fired no matter
+		// what chain was simulated.
+		stages, err := repositories.GetCorrelationRuleStages(rule.ID)
+		if err != nil || len(stages) == 0 {
 			continue
 		}
-		stagePatterns := []string{}
-		for stageRows.Next() {
-			var p string
-			stageRows.Scan(&p)
-			stagePatterns = append(stagePatterns, p)
-		}
-		stageRows.Close()
-
-		if len(stagePatterns) == 0 {
-			continue
+		stagePatterns := make([]string, len(stages))
+		for i, s := range stages {
+			stagePatterns[i] = s.Pattern
 		}
 
 		// Check which stages from this rule are covered by the simulated chain
@@ -627,11 +626,14 @@ func GetCorrelationPerformance(c *gin.Context) {
 	var totalMatches int
 	database.DB.QueryRow(`SELECT COALESCE(SUM(match_count),0) FROM correlation_rules WHERE tenant_id=$1`, tid).Scan(&totalMatches)
 
+	// No real per-engine latency/uptime instrumentation exists — rule and
+	// match counts below are real queries; not fabricating status/avg_ms
+	// numbers that would look like real measurements but aren't.
 	engines := []map[string]interface{}{
-		{"name": "Simple Engine", "status": "healthy", "avg_ms": 1, "rules": activeRules},
-		{"name": "Event Count Engine", "status": "healthy", "avg_ms": 5},
-		{"name": "Temporal Engine", "status": "healthy", "avg_ms": 12},
-		{"name": "Temporal Ordered Engine", "status": "healthy", "avg_ms": 18},
+		{"name": "Simple Engine", "rules": activeRules},
+		{"name": "Event Count Engine"},
+		{"name": "Temporal Engine"},
+		{"name": "Temporal Ordered Engine"},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -640,9 +642,6 @@ func GetCorrelationPerformance(c *gin.Context) {
 		"matches_last_hour":    matchesLastHour,
 		"incidents_last_hour":  incidentsLastHour,
 		"total_matches_all":    totalMatches,
-		"queue_depth":          0,
-		"avg_latency_ms":       9,
-		"uptime_pct":           99.9,
 		"engines":              engines,
 	})
 }

@@ -51,12 +51,18 @@ export default function OnboardPage() {
     try {
       const r = await agentsAPI.getAll();
       const agents = r.data || [];
-      // Look for a recently registered agent (within last 2 minutes)
+      // Look for a recently registered agent (within last 2 minutes) — this
+      // used to fall back to `|| agents.length > 0`, which made the check
+      // meaningless for any tenant with pre-existing agents (the overwhelming
+      // majority, including this demo tenant's 4 seeded agents): "Check Now"
+      // would unconditionally report "Agent detected!" on the very first
+      // click regardless of whether the agent from *this* onboarding session
+      // ever actually registered.
       const recent = agents.find((a: any) => {
         const created = new Date(a.created_at || a.last_seen).getTime();
         return Date.now() - created < 2 * 60 * 1000;
       });
-      if (recent || agents.length > 0) {
+      if (recent) {
         setFound(true);
       }
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { Pagination } from '@/components/ui/Pagination';
 import { alertsAPI, agentsAPI } from '@/lib/api';
@@ -73,15 +73,23 @@ export default function AlertsPage() {
 
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
+  // Guards against an in-flight request from a previous filter/page landing
+  // AFTER a newer one and clobbering it — e.g. clicking a status tab before
+  // the initial load finishes lets the two requests resolve out of order.
+  const requestSeq = useRef(0);
+
   const load = useCallback(async (p = page, sev = severity, aid = agentId, st = statusFilter, spin = false) => {
     if (spin) setRefreshing(true);
     setLoading(true);
+    const seq = ++requestSeq.current;
     try {
-      const res = await alertsAPI.getPaginated(p, PER_PAGE, sev === 'all' ? '' : sev, aid, st === 'all' ? '' : st);
-      setResult(res.data);
+      // NOTE: unlike severity, the backend treats status='' as "default to
+      // open" and status='all' as "no filter" — they are NOT interchangeable,
+      // so 'all' must be passed through literally here, not collapsed to ''.
+      const res = await alertsAPI.getPaginated(p, PER_PAGE, sev === 'all' ? '' : sev, aid, st);
+      if (seq === requestSeq.current) setResult(res.data);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (seq === requestSeq.current) { setLoading(false); setRefreshing(false); }
     }
   }, [page, severity, agentId, statusFilter]);
 

@@ -4,6 +4,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { supplyChainAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, SectionCard, DataTable, TabBar, ActionButton } from '@/components/design-system';
+import {
+  LayoutDashboard, GitBranch, Workflow, Package, KeyRound, Radar,
+  ClipboardCheck, BarChart3, Siren, Check, X, AlertTriangle,
+} from 'lucide-react';
 
 type Tab = 'overview' | 'repos' | 'pipelines' | 'sbom' | 'secrets' | 'intelligence' | 'compliance' | 'analytics' | 'response';
 
@@ -17,6 +22,11 @@ const TAB_LABELS: Record<Tab, string> = {
   compliance:   'Compliance & Policies',
   analytics:    'Analytics',
   response:     'Response & Reports',
+};
+
+const TAB_ICONS: Record<Tab, any> = {
+  overview: LayoutDashboard, repos: GitBranch, pipelines: Workflow, sbom: Package,
+  secrets: KeyRound, intelligence: Radar, compliance: ClipboardCheck, analytics: BarChart3, response: Siren,
 };
 
 const SEV_COLOR: Record<string, string> = {
@@ -39,16 +49,6 @@ function ScoreBar({ score, color }: { score: number; color?: string }) {
   );
 }
 
-function StatCard({ label, value, color, sub }: { label: string; value: string | number; color?: string; sub?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '16px 20px' }}>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: color ?? 'var(--text-1)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
-}
-
 function Badge({ label, color }: { label: string; color?: string }) {
   return (
     <span style={{
@@ -59,27 +59,36 @@ function Badge({ label, color }: { label: string; color?: string }) {
   );
 }
 
+function YesNo({ ok, warn }: { ok: boolean; warn?: boolean }) {
+  if (ok) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e' }}><Check style={{ width: 13, height: 13 }} /> Yes</span>;
+  if (warn) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444' }}><AlertTriangle style={{ width: 12, height: 12 }} /> Yes</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#f97316' }}><X style={{ width: 13, height: 13 }} /> No</span>;
+}
+
+function Dot({ on }: { on: boolean }) {
+  return <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', marginRight: 6, background: on ? '#22c55e' : '#ef4444' }} />;
+}
+
 // ─── Overview Tab ────────────────────────────────────────────────────────────
 function OverviewTab({ dash }: { dash: any }) {
   if (!dash) return <div style={{ color: 'var(--text-3)', padding: 32 }}>Loading dashboard…</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
-        <StatCard label="Repositories" value={dash.repositories} />
-        <StatCard label="Dependencies" value={dash.dependencies} />
-        <StatCard label="Critical CVEs" value={dash.critical_cves} color="#ef4444" />
-        <StatCard label="High-Risk Pkgs" value={dash.high_risk_packages} color="#f97316" />
-        <StatCard label="Risk Score" value={`${dash.risk_score}%`} color={RISK_COLOR(dash.risk_score)} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        <MetricCard label="Repositories" value={dash.repositories} />
+        <MetricCard label="Dependencies" value={dash.dependencies} />
+        <MetricCard label="Critical CVEs" value={dash.critical_cves} color="#ef4444" />
+        <MetricCard label="High-Risk Pkgs" value={dash.high_risk_packages} color="#f97316" />
+        <MetricCard label="Risk Score" value={`${dash.risk_score}%`} color={RISK_COLOR(dash.risk_score)} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
-        <StatCard label="SBOMs" value={dash.sboms} color="var(--accent)" sub="Generated" />
-        <StatCard label="Pipelines" value={dash.build_pipelines} sub="Monitored" />
-        <StatCard label="Signed Artifacts" value={`${dash.signed_artifacts}/${dash.total_artifacts}`} color="#22c55e" />
-        <StatCard label="Open Secrets" value={dash.secret_findings} color="#ef4444" sub="Detected in code" />
-        <StatCard label="SLSA Level" value="L1" color="#f97316" sub="Target: L3" />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        <MetricCard label="SBOMs" value={dash.sboms} color="var(--accent)" sub="Generated" />
+        <MetricCard label="Pipelines" value={dash.build_pipelines} sub="Monitored" />
+        <MetricCard label="Signed Artifacts" value={`${dash.signed_artifacts}/${dash.total_artifacts}`} color="#22c55e" />
+        <MetricCard label="Open Secrets" value={dash.secret_findings} color="#ef4444" sub="Detected in code" />
+        <MetricCard label="SLSA Level" value="L1" color="#f97316" sub="Target: L3" />
       </div>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 16 }}>Overall Risk Score</div>
+      <SectionCard title="Overall Risk Score">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ fontSize: 48, fontWeight: 800, color: RISK_COLOR(dash.risk_score) }}>{dash.risk_score}</div>
           <div style={{ flex: 1 }}>
@@ -89,7 +98,7 @@ function OverviewTab({ dash }: { dash: any }) {
             </div>
           </div>
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -117,45 +126,38 @@ function ReposTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['repos', 'deps'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'repos' ? 'Repository Inventory' : 'Dependency Management'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {sub === 'repos' && (
-        <div className="g-card" style={{ overflow: 'auto' }}>
-          <table className="g-table">
-            <thead className="g-thead">
-              <tr><th>Repository</th><th>Platform</th><th>Language</th><th>Branch</th><th>Contributors</th><th>Dependencies</th><th>Risk</th><th>Last Commit</th></tr>
-            </thead>
-            <tbody>
-              {repos.map(r => (
-                <tr key={r.id} className="g-tr">
-                  <td><span style={{ fontWeight: 600 }}>{r.owner}/{r.name}</span></td>
-                  <td><Badge label={r.platform} color="#3b82f6" /></td>
-                  <td><Badge label={r.language} /></td>
-                  <td><code style={{ fontSize: 12 }}>{r.default_branch}</code></td>
-                  <td>{r.contributor_count}</td>
-                  <td>{r.dep_count}</td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ color: RISK_COLOR(r.risk_score), fontWeight: 700, fontSize: 13, width: 30 }}>{r.risk_score}</span>
-                      <div style={{ width: 60 }}><ScoreBar score={r.risk_score} /></div>
-                    </div>
-                  </td>
-                  <td style={{ color: 'var(--text-3)' }}>{timeAgo(r.last_commit)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={repos}
+          rowKey={(r: any) => r.id}
+          columns={[
+            { key: 'repo', header: 'Repository', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.owner}/{r.name}</span> },
+            { key: 'platform', header: 'Platform', render: (r: any) => <Badge label={r.platform} color="#3b82f6" /> },
+            { key: 'language', header: 'Language', render: (r: any) => <Badge label={r.language} /> },
+            { key: 'branch', header: 'Branch', render: (r: any) => <code style={{ fontSize: 12 }}>{r.default_branch}</code> },
+            { key: 'contributors', header: 'Contributors', render: (r: any) => <span>{r.contributor_count}</span> },
+            { key: 'deps', header: 'Dependencies', render: (r: any) => <span>{r.dep_count}</span> },
+            { key: 'risk', header: 'Risk', render: (r: any) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: RISK_COLOR(r.risk_score), fontWeight: 700, fontSize: 13, width: 30 }}>{r.risk_score}</span>
+                <div style={{ width: 60 }}><ScoreBar score={r.risk_score} /></div>
+              </div>
+            ) },
+            { key: 'last_commit', header: 'Last Commit', render: (r: any) => <span style={{ color: 'var(--text-3)' }}>{timeAgo(r.last_commit)}</span> },
+          ]}
+        />
       )}
 
       {sub === 'deps' && (
         <>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <select className="g-select" style={{ width: 160 }} value={ecosystem} onChange={e => setEcosystem(e.target.value)}>
+            <select className="g-select" style={{ width: 160, flexShrink: 0 }} value={ecosystem} onChange={e => setEcosystem(e.target.value)}>
               <option value="">All Ecosystems</option>
               {['npm', 'pip', 'maven', 'go', 'cargo', 'gradle', 'nuget', 'rubygems', 'composer'].map(e => (
                 <option key={e} value={e}>{e}</option>
@@ -166,34 +168,27 @@ function ReposTab() {
               Has CVEs only
             </label>
           </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Package</th><th>Ecosystem</th><th>Version</th><th>Latest</th><th>License</th><th>CVEs</th><th>Type</th><th>Risk</th></tr>
-              </thead>
-              <tbody>
-                {deps.map(d => (
-                  <tr key={d.id} className="g-tr">
-                    <td style={{ fontWeight: 600 }}>{d.package_name}</td>
-                    <td><Badge label={d.ecosystem} color="#6366f1" /></td>
-                    <td><code style={{ fontSize: 12 }}>{d.version}</code></td>
-                    <td>
-                      <code style={{ fontSize: 12, color: d.is_outdated ? '#f97316' : 'var(--text-2)' }}>{d.latest_version}</code>
-                      {d.is_outdated && <span style={{ fontSize: 10, color: '#f97316', marginLeft: 4 }}>outdated</span>}
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{d.license}</td>
-                    <td>
-                      {d.cve_count > 0
-                        ? <span style={{ color: '#ef4444', fontWeight: 700 }}>{d.cve_count}</span>
-                        : <span style={{ color: 'var(--text-3)' }}>0</span>}
-                    </td>
-                    <td><Badge label={d.is_direct ? 'direct' : 'transitive'} color={d.is_direct ? '#22c55e' : '#64748b'} /></td>
-                    <td><span style={{ color: RISK_COLOR(d.risk_score), fontWeight: 700 }}>{d.risk_score}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<any>
+            rows={deps}
+            rowKey={(d: any) => d.id}
+            columns={[
+              { key: 'package_name', header: 'Package', render: (d: any) => <span style={{ fontWeight: 600 }}>{d.package_name}</span> },
+              { key: 'ecosystem', header: 'Ecosystem', render: (d: any) => <Badge label={d.ecosystem} color="#6366f1" /> },
+              { key: 'version', header: 'Version', render: (d: any) => <code style={{ fontSize: 12 }}>{d.version}</code> },
+              { key: 'latest', header: 'Latest', render: (d: any) => (
+                <span>
+                  <code style={{ fontSize: 12, color: d.is_outdated ? '#f97316' : 'var(--text-2)' }}>{d.latest_version}</code>
+                  {d.is_outdated && <span style={{ fontSize: 10, color: '#f97316', marginLeft: 4 }}>outdated</span>}
+                </span>
+              ) },
+              { key: 'license', header: 'License', render: (d: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{d.license}</span> },
+              { key: 'cves', header: 'CVEs', render: (d: any) => d.cve_count > 0
+                ? <span style={{ color: '#ef4444', fontWeight: 700 }}>{d.cve_count}</span>
+                : <span style={{ color: 'var(--text-3)' }}>0</span> },
+              { key: 'type', header: 'Type', render: (d: any) => <Badge label={d.is_direct ? 'direct' : 'transitive'} color={d.is_direct ? '#22c55e' : '#64748b'} /> },
+              { key: 'risk', header: 'Risk', render: (d: any) => <span style={{ color: RISK_COLOR(d.risk_score), fontWeight: 700 }}>{d.risk_score}</span> },
+            ]}
+          />
         </>
       )}
     </div>
@@ -222,87 +217,70 @@ function PipelinesTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['pipelines', 'artifacts', 'provenance'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'pipelines' ? 'Build Pipelines' : s === 'artifacts' ? 'Artifact Security' : 'Build Provenance'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {sub === 'pipelines' && (
-        <div className="g-card" style={{ overflow: 'auto' }}>
-          <table className="g-table">
-            <thead className="g-thead">
-              <tr><th>Pipeline</th><th>Platform</th><th>Status</th><th>Secrets in CI</th><th>Untrusted Actions</th><th>Pinned Versions</th><th>Risk</th><th>Last Run</th></tr>
-            </thead>
-            <tbody>
-              {pipelines.map(p => (
-                <tr key={p.id} className="g-tr">
-                  <td style={{ fontWeight: 600 }}>{p.name}</td>
-                  <td><Badge label={p.platform} color={PLATFORM_COLORS[p.platform] ?? '#64748b'} /></td>
-                  <td><Badge label={p.status} color={p.status === 'passing' ? '#22c55e' : '#ef4444'} /></td>
-                  <td><span style={{ color: p.has_secrets ? '#ef4444' : '#22c55e' }}>{p.has_secrets ? '⚠ Yes' : '✓ No'}</span></td>
-                  <td><span style={{ color: p.has_untrusted_actions ? '#ef4444' : '#22c55e' }}>{p.has_untrusted_actions ? '⚠ Yes' : '✓ No'}</span></td>
-                  <td><span style={{ color: p.has_pinned_versions ? '#22c55e' : '#f97316' }}>{p.has_pinned_versions ? '✓ Yes' : '✗ No'}</span></td>
-                  <td><span style={{ color: RISK_COLOR(p.risk_score), fontWeight: 700 }}>{p.risk_score}</span></td>
-                  <td style={{ color: 'var(--text-3)' }}>{timeAgo(p.last_run)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={pipelines}
+          rowKey={(p: any) => p.id}
+          columns={[
+            { key: 'name', header: 'Pipeline', render: (p: any) => <span style={{ fontWeight: 600 }}>{p.name}</span> },
+            { key: 'platform', header: 'Platform', render: (p: any) => <Badge label={p.platform} color={PLATFORM_COLORS[p.platform] ?? '#64748b'} /> },
+            { key: 'status', header: 'Status', render: (p: any) => <Badge label={p.status} color={p.status === 'passing' ? '#22c55e' : '#ef4444'} /> },
+            { key: 'secrets', header: 'Secrets in CI', render: (p: any) => p.has_secrets
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444' }}><AlertTriangle style={{ width: 12, height: 12 }} /> Yes</span>
+              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e' }}><Check style={{ width: 13, height: 13 }} /> No</span> },
+            { key: 'untrusted', header: 'Untrusted Actions', render: (p: any) => p.has_untrusted_actions
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444' }}><AlertTriangle style={{ width: 12, height: 12 }} /> Yes</span>
+              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e' }}><Check style={{ width: 13, height: 13 }} /> No</span> },
+            { key: 'pinned', header: 'Pinned Versions', render: (p: any) => <YesNo ok={p.has_pinned_versions} /> },
+            { key: 'risk', header: 'Risk', render: (p: any) => <span style={{ color: RISK_COLOR(p.risk_score), fontWeight: 700 }}>{p.risk_score}</span> },
+            { key: 'last_run', header: 'Last Run', render: (p: any) => <span style={{ color: 'var(--text-3)' }}>{timeAgo(p.last_run)}</span> },
+          ]}
+        />
       )}
 
       {sub === 'artifacts' && (
-        <div className="g-card" style={{ overflow: 'auto' }}>
-          <table className="g-table">
-            <thead className="g-thead">
-              <tr><th>Artifact</th><th>Type</th><th>Version</th><th>Signed</th><th>SBOM</th><th>Provenance</th><th>Hash</th><th>Risk</th></tr>
-            </thead>
-            <tbody>
-              {artifacts.map(a => (
-                <tr key={a.id} className="g-tr">
-                  <td style={{ fontWeight: 600 }}>{a.name}</td>
-                  <td><Badge label={a.artifact_type} color="#6366f1" /></td>
-                  <td><code style={{ fontSize: 12 }}>{a.version}</code></td>
-                  <td><span style={{ color: a.is_signed ? '#22c55e' : '#ef4444' }}>{a.is_signed ? '✓ Yes' : '✗ No'}</span></td>
-                  <td><span style={{ color: a.has_sbom ? '#22c55e' : '#f97316' }}>{a.has_sbom ? '✓ Yes' : '✗ No'}</span></td>
-                  <td><span style={{ color: a.provenance_available ? '#22c55e' : '#ef4444' }}>{a.provenance_available ? '✓ Yes' : '✗ No'}</span></td>
-                  <td><code style={{ fontSize: 10, color: 'var(--text-3)' }}>{a.artifact_hash ? a.artifact_hash.slice(0, 20) + '…' : '—'}</code></td>
-                  <td><span style={{ color: RISK_COLOR(a.risk_score), fontWeight: 700 }}>{a.risk_score}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={artifacts}
+          rowKey={(a: any) => a.id}
+          columns={[
+            { key: 'name', header: 'Artifact', render: (a: any) => <span style={{ fontWeight: 600 }}>{a.name}</span> },
+            { key: 'type', header: 'Type', render: (a: any) => <Badge label={a.artifact_type} color="#6366f1" /> },
+            { key: 'version', header: 'Version', render: (a: any) => <code style={{ fontSize: 12 }}>{a.version}</code> },
+            { key: 'signed', header: 'Signed', render: (a: any) => <YesNo ok={a.is_signed} /> },
+            { key: 'sbom', header: 'SBOM', render: (a: any) => <YesNo ok={a.has_sbom} /> },
+            { key: 'provenance', header: 'Provenance', render: (a: any) => <YesNo ok={a.provenance_available} /> },
+            { key: 'hash', header: 'Hash', render: (a: any) => <code style={{ fontSize: 10, color: 'var(--text-3)' }}>{a.artifact_hash ? a.artifact_hash.slice(0, 20) + '…' : '—'}</code> },
+            { key: 'risk', header: 'Risk', render: (a: any) => <span style={{ color: RISK_COLOR(a.risk_score), fontWeight: 700 }}>{a.risk_score}</span> },
+          ]}
+        />
       )}
 
       {sub === 'provenance' && provenance && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            <StatCard label="SLSA Level" value={`L${provenance.slsa_level}`} color="#f97316" sub="Target: L3" />
-            <StatCard label="Provenance Coverage" value={`${provenance.provenance_rate}%`} color={provenance.provenance_rate > 70 ? '#22c55e' : '#f97316'} />
-            <StatCard label="Total Builds" value={provenance.builds?.length ?? 0} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <MetricCard label="SLSA Level" value={`L${provenance.slsa_level}`} color="#f97316" sub="Target: L3" />
+            <MetricCard label="Provenance Coverage" value={`${provenance.provenance_rate}%`} color={provenance.provenance_rate > 70 ? '#22c55e' : '#f97316'} />
+            <MetricCard label="Total Builds" value={provenance.builds?.length ?? 0} />
           </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Artifact</th><th>Builder</th><th>Source Commit</th><th>Signed</th><th>SLSA Level</th><th>Attestation</th><th>Built</th></tr>
-              </thead>
-              <tbody>
-                {(provenance.builds ?? []).map((b: any, i: number) => (
-                  <tr key={i} className="g-tr">
-                    <td style={{ fontWeight: 600 }}>{b.artifact}</td>
-                    <td><Badge label={b.builder} color="#3b82f6" /></td>
-                    <td><code style={{ fontSize: 12 }}>{b.source_commit}</code></td>
-                    <td><span style={{ color: b.signed ? '#22c55e' : '#ef4444' }}>{b.signed ? '✓ Yes' : '✗ No'}</span></td>
-                    <td><Badge label={`L${b.slsa_level}`} color={b.slsa_level >= 2 ? '#22c55e' : '#ef4444'} /></td>
-                    <td style={{ color: 'var(--text-3)' }}>{b.attestation || '—'}</td>
-                    <td style={{ color: 'var(--text-3)' }}>{timeAgo(b.build_time)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<any>
+            rows={provenance.builds ?? []}
+            rowKey={(b: any, i: number) => i}
+            columns={[
+              { key: 'artifact', header: 'Artifact', render: (b: any) => <span style={{ fontWeight: 600 }}>{b.artifact}</span> },
+              { key: 'builder', header: 'Builder', render: (b: any) => <Badge label={b.builder} color="#3b82f6" /> },
+              { key: 'source_commit', header: 'Source Commit', render: (b: any) => <code style={{ fontSize: 12 }}>{b.source_commit}</code> },
+              { key: 'signed', header: 'Signed', render: (b: any) => <YesNo ok={b.signed} /> },
+              { key: 'slsa_level', header: 'SLSA Level', render: (b: any) => <Badge label={`L${b.slsa_level}`} color={b.slsa_level >= 2 ? '#22c55e' : '#ef4444'} /> },
+              { key: 'attestation', header: 'Attestation', render: (b: any) => <span style={{ color: 'var(--text-3)' }}>{b.attestation || '—'}</span> },
+              { key: 'built', header: 'Built', render: (b: any) => <span style={{ color: 'var(--text-3)' }}>{timeAgo(b.build_time)}</span> },
+            ]}
+          />
         </div>
       )}
     </div>
@@ -332,47 +310,42 @@ function SBOMTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['sboms', 'vulns'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'sboms' ? 'SBOM Management' : 'Vulnerability Management'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {sub === 'sboms' && (
-        <div className="g-card" style={{ overflow: 'auto' }}>
-          <table className="g-table">
-            <thead className="g-thead">
-              <tr><th>Artifact</th><th>Format</th><th>Components</th><th>Licenses</th><th>Suppliers</th><th>Has Vulns</th><th>Generated</th></tr>
-            </thead>
-            <tbody>
-              {sboms.map(s => (
-                <tr key={s.id} className="g-tr">
-                  <td style={{ fontWeight: 600 }}>{s.artifact_name}</td>
-                  <td><Badge label={s.format} color="#6366f1" /></td>
-                  <td>{s.component_count}</td>
-                  <td>{s.license_count}</td>
-                  <td>{s.supplier_count}</td>
-                  <td><span style={{ color: s.has_vulnerabilities ? '#ef4444' : '#22c55e' }}>{s.has_vulnerabilities ? '⚠ Yes' : '✓ Clean'}</span></td>
-                  <td style={{ color: 'var(--text-3)' }}>{timeAgo(s.generated_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={sboms}
+          rowKey={(s: any) => s.id}
+          columns={[
+            { key: 'artifact_name', header: 'Artifact', render: (s: any) => <span style={{ fontWeight: 600 }}>{s.artifact_name}</span> },
+            { key: 'format', header: 'Format', render: (s: any) => <Badge label={s.format} color="#6366f1" /> },
+            { key: 'components', header: 'Components', render: (s: any) => <span>{s.component_count}</span> },
+            { key: 'licenses', header: 'Licenses', render: (s: any) => <span>{s.license_count}</span> },
+            { key: 'suppliers', header: 'Suppliers', render: (s: any) => <span>{s.supplier_count}</span> },
+            { key: 'has_vulns', header: 'Has Vulns', render: (s: any) => s.has_vulnerabilities
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444' }}><AlertTriangle style={{ width: 12, height: 12 }} /> Yes</span>
+              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e' }}><Check style={{ width: 13, height: 13 }} /> Clean</span> },
+            { key: 'generated', header: 'Generated', render: (s: any) => <span style={{ color: 'var(--text-3)' }}>{timeAgo(s.generated_at)}</span> },
+          ]}
+        />
       )}
 
       {sub === 'vulns' && (
         <>
           {vulnData && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-              <StatCard label="Critical" value={vulnData.critical} color="#ef4444" />
-              <StatCard label="High" value={vulnData.high} color="#f97316" />
-              <StatCard label="KEV (CISA)" value={vulnData.kev} color="#dc2626" sub="Known exploited" />
-              <StatCard label="Exploited" value={vulnData.exploited} color="#f97316" sub="Active exploitation" />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <MetricCard label="Critical" value={vulnData.critical} color="#ef4444" />
+              <MetricCard label="High" value={vulnData.high} color="#f97316" />
+              <MetricCard label="KEV (CISA)" value={vulnData.kev} color="#dc2626" sub="Known exploited" />
+              <MetricCard label="Exploited" value={vulnData.exploited} color="#f97316" sub="Active exploitation" />
             </div>
           )}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <select className="g-select" style={{ width: 160 }} value={severity} onChange={e => setSeverity(e.target.value)}>
+            <select className="g-select" style={{ width: 160, flexShrink: 0 }} value={severity} onChange={e => setSeverity(e.target.value)}>
               <option value="">All Severities</option>
               {['critical', 'high', 'medium', 'low'].map(s => (
                 <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
@@ -383,28 +356,23 @@ function SBOMTab() {
               KEV only
             </label>
           </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>CVE</th><th>Description</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Has Exploit</th><th>Fix</th><th>Severity</th><th>Affected</th></tr>
-              </thead>
-              <tbody>
-                {(vulnData?.vulns ?? []).map((v: any) => (
-                  <tr key={v.id} className="g-tr">
-                    <td><code style={{ fontSize: 12, color: 'var(--accent)' }}>{v.cve_id}</code></td>
-                    <td style={{ fontSize: 12 }}>{v.description?.slice(0, 40)}…</td>
-                    <td><span style={{ color: v.cvss >= 9 ? '#ef4444' : v.cvss >= 7 ? '#f97316' : '#eab308', fontWeight: 700 }}>{v.cvss.toFixed(1)}</span></td>
-                    <td style={{ fontSize: 12 }}>{(v.epss * 100).toFixed(1)}%</td>
-                    <td>{v.is_kev && <Badge label="KEV" color="#dc2626" />}</td>
-                    <td><span style={{ color: v.has_exploit ? '#ef4444' : 'var(--text-3)' }}>{v.has_exploit ? '⚠ Yes' : '—'}</span></td>
-                    <td><code style={{ fontSize: 11 }}>{v.fix_version || '—'}</code></td>
-                    <td><Badge label={v.severity} color={SEV_COLOR[v.severity]} /></td>
-                    <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{v.affected_projects}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<any>
+            rows={vulnData?.vulns ?? []}
+            rowKey={(v: any) => v.id}
+            columns={[
+              { key: 'cve_id', header: 'CVE', render: (v: any) => <code style={{ fontSize: 12, color: 'var(--accent)' }}>{v.cve_id}</code> },
+              { key: 'description', header: 'Description', render: (v: any) => <span style={{ fontSize: 12 }}>{v.description?.slice(0, 40)}…</span> },
+              { key: 'cvss', header: 'CVSS', render: (v: any) => <span style={{ color: v.cvss >= 9 ? '#ef4444' : v.cvss >= 7 ? '#f97316' : '#eab308', fontWeight: 700 }}>{v.cvss.toFixed(1)}</span> },
+              { key: 'epss', header: 'EPSS', render: (v: any) => <span style={{ fontSize: 12 }}>{(v.epss * 100).toFixed(1)}%</span> },
+              { key: 'kev', header: 'KEV', render: (v: any) => v.is_kev ? <Badge label="KEV" color="#dc2626" /> : null },
+              { key: 'exploit', header: 'Has Exploit', render: (v: any) => v.has_exploit
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#ef4444' }}><AlertTriangle style={{ width: 12, height: 12 }} /> Yes</span>
+                : <span style={{ color: 'var(--text-3)' }}>—</span> },
+              { key: 'fix', header: 'Fix', render: (v: any) => <code style={{ fontSize: 11 }}>{v.fix_version || '—'}</code> },
+              { key: 'severity', header: 'Severity', render: (v: any) => <Badge label={v.severity} color={SEV_COLOR[v.severity]} /> },
+              { key: 'affected', header: 'Affected', render: (v: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{v.affected_projects}</span> },
+            ]}
+          />
         </>
       )}
     </div>
@@ -426,67 +394,53 @@ function SecretsTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['secrets', 'integrity'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'secrets' ? 'Secret Detection' : 'Code Integrity'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {sub === 'secrets' && secretData && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            <StatCard label="Total Findings" value={secretData.total} />
-            <StatCard label="Open" value={secretData.open} color="#ef4444" />
-            <StatCard label="AWS Keys" value={secretData.aws_keys} color="#f97316" />
-            <StatCard label="API Keys" value={secretData.api_keys} color="#eab308" />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <MetricCard label="Total Findings" value={secretData.total} />
+            <MetricCard label="Open" value={secretData.open} color="#ef4444" />
+            <MetricCard label="AWS Keys" value={secretData.aws_keys} color="#f97316" />
+            <MetricCard label="API Keys" value={secretData.api_keys} color="#eab308" />
           </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Type</th><th>File Path</th><th>Commit</th><th>Severity</th><th>Status</th><th>Found</th></tr>
-              </thead>
-              <tbody>
-                {(secretData.secrets ?? []).map((s: any) => (
-                  <tr key={s.id} className="g-tr">
-                    <td><Badge label={s.secret_type.replace(/_/g, ' ')} color="#ef4444" /></td>
-                    <td><code style={{ fontSize: 12 }}>{s.file_path}</code></td>
-                    <td><code style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.commit_hash}</code></td>
-                    <td><Badge label={s.severity} color={SEV_COLOR[s.severity]} /></td>
-                    <td><Badge label={s.status} color={s.status === 'open' ? '#ef4444' : '#22c55e'} /></td>
-                    <td style={{ color: 'var(--text-3)' }}>{timeAgo(s.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<any>
+            rows={secretData.secrets ?? []}
+            rowKey={(s: any) => s.id}
+            columns={[
+              { key: 'type', header: 'Type', render: (s: any) => <Badge label={s.secret_type.replace(/_/g, ' ')} color="#ef4444" /> },
+              { key: 'file_path', header: 'File Path', render: (s: any) => <code style={{ fontSize: 12 }}>{s.file_path}</code> },
+              { key: 'commit', header: 'Commit', render: (s: any) => <code style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.commit_hash}</code> },
+              { key: 'severity', header: 'Severity', render: (s: any) => <Badge label={s.severity} color={SEV_COLOR[s.severity]} /> },
+              { key: 'status', header: 'Status', render: (s: any) => <Badge label={s.status} color={s.status === 'open' ? '#ef4444' : '#22c55e'} /> },
+              { key: 'found', header: 'Found', render: (s: any) => <span style={{ color: 'var(--text-3)' }}>{timeAgo(s.created_at)}</span> },
+            ]}
+          />
         </>
       )}
 
       {sub === 'integrity' && integrity && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            <StatCard label="Signed Commits" value={`${integrity.signed_commits_rate}%`} color={integrity.signed_commits_rate >= 80 ? '#22c55e' : '#f97316'} />
-            <StatCard label="Signed Tags" value={`${integrity.signed_tags_rate}%`} color={integrity.signed_tags_rate >= 80 ? '#22c55e' : '#f97316'} />
-            <StatCard label="Protected Branches" value={integrity.protected_branches} color="#22c55e" />
-            <StatCard label="Force Push Incidents" value={integrity.force_push_incidents} color={integrity.force_push_incidents > 0 ? '#ef4444' : '#22c55e'} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <MetricCard label="Signed Commits" value={`${integrity.signed_commits_rate}%`} color={integrity.signed_commits_rate >= 80 ? '#22c55e' : '#f97316'} />
+            <MetricCard label="Signed Tags" value={`${integrity.signed_tags_rate}%`} color={integrity.signed_tags_rate >= 80 ? '#22c55e' : '#f97316'} />
+            <MetricCard label="Protected Branches" value={integrity.protected_branches} color="#22c55e" />
+            <MetricCard label="Force Push Incidents" value={integrity.force_push_incidents} color={integrity.force_push_incidents > 0 ? '#ef4444' : '#22c55e'} />
           </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Repository</th><th>Finding</th><th>Severity</th><th>Count</th></tr>
-              </thead>
-              <tbody>
-                {(integrity.findings ?? []).map((f: any, i: number) => (
-                  <tr key={i} className="g-tr">
-                    <td style={{ fontWeight: 600 }}>{f.repo}</td>
-                    <td>{f.finding}</td>
-                    <td><Badge label={f.severity} color={SEV_COLOR[f.severity]} /></td>
-                    <td>{f.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<any>
+            rows={integrity.findings ?? []}
+            rowKey={(f: any, i: number) => i}
+            columns={[
+              { key: 'repo', header: 'Repository', render: (f: any) => <span style={{ fontWeight: 600 }}>{f.repo}</span> },
+              { key: 'finding', header: 'Finding', render: (f: any) => <span>{f.finding}</span> },
+              { key: 'severity', header: 'Severity', render: (f: any) => <Badge label={f.severity} color={SEV_COLOR[f.severity]} /> },
+              { key: 'count', header: 'Count', render: (f: any) => <span>{f.count}</span> },
+            ]}
+          />
         </div>
       )}
     </div>
@@ -524,16 +478,15 @@ function IntelligenceTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['intel', 'third-party', 'timeline', 'ai'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'intel' ? 'Threat Intelligence' : s === 'third-party' ? 'Third-Party Risk' : s === 'timeline' ? 'Timeline' : 'AI Analysis'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {sub === 'intel' && intel && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12, color: '#ef4444' }}>Malicious Packages Detected</div>
+          <SectionCard title={<span style={{ color: '#ef4444' }}>Malicious Packages Detected</span>}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {(intel.malicious_packages ?? []).map((p: any, i: number) => (
                 <div key={i} style={{ padding: 12, background: 'var(--border)', borderRadius: 6, borderLeft: '3px solid #ef4444' }}>
@@ -546,19 +499,17 @@ function IntelligenceTab() {
                 </div>
               ))}
             </div>
-          </div>
+          </SectionCard>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div className="g-card" style={{ padding: 20 }}>
-              <div style={{ fontWeight: 600, marginBottom: 12 }}>Active Campaigns</div>
+            <SectionCard title="Active Campaigns">
               {(intel.campaigns ?? []).map((c: any, i: number) => (
                 <div key={i} style={{ padding: 10, background: 'var(--border)', borderRadius: 6, marginBottom: 8 }}>
                   <div style={{ fontWeight: 600 }}>{c.name}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.packages_affected} packages · {c.ecosystems} · Since {c.first_seen}</div>
                 </div>
               ))}
-            </div>
-            <div className="g-card" style={{ padding: 20 }}>
-              <div style={{ fontWeight: 600, marginBottom: 12 }}>IOC Matches in Dependencies</div>
+            </SectionCard>
+            <SectionCard title="IOC Matches in Dependencies">
               {(intel.ioc_matches ?? []).map((m: any, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                   <div>
@@ -568,89 +519,72 @@ function IntelligenceTab() {
                   <span style={{ fontSize: 12, color: '#ef4444' }}>{m.hits} hits</span>
                 </div>
               ))}
-            </div>
+            </SectionCard>
           </div>
         </div>
       )}
 
       {sub === 'third-party' && thirdParty && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <div style={{ padding: '12px 16px', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Third-Party Package Risk</div>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Package</th><th>Ecosystem</th><th>Version</th><th>Trust Score</th><th>Maintenance</th><th>Advisories</th><th>Weekly Downloads</th></tr>
-              </thead>
-              <tbody>
-                {(thirdParty.packages ?? []).map((p: any, i: number) => (
-                  <tr key={i} className="g-tr">
-                    <td style={{ fontWeight: 600 }}>{p.name}</td>
-                    <td><Badge label={p.ecosystem} color="#6366f1" /></td>
-                    <td><code style={{ fontSize: 12 }}>{p.version}</code></td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: RISK_COLOR(100 - p.trust_score), fontWeight: 700, width: 28 }}>{p.trust_score}</span>
-                        <div style={{ width: 60 }}><ScoreBar score={p.trust_score} color={p.trust_score >= 70 ? '#22c55e' : p.trust_score >= 40 ? '#f97316' : '#ef4444'} /></div>
-                      </div>
-                    </td>
-                    <td><Badge label={p.maintenance} color={p.maintenance === 'active' ? '#22c55e' : p.maintenance === 'abandoned' ? '#ef4444' : p.maintenance === 'compromised' || p.maintenance === 'malicious' ? '#dc2626' : '#f97316'} /></td>
-                    <td>{p.advisories > 0 ? <span style={{ color: '#ef4444', fontWeight: 700 }}>{p.advisories}</span> : <span style={{ color: '#22c55e' }}>0</span>}</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.downloads_weekly.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <div style={{ padding: '12px 16px', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>CI/CD Plugin Assessment</div>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Plugin</th><th>Version</th><th>Pinned to SHA</th><th>Trusted</th><th>SHA</th></tr>
-              </thead>
-              <tbody>
-                {(thirdParty.ci_plugins ?? []).map((p: any, i: number) => (
-                  <tr key={i} className="g-tr">
-                    <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{p.name}</td>
-                    <td><code>{p.version}</code></td>
-                    <td><span style={{ color: p.is_pinned ? '#22c55e' : '#ef4444' }}>{p.is_pinned ? '✓ Yes' : '✗ No'}</span></td>
-                    <td><span style={{ color: p.trusted ? '#22c55e' : '#f97316' }}>{p.trusted ? '✓ Yes' : '⚠ Unverified'}</span></td>
-                    <td><code style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.sha ? p.sha.slice(0, 16) + '…' : '—'}</code></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SectionCard title="Third-Party Package Risk">
+            <DataTable<any>
+              rows={thirdParty.packages ?? []}
+              rowKey={(p: any, i: number) => i}
+              columns={[
+                { key: 'name', header: 'Package', render: (p: any) => <span style={{ fontWeight: 600 }}>{p.name}</span> },
+                { key: 'ecosystem', header: 'Ecosystem', render: (p: any) => <Badge label={p.ecosystem} color="#6366f1" /> },
+                { key: 'version', header: 'Version', render: (p: any) => <code style={{ fontSize: 12 }}>{p.version}</code> },
+                { key: 'trust', header: 'Trust Score', render: (p: any) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: RISK_COLOR(100 - p.trust_score), fontWeight: 700, width: 28 }}>{p.trust_score}</span>
+                    <div style={{ width: 60 }}><ScoreBar score={p.trust_score} color={p.trust_score >= 70 ? '#22c55e' : p.trust_score >= 40 ? '#f97316' : '#ef4444'} /></div>
+                  </div>
+                ) },
+                { key: 'maintenance', header: 'Maintenance', render: (p: any) => <Badge label={p.maintenance} color={p.maintenance === 'active' ? '#22c55e' : p.maintenance === 'abandoned' ? '#ef4444' : p.maintenance === 'compromised' || p.maintenance === 'malicious' ? '#dc2626' : '#f97316'} /> },
+                { key: 'advisories', header: 'Advisories', render: (p: any) => p.advisories > 0 ? <span style={{ color: '#ef4444', fontWeight: 700 }}>{p.advisories}</span> : <span style={{ color: '#22c55e' }}>0</span> },
+                { key: 'downloads', header: 'Weekly Downloads', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.downloads_weekly.toLocaleString()}</span> },
+              ]}
+            />
+          </SectionCard>
+          <SectionCard title="CI/CD Plugin Assessment">
+            <DataTable<any>
+              rows={thirdParty.ci_plugins ?? []}
+              rowKey={(p: any, i: number) => i}
+              columns={[
+                { key: 'name', header: 'Plugin', render: (p: any) => <span style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: 13 }}>{p.name}</span> },
+                { key: 'version', header: 'Version', render: (p: any) => <code>{p.version}</code> },
+                { key: 'pinned', header: 'Pinned to SHA', render: (p: any) => <YesNo ok={p.is_pinned} /> },
+                { key: 'trusted', header: 'Trusted', render: (p: any) => p.trusted
+                  ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#22c55e' }}><Check style={{ width: 13, height: 13 }} /> Yes</span>
+                  : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#f97316' }}><AlertTriangle style={{ width: 12, height: 12 }} /> Unverified</span> },
+                { key: 'sha', header: 'SHA', render: (p: any) => <code style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.sha ? p.sha.slice(0, 16) + '…' : '—'}</code> },
+              ]}
+            />
+          </SectionCard>
         </div>
       )}
 
       {sub === 'timeline' && (
-        <div className="g-card" style={{ overflow: 'auto' }}>
-          <table className="g-table">
-            <thead className="g-thead">
-              <tr><th>Event</th><th>Target</th><th>Severity</th><th>Detail</th><th>Time</th></tr>
-            </thead>
-            <tbody>
-              {timeline.map((e: any) => (
-                <tr key={e.id} className="g-tr">
-                  <td><Badge label={e.event_type.replace(/_/g, ' ')} color="#6366f1" /></td>
-                  <td><code style={{ fontSize: 12 }}>{e.target}</code></td>
-                  <td><Badge label={e.severity} color={SEV_COLOR[e.severity]} /></td>
-                  <td style={{ fontSize: 12 }}>{e.detail}</td>
-                  <td style={{ color: 'var(--text-3)' }}>{timeAgo(e.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<any>
+          rows={timeline}
+          rowKey={(e: any) => e.id}
+          columns={[
+            { key: 'event_type', header: 'Event', render: (e: any) => <Badge label={e.event_type.replace(/_/g, ' ')} color="#6366f1" /> },
+            { key: 'target', header: 'Target', render: (e: any) => <code style={{ fontSize: 12 }}>{e.target}</code> },
+            { key: 'severity', header: 'Severity', render: (e: any) => <Badge label={e.severity} color={SEV_COLOR[e.severity]} /> },
+            { key: 'detail', header: 'Detail', render: (e: any) => <span style={{ fontSize: 12 }}>{e.detail}</span> },
+            { key: 'time', header: 'Time', render: (e: any) => <span style={{ color: 'var(--text-3)' }}>{timeAgo(e.created_at)}</span> },
+          ]}
+        />
       )}
 
       {sub === 'ai' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             {(['dependency', 'pipeline', 'ask'] as const).map(m => (
-              <button key={m} className={aiMode === m ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setAIMode(m)}>
+              <ActionButton key={m} variant={aiMode === m ? 'primary' : 'ghost'} onClick={() => setAIMode(m)}>
                 {m === 'dependency' ? 'Analyze Dependency' : m === 'pipeline' ? 'Analyze Pipeline' : 'Ask AI'}
-              </button>
+              </ActionButton>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -662,9 +596,9 @@ function IntelligenceTab() {
               value={aiInput}
               onChange={e => setAIInput(e.target.value)}
             />
-            <button className="g-btn g-btn-primary" onClick={runAI} disabled={aiLoading} style={{ alignSelf: 'flex-start' }}>
+            <ActionButton variant="primary" onClick={runAI} loading={aiLoading} style={{ alignSelf: 'flex-start' }}>
               {aiLoading ? 'Analyzing…' : 'Analyze'}
-            </button>
+            </ActionButton>
           </div>
           {aiResult && (
             <div className="g-card" style={{ padding: 20 }}>
@@ -737,15 +671,15 @@ function ComplianceTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['compliance', 'policies'] as const).map(s => (
-          <button key={s} className={sub === s ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setSub(s)}>
+          <ActionButton key={s} variant={sub === s ? 'primary' : 'ghost'} onClick={() => setSub(s)}>
             {s === 'compliance' ? 'Compliance Frameworks' : 'Policy Engine'}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
       {sub === 'compliance' && compliance && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <StatCard label="Overall Compliance Score" value={`${compliance.overall_score}%`} color={compliance.overall_score >= 70 ? '#22c55e' : compliance.overall_score >= 50 ? '#f97316' : '#ef4444'} />
+          <MetricCard label="Overall Compliance Score" value={`${compliance.overall_score}%`} color={compliance.overall_score >= 70 ? '#22c55e' : compliance.overall_score >= 50 ? '#f97316' : '#ef4444'} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {(compliance.frameworks ?? []).map((f: any, i: number) => (
               <div key={i} className="g-card" style={{ padding: 16 }}>
@@ -758,31 +692,24 @@ function ComplianceTab() {
               </div>
             ))}
           </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <div style={{ padding: '12px 16px', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>Failed Controls</div>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Control</th><th>Title</th><th>Framework</th><th>Severity</th></tr>
-              </thead>
-              <tbody>
-                {(compliance.failed_controls ?? []).map((c: any, i: number) => (
-                  <tr key={i} className="g-tr">
-                    <td><code style={{ fontSize: 12 }}>{c.control}</code></td>
-                    <td style={{ fontSize: 13 }}>{c.title}</td>
-                    <td><Badge label={c.framework} color="#6366f1" /></td>
-                    <td><Badge label={c.severity} color={SEV_COLOR[c.severity]} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SectionCard title="Failed Controls">
+            <DataTable<any>
+              rows={compliance.failed_controls ?? []}
+              rowKey={(c: any, i: number) => i}
+              columns={[
+                { key: 'control', header: 'Control', render: (c: any) => <code style={{ fontSize: 12 }}>{c.control}</code> },
+                { key: 'title', header: 'Title', render: (c: any) => <span style={{ fontSize: 13 }}>{c.title}</span> },
+                { key: 'framework', header: 'Framework', render: (c: any) => <Badge label={c.framework} color="#6366f1" /> },
+                { key: 'severity', header: 'Severity', render: (c: any) => <Badge label={c.severity} color={SEV_COLOR[c.severity]} /> },
+              ]}
+            />
+          </SectionCard>
         </div>
       )}
 
       {sub === 'policies' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="g-card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 600, marginBottom: 12 }}>New Policy</div>
+          <SectionCard title="New Policy">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
               <input className="g-input" placeholder="Policy name*" value={policyForm.name} onChange={e => setPolicyForm({ ...policyForm, name: e.target.value })} />
               <select className="g-select" value={policyForm.rule_type} onChange={e => setPolicyForm({ ...policyForm, rule_type: e.target.value })}>
@@ -797,34 +724,27 @@ function ComplianceTab() {
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <input className="g-input" style={{ flex: 1 }} placeholder="Description" value={policyForm.description} onChange={e => setPolicyForm({ ...policyForm, description: e.target.value })} />
-              <button className="g-btn g-btn-primary" onClick={savePolicy} disabled={saving}>{saving ? 'Saving…' : 'Create Policy'}</button>
+              <ActionButton variant="primary" onClick={savePolicy} loading={saving}>{saving ? 'Saving…' : 'Create Policy'}</ActionButton>
             </div>
-          </div>
-          <div className="g-card" style={{ overflow: 'auto' }}>
-            <table className="g-table">
-              <thead className="g-thead">
-                <tr><th>Name</th><th>Rule Type</th><th>Action</th><th>Status</th><th>Description</th><th></th></tr>
-              </thead>
-              <tbody>
-                {policies.map(p => (
-                  <tr key={p.id} className="g-tr">
-                    <td style={{ fontWeight: 600 }}>{p.name}</td>
-                    <td><Badge label={p.rule_type || '—'} color="#6366f1" /></td>
-                    <td><Badge label={p.action} color={p.action === 'block' ? '#ef4444' : p.action === 'warn' ? '#f97316' : '#64748b'} /></td>
-                    <td>
-                      <button className="g-btn g-btn-ghost" onClick={() => togglePolicy(p.id, p.is_enabled)} style={{ fontSize: 11, padding: '2px 8px', color: p.is_enabled ? '#22c55e' : '#ef4444' }}>
-                        {p.is_enabled ? '● Enabled' : '○ Disabled'}
-                      </button>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.description}</td>
-                    <td>
-                      <button className="g-btn g-btn-ghost" onClick={() => deletePolicy(p.id)} style={{ fontSize: 11, color: '#ef4444' }}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          </SectionCard>
+          <DataTable<any>
+            rows={policies}
+            rowKey={(p: any) => p.id}
+            columns={[
+              { key: 'name', header: 'Name', render: (p: any) => <span style={{ fontWeight: 600 }}>{p.name}</span> },
+              { key: 'rule_type', header: 'Rule Type', render: (p: any) => <Badge label={p.rule_type || '—'} color="#6366f1" /> },
+              { key: 'action', header: 'Action', render: (p: any) => <Badge label={p.action} color={p.action === 'block' ? '#ef4444' : p.action === 'warn' ? '#f97316' : '#64748b'} /> },
+              { key: 'status', header: 'Status', render: (p: any) => (
+                <button className="g-btn g-btn-ghost" onClick={() => togglePolicy(p.id, p.is_enabled)} style={{ fontSize: 11, padding: '2px 8px', color: p.is_enabled ? '#22c55e' : '#ef4444', display: 'inline-flex', alignItems: 'center' }}>
+                  <Dot on={p.is_enabled} />{p.is_enabled ? 'Enabled' : 'Disabled'}
+                </button>
+              ) },
+              { key: 'description', header: 'Description', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.description}</span> },
+              { key: 'actions', header: '', render: (p: any) => (
+                <button className="g-btn g-btn-ghost" onClick={() => deletePolicy(p.id)} style={{ fontSize: 11, color: '#ef4444' }}>Delete</button>
+              ) },
+            ]}
+          />
         </div>
       )}
     </div>
@@ -842,8 +762,7 @@ function AnalyticsTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Most Vulnerable Projects</div>
+        <SectionCard title="Most Vulnerable Projects">
           {(analytics.most_vulnerable_projects ?? []).map((p: any, i: number) => (
             <div key={i} style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -853,9 +772,8 @@ function AnalyticsTab() {
               <ScoreBar score={p.risk} />
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Most Used Dependencies</div>
+        </SectionCard>
+        <SectionCard title="Most Used Dependencies">
           {(analytics.most_used_dependencies ?? []).map((d: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -868,20 +786,18 @@ function AnalyticsTab() {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Secret Findings by Type</div>
+        <SectionCard title="Secret Findings by Type">
           {(analytics.secret_findings_by_type ?? []).map((s: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
               <span style={{ fontSize: 13 }}>{s.type.replace(/_/g, ' ')}</span>
               <span style={{ fontWeight: 700, color: '#ef4444' }}>{s.count}</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>Build Failure Summary</div>
+        </SectionCard>
+        <SectionCard title="Build Failure Summary">
           {(analytics.build_failures ?? []).map((b: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <span style={{ fontWeight: 600 }}>{b.pipeline}</span>
@@ -891,10 +807,9 @@ function AnalyticsTab() {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>CVE Discovery Trend (14 days)</div>
+      <SectionCard title="CVE Discovery Trend (14 days)">
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
           {(analytics.compliance_trend ?? []).map((p: any, i: number) => {
             const max = Math.max(...(analytics.compliance_trend ?? []).map((x: any) => x.count), 1);
@@ -906,7 +821,7 @@ function AnalyticsTab() {
             );
           })}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -947,8 +862,7 @@ function ResponseTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 16 }}>Response Actions</div>
+      <SectionCard title="Response Actions">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
           {ACTIONS.map(a => (
             <div key={a.value}
@@ -963,9 +877,9 @@ function ResponseTab() {
           <input className="g-input" placeholder="Target (pipeline name, artifact, repo…)" value={target} onChange={e => setTarget(e.target.value)} />
           <div style={{ display: 'flex', gap: 10 }}>
             <input className="g-input" style={{ flex: 1 }} placeholder="Reason / justification" value={reason} onChange={e => setReason(e.target.value)} />
-            <button className="g-btn g-btn-primary" onClick={execute} disabled={executing} style={{ background: '#ef4444' }}>
+            <ActionButton variant="primary" onClick={execute} loading={executing} style={{ background: '#ef4444' }}>
               {executing ? 'Executing…' : 'Execute'}
-            </button>
+            </ActionButton>
           </div>
         </div>
         {result && (
@@ -973,19 +887,18 @@ function ResponseTab() {
             {result.error ? result.error : result.message}
           </div>
         )}
-      </div>
+      </SectionCard>
 
-      <div className="g-card" style={{ padding: 20 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Generate Report</div>
+      <SectionCard
+        title="Generate Report"
+        actions={<ActionButton variant="primary" onClick={generateReport} loading={generating}>{generating ? 'Generating…' : 'Generate with AI'}</ActionButton>}
+      >
         <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
           {['executive', 'technical', 'compliance', 'audit'].map(t => (
-            <button key={t} className={reportType === t ? 'g-btn g-btn-primary' : 'g-btn g-btn-ghost'} onClick={() => setReportType(t)}>
+            <ActionButton key={t} variant={reportType === t ? 'primary' : 'ghost'} onClick={() => setReportType(t)}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
+            </ActionButton>
           ))}
-          <button className="g-btn g-btn-primary" onClick={generateReport} disabled={generating} style={{ marginLeft: 'auto' }}>
-            {generating ? 'Generating…' : 'Generate with AI'}
-          </button>
         </div>
         {report && !report.error && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1017,7 +930,7 @@ function ResponseTab() {
             )}
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -1045,38 +958,22 @@ export default function SupplyChainPage() {
   }), [dash]);
 
   return (
-    <RootLayout>
+    <RootLayout title="Supply Chain Security"
+      subtitle="Repository inventory · Dependency management · SBOM · Pipeline security · Artifact integrity · Vulnerability management"
+      actions={dash ? (
+        <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+          <span style={{ color: '#ef4444' }}>{dash.critical_cves} critical CVEs</span>
+          <span style={{ color: '#f97316' }}>{dash.secret_findings} open secrets</span>
+          <span style={{ color: RISK_COLOR(dash.risk_score), fontWeight: 700 }}>Risk: {dash.risk_score}</span>
+        </div>
+      ) : undefined}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0, height: '100%' }}>
         <div style={{ padding: '20px 24px 0', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Supply Chain Security</h1>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-3)' }}>
-                Repository inventory · Dependency management · SBOM · Pipeline security · Artifact integrity · Vulnerability management
-              </p>
-            </div>
-            {dash && (
-              <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
-                <span style={{ color: '#ef4444' }}>{dash.critical_cves} critical CVEs</span>
-                <span style={{ color: '#f97316' }}>{dash.secret_findings} open secrets</span>
-                <span style={{ color: RISK_COLOR(dash.risk_score), fontWeight: 700 }}>Risk: {dash.risk_score}</span>
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 0, overflowX: 'auto' }}>
-            {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                style={{
-                  padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                  color: tab === t ? 'var(--accent)' : 'var(--text-3)',
-                  borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}`,
-                  whiteSpace: 'nowrap',
-                }}
-              >{TAB_LABELS[t]}</button>
-            ))}
-          </div>
+          <TabBar
+            tabs={(Object.keys(TAB_LABELS) as Tab[]).map(t => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t] }))}
+            active={tab}
+            onChange={t => setTab(t as Tab)}
+          />
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
           {(Object.keys(TAB_LABELS) as Tab[]).map(t => (

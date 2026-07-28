@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { dashboardAPI, alertsAPI, incidentsAPI, agentsAPI, playbooksAPI, casesAPI, vulnQueueAPI, firewallAPI, dpiAPI } from '@/lib/api';
+import { dashboardAPI, alertsAPI, incidentsAPI, agentsAPI, playbooksAPI, casesAPI, vulnQueueAPI, firewallAPI, dpiAPI, complianceAPI } from '@/lib/api';
 import { DashboardOverview, Alert, Incident, Agent, PlaybookExecution } from '@/types';
 import { LiveAlert } from '@/context/NotificationContext';
 import { sevClass, timeAgo } from '@/lib/utils';
@@ -12,7 +12,8 @@ import {
   PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Activity, AlertCircle, AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brain, Bug, CheckCircle2, Clock, Code2, Cpu, Crosshair, Database, FileCode, FileText, Filter, Flame, Globe, HardDrive, ListChecks, MapPin, MessageSquare, Minus, Network, Package, Play, Radio, Search, Server, Shield, ShieldAlert, ShieldCheck, ShieldOff, Sparkles, Target, TrendingDown, TrendingUp, Trophy, UserCheck, Users, Zap } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertCircle, AlertOctagon, AlertTriangle, BarChart3, Bell, BookOpen, Brain, Bug, CheckCircle2, Clock, Code2, Cpu, Crosshair, Database, FileCode, FileText, Filter, Flame, Globe, HardDrive, ListChecks, MapPin, MessageSquare, Network, Package, Play, Radio, Search, Server, Shield, ShieldAlert, ShieldCheck, ShieldOff, Sparkles, Target, Trophy, UserCheck, Users, Zap } from 'lucide-react';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -146,38 +147,6 @@ function RangePicker({ value, onChange }: { value: RangeOption; onChange: (r: Ra
       ))}
     </div>
   );
-}
-
-function DeltaBadge({ delta, pct }: { delta: number; pct: number }) {
-  if (delta === 0) return <span className="text-[10px] flex items-center gap-0.5" style={{ color: 'var(--text-3)' }}><Minus className="h-2.5 w-2.5" /> 0%</span>;
-  const up = delta > 0;
-  const Icon = up ? TrendingUp : TrendingDown;
-  return (
-    <span className="text-[10px] flex items-center gap-0.5 font-semibold" style={{ color: up ? 'var(--red)' : 'var(--green)' }}>
-      <Icon className="h-2.5 w-2.5" />{Math.abs(pct)}%
-    </span>
-  );
-}
-
-function StatCard({ label, value, sub, accent, pulse, delta, deltaPct, link }: {
-  label: string; value: string | number; sub?: string;
-  icon?: any; accent?: string; pulse?: boolean;
-  delta?: number; deltaPct?: number; link?: string;
-}) {
-  const content = (
-    <div className="g-card p-4 h-full flex flex-col gap-2 relative overflow-hidden transition-all hover:border-accent">
-      {pulse && <span className="absolute top-3 right-3 h-2 w-2 rounded-full animate-pulse" style={{ background: accent || 'var(--accent)' }} />}
-      {delta !== undefined && deltaPct !== undefined && (
-        <div className="flex items-start justify-end">
-          <DeltaBadge delta={delta} pct={deltaPct} />
-        </div>
-      )}
-      <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--text-1)' }}>{value ?? '—'}</p>
-      <p className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>{label}</p>
-      {sub && <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-    </div>
-  );
-  return link ? <Link href={link} className="h-full block">{content}</Link> : content;
 }
 
 function ThreatGauge({ score }: { score: number }) {
@@ -863,16 +832,9 @@ function NotificationsPanel({ agents, metrics }: { agents: Agent[]; metrics: Das
 
 // ── Compliance strip ───────────────────────────────────────────────────────────
 
-function CompliancePanel({ score }: { score: number }) {
+function CompliancePanel({ score, frameworkScores }: { score: number; frameworkScores: Array<{ framework: string; score: number }> }) {
   const color = score >= 80 ? 'var(--green)' : score >= 60 ? 'var(--yellow)' : 'var(--red)';
-  const frameworks = [
-    { name: 'NIST',     pct: Math.min(100, score + 8) },
-    { name: 'ISO 27001',pct: Math.min(100, score + 2) },
-    { name: 'PCI DSS',  pct: Math.max(0, score - 5)  },
-    { name: 'SOC 2',    pct: Math.min(100, score + 5) },
-    { name: 'CIS',      pct: Math.max(0, score - 10) },
-    { name: 'HIPAA',    pct: Math.max(0, score - 15) },
-  ];
+  const frameworks = frameworkScores.map(f => ({ name: f.framework, pct: f.score }));
   return (
     <div className="g-card p-4">
       <div className="flex items-center gap-2 mb-3">
@@ -922,10 +884,11 @@ export default function DashboardPage() {
   const [vulnQueue, setVulnQueue]     = useState<any[]>([]);
   const [fwStats, setFwStats]         = useState<any>(null);
   const [dpiSummary, setDpiSummary]   = useState<any>(null);
+  const [frameworkScores, setFrameworkScores] = useState<Array<{ framework: string; score: number }>>([]);
 
   const load = useCallback(async (spin = false) => {
     if (spin) setRefreshing(true);
-    const [ov, al, inc, ag, ex, mx, cs, vq, fw, dpi] = await Promise.allSettled([
+    const [ov, al, inc, ag, ex, mx, cs, vq, fw, dpi, fc] = await Promise.allSettled([
       dashboardAPI.getOverview(),
       alertsAPI.getAll(),
       incidentsAPI.getAll(),
@@ -936,6 +899,7 @@ export default function DashboardPage() {
       vulnQueueAPI.getQueue({ limit: 200 }),
       firewallAPI.getStats(),
       dpiAPI.getSummary(),
+      complianceAPI.getLatestScores(),
     ]);
     if (ov.status  === 'fulfilled') setOverview(ov.value.data);
     if (al.status  === 'fulfilled') setAlerts((al.value.data || []).slice(0, 30));
@@ -947,6 +911,7 @@ export default function DashboardPage() {
     if (vq.status  === 'fulfilled') setVulnQueue(vq.value.data?.items || []);
     if (fw.status  === 'fulfilled') setFwStats(fw.value.data);
     if (dpi.status === 'fulfilled') setDpiSummary(dpi.value.data);
+    if (fc.status  === 'fulfilled') setFrameworkScores(fc.value.data || []);
     setLoading(false);
     setRefreshing(false);
   }, [range]);
@@ -1315,9 +1280,9 @@ export default function DashboardPage() {
 
         {/* ── Executive KPI Row ────────────────────────────────── */}
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Security Score" value={`${securityScore}%`}
+          <MetricCard label="Security Score" value={`${securityScore}%`}
             sub={securityScore >= 70 ? 'Good posture' : securityScore >= 50 ? 'Needs attention' : 'At risk'}
-            icon={ShieldCheck} accent={securityScore >= 70 ? 'var(--green)' : securityScore >= 50 ? 'var(--yellow)' : 'var(--red)'} />
+            icon={ShieldCheck} color={securityScore >= 70 ? 'var(--green)' : securityScore >= 50 ? 'var(--yellow)' : 'var(--red)'} />
           <div className="g-card p-4 flex flex-col items-center justify-center gap-1 overflow-hidden">
             <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Risk Score</p>
             {metrics ? <ThreatGauge score={metrics.threat_score} /> : <p className="text-2xl font-bold" style={{ color: 'var(--text-3)' }}>—</p>}
@@ -1346,42 +1311,42 @@ export default function DashboardPage() {
               <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{metrics?.mttr.total_resolved ?? 0} resolved</p>
             </div>
           </div>
-          <StatCard label="Open Cases" value={openCases}
+          <MetricCard label="Open Cases" value={openCases}
             sub={`${activeInv} under investigation`} icon={BookOpen}
-            accent={openCases > 0 ? 'var(--orange)' : undefined} link="/cases" />
-          <StatCard label="SLA Compliance" value={`${slaScore}%`}
+            color={openCases > 0 ? 'var(--orange)' : undefined} href="/cases" />
+          <MetricCard label="SLA Compliance" value={`${slaScore}%`}
             sub={slaScore >= 90 ? 'Within SLA' : 'SLA breaches detected'} icon={CheckCircle2}
-            accent={slaScore >= 90 ? 'var(--green)' : slaScore >= 70 ? 'var(--yellow)' : 'var(--red)'} />
+            color={slaScore >= 90 ? 'var(--green)' : slaScore >= 70 ? 'var(--yellow)' : 'var(--red)'} />
         </div>
 
         {/* ── Operational KPI Row ───────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
-          <StatCard label="Critical Alerts" value={criticalAlerts}
+          <MetricCard label="Critical Alerts" value={criticalAlerts}
             sub={`${openAlerts} open · ${snoozedAlerts} snoozed`}
-            icon={Bell} accent={criticalAlerts > 0 ? 'var(--red)' : undefined}
-            pulse={criticalAlerts > 0} delta={metrics?.alert_deltas?.delta} deltaPct={metrics?.alert_deltas?.delta_pct} link="/alerts" />
-          <StatCard label="Open Incidents" value={openIncidents}
+            icon={Bell} color={criticalAlerts > 0 ? 'var(--red)' : undefined}
+            pulse={criticalAlerts > 0} delta={metrics?.alert_deltas?.delta} deltaPct={metrics?.alert_deltas?.delta_pct} href="/alerts" />
+          <MetricCard label="Open Incidents" value={openIncidents}
             sub="active incidents" icon={AlertTriangle}
-            accent={openIncidents > 0 ? 'var(--orange)' : undefined} link="/incidents" />
-          <StatCard label="Investigations" value={activeInv}
+            color={openIncidents > 0 ? 'var(--orange)' : undefined} href="/incidents" />
+          <MetricCard label="Investigations" value={activeInv}
             sub="cases in progress" icon={Search}
-            accent={activeInv > 0 ? 'var(--yellow)' : undefined} link="/cases" />
-          <StatCard label="SOAR Executed" value={soarFired}
+            color={activeInv > 0 ? 'var(--yellow)' : undefined} href="/cases" />
+          <MetricCard label="SOAR Executed" value={soarFired}
             sub="auto-responses" icon={Zap}
-            accent={soarFired > 0 ? 'var(--green)' : undefined} link="/playbooks" />
-          <StatCard label="Endpoints On" value={agentsOnline}
+            color={soarFired > 0 ? 'var(--green)' : undefined} href="/playbooks" />
+          <MetricCard label="Endpoints On" value={agentsOnline}
             sub={`${agentsTotal} total`} icon={ShieldCheck}
-            accent="var(--green)" link="/agents" />
-          <StatCard label="Endpoints Off" value={agentsOffline}
+            color="var(--green)" href="/agents" />
+          <MetricCard label="Endpoints Off" value={agentsOffline}
             sub="coverage gap" icon={ShieldOff}
-            accent={agentsOffline > 0 ? 'var(--red)' : 'var(--text-3)'} link="/agents" />
-          <StatCard label="Critical CVEs" value={criticalVulns + highVulns}
+            color={agentsOffline > 0 ? 'var(--red)' : 'var(--text-3)'} href="/agents" />
+          <MetricCard label="Critical CVEs" value={criticalVulns + highVulns}
             sub={`${criticalVulns} critical · ${highVulns} high`}
-            icon={AlertOctagon} accent={criticalVulns > 0 ? 'var(--red)' : highVulns > 0 ? 'var(--orange)' : undefined}
-            link="/vuln-queue" />
-          <StatCard label="MITRE Coverage" value={`${mitreCovPct}%`}
+            icon={AlertOctagon} color={criticalVulns > 0 ? 'var(--red)' : highVulns > 0 ? 'var(--orange)' : undefined}
+            href="/vuln-queue" />
+          <MetricCard label="MITRE Coverage" value={`${mitreCovPct}%`}
             sub={`${mitreCount}/${mitreTotal} tactics`} icon={Crosshair}
-            accent="var(--accent)" />
+            color="var(--accent)" />
         </div>
 
         {/* ── Anomaly banner ────────────────────────────────────── */}
@@ -1486,7 +1451,7 @@ export default function DashboardPage() {
         {/* ── Compliance + Detection Rule Health ───────────────── */}
         {metrics && (metrics.compliance_score > 0 || metrics.rule_health) && (
           <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-            {metrics.compliance_score > 0 && <CompliancePanel score={metrics.compliance_score} />}
+            {metrics.compliance_score > 0 && frameworkScores.length > 0 && <CompliancePanel score={metrics.compliance_score} frameworkScores={frameworkScores} />}
             {metrics.rule_health && (
               <div className="g-card p-4">
                 <div className="flex items-center gap-2 mb-3">

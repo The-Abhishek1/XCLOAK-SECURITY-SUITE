@@ -153,11 +153,11 @@ function AppHeader({
       <div className="min-w-0 flex-1">
         {title && (
           <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-[15px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{title}</h1>
+            <h1 className="text-[15px] font-semibold truncate shrink-0" style={{ color: 'var(--text-1)', maxWidth: '100%' }}>{title}</h1>
             {subtitle && (
               <>
-                <span className="hidden sm:inline" style={{ color: 'var(--text-3)' }}>·</span>
-                <p className="text-xs truncate hidden sm:block" style={{ color: 'var(--text-2)' }}>{subtitle}</p>
+                <span className="hidden sm:inline shrink-0" style={{ color: 'var(--text-3)' }}>·</span>
+                <p className="text-xs truncate hidden sm:block min-w-0" style={{ color: 'var(--text-2)' }}>{subtitle}</p>
               </>
             )}
           </div>
@@ -170,8 +170,8 @@ function AppHeader({
         <DemoBadge />
 
         {/* Global search */}
-        <div className="hidden md:block"><GlobalSearch /></div>
-        <div className="flex md:hidden"><GlobalSearch compact /></div>
+        <div className="hidden lg:block"><GlobalSearch /></div>
+        <div className="flex lg:hidden"><GlobalSearch compact /></div>
 
         {/* Clock — click to toggle local ↔ UTC */}
         <button

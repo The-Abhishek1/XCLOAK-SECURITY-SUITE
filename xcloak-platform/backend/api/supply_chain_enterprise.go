@@ -367,20 +367,18 @@ func GetSCSecretFindings(c *gin.Context) {
 func GetSCCodeIntegrity(c *gin.Context) {
 	createSupplyChainTables()
 	tid := tenantIDFromContext(c)
-	var signedRepos int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_repositories WHERE tenant_id=$1`, tid).Scan(&signedRepos)
+	var totalRepos int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_repositories WHERE tenant_id=$1`, tid).Scan(&totalRepos)
+	// This schema has no per-repo commit-signing / branch-protection tracking table,
+	// so report honest zeros and an empty findings list instead of fabricated repo data.
 	c.JSON(http.StatusOK, gin.H{
-		"signed_commits_rate":    72,
-		"signed_tags_rate":       88,
-		"protected_branches":     8,
-		"force_push_incidents":   1,
-		"unsigned_commit_repos":  3,
-		"findings": []map[string]interface{}{
-			{"repo": "api-server", "finding": "Unsigned commits on main branch", "severity": "high", "count": 14},
-			{"repo": "frontend", "finding": "Force push detected on protected branch", "severity": "critical", "count": 1},
-			{"repo": "mobile-app", "finding": "Unsigned tags on releases", "severity": "medium", "count": 3},
-			{"repo": "infra-terraform", "finding": "No branch protection on default branch", "severity": "high", "count": 1},
-		},
+		"total_repositories":    totalRepos,
+		"signed_commits_rate":   0,
+		"signed_tags_rate":      0,
+		"protected_branches":    0,
+		"force_push_incidents":  0,
+		"unsigned_commit_repos": 0,
+		"findings":              []map[string]interface{}{},
 	})
 }
 
@@ -422,21 +420,38 @@ func GetSCArtifacts(c *gin.Context) {
 // GetSCThirdPartyRisk — GET /api/supply-chain/third-party
 func GetSCThirdPartyRisk(c *gin.Context) {
 	createSupplyChainTables()
+	tid := tenantIDFromContext(c)
+	rows, err := database.DB.Query(`SELECT package_name, ecosystem, version, license, cve_count, is_outdated, risk_score
+		FROM sc_dependencies WHERE tenant_id=$1 ORDER BY risk_score DESC LIMIT 50`, tid)
+	type Pkg struct {
+		Name       string `json:"name"`
+		Ecosystem  string `json:"ecosystem"`
+		Version    string `json:"version"`
+		License    string `json:"license"`
+		CVECount   int    `json:"advisories"`
+		IsOutdated bool   `json:"is_outdated"`
+		TrustScore int    `json:"trust_score"`
+	}
+	packages := []Pkg{}
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var p Pkg
+			var riskScore int
+			if rows.Scan(&p.Name, &p.Ecosystem, &p.Version, &p.License, &p.CVECount, &p.IsOutdated, &riskScore) == nil {
+				p.TrustScore = 100 - riskScore
+				if p.TrustScore < 0 {
+					p.TrustScore = 0
+				}
+				packages = append(packages, p)
+			}
+		}
+	}
+	// No real CI-plugin/action inventory table exists in this schema; report an
+	// honest empty list rather than fabricated plugin names.
 	c.JSON(http.StatusOK, gin.H{
-		"packages": []map[string]interface{}{
-			{"name": "lodash", "ecosystem": "npm", "version": "4.17.15", "trust_score": 82, "maintenance": "active", "last_release": "2021-02-13", "advisories": 1, "downloads_weekly": 45000000},
-			{"name": "log4j-core", "ecosystem": "maven", "version": "2.14.1", "trust_score": 34, "maintenance": "patched", "last_release": "2021-12-28", "advisories": 3, "downloads_weekly": 1200000},
-			{"name": "requests", "ecosystem": "pip", "version": "2.28.2", "trust_score": 91, "maintenance": "active", "last_release": "2023-01-12", "advisories": 0, "downloads_weekly": 8000000},
-			{"name": "colors", "ecosystem": "npm", "version": "1.4.0", "trust_score": 22, "maintenance": "abandoned", "last_release": "2021-01-04", "advisories": 1, "downloads_weekly": 3500000},
-			{"name": "event-stream", "ecosystem": "npm", "version": "3.3.4", "trust_score": 5, "maintenance": "compromised", "last_release": "2018-11-26", "advisories": 1, "downloads_weekly": 0},
-			{"name": "pypi-attacks/ctx", "ecosystem": "pip", "version": "0.1.2", "trust_score": 0, "maintenance": "malicious", "last_release": "2022-05-21", "advisories": 1, "downloads_weekly": 0},
-		},
-		"ci_plugins": []map[string]interface{}{
-			{"name": "actions/checkout", "version": "v4", "is_pinned": true, "trusted": true, "sha": "b4ffde65f46336ab88eb53be808477a3936bae11"},
-			{"name": "actions/setup-node", "version": "v3", "is_pinned": false, "trusted": true, "sha": ""},
-			{"name": "third-party/deploy-action", "version": "latest", "is_pinned": false, "trusted": false, "sha": ""},
-			{"name": "nick-invision/retry", "version": "v2", "is_pinned": true, "trusted": true, "sha": "943e742917ac94714d2f408a0e8320f22b83cfe1"},
-		},
+		"packages":   packages,
+		"ci_plugins": []map[string]interface{}{},
 	})
 }
 
@@ -444,46 +459,99 @@ func GetSCThirdPartyRisk(c *gin.Context) {
 func GetSCBuildProvenance(c *gin.Context) {
 	createSupplyChainTables()
 	tid := tenantIDFromContext(c)
-	var total, signed int
+	var total, signed, withProvenance int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_artifacts WHERE tenant_id=$1`, tid).Scan(&total)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_artifacts WHERE tenant_id=$1 AND provenance_available=true`, tid).Scan(&signed)
-	if total == 0 { total = 1 }
+	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_artifacts WHERE tenant_id=$1 AND is_signed=true`, tid).Scan(&signed)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_artifacts WHERE tenant_id=$1 AND provenance_available=true`, tid).Scan(&withProvenance)
+
+	rows, err := database.DB.Query(`SELECT name, artifact_type, version, is_signed, has_sbom,
+		artifact_hash, provenance_available, created_at
+		FROM sc_artifacts WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50`, tid)
+	type Build struct {
+		Artifact     string `json:"artifact"`
+		ArtifactType string `json:"artifact_type"`
+		BuildTime    string `json:"build_time"`
+		ArtifactHash string `json:"artifact_hash"`
+		Signed       bool   `json:"signed"`
+		HasSBOM      bool   `json:"has_sbom"`
+		Provenance   bool   `json:"provenance_available"`
+	}
+	builds := []Build{}
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name, atype, version, hash, createdAt string
+			var isSigned, hasSBOM, provAvail bool
+			if rows.Scan(&name, &atype, &version, &isSigned, &hasSBOM, &hash, &provAvail, &createdAt) == nil {
+				builds = append(builds, Build{
+					Artifact: name + ":" + version, ArtifactType: atype, BuildTime: createdAt,
+					ArtifactHash: hash, Signed: isSigned, HasSBOM: hasSBOM, Provenance: provAvail,
+				})
+			}
+		}
+	}
+
+	slsaLevel := 0
+	provenanceRate := 0
+	if total > 0 {
+		provenanceRate = withProvenance * 100 / total
+		switch {
+		case withProvenance == total && signed == total:
+			slsaLevel = 3
+		case withProvenance > 0:
+			slsaLevel = 2
+		case signed > 0:
+			slsaLevel = 1
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"slsa_level":          1,
-		"provenance_rate":     signed * 100 / total,
-		"builds": []map[string]interface{}{
-			{"artifact": "api-server:2.8.1", "builder": "github-actions", "build_time": time.Now().Add(-2*time.Hour).Format(time.RFC3339), "source_commit": "a1b2c3d4", "artifact_hash": "sha256:3e4f5a6b7c8d9e0f...", "signed": true, "slsa_level": 2, "attestation": "cosign"},
-			{"artifact": "frontend:1.12.0", "builder": "github-actions", "build_time": time.Now().Add(-6*time.Hour).Format(time.RFC3339), "source_commit": "b2c3d4e5", "artifact_hash": "sha256:7a8b9c0d1e2f3a4b...", "signed": true, "slsa_level": 2, "attestation": "cosign"},
-			{"artifact": "worker:0.9.3", "builder": "jenkins", "build_time": time.Now().Add(-24*time.Hour).Format(time.RFC3339), "source_commit": "c3d4e5f6", "artifact_hash": "sha256:1c2d3e4f5a6b7c8d...", "signed": false, "slsa_level": 0, "attestation": ""},
-			{"artifact": "mobile-app:3.1.0", "builder": "circleci", "build_time": time.Now().Add(-48*time.Hour).Format(time.RFC3339), "source_commit": "d4e5f6a7", "artifact_hash": "sha256:5e6f7a8b9c0d1e2f...", "signed": false, "slsa_level": 0, "attestation": ""},
-		},
+		"slsa_level":      slsaLevel,
+		"provenance_rate": provenanceRate,
+		"builds":          builds,
 	})
 }
 
 // GetSCThreatIntel — GET /api/supply-chain/threat-intel
 func GetSCThreatIntel(c *gin.Context) {
 	createSupplyChainTables()
+	tid := tenantIDFromContext(c)
+
+	// Publicly known malicious/compromised package incidents, used only as
+	// match criteria against this tenant's real dependency inventory below.
+	knownMalicious := []map[string]interface{}{
+		{"name": "event-stream", "ecosystem": "npm", "version": "3.3.6", "threat": "cryptominer injected by compromised maintainer account", "discovered": "2018-11-26", "downloads": 8000000},
+		{"name": "ctx", "ecosystem": "pip", "version": "0.1.2", "threat": "Dependency confusion attack — steals env vars and AWS credentials", "discovered": "2022-05-21", "downloads": 22000},
+		{"name": "pyopenssl-malicious", "ecosystem": "pip", "version": "0.0.1", "threat": "Typosquatting pyopenssl — reverse shell payload", "discovered": "2023-03-14", "downloads": 1200},
+		{"name": "node-ipc", "ecosystem": "npm", "version": "10.1.1", "threat": "Political protest payload — destructive code targeting Russian/Belarusian IPs", "discovered": "2022-03-15", "downloads": 1000000},
+	}
+	exploitedCVEs := []map[string]interface{}{
+		{"cve": "CVE-2021-44228", "package": "log4j-core", "cvss": 10.0, "kev": true, "exploits_in_wild": true},
+		{"cve": "CVE-2022-22965", "package": "spring-webmvc", "cvss": 9.8, "kev": true, "exploits_in_wild": true},
+		{"cve": "CVE-2022-42889", "package": "commons-text", "cvss": 9.8, "kev": false, "exploits_in_wild": true},
+	}
+
+	// Real per-tenant IOC matching: check this tenant's actual sc_dependencies
+	// rows against the known-malicious package names above. Only emit a match
+	// when a real row for this tenant exists — no placeholder rows.
+	iocMatches := []map[string]interface{}{}
+	for _, m := range knownMalicious {
+		name, _ := m["name"].(string)
+		var count int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM sc_dependencies WHERE tenant_id=$1 AND package_name=$2`, tid, name).Scan(&count)
+		if count > 0 {
+			iocMatches = append(iocMatches, map[string]interface{}{
+				"type": "package", "value": name, "hits": count, "category": "known_malicious_package",
+			})
+		}
+	}
+
+	// No real campaign-tracking table exists in this schema; report an honest
+	// empty list rather than fabricated campaign data.
 	c.JSON(http.StatusOK, gin.H{
-		"malicious_packages": []map[string]interface{}{
-			{"name": "event-stream", "ecosystem": "npm", "version": "3.3.6", "threat": "cryptominer injected by compromised maintainer account", "discovered": "2018-11-26", "downloads": 8000000},
-			{"name": "ctx", "ecosystem": "pip", "version": "0.1.2", "threat": "Dependency confusion attack — steals env vars and AWS credentials", "discovered": "2022-05-21", "downloads": 22000},
-			{"name": "pyopenssl-malicious", "ecosystem": "pip", "version": "0.0.1", "threat": "Typosquatting pyopenssl — reverse shell payload", "discovered": "2023-03-14", "downloads": 1200},
-			{"name": "node-ipc", "ecosystem": "npm", "version": "10.1.1", "threat": "Political protest payload — destructive code targeting Russian/Belarusian IPs", "discovered": "2022-03-15", "downloads": 1000000},
-		},
-		"campaigns": []map[string]interface{}{
-			{"name": "Dependency Confusion Wave", "first_seen": "2026-07-01", "packages_affected": 12, "ecosystems": "npm,pip,nuget", "actor": "Unknown"},
-			{"name": "Typosquatting Campaign", "first_seen": "2026-06-15", "packages_affected": 34, "ecosystems": "npm", "actor": "Unknown"},
-		},
-		"ioc_matches": []map[string]interface{}{
-			{"type": "package", "value": "event-stream@3.3.6", "hits": 2, "category": "compromised_package"},
-			{"type": "domain", "value": "npm-malware-c2.xyz", "hits": 1, "category": "c2_callback"},
-			{"type": "hash", "value": "d41d8cd98f00b204e9800998ecf8427e", "hits": 3, "category": "malware_hash"},
-		},
-		"exploited_cves": []map[string]interface{}{
-			{"cve": "CVE-2021-44228", "package": "log4j-core", "cvss": 10.0, "kev": true, "exploits_in_wild": true},
-			{"cve": "CVE-2022-22965", "package": "spring-webmvc", "cvss": 9.8, "kev": true, "exploits_in_wild": true},
-			{"cve": "CVE-2022-42889", "package": "commons-text", "cvss": 9.8, "kev": false, "exploits_in_wild": true},
-		},
+		"malicious_packages": knownMalicious,
+		"campaigns":          []map[string]interface{}{},
+		"ioc_matches":        iocMatches,
+		"exploited_cves":     exploitedCVEs,
 	})
 }
 
@@ -532,54 +600,155 @@ func GetSCAnalytics(c *gin.Context) {
 		database.DB.QueryRow(`SELECT COUNT(*) FROM sc_vulnerabilities WHERE tenant_id=$1 AND DATE(created_at)<=$2`, tid, d).Scan(&cnt)
 		trend = append(trend, TrendPoint{Date: d, Count: cnt})
 	}
+	type projRow struct {
+		Name     string `json:"name"`
+		CVECount int    `json:"cve_count"`
+		Critical int    `json:"critical"`
+		Risk     int    `json:"risk"`
+	}
+	mostVulnerableProjects := []projRow{}
+	prows, _ := database.DB.Query(`
+		SELECT r.name, COUNT(v.id) AS cve_count,
+			COUNT(*) FILTER (WHERE v.severity='critical') AS critical,
+			COALESCE(AVG(r.risk_score),0) AS risk
+		FROM sc_vulnerabilities v
+		JOIN sc_dependencies d ON d.id=v.dep_id AND d.tenant_id=v.tenant_id
+		JOIN sc_repositories r ON r.id=d.repo_id AND r.tenant_id=v.tenant_id
+		WHERE v.tenant_id=$1
+		GROUP BY r.name ORDER BY cve_count DESC LIMIT 10`, tid)
+	if prows != nil {
+		defer prows.Close()
+		for prows.Next() {
+			var p projRow
+			if prows.Scan(&p.Name, &p.CVECount, &p.Critical, &p.Risk) == nil {
+				mostVulnerableProjects = append(mostVulnerableProjects, p)
+			}
+		}
+	}
+
+	type depRow struct {
+		Package   string `json:"package"`
+		Ecosystem string `json:"ecosystem"`
+		UsedBy    int    `json:"used_by"`
+		HasVuln   bool   `json:"has_vuln"`
+	}
+	mostUsedDependencies := []depRow{}
+	drows, _ := database.DB.Query(`
+		SELECT package_name, ecosystem, COUNT(DISTINCT repo_id) AS used_by, BOOL_OR(cve_count>0) AS has_vuln
+		FROM sc_dependencies WHERE tenant_id=$1
+		GROUP BY package_name, ecosystem ORDER BY used_by DESC LIMIT 10`, tid)
+	if drows != nil {
+		defer drows.Close()
+		for drows.Next() {
+			var d depRow
+			if drows.Scan(&d.Package, &d.Ecosystem, &d.UsedBy, &d.HasVuln) == nil {
+				mostUsedDependencies = append(mostUsedDependencies, d)
+			}
+		}
+	}
+
+	type secretTypeRow struct {
+		Type  string `json:"type"`
+		Count int    `json:"count"`
+	}
+	secretFindingsByType := []secretTypeRow{}
+	srows, _ := database.DB.Query(`
+		SELECT secret_type, COUNT(*) FROM sc_secrets WHERE tenant_id=$1
+		GROUP BY secret_type ORDER BY COUNT(*) DESC`, tid)
+	if srows != nil {
+		defer srows.Close()
+		for srows.Next() {
+			var s secretTypeRow
+			if srows.Scan(&s.Type, &s.Count) == nil {
+				secretFindingsByType = append(secretFindingsByType, s)
+			}
+		}
+	}
+
+	type buildFailureRow struct {
+		Pipeline    string `json:"pipeline"`
+		LastFailure string `json:"last_failure"`
+	}
+	buildFailures := []buildFailureRow{}
+	brows, _ := database.DB.Query(`
+		SELECT name, last_run FROM sc_build_pipelines
+		WHERE tenant_id=$1 AND status NOT IN ('passing','success')
+		ORDER BY last_run DESC LIMIT 10`, tid)
+	if brows != nil {
+		defer brows.Close()
+		for brows.Next() {
+			var b buildFailureRow
+			if brows.Scan(&b.Pipeline, &b.LastFailure) == nil {
+				buildFailures = append(buildFailures, b)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"compliance_trend": trend,
-		"most_vulnerable_projects": []map[string]interface{}{
-			{"name": "api-server", "cve_count": 14, "critical": 3, "risk": 87},
-			{"name": "legacy-service", "cve_count": 22, "critical": 6, "risk": 94},
-			{"name": "worker", "cve_count": 8, "critical": 1, "risk": 71},
-		},
-		"most_used_dependencies": []map[string]interface{}{
-			{"package": "lodash", "ecosystem": "npm", "used_by": 8, "has_vuln": false},
-			{"package": "requests", "ecosystem": "pip", "used_by": 5, "has_vuln": false},
-			{"package": "log4j-core", "ecosystem": "maven", "used_by": 3, "has_vuln": true},
-			{"package": "spring-webmvc", "ecosystem": "maven", "used_by": 2, "has_vuln": true},
-		},
-		"secret_findings_by_type": []map[string]interface{}{
-			{"type": "aws_access_key", "count": 3},
-			{"type": "api_key", "count": 4},
-			{"type": "github_token", "count": 2},
-			{"type": "ssh_private_key", "count": 1},
-			{"type": "gcp_service_account", "count": 1},
-		},
-		"build_failures": []map[string]interface{}{
-			{"pipeline": "api-server-ci", "failures": 3, "last_failure": time.Now().Add(-6*time.Hour).Format(time.RFC3339)},
-			{"pipeline": "legacy-build", "failures": 7, "last_failure": time.Now().Add(-2*time.Hour).Format(time.RFC3339)},
-		},
+		"compliance_trend":         trend,
+		"most_vulnerable_projects": mostVulnerableProjects,
+		"most_used_dependencies":   mostUsedDependencies,
+		"secret_findings_by_type":  secretFindingsByType,
+		"build_failures":           buildFailures,
 	})
 }
 
 // GetSCCompliance — GET /api/supply-chain/compliance
 func GetSCCompliance(c *gin.Context) {
 	createSupplyChainTables()
+	createFCETables()
+	tid := tenantIDFromContext(c)
+	db := database.DB
+
+	type fwRow struct {
+		Name   string `json:"name"`
+		Score  int    `json:"score"`
+		Passed int    `json:"passed"`
+		Failed int    `json:"failed"`
+		Total  int    `json:"total"`
+		Status string `json:"status"`
+	}
+	frows, _ := db.Query(`SELECT name, overall_score, passed_controls, failed_controls, total_controls, compliance_status
+		FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC`, tid)
+	frameworks := []fwRow{}
+	if frows != nil {
+		defer frows.Close()
+		for frows.Next() {
+			var r fwRow
+			if frows.Scan(&r.Name, &r.Score, &r.Passed, &r.Failed, &r.Total, &r.Status) == nil {
+				frameworks = append(frameworks, r)
+			}
+		}
+	}
+
+	var overallScore float64
+	db.QueryRow(`SELECT COALESCE(AVG(overall_score),0) FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE`, tid).Scan(&overallScore)
+
+	type ctrlRow struct {
+		Control   string `json:"control"`
+		Title     string `json:"title"`
+		Severity  string `json:"severity"`
+		Framework string `json:"framework"`
+	}
+	crows, _ := db.Query(`SELECT c.control_id, c.name, c.risk_level, f.name
+		FROM fce_controls c JOIN fce_frameworks f ON f.id=c.framework_id
+		WHERE c.tenant_id=$1 AND c.assessment_status='failed'
+		ORDER BY CASE c.risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 20`, tid)
+	failedControls := []ctrlRow{}
+	if crows != nil {
+		defer crows.Close()
+		for crows.Next() {
+			var r ctrlRow
+			if crows.Scan(&r.Control, &r.Title, &r.Severity, &r.Framework) == nil {
+				failedControls = append(failedControls, r)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"overall_score": 64,
-		"frameworks": []map[string]interface{}{
-			{"name": "NIST SSDF", "score": 68, "passed": 41, "failed": 19, "total": 60, "version": "1.1"},
-			{"name": "SLSA", "score": 42, "level": 1, "target_level": 3, "passed": 8, "failed": 11, "total": 19},
-			{"name": "CIS Software Supply Chain", "score": 71, "passed": 29, "failed": 12, "total": 41},
-			{"name": "ISO 27001", "score": 74, "passed": 36, "failed": 13, "total": 49, "version": "2022"},
-			{"name": "SOC 2", "score": 69, "passed": 22, "failed": 10, "total": 32},
-			{"name": "PCI DSS", "score": 77, "passed": 24, "failed": 7, "total": 31, "version": "4.0"},
-		},
-		"failed_controls": []map[string]interface{}{
-			{"control": "SSDF-PO.3.2", "title": "Review and document the security requirements of the organization's software", "severity": "high", "framework": "NIST SSDF"},
-			{"control": "SLSA-L2", "title": "Hosted build platform — builds must not be user-defined", "severity": "critical", "framework": "SLSA"},
-			{"control": "SLSA-L2", "title": "Build must be automatically initiated by source control", "severity": "high", "framework": "SLSA"},
-			{"control": "CIS-2.1", "title": "Ensure all open source packages are pinned to specific versions", "severity": "high", "framework": "CIS"},
-			{"control": "CIS-3.4", "title": "Ensure all build artifacts are signed", "severity": "critical", "framework": "CIS"},
-			{"control": "SOC2-CC8.1", "title": "Changes to production must be reviewed and approved", "severity": "high", "framework": "SOC 2"},
-		},
+		"overall_score":   int(overallScore),
+		"frameworks":      frameworks,
+		"failed_controls": failedControls,
 	})
 }
 

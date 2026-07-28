@@ -3,23 +3,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { fceAPI } from '@/lib/api';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
+import {
+  LayoutDashboard, Layers, SlidersHorizontal, FileCheck2, SearchX, Wrench,
+  BarChart3, ClipboardCheck, ScrollText, Bell, Sparkles, X, Plus, Save, Trash2, Power, Check,
+} from 'lucide-react';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type Tab = 'dashboard' | 'frameworks' | 'controls' | 'evidence' | 'gaps' | 'remediation' | 'analytics' | 'assessments' | 'audit' | 'notif';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',   label: 'Dashboard'     },
-  { id: 'frameworks',  label: 'Frameworks'    },
-  { id: 'controls',    label: 'Controls'      },
-  { id: 'evidence',    label: 'Evidence'      },
-  { id: 'gaps',        label: 'Gap Analysis'  },
-  { id: 'remediation', label: 'Remediation'   },
-  { id: 'analytics',   label: 'Analytics'     },
-  { id: 'assessments', label: 'Assessments'   },
-  { id: 'audit',       label: 'Audit Trail'   },
-  { id: 'notif',       label: 'Notifications' },
-];
 
 const FRAMEWORK_CATEGORIES = ['security', 'cloud', 'privacy', 'financial', 'healthcare', 'custom'];
 const EVIDENCE_TYPES = ['document', 'screenshot', 'log', 'report', 'certificate', 'config', 'test_result', 'attestation'];
@@ -74,16 +66,6 @@ function pill(label: string, color: string) {
   );
 }
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
-
 function fmt(d?: string | null) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString();
@@ -132,21 +114,23 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: '0 0 0 auto', width: 420, background: 'var(--bg-1)', borderLeft: '1px solid var(--border)', zIndex: 50, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px #0006' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>✦ AI Compliance Assistant</span>
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 12, padding: '2px 8px' }} onClick={onClose}>✕</button>
+        <span className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: 13 }}>
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--accent)' }} /> AI Compliance Assistant
+        </span>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '2px 8px' }} />
       </div>
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, flex: 1, overflowY: 'auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {AI_ACTIONS.map(a => (
-            <button key={a.id} onClick={() => setAction(a.id)} className="g-btn g-btn-ghost"
-              style={{ fontSize: 11, textAlign: 'left', fontWeight: action === a.id ? 700 : 400, color: action === a.id ? 'var(--accent)' : 'var(--text-2)', borderColor: action === a.id ? 'var(--accent)' : 'var(--border)' }}>
+            <ActionButton key={a.id} variant={action === a.id ? 'primary' : 'ghost'} onClick={() => setAction(a.id)}
+              style={{ fontSize: 11, textAlign: 'left' }}>
               {a.label}
-            </button>
+            </ActionButton>
           ))}
         </div>
-        <button className="g-btn" onClick={run} disabled={loading} style={{ fontSize: 12 }}>
+        <ActionButton variant="primary" onClick={run} disabled={loading} style={{ fontSize: 12 }}>
           {loading ? 'Analyzing…' : 'Run Analysis'}
-        </button>
+        </ActionButton>
         {resp && (
           <div className="g-card" style={{ padding: 14, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--text-1)' }}>
             {resp}
@@ -164,47 +148,48 @@ function DashboardTab({ dash }: { dash: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Score hero */}
-      <div className="g-card" style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 28 }}>
-        <ScoreRing score={dash.overall_score ?? 0} size={96} />
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Overall Compliance Score</div>
-          <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{dash.overall_score ?? 0}%</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
-              Audit Readiness: <strong style={{ color: '#22c55e' }}>{dash.audit_readiness}%</strong>
-            </span>
-            <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
-              Active Frameworks: <strong>{dash.active_frameworks}</strong>
-            </span>
+      <SectionCard>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+          <ScoreRing score={dash.overall_score ?? 0} size={96} />
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Overall Compliance Score</div>
+            <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{dash.overall_score ?? 0}%</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
+                Audit Readiness: <strong style={{ color: '#22c55e' }}>{dash.audit_readiness}%</strong>
+              </span>
+              <span style={{ fontSize: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '3px 8px', color: 'var(--text-2)' }}>
+                Active Frameworks: <strong>{dash.active_frameworks}</strong>
+              </span>
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { label: 'Passed',   value: dash.passed_controls,  color: '#22c55e' },
+              { label: 'Failed',   value: dash.failed_controls,  color: '#ef4444' },
+              { label: 'Unassessed', value: dash.not_assessed,   color: '#eab308' },
+              { label: 'Critical', value: dash.critical_findings, color: '#ef4444' },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'center', background: s.color + '18', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {[
-            { label: 'Passed',   value: dash.passed_controls,  color: '#22c55e' },
-            { label: 'Failed',   value: dash.failed_controls,  color: '#ef4444' },
-            { label: 'Unassessed', value: dash.not_assessed,   color: '#eab308' },
-            { label: 'Critical', value: dash.critical_findings, color: '#ef4444' },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign: 'center', background: s.color + '18', borderRadius: 10, padding: '10px 14px' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      </SectionCard>
 
       {/* Stat row */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Frameworks"  value={dash.total_frameworks}   color="var(--accent)" />
-        <StatCard label="Open Remediations" value={dash.open_remediations}  color="#eab308" />
-        <StatCard label="Overdue Tasks"     value={dash.overdue_count}      color="#ef4444" />
-        <StatCard label="Critical Findings" value={dash.critical_findings}  color="#ef4444" />
+        <MetricCard label="Total Frameworks"  value={dash.total_frameworks}   color="var(--accent)" />
+        <MetricCard label="Open Remediations" value={dash.open_remediations}  color="#eab308" />
+        <MetricCard label="Overdue Tasks"     value={dash.overdue_count}      color="#ef4444" />
+        <MetricCard label="Critical Findings" value={dash.critical_findings}  color="#ef4444" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {/* Status breakdown */}
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Compliance Status Breakdown</div>
+        <SectionCard title="Compliance Status Breakdown">
           {(!dash.status_breakdown?.length) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No framework data yet.</div>}
           {(dash.status_breakdown || []).map((s: any) => (
             <div key={s.status} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -212,11 +197,10 @@ function DashboardTab({ dash }: { dash: any }) {
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{s.count}</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
         {/* Weakest frameworks */}
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Frameworks Needing Attention</div>
+        <SectionCard title="Frameworks Needing Attention">
           {(!dash.bottom_frameworks?.length) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data.</div>}
           {(dash.bottom_frameworks || []).map((f: any) => (
             <div key={f.framework_id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -230,7 +214,7 @@ function DashboardTab({ dash }: { dash: any }) {
               <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', width: 32, textAlign: 'right' }}>{f.overall_score}%</span>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -268,12 +252,11 @@ function FrameworksTab({ frameworks, onRefresh }: { frameworks: any[]; onRefresh
           {FRAMEWORK_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>{filtered.length} frameworks</span>
-        <button className="g-btn" style={{ fontSize: 12 }} onClick={() => setShowAdd(v => !v)}>+ Add Framework</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 12 }} onClick={() => setShowAdd(v => !v)}>Add Framework</ActionButton>
       </div>
 
       {showAdd && (
-        <div className="g-card" style={{ padding: 16, borderColor: 'var(--accent)' }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Add Custom Framework</div>
+        <SectionCard title="Add Custom Framework">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <input placeholder="Name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="g-input" style={{ fontSize: 12 }} />
             <input placeholder="Version" value={form.version} onChange={e => setForm({ ...form, version: e.target.value })} className="g-input" style={{ fontSize: 12 }} />
@@ -284,10 +267,10 @@ function FrameworksTab({ frameworks, onRefresh }: { frameworks: any[]; onRefresh
             <input placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="g-input" style={{ fontSize: 12, gridColumn: '1 / -1' }} />
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button className="g-btn" style={{ fontSize: 12 }} onClick={add}>Add</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowAdd(false)}>Cancel</button>
+            <ActionButton variant="primary" icon={Check} style={{ fontSize: 12 }} onClick={add}>Add</ActionButton>
+            <ActionButton variant="ghost" icon={X} style={{ fontSize: 12 }} onClick={() => setShowAdd(false)}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -314,20 +297,20 @@ function FrameworksTab({ frameworks, onRefresh }: { frameworks: any[]; onRefresh
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }}
+              <ActionButton variant="ghost" icon={Power} style={{ fontSize: 11 }}
                 onClick={async () => { await fceAPI.updateFramework(fw.id, { is_active: !fw.is_active }); onRefresh(); }}>
                 {fw.is_active ? 'Deactivate' : 'Activate'}
-              </button>
+              </ActionButton>
               {!fw.is_builtin && (
-                <button className="g-btn g-btn-ghost" style={{ fontSize: 11, color: '#ef4444' }}
+                <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11 }}
                   onClick={async () => { await fceAPI.deleteFramework(fw.id); onRefresh(); }}>
                   Delete
-                </button>
+                </ActionButton>
               )}
             </div>
           </div>
         ))}
-        {!filtered.length && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-3)', fontSize: 13 }}>No frameworks found.</div>}
+        {!filtered.length && <EmptyState title="No frameworks found" />}
       </div>
     </div>
   );
@@ -381,72 +364,56 @@ function ControlsTab({ controls, frameworks, onRefresh }: { controls: any[]; fra
       </div>
 
       {noteTarget && (
-        <div className="g-card" style={{ padding: 14, borderColor: 'var(--accent)' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--text-1)' }}>{noteTarget.control_id} — {noteTarget.name}</div>
+        <SectionCard title={`${noteTarget.control_id} — ${noteTarget.name}`}>
           <textarea value={noteVal} onChange={e => setNoteVal(e.target.value)} rows={3} placeholder="Add notes…"
             className="g-input" style={{ width: '100%', fontSize: 12, resize: 'vertical' }} />
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="g-btn" style={{ fontSize: 12 }} onClick={saveNote}>Save</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setNoteTarget(null)}>Cancel</button>
+            <ActionButton variant="primary" icon={Save} style={{ fontSize: 12 }} onClick={saveNote}>Save</ActionButton>
+            <ActionButton variant="ghost" icon={X} style={{ fontSize: 12 }} onClick={() => setNoteTarget(null)}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       {Object.entries(grouped).map(([fwId, ctrls]) => (
-        <div key={fwId} className="g-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ color: 'var(--accent)' }}>{fwId}</span>
-            <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({ctrls.length} controls)</span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="g-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th>Control</th>
-                  <th>Category</th>
-                  <th>Risk</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Evidence</th>
-                  <th>Owner</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {ctrls.map(c => (
-                  <tr key={c.id}>
-                    <td>
-                      <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--accent)' }}>{c.control_id}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-1)' }}>{c.name}</div>
-                    </td>
-                    <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.category}</td>
-                    <td>{pill(c.risk_level, RISK_CLR[c.risk_level] || '#6b7280')}</td>
-                    <td style={{ fontSize: 11, fontWeight: 600, color: RISK_CLR[c.priority] || 'var(--text-2)' }}>{c.priority}</td>
-                    <td>
-                      <select value={c.assessment_status}
-                        onChange={async e => { await fceAPI.updateControl(c.id, { assessment_status: e.target.value }); onRefresh(); }}
-                        className="g-input" style={{ fontSize: 11, padding: '2px 6px' }}>
-                        {['passed', 'failed', 'not_assessed', 'not_applicable'].map(s => (
-                          <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{c.evidence_count}</td>
-                    <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.owner || '—'}</td>
-                    <td>
-                      <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }}
-                        onClick={() => { setNoteTarget(c); setNoteVal(c.notes || ''); }}>
-                        Notes
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SectionCard key={fwId}
+          title={<span style={{ color: 'var(--accent)' }}>{fwId}</span>}
+          subtitle={`${ctrls.length} controls`}
+          padded={false}>
+          <DataTable<any>
+            rows={ctrls}
+            rowKey={(c: any) => c.id}
+            columns={[
+              { key: 'control', header: 'Control', render: (c: any) => (
+                <div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--accent)' }}>{c.control_id}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-1)' }}>{c.name}</div>
+                </div>
+              ) },
+              { key: 'category', header: 'Category', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.category}</span> },
+              { key: 'risk_level', header: 'Risk', render: (c: any) => pill(c.risk_level, RISK_CLR[c.risk_level] || '#6b7280') },
+              { key: 'priority', header: 'Priority', render: (c: any) => <span style={{ fontSize: 11, fontWeight: 600, color: RISK_CLR[c.priority] || 'var(--text-2)' }}>{c.priority}</span> },
+              { key: 'assessment_status', header: 'Status', render: (c: any) => (
+                <select value={c.assessment_status}
+                  onChange={async e => { await fceAPI.updateControl(c.id, { assessment_status: e.target.value }); onRefresh(); }}
+                  className="g-input" style={{ fontSize: 11, padding: '2px 6px' }}>
+                  {['passed', 'failed', 'not_assessed', 'not_applicable'].map(s => (
+                    <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              ) },
+              { key: 'evidence_count', header: 'Evidence', render: (c: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{c.evidence_count}</span> },
+              { key: 'owner', header: 'Owner', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.owner || '—'}</span> },
+              { key: 'actions', header: '', render: (c: any) => (
+                <ActionButton variant="ghost" style={{ fontSize: 10 }}
+                  onClick={() => { setNoteTarget(c); setNoteVal(c.notes || ''); }}>
+                  Notes
+                </ActionButton>
+              ) },
+            ]}
+          />
+        </SectionCard>
       ))}
-      {!filtered.length && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-3)', fontSize: 13 }}>No controls found.</div>}
+      {!filtered.length && <EmptyState title="No controls found" />}
     </div>
   );
 }
@@ -476,12 +443,11 @@ function EvidenceTab({ evidence, frameworks, onRefresh }: { evidence: any[]; fra
           {frameworks.map(f => <option key={f.framework_id} value={f.framework_id}>{f.name}</option>)}
         </select>
         <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>{filtered.length} items</span>
-        <button className="g-btn" style={{ fontSize: 12 }} onClick={() => setShowAdd(v => !v)}>+ Add Evidence</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 12 }} onClick={() => setShowAdd(v => !v)}>Add Evidence</ActionButton>
       </div>
 
       {showAdd && (
-        <div className="g-card" style={{ padding: 16, borderColor: 'var(--accent)' }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Add Evidence</div>
+        <SectionCard title="Add Evidence">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <select value={form.framework_id} onChange={e => setForm({ ...form, framework_id: e.target.value })} className="g-input" style={{ fontSize: 12 }}>
               <option value="">Select Framework *</option>
@@ -497,55 +463,43 @@ function EvidenceTab({ evidence, frameworks, onRefresh }: { evidence: any[]; fra
             <input placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="g-input" style={{ fontSize: 12, gridColumn: '1 / -1' }} />
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button className="g-btn" style={{ fontSize: 12 }} onClick={add}>Upload</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowAdd(false)}>Cancel</button>
+            <ActionButton variant="primary" icon={Check} style={{ fontSize: 12 }} onClick={add}>Upload</ActionButton>
+            <ActionButton variant="ghost" icon={X} style={{ fontSize: 12 }} onClick={() => setShowAdd(false)}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      <div className="g-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th>Evidence</th>
-              <th>Framework</th>
-              <th>Control</th>
-              <th>Type</th>
-              <th>Verified</th>
-              <th>Uploaded By</th>
-              <th>Expires</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(e => (
-              <tr key={e.id}>
-                <td>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{e.name}</div>
-                  {e.file_name && <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{e.file_name}</div>}
-                </td>
-                <td style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.framework_id}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.control_id || '—'}</td>
-                <td>{pill(e.evidence_type, '#6b7280')}</td>
-                <td style={{ fontSize: 11 }}>
-                  {e.verified
-                    ? <span style={{ color: '#22c55e' }}>✓ {e.verified_by}</span>
-                    : <span style={{ color: '#eab308' }}>Pending</span>}
-                </td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.uploaded_by}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(e.expires_at)}</td>
-                <td>
-                  <button className="g-btn g-btn-ghost" style={{ fontSize: 10, color: '#ef4444' }}
-                    onClick={async () => { await fceAPI.deleteEvidence(e.id); onRefresh(); }}>
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!filtered.length && <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-3)', fontSize: 13 }}>No evidence records.</div>}
-      </div>
+      <DataTable<any>
+        rows={filtered}
+        rowKey={(e: any) => e.id}
+        emptyState={<EmptyState title="No evidence records" />}
+        columns={[
+          { key: 'name', header: 'Evidence', render: (e: any) => (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{e.name}</div>
+              {e.file_name && <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{e.file_name}</div>}
+            </div>
+          ) },
+          { key: 'framework_id', header: 'Framework', render: (e: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.framework_id}</span> },
+          { key: 'control_id', header: 'Control', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.control_id || '—'}</span> },
+          { key: 'evidence_type', header: 'Type', render: (e: any) => pill(e.evidence_type, '#6b7280') },
+          { key: 'verified', header: 'Verified', render: (e: any) => (
+            <span style={{ fontSize: 11 }}>
+              {e.verified
+                ? <span style={{ color: '#22c55e' }}>✓ {e.verified_by}</span>
+                : <span style={{ color: '#eab308' }}>Pending</span>}
+            </span>
+          ) },
+          { key: 'uploaded_by', header: 'Uploaded By', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.uploaded_by}</span> },
+          { key: 'expires_at', header: 'Expires', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(e.expires_at)}</span> },
+          { key: 'actions', header: '', render: (e: any) => (
+            <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 10 }}
+              onClick={async () => { await fceAPI.deleteEvidence(e.id); onRefresh(); }}>
+              Delete
+            </ActionButton>
+          ) },
+        ]}
+      />
     </div>
   );
 }
@@ -570,10 +524,9 @@ function GapsTab({ gaps, frameworks, onRefresh }: { gaps: any; frameworks: any[]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: '#0008', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="g-card" style={{ padding: 20, width: 460 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Create Remediation Task</div>
+      <Modal open={!!modal} onClose={() => setModal(null)} title="Create Remediation Task" maxWidth={460}>
+        {modal && (
+          <>
             <div style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--bg-2)', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>
               Control: {modal.control_id} — {modal.name}
             </div>
@@ -590,12 +543,12 @@ function GapsTab({ gaps, frameworks, onRefresh }: { gaps: any; frameworks: any[]
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button className="g-btn" style={{ fontSize: 12 }} onClick={createRemediation}>Create</button>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setModal(null)}>Cancel</button>
+              <ActionButton variant="primary" icon={Check} style={{ fontSize: 12 }} onClick={createRemediation}>Create</ActionButton>
+              <ActionButton variant="ghost" icon={X} style={{ fontSize: 12 }} onClick={() => setModal(null)}>Cancel</ActionButton>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <select value={fwFilter} onChange={e => setFwFilter(e.target.value)} className="g-input" style={{ fontSize: 12 }}>
@@ -605,52 +558,40 @@ function GapsTab({ gaps, frameworks, onRefresh }: { gaps: any; frameworks: any[]
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Gaps"       value={gaps?.total_gaps ?? 0}       color="#eab308" />
-        <StatCard label="Critical Gaps"    value={gaps?.critical_count ?? 0}   color="#ef4444" />
-        <StatCard label="High Gaps"        value={gaps?.high_count ?? 0}       color="#f97316" />
-        <StatCard label="Missing Evidence" value={gaps?.missing_evidence ?? 0} color="#a855f7" />
+        <MetricCard label="Total Gaps"       value={gaps?.total_gaps ?? 0}       color="#eab308" />
+        <MetricCard label="Critical Gaps"    value={gaps?.critical_count ?? 0}   color="#ef4444" />
+        <MetricCard label="High Gaps"        value={gaps?.high_count ?? 0}       color="#f97316" />
+        <MetricCard label="Missing Evidence" value={gaps?.missing_evidence ?? 0} color="#a855f7" />
       </div>
 
-      <div className="g-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th>Framework</th>
-              <th>Control</th>
-              <th>Category</th>
-              <th>Risk</th>
-              <th>Status</th>
-              <th>Score</th>
-              <th>Evidence</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((g: any, i: number) => (
-              <tr key={i}>
-                <td style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{g.framework_id}</td>
-                <td>
-                  <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-2)' }}>{g.control_id}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-1)' }}>{g.name}</div>
-                </td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{g.category}</td>
-                <td>{pill(g.risk_level, RISK_CLR[g.risk_level] || '#6b7280')}</td>
-                <td>{pill(g.status.replace(/_/g, ' '), STATUS_CLR[g.status] || '#6b7280')}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-2)' }}>{g.score}%</td>
-                <td style={{ fontSize: 11 }}>
-                  {g.evidence_count === 0
-                    ? <span style={{ color: '#ef4444' }}>None</span>
-                    : <span style={{ color: 'var(--text-2)' }}>{g.evidence_count}</span>}
-                </td>
-                <td>
-                  <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => setModal(g)}>Remediate</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!filtered.length && <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-3)', fontSize: 13 }}>No gaps found — great compliance posture!</div>}
-      </div>
+      <DataTable<any>
+        rows={filtered}
+        rowKey={(g: any, i: number) => g.control_id ?? i}
+        emptyState={<EmptyState title="No gaps found" message="Great compliance posture!" />}
+        columns={[
+          { key: 'framework_id', header: 'Framework', render: (g: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{g.framework_id}</span> },
+          { key: 'control', header: 'Control', render: (g: any) => (
+            <div>
+              <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-2)' }}>{g.control_id}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-1)' }}>{g.name}</div>
+            </div>
+          ) },
+          { key: 'category', header: 'Category', render: (g: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{g.category}</span> },
+          { key: 'risk_level', header: 'Risk', render: (g: any) => pill(g.risk_level, RISK_CLR[g.risk_level] || '#6b7280') },
+          { key: 'status', header: 'Status', render: (g: any) => pill(g.status.replace(/_/g, ' '), STATUS_CLR[g.status] || '#6b7280') },
+          { key: 'score', header: 'Score', render: (g: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{g.score}%</span> },
+          { key: 'evidence_count', header: 'Evidence', render: (g: any) => (
+            <span style={{ fontSize: 11 }}>
+              {g.evidence_count === 0
+                ? <span style={{ color: '#ef4444' }}>None</span>
+                : <span style={{ color: 'var(--text-2)' }}>{g.evidence_count}</span>}
+            </span>
+          ) },
+          { key: 'actions', header: '', render: (g: any) => (
+            <ActionButton variant="ghost" style={{ fontSize: 11 }} onClick={() => setModal(g)}>Remediate</ActionButton>
+          ) },
+        ]}
+      />
     </div>
   );
 }
@@ -704,16 +645,16 @@ function RemediationTab({ remediations, frameworks, onRefresh }: { remediations:
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {REMEDIATION_STATUSES.filter(s => s !== item.status).slice(0, 3).map(s => (
-                  <button key={s} className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }}
+                  <ActionButton key={s} variant="ghost" style={{ fontSize: 10 }}
                     onClick={async () => { await fceAPI.updateRemediation(item.id, { status: s }); onRefresh(); }}>
                     → {s.replace(/_/g, ' ')}
-                  </button>
+                  </ActionButton>
                 ))}
               </div>
             </div>
           </div>
         ))}
-        {!filtered.length && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-3)', fontSize: 13 }}>No remediation tasks. Create them from Gap Analysis.</div>}
+        {!filtered.length && <EmptyState title="No remediation tasks" message="Create them from Gap Analysis" />}
       </div>
     </div>
   );
@@ -733,16 +674,15 @@ function AnalyticsTab({ data }: { data: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Remediations"  value={data.total_remediations ?? 0} />
-        <StatCard label="Closed"              value={data.closed_remediations ?? 0}  color="#22c55e" />
-        <StatCard label="Overdue"             value={data.overdue_remediations ?? 0} color="#ef4444" />
-        <StatCard label="Total Evidence"      value={data.total_evidence ?? 0}       color="#3b82f6" />
-        <StatCard label="Evidence Verified"   value={data.verified_evidence ?? 0}    color="#22c55e" />
+        <MetricCard label="Total Remediations"  value={data.total_remediations ?? 0} />
+        <MetricCard label="Closed"              value={data.closed_remediations ?? 0}  color="#22c55e" />
+        <MetricCard label="Overdue"             value={data.overdue_remediations ?? 0} color="#ef4444" />
+        <MetricCard label="Total Evidence"      value={data.total_evidence ?? 0}       color="#3b82f6" />
+        <MetricCard label="Evidence Verified"   value={data.verified_evidence ?? 0}    color="#22c55e" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Compliance Scores by Framework</div>
+        <SectionCard title="Compliance Scores by Framework">
           {(data.by_framework || []).map((f: any) => (
             <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: 'var(--text-2)', width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
@@ -753,10 +693,9 @@ function AnalyticsTab({ data }: { data: any }) {
             </div>
           ))}
           {!data.by_framework?.length && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No framework data.</div>}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Failed Controls by Category</div>
+        <SectionCard title="Failed Controls by Category">
           {(data.failed_by_category || []).map((c: any, i: number) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: 'var(--text-2)', width: 120, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.category}</div>
@@ -767,10 +706,9 @@ function AnalyticsTab({ data }: { data: any }) {
             </div>
           ))}
           {!data.failed_by_category?.length && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No failures.</div>}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Risk Distribution (Failed Controls)</div>
+        <SectionCard title="Risk Distribution (Failed Controls)">
           {(data.risk_distribution || []).map((r: any) => (
             <div key={r.risk_level} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               {pill(r.risk_level, RISK_CLR[r.risk_level] || '#6b7280')}
@@ -781,10 +719,9 @@ function AnalyticsTab({ data }: { data: any }) {
             </div>
           ))}
           {!data.risk_distribution?.length && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No risk data.</div>}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 16 }}>Progress Indicators</div>
+        <SectionCard title="Progress Indicators">
           {[
             { label: 'Remediation Progress', pct: remPct, color: '#3b82f6' },
             { label: `Evidence Verified (${data.verified_evidence}/${data.total_evidence})`, pct: evPct, color: '#22c55e' },
@@ -798,7 +735,7 @@ function AnalyticsTab({ data }: { data: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -824,13 +761,11 @@ function AssessmentsTab({ assessments, frameworks, onRefresh }: { assessments: a
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{assessments.length} assessments run</span>
-        <button className="g-btn" style={{ fontSize: 12, marginLeft: 'auto' }} onClick={() => setShowRun(v => !v)}>Run Assessment</button>
+        <ActionButton variant="primary" icon={ClipboardCheck} style={{ fontSize: 12, marginLeft: 'auto' }} onClick={() => setShowRun(v => !v)}>Run Assessment</ActionButton>
       </div>
 
       {showRun && (
-        <div className="g-card" style={{ padding: 16, borderColor: 'var(--accent)' }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Run Framework Assessment</div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>Calculates scores from current control assessment statuses.</div>
+        <SectionCard title="Run Framework Assessment" subtitle="Calculates scores from current control assessment statuses.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <select value={form.framework_id} onChange={e => setForm({ ...form, framework_id: e.target.value })} className="g-input" style={{ fontSize: 12 }}>
               <option value="">Select Framework *</option>
@@ -840,43 +775,27 @@ function AssessmentsTab({ assessments, frameworks, onRefresh }: { assessments: a
               rows={2} className="g-input" style={{ fontSize: 12, resize: 'vertical', width: '100%' }} />
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button className="g-btn" style={{ fontSize: 12 }} onClick={run} disabled={running}>{running ? 'Running…' : 'Run'}</button>
-            <button className="g-btn g-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowRun(false)}>Cancel</button>
+            <ActionButton variant="primary" icon={Check} style={{ fontSize: 12 }} onClick={run} disabled={running}>{running ? 'Running…' : 'Run'}</ActionButton>
+            <ActionButton variant="ghost" icon={X} style={{ fontSize: 12 }} onClick={() => setShowRun(false)}>Cancel</ActionButton>
           </div>
-        </div>
+        </SectionCard>
       )}
 
-      <div className="g-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th>Framework</th>
-              <th>Type</th>
-              <th>Score</th>
-              <th>Passed</th>
-              <th>Failed</th>
-              <th>N/A</th>
-              <th>Started By</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assessments.map(a => (
-              <tr key={a.id}>
-                <td style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 500 }}>{a.framework_name}</td>
-                <td>{pill(a.assessment_type, '#6b7280')}</td>
-                <td style={{ fontSize: 13, fontWeight: 700, color: a.score >= 80 ? '#22c55e' : a.score >= 60 ? '#eab308' : '#ef4444' }}>{a.score}%</td>
-                <td style={{ fontSize: 12, color: '#22c55e' }}>{a.passed}</td>
-                <td style={{ fontSize: 12, color: '#ef4444' }}>{a.failed}</td>
-                <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.not_applicable}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.started_by}</td>
-                <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(a.started_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!assessments.length && <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-3)', fontSize: 13 }}>No assessments run yet.</div>}
-      </div>
+      <DataTable<any>
+        rows={assessments}
+        rowKey={(a: any) => a.id}
+        emptyState={<EmptyState title="No assessments run yet" />}
+        columns={[
+          { key: 'framework_name', header: 'Framework', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 500 }}>{a.framework_name}</span> },
+          { key: 'assessment_type', header: 'Type', render: (a: any) => pill(a.assessment_type, '#6b7280') },
+          { key: 'score', header: 'Score', render: (a: any) => <span style={{ fontSize: 13, fontWeight: 700, color: a.score >= 80 ? '#22c55e' : a.score >= 60 ? '#eab308' : '#ef4444' }}>{a.score}%</span> },
+          { key: 'passed', header: 'Passed', render: (a: any) => <span style={{ fontSize: 12, color: '#22c55e' }}>{a.passed}</span> },
+          { key: 'failed', header: 'Failed', render: (a: any) => <span style={{ fontSize: 12, color: '#ef4444' }}>{a.failed}</span> },
+          { key: 'not_applicable', header: 'N/A', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.not_applicable}</span> },
+          { key: 'started_by', header: 'Started By', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.started_by}</span> },
+          { key: 'started_at', header: 'Date', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(a.started_at)}</span> },
+        ]}
+      />
     </div>
   );
 }
@@ -885,33 +804,21 @@ function AssessmentsTab({ assessments, frameworks, onRefresh }: { assessments: a
 
 function AuditTab({ items }: { items: any[] }) {
   return (
-    <div className="g-card" style={{ padding: 0, overflow: 'hidden' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead>
-          <tr>
-            <th>Action</th>
-            <th>Object</th>
-            <th>Name</th>
-            <th>Actor</th>
-            <th>Details</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map(e => (
-            <tr key={e.id}>
-              <td>{pill(e.action.replace(/_/g, ' '), AUDIT_CLR[e.action] || '#6b7280')}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{e.object_type}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-2)' }}>{e.object_name || e.object_id || '—'}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.actor}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.details || '—'}</td>
-              <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmt(e.created_at)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {!items.length && <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-3)', fontSize: 13 }}>No audit entries.</div>}
-    </div>
+    <SectionCard padded={false}>
+      <DataTable<any>
+        rows={items}
+        rowKey={(e: any) => e.id}
+        emptyState={<EmptyState title="No audit entries" />}
+        columns={[
+          { key: 'action', header: 'Action', render: (e: any) => pill(e.action.replace(/_/g, ' '), AUDIT_CLR[e.action] || '#6b7280') },
+          { key: 'object_type', header: 'Object', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{e.object_type}</span> },
+          { key: 'object_name', header: 'Name', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{e.object_name || e.object_id || '—'}</span> },
+          { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.actor}</span> },
+          { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.details || '—'}</span> },
+          { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmt(e.created_at)}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -925,8 +832,9 @@ function NotificationsTab({ items, onMarkRead }: { items: any[]; onMarkRead: () 
         <span style={{ fontWeight: 600, fontSize: 13 }}>
           Notifications {unread > 0 && <span style={{ fontSize: 11, background: '#3b82f622', color: '#3b82f6', borderRadius: 10, padding: '1px 8px', marginLeft: 6 }}>{unread} unread</span>}
         </span>
-        {unread > 0 && <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</button>}
+        {unread > 0 && <ActionButton variant="ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</ActionButton>}
       </div>
+      {!items.length && <EmptyState title="No notifications" />}
       {items.map(n => (
         <div key={n.id} className="g-card" style={{ padding: 14, borderLeft: `3px solid ${n.read ? 'var(--border)' : NOTIF_CLR[n.severity] || '#6b7280'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -938,7 +846,6 @@ function NotificationsTab({ items, onMarkRead }: { items: any[]; onMarkRead: () 
           <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>{fmt(n.created_at)}</div>
         </div>
       ))}
-      {!items.length && <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-3)', fontSize: 13 }}>No notifications.</div>}
     </div>
   );
 }
@@ -998,6 +905,19 @@ export default function FrameworkCompliancePage() {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const TABS: { key: Tab; label: string; icon: any; count?: number }[] = [
+    { key: 'dashboard',   label: 'Dashboard',     icon: LayoutDashboard },
+    { key: 'frameworks',  label: 'Frameworks',    icon: Layers },
+    { key: 'controls',    label: 'Controls',      icon: SlidersHorizontal },
+    { key: 'evidence',    label: 'Evidence',      icon: FileCheck2 },
+    { key: 'gaps',        label: 'Gap Analysis',  icon: SearchX },
+    { key: 'remediation', label: 'Remediation',   icon: Wrench },
+    { key: 'analytics',   label: 'Analytics',     icon: BarChart3 },
+    { key: 'assessments', label: 'Assessments',   icon: ClipboardCheck },
+    { key: 'audit',       label: 'Audit Trail',   icon: ScrollText },
+    { key: 'notif',       label: 'Notifications', icon: Bell, count: unreadCount || undefined },
+  ];
+
   return (
     <RootLayout
       title="Framework & Compliance"
@@ -1005,29 +925,12 @@ export default function FrameworkCompliancePage() {
       onRefresh={() => loadAll(true)}
       refreshing={refreshing}
       actions={
-        <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>
-          ✦ AI Assistant
-        </button>
+        <ActionButton variant="ghost" icon={Sparkles} style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>AI Assistant</ActionButton>
       }
     >
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20, overflowX: 'auto' }}>
-        {TABS.map(t => {
-          const badge = t.id === 'notif' ? unreadCount : 0;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: '10px 14px', fontSize: 12, fontWeight: tab === t.id ? 700 : 400,
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              background: 'none', whiteSpace: 'nowrap', position: 'relative',
-            }}>
-              {t.label}
-              {badge > 0 && (
-                <span style={{ position: 'absolute', top: 6, right: 2, fontSize: 8, fontWeight: 700, background: '#ef4444', color: '#fff', borderRadius: 8, padding: '1px 4px', minWidth: 14, textAlign: 'center' }}>{badge}</span>
-              )}
-            </button>
-          );
-        })}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, marginBottom: 20, overflowX: 'auto' }}>
+        <TabBar tabs={TABS} active={tab} onChange={k => setTab(k as Tab)} />
       </div>
 
       {tab === 'dashboard'   && <DashboardTab dash={dash} />}

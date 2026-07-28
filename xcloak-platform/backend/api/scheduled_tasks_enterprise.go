@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -112,6 +115,10 @@ func createSTETables() {
 		details     TEXT,
 		created_at  TIMESTAMP DEFAULT NOW()
 	)`)
+	// agent_task_ids carries the real agent_tasks.id rows a dispatched
+	// execution is waiting on — used by syncSTEExecution to reflect genuine
+	// agent-reported completion instead of a timer-based fake result.
+	database.DB.Exec(`ALTER TABLE ste_executions ADD COLUMN IF NOT EXISTS agent_task_ids TEXT DEFAULT '[]'`)
 }
 
 func steAudit(tid int, taskID, taskName, action, actor, details string) {
@@ -514,6 +521,209 @@ func DeleteSTETask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+// resolveSTETargetAgents resolves a task's target_type/target_ids to real
+// agent IDs registered for the tenant. Never invents a target — returns an
+// empty slice if nothing matches, so the caller can fail honestly instead of
+// fabricating a dispatched execution.
+func resolveSTETargetAgents(tid int, targetType, targetIDs string) []int {
+	agentIDs := []int{}
+	switch targetType {
+	case "all", "":
+		rows, err := database.DB.Query(`SELECT id FROM agents WHERE tenant_id=$1`, tid)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int
+				if rows.Scan(&id) == nil {
+					agentIDs = append(agentIDs, id)
+				}
+			}
+		}
+	default:
+		// target_ids holds a JSON array of hostnames/IPs picked when the
+		// task was created (target_type e.g. "specific", "group").
+		var hostnames []string
+		if json.Unmarshal([]byte(targetIDs), &hostnames) == nil {
+			for _, h := range hostnames {
+				var id int
+				if database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND (hostname=$2 OR ip_address=$2)`, tid, h).Scan(&id) == nil {
+					agentIDs = append(agentIDs, id)
+				}
+			}
+		}
+	}
+	return agentIDs
+}
+
+// dispatchSTETask resolves the task's real targets and dispatches a real
+// agent_tasks row (task_type = the task's own task_type, e.g.
+// "vulnerability_scan", "fim_scan", "collect_processes" — real types the
+// agent executor understands) to each. Destructive task types go through
+// the same pending_approval gate as every other dispatcher in this codebase.
+// Returns the execution's initial status honestly — "failed" if no target
+// agent could be resolved or nothing dispatched, never a fabricated success.
+func dispatchSTETask(tid int, taskType, scheduleConfig, targetType, targetIDs string) (status string, agentTaskIDs []int, failReason string) {
+	agentIDs := resolveSTETargetAgents(tid, targetType, targetIDs)
+	if len(agentIDs) == 0 {
+		return "failed", nil, "no registered agent matches this task's target configuration"
+	}
+	payload := json.RawMessage(scheduleConfig)
+	if len(payload) == 0 {
+		payload = json.RawMessage("{}")
+	}
+	destructive := services.IsDestructiveTask(taskType)
+	for _, agentID := range agentIDs {
+		task := models.AgentTask{AgentID: agentID, TaskType: taskType, Payload: payload}
+		var err error
+		if destructive {
+			err = repositories.CreateTaskPendingApproval(task)
+		} else {
+			err = repositories.CreateTask(task)
+		}
+		if err != nil {
+			continue
+		}
+		var atID int
+		database.DB.QueryRow(`SELECT id FROM agent_tasks WHERE agent_id=$1 AND task_type=$2 ORDER BY id DESC LIMIT 1`, agentID, taskType).Scan(&atID)
+		if atID != 0 {
+			agentTaskIDs = append(agentTaskIDs, atID)
+		}
+	}
+	if len(agentTaskIDs) == 0 {
+		return "failed", nil, "failed to dispatch task to any resolved agent"
+	}
+	if destructive {
+		return "pending_agent_approval", agentTaskIDs, ""
+	}
+	return "running", agentTaskIDs, ""
+}
+
+// executeSTETaskNow dispatches a real execution for a task (bypassing the
+// ste_approvals workflow, since the caller already confirmed approval was
+// either not required or has just been granted). Used by both the direct
+// manual-run path and the approval-decision path so an approved task
+// actually runs instead of just flipping a status flag.
+func executeSTETaskNow(tid int, dbID, taskID, name, trigger, actor string) (execID string, status string, err error) {
+	var taskType, scheduleConfig, targetType, targetIDs string
+	err = database.DB.QueryRow(`SELECT task_type,schedule_config,target_type,target_ids FROM ste_tasks WHERE tenant_id=$1 AND id=$2`, tid, dbID).
+		Scan(&taskType, &scheduleConfig, &targetType, &targetIDs)
+	if err != nil {
+		return "", "", fmt.Errorf("task not found")
+	}
+
+	dispatchStatus, agentTaskIDs, failReason := dispatchSTETask(tid, taskType, scheduleConfig, targetType, targetIDs)
+	agentTaskIDsJSON, _ := json.Marshal(agentTaskIDs)
+
+	execID = fmt.Sprintf("EX-%08d", rand.Intn(99999999))
+	var eid int
+	execStatus := dispatchStatus
+	if execStatus == "pending_agent_approval" {
+		execStatus = "running" // shown as running in history; agent_tasks rows are pending_approval underneath
+	}
+	dbErr := database.DB.QueryRow(`INSERT INTO ste_executions
+		(tenant_id,execution_id,task_id,task_name,status,trigger,executed_by,target_count,error_message,agent_task_ids)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+		tid, execID, taskID, name, execStatus, trigger, actor, len(agentTaskIDs), failReason, string(agentTaskIDsJSON)).Scan(&eid)
+	if dbErr != nil {
+		return "", "", dbErr
+	}
+
+	database.DB.Exec(`UPDATE ste_tasks SET run_count=run_count+1, last_run_at=NOW(), updated_at=NOW() WHERE tenant_id=$1 AND id=$2`, tid, dbID)
+	steAudit(tid, taskID, name, "executed", actor, fmt.Sprintf("trigger=%s targets=%d", trigger, len(agentTaskIDs)))
+
+	if dispatchStatus == "failed" {
+		database.DB.Exec(`UPDATE ste_executions SET status='failed',end_time=NOW() WHERE id=$1`, eid)
+		database.DB.Exec(`UPDATE ste_tasks SET failure_count=failure_count+1 WHERE id=$1`, dbID)
+		steNotify(tid, taskID, name, "task_failed", fmt.Sprintf("Task '%s' failed to dispatch: %s", name, failReason), "critical")
+		return execID, "failed", nil
+	}
+
+	steNotify(tid, taskID, name, "task_started", fmt.Sprintf("Task '%s' dispatched to %d agent(s) by %s", name, len(agentTaskIDs), actor), "info")
+	return execID, "running", nil
+}
+
+// syncSTEExecutions reflects the real status of every agent_tasks row a
+// still-"running" execution is waiting on. An execution only turns
+// "completed" once ALL of its dispatched tasks genuinely completed; it turns
+// "failed" as soon as any of them fails or expires. Never fabricates
+// completion via a timer.
+func syncSTEExecutions(tid int, ids []int) {
+	if len(ids) == 0 {
+		return
+	}
+	rows, err := database.DB.Query(`SELECT id,execution_id,task_id,task_name,agent_task_ids,start_time FROM ste_executions WHERE tenant_id=$1 AND status='running' AND id = ANY($2)`,
+		tid, pqIntArray(ids))
+	if err != nil || rows == nil {
+		return
+	}
+	type pending struct {
+		id                        int
+		execID, taskID, taskName  string
+		agentTaskIDs              []int
+		startTime                 time.Time
+	}
+	list := []pending{}
+	for rows.Next() {
+		var p pending
+		var atJSON string
+		if rows.Scan(&p.id, &p.execID, &p.taskID, &p.taskName, &atJSON, &p.startTime) == nil {
+			json.Unmarshal([]byte(atJSON), &p.agentTaskIDs)
+			list = append(list, p)
+		}
+	}
+	rows.Close()
+
+	for _, p := range list {
+		if len(p.agentTaskIDs) == 0 {
+			continue
+		}
+		allDone, anyFailed := true, false
+		for _, atID := range p.agentTaskIDs {
+			var st string
+			database.DB.QueryRow(`SELECT status FROM agent_tasks WHERE id=$1`, atID).Scan(&st)
+			if st != "completed" && st != "failed" && st != "expired" && st != "rejected" {
+				allDone = false
+			}
+			if st == "failed" || st == "expired" || st == "rejected" {
+				anyFailed = true
+			}
+		}
+		if !allDone {
+			continue
+		}
+		finalStatus := "completed"
+		if anyFailed {
+			finalStatus = "failed"
+		}
+		dur := int(time.Since(p.startTime).Milliseconds())
+		exitCode := 0
+		if anyFailed {
+			exitCode = 1
+		}
+		database.DB.Exec(`UPDATE ste_executions SET status=$1,end_time=NOW(),duration=$2,exit_code=$3 WHERE id=$4 AND status='running'`,
+			finalStatus, dur, exitCode, p.id)
+		var dbTaskID string
+		database.DB.QueryRow(`SELECT id FROM ste_tasks WHERE tenant_id=$1 AND task_id=$2`, tid, p.taskID).Scan(&dbTaskID)
+		if finalStatus == "completed" {
+			database.DB.Exec(`UPDATE ste_tasks SET success_count=success_count+1 WHERE tenant_id=$1 AND task_id=$2`, tid, p.taskID)
+			steNotify(tid, p.taskID, p.taskName, "task_completed", fmt.Sprintf("Task '%s' completed successfully", p.taskName), "info")
+		} else {
+			database.DB.Exec(`UPDATE ste_tasks SET failure_count=failure_count+1 WHERE tenant_id=$1 AND task_id=$2`, tid, p.taskID)
+			steNotify(tid, p.taskID, p.taskName, "task_failed", fmt.Sprintf("Task '%s' failed", p.taskName), "critical")
+		}
+	}
+}
+
+// pqIntArray formats a Go int slice as a Postgres integer array literal for
+// use with = ANY($n) — avoids pulling in lib/pq's pq.Array just for this.
+func pqIntArray(ids []int) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.Itoa(id)
+	}
+	return "{" + strings.Join(parts, ",") + "}"
+}
+
 // POST /api/ste/tasks/:id/run
 func PostSTERunTask(c *gin.Context) {
 	tid := tenantIDFromContext(c)
@@ -540,36 +750,12 @@ func PostSTERunTask(c *gin.Context) {
 		return
 	}
 
-	execID := fmt.Sprintf("EX-%08d", rand.Intn(99999999))
-	var eid int
-	database.DB.QueryRow(`INSERT INTO ste_executions
-		(tenant_id,execution_id,task_id,task_name,status,trigger,executed_by,target_count)
-		VALUES ($1,$2,$3,$4,'running','manual',$5,1) RETURNING id`, tid, execID, taskID, name, actor).Scan(&eid)
-	database.DB.Exec(`UPDATE ste_tasks SET run_count=run_count+1, last_run_at=NOW(), updated_at=NOW() WHERE id=$1`, id)
-	steAudit(tid, taskID, name, "executed", actor, "Manual run triggered")
-	steNotify(tid, taskID, name, "task_started", fmt.Sprintf("Task '%s' started manually by %s", name, actor), "info")
-
-	// Simulate completion in background
-	go func() {
-		time.Sleep(time.Duration(2+rand.Intn(8)) * time.Second)
-		dur := 2000 + rand.Intn(30000)
-		success := rand.Float32() > 0.1
-		st := "completed"
-		if !success {
-			st = "failed"
-		}
-		database.DB.Exec(`UPDATE ste_executions SET status=$1,end_time=NOW(),duration=$2,exit_code=$3 WHERE id=$4`,
-			st, dur, map[bool]int{true: 0, false: 1}[success], eid)
-		if success {
-			database.DB.Exec(`UPDATE ste_tasks SET success_count=success_count+1 WHERE id=$1`, id)
-			steNotify(tid, taskID, name, "task_completed", fmt.Sprintf("Task '%s' completed successfully", name), "info")
-		} else {
-			database.DB.Exec(`UPDATE ste_tasks SET failure_count=failure_count+1 WHERE id=$1`, id)
-			steNotify(tid, taskID, name, "task_failed", fmt.Sprintf("Task '%s' failed", name), "critical")
-		}
-	}()
-
-	c.JSON(http.StatusOK, gin.H{"status": "running", "execution_id": execID})
+	execID, status, err := executeSTETaskNow(tid, id, taskID, name, "manual", actor)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": status, "execution_id": execID})
 }
 
 // GET /api/ste/executions

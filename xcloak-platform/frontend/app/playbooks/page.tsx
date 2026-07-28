@@ -1,14 +1,30 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import type { ComponentType, CSSProperties } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { pbAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, SectionCard, TabBar, ActionButton, EmptyState } from '@/components/design-system';
+import {
+  LayoutDashboard, Library, Workflow, History as HistoryIcon, CheckCircle2, Braces, BarChart3, LayoutTemplate, Store, Sparkles, FileText,
+  AlertTriangle, Flame, FolderOpen, Target, Radio, Unlock, Play, Clock, Webhook as WebhookIcon, Plug,
+  GitBranch, CornerDownLeft, Shuffle, Repeat, ArrowLeftRight, Pause, Timer, RotateCw,
+  ShieldBan, Ban, Package, Skull, Lock, UserX, KeyRound, Mail, Ticket, Terminal, Network, FileBarChart,
+  UserCog, Megaphone, Trash2, Save, Rocket, Download, Zap, Check, X, Wrench, Star,
+} from 'lucide-react';
+
+type IconComponent = ComponentType<{ className?: string; style?: CSSProperties }>;
 
 type Tab = 'overview' | 'library' | 'builder' | 'executions' | 'approvals' | 'variables' | 'analytics' | 'templates' | 'marketplace' | 'ai' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
   overview: 'Dashboard', library: 'Library', builder: 'Builder', executions: 'Executions',
   approvals: 'Approvals', variables: 'Variables', analytics: 'Analytics',
   templates: 'Templates', marketplace: 'Marketplace', ai: 'AI Assistant', reports: 'Reports',
+};
+const TAB_ICONS: Record<Tab, IconComponent> = {
+  overview: LayoutDashboard, library: Library, builder: Workflow, executions: HistoryIcon,
+  approvals: CheckCircle2, variables: Braces, analytics: BarChart3,
+  templates: LayoutTemplate, marketplace: Store, ai: Sparkles, reports: FileText,
 };
 
 type NodeType = 'trigger' | 'logic' | 'action' | 'human';
@@ -21,6 +37,23 @@ const NODE_H = 72;
 interface WFNode { id: string; type: NodeType; label: string; icon: string; x: number; y: number; config: Record<string, any>; }
 interface WFEdge { id: string; from: string; to: string; label?: string; }
 interface WFState { nodes: WFNode[]; edges: WFEdge[]; }
+
+// Node/palette icons are persisted as emoji strings in workflow JSON (backend compatibility) — this maps
+// each emoji glyph to a real Lucide icon purely for rendering, without touching the stored data shape.
+const EMOJI_ICON: Record<string, IconComponent> = {
+  '🚨': AlertTriangle, '🔥': Flame, '📁': FolderOpen, '🎯': Target, '📡': Radio,
+  '🔓': Unlock, '▶': Play, '⏰': Clock, '🪝': WebhookIcon, '🔌': Plug,
+  '❓': GitBranch, '↩': CornerDownLeft, '🔀': Shuffle, '🔄': Repeat, '⟺': ArrowLeftRight,
+  '⏸': Pause, '⏱': Timer, '↻': RotateCw,
+  '🛡': ShieldBan, '🚫': Ban, '📦': Package, '💀': Skull, '🔒': Lock, '👤': UserX,
+  '🔑': KeyRound, '📧': Mail, '🎫': Ticket, '💻': Terminal, '📊': FileBarChart,
+  '✅': CheckCircle2, '👨‍💻': UserCog, '📢': Megaphone,
+};
+function GlyphIcon({ glyph, style }: { glyph: string; style?: CSSProperties }) {
+  const Icon = EMOJI_ICON[glyph];
+  if (!Icon) return <span style={style}>{glyph}</span>;
+  return <Icon style={style} />;
+}
 
 const PALETTE: { type: NodeType; label: string; color: string; items: { label: string; icon: string }[] }[] = [
   { type: 'trigger', label: 'Triggers', color: '#3b82f6', items: [
@@ -128,7 +161,7 @@ function WorkflowCanvas({ workflow, onChange }: { workflow: WFState; onChange: (
                   style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 6px', background: 'none', border: `1px solid ${group.color}22`, borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem', color: 'var(--text-2)', textAlign: 'left', transition: 'all 0.1s' }}
                   onMouseEnter={e => (e.currentTarget.style.background = `${group.color}18`)}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                  <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>{item.icon}</span>
+                  <GlyphIcon glyph={item.icon} style={{ width: 13, height: 13, flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
                 </button>
               ))}
@@ -199,7 +232,7 @@ function WorkflowCanvas({ workflow, onChange }: { workflow: WFState; onChange: (
               {/* Body */}
               <div style={{ padding: '8px 12px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.95rem', flexShrink: 0 }}>{node.icon}</span>
+                  <GlyphIcon glyph={node.icon} style={{ width: 14, height: 14, flexShrink: 0, color: col }} />
                   <span style={{ fontSize: '0.76rem', fontWeight: 600, color: col, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{node.label}</span>
                 </div>
                 {node.config?.condition && <div style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.config.condition}</div>}
@@ -218,7 +251,7 @@ function WorkflowCanvas({ workflow, onChange }: { workflow: WFState; onChange: (
 
         {workflow.nodes.length === 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', pointerEvents: 'none' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>⚡</div>
+            <Zap style={{ width: 40, height: 40, marginBottom: '0.5rem' }} />
             <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>Click a node type on the left to add it</div>
             <div style={{ fontSize: '0.75rem', marginTop: '0.3rem', color: 'var(--text-3)' }}>Then click output port (bottom ●) → input port (top ●) to connect</div>
           </div>
@@ -233,7 +266,9 @@ function WorkflowCanvas({ workflow, onChange }: { workflow: WFState; onChange: (
       {/* Config panel */}
       {selectedNode && (
         <div style={{ width: '230px', borderLeft: '1px solid var(--border)', padding: '0.85rem', overflowY: 'auto', flexShrink: 0, fontSize: '0.8rem' }}>
-          <div style={{ fontWeight: 700, color: NODE_COLORS[selectedNode.type], marginBottom: '0.75rem', fontSize: '0.85rem' }}>{selectedNode.icon} {selectedNode.label}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: NODE_COLORS[selectedNode.type], marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+            <GlyphIcon glyph={selectedNode.icon} style={{ width: 14, height: 14 }} /> {selectedNode.label}
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
             <div>
               <div style={{ color: 'var(--text-3)', fontSize: '0.68rem', marginBottom: '2px' }}>Label</div>
@@ -292,8 +327,8 @@ function WorkflowCanvas({ workflow, onChange }: { workflow: WFState; onChange: (
               <button onClick={() => {
                 onChange({ nodes: workflow.nodes.filter(n => n.id !== selectedNode.id), edges: workflow.edges.filter(e => e.from !== selectedNode.id && e.to !== selectedNode.id) });
                 setSelectedId(null);
-              }} style={{ width: '100%', padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '4px', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }}>
-                🗑 Delete Node
+              }} style={{ width: '100%', padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '4px', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                <Trash2 style={{ width: 12, height: 12 }} /> Delete Node
               </button>
             </div>
           </div>
@@ -319,13 +354,8 @@ function OverviewTab({ dash }: { dash: any }) {
     { label: 'Total Executions', value: dash.total_executions, color: '#6b7280' },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: '1rem' }}>
-      {cards.map(c => (
-        <div key={c.label} className="g-card" style={{ padding: '1.25rem', borderTop: `3px solid ${c.color}` }}>
-          <div style={{ fontSize: '1.9rem', fontWeight: 700, color: c.color }}>{c.value}</div>
-          <div style={{ fontSize: '0.73rem', color: 'var(--text-3)', marginTop: '0.2rem' }}>{c.label}</div>
-        </div>
-      ))}
+    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+      {cards.map(c => <MetricCard key={c.label} label={c.label} value={c.value} color={c.color} />)}
     </div>
   );
 }
@@ -365,10 +395,10 @@ function LibraryTab({ onEdit, onExecute }: { onEdit: (pb: any) => void; onExecut
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <select className="g-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ fontSize: '0.82rem' }}>
+        <select className="g-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ fontSize: '0.82rem', width: 160 }}>
           {STATUSES.map(s => <option key={s} value={s}>{s || 'All Statuses'}</option>)}
         </select>
-        <button className="g-btn g-btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setShowCreate(!showCreate)}>+ New Playbook</button>
+        <ActionButton variant="primary" onClick={() => setShowCreate(!showCreate)} style={{ marginLeft: 'auto' }}>+ New Playbook</ActionButton>
       </div>
 
       {showCreate && (
@@ -387,52 +417,46 @@ function LibraryTab({ onEdit, onExecute }: { onEdit: (pb: any) => void; onExecut
             </select>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-            <button className="g-btn g-btn-primary" onClick={create} disabled={creating || !form.name}>{creating ? 'Creating…' : 'Create'}</button>
-            <button className="g-btn g-btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+            <ActionButton variant="primary" onClick={create} disabled={creating || !form.name}>{creating ? 'Creating…' : 'Create'}</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowCreate(false)}>Cancel</ActionButton>
           </div>
         </div>
       )}
 
-      <div className="g-card" style={{ padding: 0, overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead"><tr>
-            <th className="g-tr">Name</th><th className="g-tr">Category</th><th className="g-tr">Trigger</th>
-            <th className="g-tr">Version</th><th className="g-tr">Status</th><th className="g-tr">Author</th>
-            <th className="g-tr">Runs</th><th className="g-tr">Success</th><th className="g-tr">Avg</th>
-            <th className="g-tr">Updated</th><th className="g-tr"></th>
-          </tr></thead>
-          <tbody>
-            {list.map((pb: any) => (
-              <tr key={pb.id} style={{ cursor: 'pointer' }} onClick={() => onEdit(pb)}>
-                <td className="g-tr" style={{ fontWeight: 600, fontSize: '0.85rem', maxWidth: '180px' }}>
-                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pb.name}</div>
-                  {pb.tags && <div style={{ display: 'flex', gap: '2px', marginTop: '2px', flexWrap: 'wrap' }}>
-                    {pb.tags.split(',').slice(0, 2).map((t: string) => <span key={t} style={{ fontSize: '0.63rem', background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 4px', borderRadius: '2px' }}>{t.trim()}</span>)}
-                  </div>}
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{pb.category?.replace(/_/g, ' ')}</td>
-                <td className="g-tr"><code style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>{pb.trigger_type}</code></td>
-                <td className="g-tr"><code style={{ fontSize: '0.72rem' }}>v{pb.version}</code></td>
-                <td className="g-tr">
-                  <span style={{ background: `${STATUS_COLOR[pb.status] || '#666'}18`, color: STATUS_COLOR[pb.status] || '#666', padding: '2px 7px', borderRadius: '3px', fontSize: '0.73rem', fontWeight: 600 }}>{pb.status}</span>
-                </td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{pb.author}</td>
-                <td className="g-tr" style={{ fontSize: '0.82rem', textAlign: 'right' }}>{pb.execution_count}</td>
-                <td className="g-tr" style={{ fontSize: '0.82rem', color: '#22c55e', textAlign: 'right' }}>{successRate(pb)}</td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)', textAlign: 'right' }}>{pb.avg_runtime_s > 0 ? `${pb.avg_runtime_s}s` : '—'}</td>
-                <td className="g-tr" style={{ fontSize: '0.75rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(pb.updated_at)}</td>
-                <td className="g-tr">
-                  <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: '0.72rem', padding: '2px 6px' }} onClick={() => onEdit(pb)}>Edit</button>
-                    <button className="g-btn g-btn-primary" style={{ fontSize: '0.72rem', padding: '2px 6px' }} onClick={() => onExecute(pb)}>▶ Run</button>
-                    <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem', padding: '2px 4px' }} onClick={() => del(pb.id)}>✕</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={list}
+        rowKey={(pb: any) => pb.id}
+        onRowClick={pb => onEdit(pb)}
+        emptyState={<EmptyState icon={Library} title="No playbooks found" />}
+        columns={[
+          { key: 'name', header: 'Name', render: (pb: any) => (
+            <div style={{ fontWeight: 600, fontSize: '0.85rem', maxWidth: '180px' }}>
+              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pb.name}</div>
+              {pb.tags && <div style={{ display: 'flex', gap: '2px', marginTop: '2px', flexWrap: 'wrap' }}>
+                {pb.tags.split(',').slice(0, 2).map((t: string) => <span key={t} style={{ fontSize: '0.63rem', background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 4px', borderRadius: '2px' }}>{t.trim()}</span>)}
+              </div>}
+            </div>
+          ) },
+          { key: 'category', header: 'Category', render: (pb: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{pb.category?.replace(/_/g, ' ')}</span> },
+          { key: 'trigger_type', header: 'Trigger', render: (pb: any) => <code style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>{pb.trigger_type}</code> },
+          { key: 'version', header: 'Version', render: (pb: any) => <code style={{ fontSize: '0.72rem' }}>v{pb.version}</code> },
+          { key: 'status', header: 'Status', render: (pb: any) => (
+            <span style={{ background: `${STATUS_COLOR[pb.status] || '#666'}18`, color: STATUS_COLOR[pb.status] || '#666', padding: '2px 7px', borderRadius: '3px', fontSize: '0.73rem', fontWeight: 600 }}>{pb.status}</span>
+          ) },
+          { key: 'author', header: 'Author', render: (pb: any) => <span style={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{pb.author}</span> },
+          { key: 'execution_count', header: 'Runs', align: 'right', render: (pb: any) => <span style={{ fontSize: '0.82rem' }}>{pb.execution_count}</span> },
+          { key: 'success', header: 'Success', align: 'right', render: (pb: any) => <span style={{ fontSize: '0.82rem', color: '#22c55e' }}>{successRate(pb)}</span> },
+          { key: 'avg_runtime_s', header: 'Avg', align: 'right', render: (pb: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{pb.avg_runtime_s > 0 ? `${pb.avg_runtime_s}s` : '—'}</span> },
+          { key: 'updated_at', header: 'Updated', render: (pb: any) => <span style={{ fontSize: '0.75rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(pb.updated_at)}</span> },
+          { key: 'actions', header: '', render: (pb: any) => (
+            <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
+              <ActionButton variant="ghost" onClick={() => onEdit(pb)} style={{ fontSize: '0.72rem', padding: '2px 6px' }}>Edit</ActionButton>
+              <ActionButton variant="primary" icon={Play} onClick={() => onExecute(pb)} style={{ fontSize: '0.72rem', padding: '2px 6px' }}>Run</ActionButton>
+              <ActionButton variant="ghost" icon={X} onClick={() => del(pb.id)} style={{ padding: '2px 4px', color: '#ef4444' }} />
+            </div>
+          ) },
+        ]}
+      />
     </div>
   );
 }
@@ -480,9 +504,9 @@ function BuilderTab({ playbook, onSelectPlaybook }: { playbook: any; onSelectPla
 
   if (!playbook) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '400px', color: 'var(--text-3)', gap: '1rem' }}>
-      <div style={{ fontSize: '2.5rem' }}>🔧</div>
+      <Wrench style={{ width: 40, height: 40 }} />
       <div style={{ fontWeight: 600 }}>No playbook selected</div>
-      <button className="g-btn g-btn-primary" onClick={onSelectPlaybook}>Go to Library →</button>
+      <ActionButton variant="primary" onClick={onSelectPlaybook}>Go to Library →</ActionButton>
     </div>
   );
 
@@ -498,10 +522,10 @@ function BuilderTab({ playbook, onSelectPlaybook }: { playbook: any; onSelectPla
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
-          <button className="g-btn g-btn-ghost" onClick={() => setShowVersions(!showVersions)} style={{ fontSize: '0.78rem' }}>History</button>
-          <button className="g-btn g-btn-ghost" onClick={runDry} disabled={dryRunning} style={{ fontSize: '0.78rem' }}>{dryRunning ? 'Testing…' : '▷ Dry Run'}</button>
-          <button className="g-btn g-btn-ghost" onClick={save} disabled={saving} style={{ fontSize: '0.78rem' }}>{saving ? 'Saving…' : '💾 Save'}</button>
-          <button className="g-btn g-btn-primary" onClick={publish} disabled={publishing} style={{ fontSize: '0.78rem' }}>{publishing ? 'Publishing…' : '🚀 Publish'}</button>
+          <ActionButton variant="ghost" icon={HistoryIcon} onClick={() => setShowVersions(!showVersions)} style={{ fontSize: '0.78rem' }}>History</ActionButton>
+          <ActionButton variant="ghost" icon={Play} onClick={runDry} disabled={dryRunning} style={{ fontSize: '0.78rem' }}>{dryRunning ? 'Testing…' : 'Dry Run'}</ActionButton>
+          <ActionButton variant="ghost" icon={Save} onClick={save} disabled={saving} style={{ fontSize: '0.78rem' }}>{saving ? 'Saving…' : 'Save'}</ActionButton>
+          <ActionButton variant="primary" icon={Rocket} onClick={publish} disabled={publishing} style={{ fontSize: '0.78rem' }}>{publishing ? 'Publishing…' : 'Publish'}</ActionButton>
         </div>
       </div>
 
@@ -530,15 +554,16 @@ function BuilderTab({ playbook, onSelectPlaybook }: { playbook: any; onSelectPla
       {dryResult && (
         <div className="g-card" style={{ padding: '1rem', border: `1px solid ${dryResult.steps_failed > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontWeight: 600, color: dryResult.steps_failed > 0 ? '#ef4444' : '#22c55e' }}>
-              {dryResult.steps_failed > 0 ? '⚠ Dry Run: Issues Found' : '✓ Dry Run: All Passed'}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: dryResult.steps_failed > 0 ? '#ef4444' : '#22c55e' }}>
+              {dryResult.steps_failed > 0 ? <AlertTriangle style={{ width: 14, height: 14 }} /> : <CheckCircle2 style={{ width: 14, height: 14 }} />}
+              {dryResult.steps_failed > 0 ? 'Dry Run: Issues Found' : 'Dry Run: All Passed'}
             </span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>Est. {dryResult.estimated_time_s}s</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
             {(dryResult.step_results || []).map((s: any, i: number) => (
-              <span key={i} style={{ fontSize: '0.72rem', padding: '2px 7px', borderRadius: '3px', background: s.status === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: s.status === 'ok' ? '#22c55e' : '#ef4444' }}>
-                {s.status === 'ok' ? '✓' : '✗'} {s.step} <span style={{ color: 'var(--text-3)' }}>({s.duration_ms}ms)</span>
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', padding: '2px 7px', borderRadius: '3px', background: s.status === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: s.status === 'ok' ? '#22c55e' : '#ef4444' }}>
+                {s.status === 'ok' ? <Check style={{ width: 10, height: 10 }} /> : <X style={{ width: 10, height: 10 }} />} {s.step} <span style={{ color: 'var(--text-3)' }}>({s.duration_ms}ms)</span>
               </span>
             ))}
           </div>
@@ -562,36 +587,28 @@ function ExecutionsTab() {
   useEffect(() => { pbAPI.getExecutions().then(r => setExecs(r.data || [])); }, []);
 
   return (
-    <div className="g-card" style={{ padding: 0, overflowX: 'auto' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead className="g-thead"><tr>
-          <th className="g-tr">Execution ID</th><th className="g-tr">Playbook</th><th className="g-tr">Status</th>
-          <th className="g-tr">Trigger</th><th className="g-tr">Analyst</th><th className="g-tr">Duration</th>
-          <th className="g-tr">Failed Step</th><th className="g-tr">Started</th><th className="g-tr">Type</th>
-        </tr></thead>
-        <tbody>
-          {execs.map((e: any) => (
-            <tr key={e.id}>
-              <td className="g-tr"><code style={{ fontSize: '0.72rem', color: '#818cf8' }}>{e.execution_id}</code></td>
-              <td className="g-tr" style={{ fontWeight: 600, fontSize: '0.83rem' }}>{e.playbook_name}</td>
-              <td className="g-tr">
-                <span style={{ background: `${STATUS_COLOR[e.status] || '#666'}18`, color: STATUS_COLOR[e.status] || '#666', padding: '2px 7px', borderRadius: '3px', fontSize: '0.73rem', fontWeight: 600 }}>
-                  {e.status === 'running' ? '⟳ ' : ''}{e.status}
-                </span>
-              </td>
-              <td className="g-tr"><code style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>{e.trigger_type}</code></td>
-              <td className="g-tr" style={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{e.analyst}</td>
-              <td className="g-tr" style={{ fontSize: '0.82rem', color: 'var(--text-2)', textAlign: 'right' }}>{e.duration_s > 0 ? `${e.duration_s}s` : '—'}</td>
-              <td className="g-tr" style={{ fontSize: '0.75rem', color: '#ef4444' }}>{e.failed_step || '—'}</td>
-              <td className="g-tr" style={{ fontSize: '0.75rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.started_at)}</td>
-              <td className="g-tr">
-                {e.is_dry_run && <span style={{ fontSize: '0.68rem', background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 5px', borderRadius: '3px' }}>dry</span>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable<any>
+      rows={execs}
+      rowKey={(e: any) => e.id}
+      emptyState={<EmptyState icon={HistoryIcon} title="No executions yet" />}
+      columns={[
+        { key: 'execution_id', header: 'Execution ID', render: (e: any) => <code style={{ fontSize: '0.72rem', color: '#818cf8' }}>{e.execution_id}</code> },
+        { key: 'playbook_name', header: 'Playbook', render: (e: any) => <span style={{ fontWeight: 600, fontSize: '0.83rem' }}>{e.playbook_name}</span> },
+        { key: 'status', header: 'Status', render: (e: any) => (
+          <span style={{ background: `${STATUS_COLOR[e.status] || '#666'}18`, color: STATUS_COLOR[e.status] || '#666', padding: '2px 7px', borderRadius: '3px', fontSize: '0.73rem', fontWeight: 600 }}>
+            {e.status}
+          </span>
+        ) },
+        { key: 'trigger_type', header: 'Trigger', render: (e: any) => <code style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>{e.trigger_type}</code> },
+        { key: 'analyst', header: 'Analyst', render: (e: any) => <span style={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{e.analyst}</span> },
+        { key: 'duration_s', header: 'Duration', align: 'right', render: (e: any) => <span style={{ fontSize: '0.82rem', color: 'var(--text-2)' }}>{e.duration_s > 0 ? `${e.duration_s}s` : '—'}</span> },
+        { key: 'failed_step', header: 'Failed Step', render: (e: any) => <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{e.failed_step || '—'}</span> },
+        { key: 'started_at', header: 'Started', render: (e: any) => <span style={{ fontSize: '0.75rem', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.started_at)}</span> },
+        { key: 'is_dry_run', header: 'Type', render: (e: any) => (
+          e.is_dry_run ? <span style={{ fontSize: '0.68rem', background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 5px', borderRadius: '3px' }}>dry</span> : null
+        ) },
+      ]}
+    />
   );
 }
 
@@ -643,18 +660,22 @@ function ApprovalsTab() {
           {a.status === 'pending' && (
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input className="g-input" placeholder="Optional notes…" value={deciding === a.id ? notes : ''} style={{ flex: 1, fontSize: '0.78rem', minWidth: '200px' }} onChange={e => { setDeciding(a.id); setNotes(e.target.value); }} />
-              <button className="g-btn g-btn-primary" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }} disabled={deciding === a.id && !notes} onClick={() => decide(a.id, 'approved')}>✓ Approve</button>
-              <button className="g-btn g-btn-ghost" style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }} onClick={() => decide(a.id, 'rejected')}>✗ Reject</button>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: '0.75rem' }} onClick={() => decide(a.id, 'escalated')}>📢 Escalate</button>
+              <ActionButton variant="primary" icon={Check} disabled={deciding === a.id && !notes} onClick={() => decide(a.id, 'approved')} style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}>Approve</ActionButton>
+              <ActionButton variant="ghost" icon={X} onClick={() => decide(a.id, 'rejected')} style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>Reject</ActionButton>
+              <ActionButton variant="ghost" icon={Megaphone} onClick={() => decide(a.id, 'escalated')} style={{ fontSize: '0.75rem' }}>Escalate</ActionButton>
             </div>
           )}
           {a.status !== 'pending' && a.approver && (
-            <div style={{ fontSize: '0.73rem', color: 'var(--text-3)' }}>{a.status === 'approved' ? '✓' : '✗'} by {a.approver}{a.notes ? ` · "${a.notes}"` : ''}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.73rem', color: 'var(--text-3)' }}>
+              {a.status === 'approved' ? <Check style={{ width: 11, height: 11 }} /> : <X style={{ width: 11, height: 11 }} />} by {a.approver}{a.notes ? ` · "${a.notes}"` : ''}
+            </div>
           )}
         </div>
       ))}
       {approvals.filter(a => a.status === 'pending').length === 0 && approvals.length > 0 && (
-        <div style={{ textAlign: 'center', color: '#22c55e', padding: '1rem', fontSize: '0.85rem' }}>✓ All pending approvals resolved</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#22c55e', padding: '1rem', fontSize: '0.85rem' }}>
+          <CheckCircle2 style={{ width: 15, height: 15 }} /> All pending approvals resolved
+        </div>
       )}
     </div>
   );
@@ -682,7 +703,7 @@ function VariablesTab() {
           <div style={{ fontWeight: 600 }}>Global Variable Store</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>Shared across all playbooks. Secrets are encrypted at rest.</div>
         </div>
-        <button className="g-btn g-btn-primary" onClick={() => setShowAdd(!showAdd)}>+ Add Variable</button>
+        <ActionButton variant="primary" onClick={() => setShowAdd(!showAdd)}>+ Add Variable</ActionButton>
       </div>
 
       {showAdd && (
@@ -696,36 +717,29 @@ function VariablesTab() {
             <input className="g-input" placeholder="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <button className="g-btn g-btn-primary" disabled={!form.key} onClick={() => { setVars(v => [{ ...form }, ...v]); setShowAdd(false); setForm({ key: '', value: '', type: 'string', description: '' }); }}>Save</button>
-            <button className="g-btn g-btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+            <ActionButton variant="primary" disabled={!form.key} onClick={() => { setVars(v => [{ ...form }, ...v]); setShowAdd(false); setForm({ key: '', value: '', type: 'string', description: '' }); }}>Save</ActionButton>
+            <ActionButton variant="ghost" onClick={() => setShowAdd(false)}>Cancel</ActionButton>
           </div>
         </div>
       )}
 
-      <div className="g-card" style={{ padding: 0, overflowX: 'auto' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead"><tr>
-            <th className="g-tr">Name</th><th className="g-tr">Type</th><th className="g-tr">Value</th><th className="g-tr">Description</th><th className="g-tr"></th>
-          </tr></thead>
-          <tbody>
-            {vars.map((v, i) => (
-              <tr key={v.key}>
-                <td className="g-tr"><code style={{ color: '#818cf8', fontSize: '0.8rem' }}>{v.key}</code></td>
-                <td className="g-tr">
-                  <span style={{ fontSize: '0.72rem', background: v.type === 'secret' ? 'rgba(239,68,68,0.1)' : 'rgba(99,102,241,0.1)', color: v.type === 'secret' ? '#ef4444' : '#818cf8', padding: '1px 5px', borderRadius: '3px' }}>
-                    {v.type === 'secret' ? '🔐 ' : ''}{v.type}
-                  </span>
-                </td>
-                <td className="g-tr"><code style={{ fontSize: '0.78rem', color: 'var(--text-2)' }}>{v.type === 'secret' ? '●●●●●●●' : v.value}</code></td>
-                <td className="g-tr" style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{v.description}</td>
-                <td className="g-tr">
-                  <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }} onClick={() => setVars(prev => prev.filter((_, j) => j !== i))}>✕</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={vars}
+        rowKey={(v: any) => v.key}
+        columns={[
+          { key: 'key', header: 'Name', render: (v: any) => <code style={{ color: '#818cf8', fontSize: '0.8rem' }}>{v.key}</code> },
+          { key: 'type', header: 'Type', render: (v: any) => (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', background: v.type === 'secret' ? 'rgba(239,68,68,0.1)' : 'rgba(99,102,241,0.1)', color: v.type === 'secret' ? '#ef4444' : '#818cf8', padding: '1px 5px', borderRadius: '3px' }}>
+              {v.type === 'secret' && <Lock style={{ width: 9, height: 9 }} />}{v.type}
+            </span>
+          ) },
+          { key: 'value', header: 'Value', render: (v: any) => <code style={{ fontSize: '0.78rem', color: 'var(--text-2)' }}>{v.type === 'secret' ? '●●●●●●●' : v.value}</code> },
+          { key: 'description', header: 'Description', render: (v: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{v.description}</span> },
+          { key: 'actions', header: '', render: (v: any) => (
+            <ActionButton variant="ghost" icon={X} onClick={() => setVars(prev => prev.filter((p: any) => p.key !== v.key))} style={{ padding: '2px 4px', color: '#ef4444' }} />
+          ) },
+        ]}
+      />
     </div>
   );
 }
@@ -740,7 +754,7 @@ function AnalyticsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '1rem' }}>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         {[
           { label: 'Success Rate', value: `${data.success_rate?.toFixed(1)}%`, color: '#22c55e' },
           { label: 'Total Runs', value: data.total_runs, color: '#6366f1' },
@@ -748,16 +762,10 @@ function AnalyticsTab() {
           { label: 'Time Saved', value: `${data.time_saved_h?.toFixed(0)}h`, color: '#3b82f6' },
           { label: 'Analyst Hours', value: `${data.analyst_hours_saved?.toFixed(0)}h`, color: '#a855f7' },
           { label: 'Auto Coverage', value: `${data.automation_coverage}%`, color: '#22c55e' },
-        ].map(c => (
-          <div key={c.label} className="g-card" style={{ padding: '1.1rem', borderTop: `3px solid ${c.color}` }}>
-            <div style={{ fontSize: '1.7rem', fontWeight: 700, color: c.color }}>{c.value}</div>
-            <div style={{ fontSize: '0.73rem', color: 'var(--text-3)', marginTop: '0.15rem' }}>{c.label}</div>
-          </div>
-        ))}
+        ].map(c => <MetricCard key={c.label} label={c.label} value={c.value} color={c.color} />)}
       </div>
 
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '1rem' }}>Execution Trend (8d)</div>
+      <SectionCard title="Execution Trend (8d)">
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '80px' }}>
           {data.trend?.map((p: any, i: number) => (
             <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
@@ -773,11 +781,10 @@ function AnalyticsTab() {
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '2px', display: 'inline-block' }} /> Success</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '10px', height: '10px', background: '#ef4444', borderRadius: '2px', display: 'inline-block' }} /> Failed</span>
         </div>
-      </div>
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Most Used Playbooks</div>
+        <SectionCard title="Most Used Playbooks">
           {data.most_used?.map((pb: any) => (
             <div key={pb.name} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
               <span style={{ minWidth: '140px', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pb.name}</span>
@@ -788,9 +795,8 @@ function AnalyticsTab() {
               <span style={{ fontSize: '0.72rem', color: '#22c55e', minWidth: '40px', textAlign: 'right' }}>{pb.success_rate}%</span>
             </div>
           ))}
-        </div>
-        <div className="g-card" style={{ padding: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Failed Steps</div>
+        </SectionCard>
+        <SectionCard title="Failed Steps">
           {data.failed_steps?.map((s: any) => (
             <div key={s.step} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.55rem' }}>
               <span style={{ minWidth: '120px', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.step}</span>
@@ -805,7 +811,7 @@ function AnalyticsTab() {
             <div><div style={{ color: '#22c55e', fontWeight: 700 }}>{data.manual_vs_automated?.automated}%</div><div style={{ color: 'var(--text-3)', fontSize: '0.7rem' }}>Automated</div></div>
             <div><div style={{ color: '#eab308', fontWeight: 700 }}>{data.manual_vs_automated?.manual}%</div><div style={{ color: 'var(--text-3)', fontSize: '0.7rem' }}>Manual</div></div>
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -843,9 +849,9 @@ function TemplatesTab({ onInstall }: { onInstall: (t: any) => void }) {
             <span style={{ fontSize: '0.68rem', background: `${APPROVAL_COLORS[t.approval_policy] || '#666'}18`, color: APPROVAL_COLORS[t.approval_policy] || '#666', padding: '1px 5px', borderRadius: '3px' }}>{t.approval_policy?.replace(/_/g, ' ')}</span>
             <code style={{ fontSize: '0.68rem', color: 'var(--text-3)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '3px' }}>{t.trigger}</code>
           </div>
-          <button className="g-btn g-btn-primary" style={{ marginTop: 'auto', fontSize: '0.78rem' }} disabled={installing === t.id} onClick={() => install(t)}>
+          <ActionButton variant="primary" disabled={installing === t.id} onClick={() => install(t)} style={{ marginTop: 'auto', fontSize: '0.78rem', justifyContent: 'center' }}>
             {installing === t.id ? 'Installing…' : '+ Use Template'}
-          </button>
+          </ActionButton>
         </div>
       ))}
     </div>
@@ -872,7 +878,7 @@ function MarketplaceTab({ onInstall }: { onInstall: (t: any) => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <select className="g-select" value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ fontSize: '0.82rem' }}>
+        <select className="g-select" value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ fontSize: '0.82rem', width: 200 }}>
           {cats.map(c => <option key={c} value={c}>{c || 'All Categories'}</option>)}
         </select>
         <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginLeft: 'auto' }}>{filtered.length} integrations available</span>
@@ -883,7 +889,12 @@ function MarketplaceTab({ onInstall }: { onInstall: (t: any) => void }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ fontSize: '1.6rem' }}>{item.icon}</div>
               <div style={{ textAlign: 'right', fontSize: '0.72rem' }}>
-                <div style={{ color: '#eab308' }}>{'★'.repeat(Math.round(item.rating))} <span style={{ color: 'var(--text-3)' }}>{item.rating}</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end', color: '#eab308' }}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star key={i} style={{ width: 10, height: 10, fill: i < Math.round(item.rating) ? '#eab308' : 'none' }} />
+                  ))}
+                  <span style={{ color: 'var(--text-3)', marginLeft: 3 }}>{item.rating}</span>
+                </div>
                 <div style={{ color: 'var(--text-3)', marginTop: '1px' }}>{(item.downloads / 1000).toFixed(1)}k downloads</div>
               </div>
             </div>
@@ -895,9 +906,9 @@ function MarketplaceTab({ onInstall }: { onInstall: (t: any) => void }) {
             <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
               {(item.actions || []).map((a: string) => <span key={a} style={{ fontSize: '0.65rem', background: 'rgba(34,197,94,0.1)', color: '#22c55e', padding: '1px 5px', borderRadius: '3px' }}>{a}</span>)}
             </div>
-            <button className="g-btn g-btn-ghost" style={{ marginTop: 'auto', fontSize: '0.78rem' }} disabled={installing === item.id} onClick={() => install(item)}>
-              {installing === item.id ? 'Installing…' : '↓ Install'}
-            </button>
+            <ActionButton variant="ghost" icon={Download} disabled={installing === item.id} onClick={() => install(item)} style={{ marginTop: 'auto', fontSize: '0.78rem', justifyContent: 'center' }}>
+              {installing === item.id ? 'Installing…' : 'Install'}
+            </ActionButton>
           </div>
         ))}
       </div>
@@ -930,19 +941,18 @@ function AITab({ playbook }: { playbook: any }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.75rem' }}>AI Playbook Assistant</div>
+      <SectionCard title="AI Playbook Assistant">
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
           {AI_MODES.map(m => (
-            <button key={m.id} className={`g-btn ${mode === m.id ? 'g-btn-primary' : 'g-btn-ghost'}`} style={{ fontSize: '0.78rem' }} onClick={() => setMode(m.id)}>{m.label}</button>
+            <ActionButton key={m.id} variant={mode === m.id ? 'primary' : 'ghost'} onClick={() => setMode(m.id)} style={{ fontSize: '0.78rem' }}>{m.label}</ActionButton>
           ))}
         </div>
         <textarea className="g-input" style={{ width: '100%', height: '80px', resize: 'vertical', marginBottom: '0.5rem' }}
           placeholder={AI_MODES.find(m => m.id === mode)?.placeholder}
           value={query} onChange={e => setQuery(e.target.value)} />
         {!playbook && <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginBottom: '0.4rem' }}>Select a playbook from Library for context-aware analysis.</div>}
-        <button className="g-btn g-btn-primary" onClick={run} disabled={loading}>{loading ? 'Analyzing…' : 'Analyze'}</button>
-      </div>
+        <ActionButton variant="primary" icon={Sparkles} onClick={run} disabled={loading}>{loading ? 'Analyzing…' : 'Analyze'}</ActionButton>
+      </SectionCard>
 
       {result && (
         <div className="g-card" style={{ padding: '1.25rem', border: '1px solid rgba(99,102,241,0.2)' }}>
@@ -976,7 +986,9 @@ function AITab({ playbook }: { playbook: any }) {
             <div>
               <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: '0.35rem' }}>Warnings</div>
               {result.warnings.map((w: string, i: number) => (
-                <div key={i} style={{ fontSize: '0.8rem', color: '#eab308', paddingLeft: '0.5rem', borderLeft: '2px solid #eab308', marginBottom: '0.3rem' }}>⚠ {w}</div>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', color: '#eab308', paddingLeft: '0.5rem', borderLeft: '2px solid #eab308', marginBottom: '0.3rem' }}>
+                  <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} /> {w}
+                </div>
               ))}
             </div>
           )}
@@ -1005,14 +1017,14 @@ function ReportsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div className="g-card" style={{ padding: '1.25rem' }}>
+      <SectionCard title="Generate Report">
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <select className="g-select" value={type} onChange={e => setType(e.target.value)}>
+          <select className="g-select" value={type} onChange={e => setType(e.target.value)} style={{ width: 220 }}>
             {TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
           </select>
-          <button className="g-btn g-btn-primary" onClick={gen} disabled={loading}>{loading ? 'Generating…' : 'Generate Report'}</button>
+          <ActionButton variant="primary" onClick={gen} disabled={loading}>{loading ? 'Generating…' : 'Generate Report'}</ActionButton>
         </div>
-      </div>
+      </SectionCard>
 
       {report && (
         <div className="g-card" style={{ padding: '1.5rem' }}>
@@ -1022,12 +1034,9 @@ function ReportsTab() {
           </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', lineHeight: 1.7, marginBottom: '1rem' }}>{report.executive_summary}</div>
           {report.key_metrics && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
               {Object.entries(report.key_metrics).map(([k, v]) => (
-                <div key={k} style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#6366f1' }}>{String(v)}</div>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginTop: '2px' }}>{k.replace(/_/g, ' ')}</div>
-                </div>
+                <MetricCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
               ))}
             </div>
           )}
@@ -1077,37 +1086,30 @@ export default function PlaybooksPage() {
   const tabs = Object.keys(TAB_LABELS) as Tab[];
 
   return (
-    <RootLayout>
-      <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+    <RootLayout title="Playbooks & SOAR"
+      subtitle="Visual workflow automation · Human-in-the-Loop approvals · AI-assisted response"
+      actions={selectedPlaybook ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Playbooks & SOAR</h1>
-            <p style={{ color: 'var(--text-3)', margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
-              Visual workflow automation · Human-in-the-Loop approvals · AI-assisted response
-            </p>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Editing</div>
+            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent)' }}>{selectedPlaybook.name}</div>
           </div>
-          {selectedPlaybook && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', padding: '0.5rem 1rem', borderRadius: '6px' }}>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>Editing</div>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--accent)' }}>{selectedPlaybook.name}</div>
-              </div>
-              <code style={{ fontSize: '0.72rem', color: '#818cf8' }}>v{selectedPlaybook.version}</code>
-              <button className="g-btn g-btn-ghost" style={{ fontSize: '0.75rem', padding: '3px 8px' }} onClick={() => setSelectedPlaybook(null)}>✕</button>
-            </div>
-          )}
+          <code style={{ fontSize: '0.72rem', color: '#818cf8' }}>v{selectedPlaybook.version}</code>
+          <ActionButton variant="ghost" icon={X} onClick={() => setSelectedPlaybook(null)} style={{ padding: '3px 6px' }} />
         </div>
-
-        <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {tabs.map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '0.6rem 1rem',
-              fontSize: '0.82rem', whiteSpace: 'nowrap',
-              color: tab === t ? 'var(--accent)' : 'var(--text-3)',
-              borderBottom: `2px solid ${tab === t ? 'var(--accent)' : 'transparent'}`,
-              marginBottom: '-1px', transition: 'all 0.15s',
-            }}>{TAB_LABELS[t]}</button>
-          ))}
+      ) : undefined}>
+      <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+          <TabBar
+            tabs={tabs.map(t => ({
+              key: t,
+              label: TAB_LABELS[t],
+              icon: TAB_ICONS[t],
+              count: t === 'approvals' ? (dash?.pending_approvals > 0 ? dash.pending_approvals : undefined) : undefined,
+            }))}
+            active={tab}
+            onChange={t => setTab(t as Tab)}
+          />
         </div>
 
         <div style={{ display: loaded.current['overview'] && tab === 'overview' ? 'block' : 'none' }}>

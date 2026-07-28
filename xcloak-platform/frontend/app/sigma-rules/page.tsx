@@ -5,7 +5,8 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { sigmaAPI } from '@/lib/api';
 import { SigmaRule, SigmaRuleStat } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
-import { AlertTriangle, BarChart, BarChart2, Bot, CheckSquare, ChevronRight, Copy, Download, Edit2, Eye, FileCode, Grid, Layers, Plus, Repeat2, Search, Shield, TestTube, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { AlertTriangle, BarChart, BarChart2, Bot, CheckSquare, ChevronRight, Copy, Download, Edit2, Eye, FileCode, Grid, Layers, Plus, Repeat2, Search, Shield, TestTube, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -80,15 +81,6 @@ const emptyForm = {
 
 // ── Shared micro-components ───────────────────────────────────────────────
 
-function KPICard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card p-4 flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>{label}</span>
-      <span className="text-2xl font-bold font-mono" style={{ color: color ?? 'var(--text-1)' }}>{value}</span>
-      {sub && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{sub}</span>}
-    </div>
-  );
-}
 
 function MiniBar({ value, max, color = 'var(--accent)' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
@@ -662,7 +654,7 @@ export default function SigmaRulesPage() {
   return (
     <RootLayout
       title="Sigma Rules"
-      subtitle={`${rules.length} rules · ${rules.filter(r => r.enabled).length} active`}
+      subtitle={`${dash?.total ?? rules.length} rules · ${dash?.enabled ?? rules.filter(r => r.enabled).length} active`}
       onRefresh={() => { loaded.current = {}; loadBase(true); }}
       refreshing={refreshing}
       actions={
@@ -718,12 +710,12 @@ export default function SigmaRulesPage() {
       {tab === 'dashboard' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <KPICard label="Total Rules" value={dash?.total ?? rules.length} />
-            <KPICard label="Enabled" value={dash?.enabled ?? rules.filter(r => r.enabled).length} color="var(--green)" />
-            <KPICard label="Disabled" value={dash?.disabled ?? rules.filter(r => !r.enabled).length} color="var(--text-3)" />
-            <KPICard label="Triggered 24h" value={dash?.triggered_24h ?? '—'} color="var(--orange)" />
-            <KPICard label="MITRE Tactics" value={dash?.mitre_tactics ?? '—'} color="var(--accent)" sub="covered" />
-            <KPICard label="Techniques" value={dash?.mitre_techniques ?? '—'} color="var(--accent)" sub="mapped" />
+            <MetricCard label="Total Rules" value={dash?.total ?? rules.length} />
+            <MetricCard label="Enabled" value={dash?.enabled ?? rules.filter(r => r.enabled).length} color="var(--green)" />
+            <MetricCard label="Disabled" value={dash?.disabled ?? rules.filter(r => !r.enabled).length} color="var(--text-3)" />
+            <MetricCard label="Triggered 24h" value={dash?.triggered_24h ?? '—'} color="var(--orange)" />
+            <MetricCard label="MITRE Tactics" value={dash?.mitre_tactics ?? '—'} color="var(--accent)" sub="covered" />
+            <MetricCard label="Techniques" value={dash?.mitre_techniques ?? '—'} color="var(--accent)" sub="mapped" />
           </div>
 
           {dash && (
@@ -1008,9 +1000,9 @@ export default function SigmaRulesPage() {
           ) : (
             <>
               <div className="grid grid-cols-3 gap-3">
-                <KPICard label="Tactics Covered" value={mitreCov.coverage.length} sub={`of 14 (${Math.round(mitreCov.coverage.length / 14 * 100)}%)`} color="var(--accent)" />
-                <KPICard label="Techniques Mapped" value={mitreCov.coverage.reduce((s, t) => s + t.techniques.length, 0)} color="var(--green)" />
-                <KPICard label="Rules w/o MITRE" value={mitreCov.uncovered} color="var(--text-3)" />
+                <MetricCard label="Tactics Covered" value={mitreCov.coverage.length} sub={`of 14 (${Math.round(mitreCov.coverage.length / 14 * 100)}%)`} color="var(--accent)" />
+                <MetricCard label="Techniques Mapped" value={mitreCov.coverage.reduce((s, t) => s + t.techniques.length, 0)} color="var(--green)" />
+                <MetricCard label="Rules w/o MITRE" value={mitreCov.uncovered} color="var(--text-3)" />
               </div>
 
               {/* Tactic heatmap */}

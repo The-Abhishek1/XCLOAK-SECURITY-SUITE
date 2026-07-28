@@ -2,6 +2,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { aiaAPI } from '@/lib/api';
+import { MetricCard, SectionCard, TabBar, ActionButton, DataTable, EmptyState } from '@/components/design-system';
+import {
+  LayoutDashboard, MessageSquare, MessageSquarePlus, Search, Bot, Lightbulb,
+  Wand2, Sparkles, ListChecks, BookMarked, BarChart3, FileBarChart2, ScrollText,
+  Check, X, ArrowRight, Plus, Save, RefreshCw, Send,
+} from 'lucide-react';
 
 /* ── colour helpers ───────────────────────────────────────────────────────── */
 const PILL_COLORS: Record<string, string> = {
@@ -22,16 +28,6 @@ function pill(label: string, color?: string) {
       borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600,
       textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap',
     }}>{label}</span>
-  );
-}
-
-function StatCard({ label, value, sub, color }: { label: string; value: any; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '18px 22px', minWidth: 140 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: color ?? 'var(--accent)' }}>{value}</div>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 2 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{sub}</div>}
-    </div>
   );
 }
 
@@ -63,18 +59,18 @@ function MarkdownBlock({ content }: { content: string }) {
 
 /* ── constants ────────────────────────────────────────────────────────────── */
 const TABS = [
-  { id: 'dashboard',       label: 'Dashboard' },
-  { id: 'chat',            label: 'AI Chat' },
-  { id: 'investigate',     label: 'Investigate' },
-  { id: 'copilot',         label: 'Copilot' },
-  { id: 'recommendations', label: 'Recommendations' },
-  { id: 'automation',      label: 'Automation' },
-  { id: 'insights',        label: 'Insights' },
-  { id: 'actions',         label: 'Actions' },
-  { id: 'prompts',         label: 'Prompt Library' },
-  { id: 'analytics',       label: 'Analytics' },
-  { id: 'reports',         label: 'Reports' },
-  { id: 'audit',           label: 'Audit Trail' },
+  { key: 'dashboard',       label: 'Dashboard',       icon: LayoutDashboard },
+  { key: 'chat',            label: 'AI Chat',         icon: MessageSquare },
+  { key: 'investigate',     label: 'Investigate',     icon: Search },
+  { key: 'copilot',         label: 'Copilot',         icon: Bot },
+  { key: 'recommendations', label: 'Recommendations', icon: Lightbulb },
+  { key: 'automation',      label: 'Automation',      icon: Wand2 },
+  { key: 'insights',        label: 'Insights',        icon: Sparkles },
+  { key: 'actions',         label: 'Actions',         icon: ListChecks },
+  { key: 'prompts',         label: 'Prompt Library',  icon: BookMarked },
+  { key: 'analytics',       label: 'Analytics',       icon: BarChart3 },
+  { key: 'reports',         label: 'Reports',         icon: FileBarChart2 },
+  { key: 'audit',           label: 'Audit Trail',     icon: ScrollText },
 ];
 
 const MODE_OPTIONS = [
@@ -246,25 +242,16 @@ export default function AIAssistantEnterprise() {
 
   return (
     <RootLayout title="AI Security Assistant" subtitle="Agentic AI copilot — investigation · detection · automation · executive intelligence"
+      onRefresh={loadAll}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="g-btn-ghost" onClick={() => startNewChat('chat')}>+ New Chat</button>
-          <button className="g-btn-ghost" onClick={() => startNewChat('investigate')}>+ Investigate</button>
-          <button className="g-btn" onClick={loadAll}>Refresh</button>
+          <ActionButton variant="ghost" icon={MessageSquarePlus} onClick={() => startNewChat('chat')}>New Chat</ActionButton>
+          <ActionButton variant="ghost" icon={Search} onClick={() => startNewChat('investigate')}>Investigate</ActionButton>
         </div>
       }>
-      <div style={{ padding: '24px 32px', minHeight: '100vh', background: 'var(--bg-1)' }}>
-        {/* tab bar */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              background: 'none', border: 'none', padding: '10px 16px', cursor: 'pointer',
-              fontSize: 13, fontWeight: tab === t.id ? 600 : 400,
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: -1, whiteSpace: 'nowrap',
-            }}>{t.label}</button>
-          ))}
+      <div className="space-y-4">
+        <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, overflowX: 'auto' }}>
+          <TabBar tabs={TABS} active={tab} onChange={setTab} />
         </div>
 
         {loading ? (
@@ -275,51 +262,46 @@ export default function AIAssistantEnterprise() {
             {tab === 'dashboard' && (
               <div>
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-                  <StatCard label="Total Sessions"       value={d?.total_sessions ?? 0} />
-                  <StatCard label="Messages Sent"        value={d?.total_messages ?? 0} />
-                  <StatCard label="Saved Prompts"        value={d?.saved_prompts ?? 0} />
-                  <StatCard label="Open Recommendations" value={d?.open_recommendations ?? 0} color="#ea580c" />
-                  <StatCard label="Pending Actions"      value={d?.pending_actions ?? 0}       color="#d97706" />
-                  <StatCard label="Connected Sources"    value={d?.connected_sources ?? 0}     color="#16a34a" />
-                  <StatCard label="Health Score"         value={`${d?.health_score ?? 0}%`}    color="#16a34a" />
-                  <StatCard label="Hours Saved"          value={d?.stats?.analyst_hours_saved ?? 0} sub="this month" color="#7c3aed" />
+                  <MetricCard label="Total Sessions"       value={d?.total_sessions ?? 0} color="var(--accent)" />
+                  <MetricCard label="Messages Sent"        value={d?.total_messages ?? 0} color="var(--accent)" />
+                  <MetricCard label="Saved Prompts"        value={d?.saved_prompts ?? 0} color="var(--accent)" />
+                  <MetricCard label="Open Recommendations" value={d?.open_recommendations ?? 0} color="#ea580c" />
+                  <MetricCard label="Pending Actions"      value={d?.pending_actions ?? 0}       color="#d97706" />
+                  <MetricCard label="Connected Sources"    value={d?.connected_sources ?? 0}     color="#16a34a" />
+                  <MetricCard label="Health Score"         value={`${d?.health_score ?? 0}%`}    color="#16a34a" />
+                  <MetricCard label="Hours Saved"          value={d?.stats?.analyst_hours_saved ?? 0} sub="this month" color="#7c3aed" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Recent Sessions</div>
-                    <table className="g-table" style={{ width: '100%' }}>
-                      <thead><tr><th>Title</th><th>Mode</th><th>Msgs</th><th>Status</th></tr></thead>
-                      <tbody>
-                        {(d?.recent_sessions ?? []).map((s: any, i: number) => (
-                          <tr key={i} style={{ cursor: 'pointer' }} onClick={() => loadSession(s)}>
-                            <td style={{ color: 'var(--accent)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</td>
-                            <td>{pill(s.mode)}</td>
-                            <td>{s.message_count}</td>
-                            <td>{pill(s.status)}</td>
-                          </tr>
-                        ))}
-                        {!d?.recent_sessions?.length && <tr><td colSpan={4} style={{ color: 'var(--text-3)', textAlign: 'center', padding: 20 }}>No sessions yet — start a new chat</td></tr>}
-                      </tbody>
-                    </table>
-                  </div>
+                  <SectionCard title="Recent Sessions" padded={false}>
+                    <DataTable<any>
+                      rows={d?.recent_sessions ?? []}
+                      rowKey={(s: any, i: number) => s.session_id ?? i}
+                      onRowClick={s => loadSession(s)}
+                      emptyState={<EmptyState title="No sessions yet" message="Start a new chat" />}
+                      columns={[
+                        { key: 'title', header: 'Title', render: (s: any) => <span style={{ color: 'var(--accent)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{s.title}</span> },
+                        { key: 'mode', header: 'Mode', render: (s: any) => pill(s.mode) },
+                        { key: 'message_count', header: 'Msgs', render: (s: any) => <span>{s.message_count}</span> },
+                        { key: 'status', header: 'Status', render: (s: any) => pill(s.status) },
+                      ]}
+                    />
+                  </SectionCard>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--text-1)' }}>Quick Start</div>
+                    <SectionCard title="Quick Start">
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {MODE_OPTIONS.map(m => (
-                          <button key={m.id} className="g-btn-ghost" onClick={() => startNewChat(m.id)}
-                            style={{ textAlign: 'left', padding: '10px 12px', height: 'auto' }}>
+                          <ActionButton key={m.id} variant="ghost" onClick={() => startNewChat(m.id)}
+                            style={{ textAlign: 'left', padding: '10px 12px', height: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                             <div style={{ fontWeight: 600, fontSize: 12 }}>{m.label}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{m.desc}</div>
-                          </button>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, fontWeight: 400 }}>{m.desc}</div>
+                          </ActionButton>
                         ))}
                       </div>
-                    </div>
+                    </SectionCard>
 
-                    <div className="g-card">
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--text-1)' }}>Automation Stats</div>
+                    <SectionCard title="Automation Stats">
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {[
                           ['Automation Rate', `${d?.stats?.automation_rate ?? 34}%`],
@@ -327,28 +309,27 @@ export default function AIAssistantEnterprise() {
                           ['Actions Run', d?.stats?.actions_executed ?? 89],
                           ['Success Rate', `${d?.stats?.success_rate ?? 97}%`],
                         ].map(([l, v]) => (
-                          <div key={String(l)} style={{ background: 'var(--bg-2)', borderRadius: 6, padding: '10px 14px' }}>
+                          <div key={String(l)} style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                             <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>{v}</div>
                             <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{l}</div>
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </SectionCard>
                   </div>
                 </div>
 
-                <div className="g-card">
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Top Prompts</div>
+                <SectionCard title="Top Prompts">
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {(d?.top_prompts ?? []).map((p: any, i: number) => (
-                      <button key={i} className="g-btn-ghost" onClick={() => { setChatInput(p.title); setTab('chat'); }}
+                      <ActionButton key={i} variant="ghost" onClick={() => { setChatInput(p.title); setTab('chat'); }}
                         style={{ fontSize: 12, padding: '6px 12px' }}>
                         {p.title} <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>{p.usage_count}×</span>
-                      </button>
+                      </ActionButton>
                     ))}
                     {!d?.top_prompts?.length && <span style={{ color: 'var(--text-3)', fontSize: 13 }}>No prompts saved yet — visit Prompt Library to add some</span>}
                   </div>
-                </div>
+                </SectionCard>
               </div>
             )}
 
@@ -362,9 +343,9 @@ export default function AIAssistantEnterprise() {
                     {MODE_OPTIONS.map(m => (
                       <button key={m.id} onClick={() => setChatMode(m.id)} style={{
                         display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
-                        background: chatMode === m.id ? 'var(--accent)22' : 'none',
-                        border: chatMode === m.id ? '1px solid var(--accent)55' : '1px solid transparent',
-                        borderRadius: 6, cursor: 'pointer', marginBottom: 4,
+                        background: chatMode === m.id ? 'var(--accent-glow)' : 'none',
+                        border: chatMode === m.id ? '1px solid var(--accent-border)' : '1px solid transparent',
+                        borderRadius: 'var(--radius-md)', cursor: 'pointer', marginBottom: 4,
                         color: 'var(--text-1)', fontSize: 12, fontWeight: 600,
                       }}>{m.label}</button>
                     ))}
@@ -373,14 +354,14 @@ export default function AIAssistantEnterprise() {
                   <div className="g-card" style={{ padding: 12, overflow: 'auto', flex: 1, minHeight: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>HISTORY</div>
-                      <button className="g-btn-ghost" onClick={() => { setChatSession(''); setMessages([]); }}
-                        style={{ fontSize: 11, padding: '2px 8px' }}>New</button>
+                      <ActionButton variant="ghost" icon={Plus} onClick={() => { setChatSession(''); setMessages([]); }}
+                        style={{ fontSize: 11, padding: '2px 8px' }}>New</ActionButton>
                     </div>
                     {sessions.slice(0, 20).map((s: any, i: number) => (
                       <div key={i} onClick={() => loadSession(s)} style={{
-                        padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 4,
-                        background: chatSession === s.session_id ? 'var(--accent)22' : 'transparent',
-                        border: `1px solid ${chatSession === s.session_id ? 'var(--accent)55' : 'transparent'}`,
+                        padding: '8px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', marginBottom: 4,
+                        background: chatSession === s.session_id ? 'var(--accent-glow)' : 'transparent',
+                        border: `1px solid ${chatSession === s.session_id ? 'var(--accent-border)' : 'transparent'}`,
                       }}>
                         <div style={{ fontSize: 12, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.mode} · {s.message_count} msgs</div>
@@ -402,8 +383,8 @@ export default function AIAssistantEnterprise() {
                       </span>
                     </div>
                     {chatSession && (
-                      <button className="g-btn-ghost" style={{ fontSize: 11 }}
-                        onClick={() => { setChatSession(''); setMessages([]); }}>Clear</button>
+                      <ActionButton variant="ghost" icon={X} style={{ fontSize: 11 }}
+                        onClick={() => { setChatSession(''); setMessages([]); }}>Clear</ActionButton>
                     )}
                   </div>
 
@@ -411,7 +392,7 @@ export default function AIAssistantEnterprise() {
                   <div style={{ flex: 1, overflow: 'auto', padding: 18 }}>
                     {!messages.length && (
                       <div style={{ color: 'var(--text-3)', textAlign: 'center', marginTop: 60 }}>
-                        <div style={{ fontSize: 36, marginBottom: 12 }}>◉</div>
+                        <Bot className="h-9 w-9 mx-auto mb-3" style={{ color: 'var(--text-3)' }} />
                         <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>
                           {MODE_OPTIONS.find(m => m.id === chatMode)?.label}
                         </div>
@@ -420,8 +401,8 @@ export default function AIAssistantEnterprise() {
                         </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                           {(TEMPLATE_PROMPTS[chatMode] ?? []).map((p, i) => (
-                            <button key={i} className="g-btn-ghost" onClick={() => sendMessage(p)}
-                              style={{ fontSize: 12 }}>{p}</button>
+                            <ActionButton key={i} variant="ghost" onClick={() => sendMessage(p)}
+                              style={{ fontSize: 12 }}>{p}</ActionButton>
                           ))}
                         </div>
                       </div>
@@ -466,8 +447,8 @@ export default function AIAssistantEnterprise() {
                   {/* template shortcuts */}
                   <div style={{ padding: '8px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, overflowX: 'auto' }}>
                     {(TEMPLATE_PROMPTS[chatMode] ?? []).map((p, i) => (
-                      <button key={i} className="g-btn-ghost" onClick={() => sendMessage(p)}
-                        style={{ fontSize: 11, padding: '4px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{p}</button>
+                      <ActionButton key={i} variant="ghost" onClick={() => sendMessage(p)}
+                        style={{ fontSize: 11, padding: '4px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>{p}</ActionButton>
                     ))}
                   </div>
 
@@ -477,8 +458,8 @@ export default function AIAssistantEnterprise() {
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                       placeholder={`Ask the ${MODE_OPTIONS.find(m => m.id === chatMode)?.label ?? 'AI'}…`}
                       style={{ flex: 1, padding: '10px 14px' }} disabled={sending} />
-                    <button className="g-btn" onClick={() => sendMessage()} disabled={sending || !chatInput.trim()}
-                      style={{ padding: '10px 20px', flexShrink: 0 }}>Send</button>
+                    <ActionButton variant="primary" icon={Send} onClick={() => sendMessage()} disabled={sending || !chatInput.trim()}
+                      style={{ padding: '10px 20px', flexShrink: 0 }}>Send</ActionButton>
                   </div>
                 </div>
               </div>
@@ -488,8 +469,7 @@ export default function AIAssistantEnterprise() {
             {tab === 'investigate' && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Investigation Assistant</div>
+                  <SectionCard title="Investigation Assistant">
                     <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 14 }}>
                       Deep-dive analysis of incidents, alerts, and threat activity. The AI correlates data across SIEM, EDR, Firewall, and Threat Intel.
                     </p>
@@ -501,15 +481,14 @@ export default function AIAssistantEnterprise() {
                         'What endpoints communicated with 185.220.101.44?',
                         'Investigate INC-2025-0892 root cause',
                       ].map((q, i) => (
-                        <button key={i} className="g-btn-ghost"
+                        <ActionButton key={i} variant="ghost"
                           onClick={() => { setChatMode('investigate'); setChatInput(q); setTab('chat'); }}
-                          style={{ textAlign: 'left', fontSize: 12 }}>{q}</button>
+                          style={{ textAlign: 'left', fontSize: 12 }}>{q}</ActionButton>
                       ))}
                     </div>
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Active Investigations</div>
+                  <SectionCard title="Active Investigations">
                     {[
                       { id: 'INC-2025-0892', title: 'Ransomware Attempt — Finance Workstation', status: 'active', severity: 'critical', progress: 78 },
                       { id: 'INC-2025-0891', title: 'Lateral Movement Detected — VLAN-CORP',    status: 'active', severity: 'high',     progress: 45 },
@@ -526,16 +505,15 @@ export default function AIAssistantEnterprise() {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--text-3)' }}>
                           <span>{inv.progress}% complete</span>
-                          <button className="g-btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }}
-                            onClick={() => { setChatMode('investigate'); setChatInput(`Investigate ${inv.id}: ${inv.title}`); setTab('chat'); }}>Continue</button>
+                          <ActionButton variant="ghost" icon={ArrowRight} style={{ fontSize: 11, padding: '2px 8px' }}
+                            onClick={() => { setChatMode('investigate'); setChatInput(`Investigate ${inv.id}: ${inv.title}`); setTab('chat'); }}>Continue</ActionButton>
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </SectionCard>
                 </div>
 
-                <div className="g-card">
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Investigation Templates</div>
+                <SectionCard title="Investigation Templates">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                     {[
                       { title: 'Malware Analysis',       prompt: 'Perform full malware analysis for alert ID: ' },
@@ -545,15 +523,15 @@ export default function AIAssistantEnterprise() {
                       { title: 'C2 Beacon Analysis',     prompt: 'Analyze potential C2 beaconing to IP: ' },
                       { title: 'Vulnerability Exploit',  prompt: 'Investigate exploitation of CVE-' },
                     ].map((t, i) => (
-                      <button key={i} className="g-btn-ghost"
+                      <ActionButton key={i} variant="ghost"
                         onClick={() => { setChatMode('investigate'); setChatInput(t.prompt); setTab('chat'); }}
-                        style={{ textAlign: 'left', padding: '12px 14px', height: 'auto' }}>
+                        style={{ textAlign: 'left', padding: '12px 14px', height: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{t.title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{t.prompt}</div>
-                      </button>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, fontWeight: 400 }}>{t.prompt}</div>
+                      </ActionButton>
                     ))}
                   </div>
-                </div>
+                </SectionCard>
               </div>
             )}
 
@@ -561,25 +539,23 @@ export default function AIAssistantEnterprise() {
             {tab === 'copilot' && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Security Copilot</div>
+                  <SectionCard title="Security Copilot">
                     <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 14 }}>
                       Explain security concepts, alerts, logs, detection rules, MITRE techniques, and playbooks in plain English.
                     </p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       {COPILOT_TEMPLATES.map((t, i) => (
-                        <button key={i} className="g-btn-ghost"
+                        <ActionButton key={i} variant="ghost"
                           onClick={() => { setChatMode('copilot'); setChatInput(t.prompt); setTab('chat'); }}
-                          style={{ textAlign: 'left', padding: '10px 12px', height: 'auto' }}>
+                          style={{ textAlign: 'left', padding: '10px 12px', height: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                           <div style={{ fontWeight: 600, fontSize: 12 }}>{t.label}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{t.prompt}</div>
-                        </button>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, fontWeight: 400 }}>{t.prompt}</div>
+                        </ActionButton>
                       ))}
                     </div>
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Knowledge Base Topics</div>
+                  <SectionCard title="Knowledge Base Topics">
                     {[
                       { topic: 'MITRE ATT&CK Framework', desc: '14 tactics, 200+ techniques explained' },
                       { topic: 'Detection Engineering',   desc: 'Sigma, YARA, Snort, KQL, SPL syntax' },
@@ -596,24 +572,23 @@ export default function AIAssistantEnterprise() {
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>{k.topic}</div>
                           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.desc}</div>
                         </div>
-                        <span style={{ color: 'var(--text-3)', fontSize: 14, alignSelf: 'center' }}>›</span>
+                        <ArrowRight className="h-3.5 w-3.5" style={{ color: 'var(--text-3)', alignSelf: 'center' }} />
                       </div>
                     ))}
-                  </div>
+                  </SectionCard>
                 </div>
 
-                <div className="g-card">
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: 'var(--text-1)' }}>Quick Explain</div>
+                <SectionCard title="Quick Explain">
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {['T1566 Phishing', 'T1059 PowerShell', 'T1486 Ransomware', 'T1021 Lateral Movement',
                       'Cobalt Strike', 'LSASS Dumping', 'Kerberoasting', 'DCSync', 'Pass-the-Hash',
                       'AMSI Bypass', 'LOLBins', 'Sigma Rules', 'YARA Hunting', 'EPSS Score'].map((t, i) => (
-                      <button key={i} className="g-btn-ghost"
+                      <ActionButton key={i} variant="ghost"
                         onClick={() => { setChatMode('copilot'); sendMessage(`Explain ${t}`); setTab('chat'); }}
-                        style={{ fontSize: 12, padding: '6px 12px' }}>{t}</button>
+                        style={{ fontSize: 12, padding: '6px 12px' }}>{t}</ActionButton>
                     ))}
                   </div>
-                </div>
+                </SectionCard>
               </div>
             )}
 
@@ -623,56 +598,47 @@ export default function AIAssistantEnterprise() {
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
                   {(['critical', 'high', 'medium', 'low'] as const).map(p => {
                     const cnt = (data.recommendations ?? []).filter((r: any) => r.priority === p).length;
-                    return <StatCard key={p} label={p.charAt(0).toUpperCase() + p.slice(1)} value={cnt} color={PILL_COLORS[p]} />;
+                    return <MetricCard key={p} label={p.charAt(0).toUpperCase() + p.slice(1)} value={cnt} color={PILL_COLORS[p]} />;
                   })}
-                  <StatCard label="Total" value={(data.recommendations ?? []).length} />
+                  <MetricCard label="Total" value={(data.recommendations ?? []).length} color="var(--accent)" />
                 </div>
 
-                <div className="g-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-1)' }}>
-                      AI Recommendations ({(data.recommendations ?? []).length})
-                    </div>
-                    <button className="g-btn-ghost"
+                <SectionCard
+                  title={`AI Recommendations (${(data.recommendations ?? []).length})`}
+                  padded={false}
+                  actions={
+                    <ActionButton variant="ghost" icon={Wand2}
                       onClick={() => { setChatMode('chat'); setChatInput('Generate new security recommendations based on current threat landscape'); setTab('chat'); }}>
                       Generate More
-                    </button>
-                  </div>
-                  {!(data.recommendations ?? []).length ? (
-                    <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 40 }}>
-                      No recommendations yet — start a chat session to generate AI-powered recommendations
-                    </div>
-                  ) : (
-                    <table className="g-table" style={{ width: '100%' }}>
-                      <thead><tr><th>Title</th><th>Category</th><th>Priority</th><th>Impact</th><th>Effort</th><th>Status</th><th>Actions</th></tr></thead>
-                      <tbody>
-                        {(data.recommendations ?? []).map((r: any, i: number) => (
-                          <tr key={i}>
-                            <td>
-                              <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>{r.title}</div>
-                              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{(r.description ?? '').slice(0, 80)}{r.description?.length > 80 ? '…' : ''}</div>
-                            </td>
-                            <td>{pill(r.category)}</td>
-                            <td>{pill(r.priority)}</td>
-                            <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.impact}</td>
-                            <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.effort}</td>
-                            <td>{pill(r.status)}</td>
-                            <td>
-                              {r.status === 'open' && (
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                  <button className="g-btn" style={{ fontSize: 11, padding: '4px 10px' }}
-                                    onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'accepted' }).then(loadAll)}>Accept</button>
-                                  <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}
-                                    onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'dismissed' }).then(loadAll)}>Dismiss</button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                    </ActionButton>
+                  }>
+                  <DataTable<any>
+                    rows={data.recommendations ?? []}
+                    rowKey={(r: any, i: number) => r.rec_id ?? i}
+                    emptyState={<EmptyState title="No recommendations yet" message="Start a chat session to generate AI-powered recommendations" />}
+                    columns={[
+                      { key: 'title', header: 'Title', render: (r: any) => (
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>{r.title}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{(r.description ?? '').slice(0, 80)}{r.description?.length > 80 ? '…' : ''}</div>
+                        </div>
+                      ) },
+                      { key: 'category', header: 'Category', render: (r: any) => pill(r.category) },
+                      { key: 'priority', header: 'Priority', render: (r: any) => pill(r.priority) },
+                      { key: 'impact', header: 'Impact', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.impact}</span> },
+                      { key: 'effort', header: 'Effort', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.effort}</span> },
+                      { key: 'status', header: 'Status', render: (r: any) => pill(r.status) },
+                      { key: 'actions', header: 'Actions', render: (r: any) => r.status === 'open' ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <ActionButton variant="primary" icon={Check} style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'accepted' }).then(loadAll)}>Accept</ActionButton>
+                          <ActionButton variant="ghost" icon={X} style={{ fontSize: 11, padding: '4px 10px' }}
+                            onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'dismissed' }).then(loadAll)}>Dismiss</ActionButton>
+                        </div>
+                      ) : null },
+                    ]}
+                  />
+                </SectionCard>
               </div>
             )}
 
@@ -680,28 +646,26 @@ export default function AIAssistantEnterprise() {
             {tab === 'automation' && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Detection Engineering</div>
+                  <SectionCard title="Detection Engineering">
                     <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 14 }}>
                       Generate Sigma rules, YARA signatures, KQL/SPL queries, and Python scripts from natural language.
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {AUTOMATION_TEMPLATES.map((t, i) => (
-                        <button key={i} className="g-btn-ghost"
+                        <ActionButton key={i} variant="ghost"
                           onClick={() => { setChatMode('automation'); setChatInput(t.prompt); setTab('chat'); }}
-                          style={{ textAlign: 'left', padding: '10px 14px', height: 'auto' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          style={{ textAlign: 'left', padding: '10px 14px', height: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                             <span style={{ fontWeight: 600, fontSize: 13 }}>{t.label}</span>
                             {pill('automation')}
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{t.prompt}</div>
-                        </button>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, fontWeight: 400 }}>{t.prompt}</div>
+                        </ActionButton>
                       ))}
                     </div>
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>SOAR & Playbook Builder</div>
+                  <SectionCard title="SOAR & Playbook Builder">
                     {[
                       { title: 'Ransomware Response',  prompt: 'Generate complete SOAR playbook for ransomware containment and recovery' },
                       { title: 'Phishing Triage',      prompt: 'Generate automated phishing investigation and response playbook' },
@@ -716,14 +680,13 @@ export default function AIAssistantEnterprise() {
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>{t.title}</div>
                           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{t.prompt.slice(0, 60)}…</div>
                         </div>
-                        <span style={{ color: 'var(--text-3)', fontSize: 14, alignSelf: 'center' }}>›</span>
+                        <ArrowRight className="h-3.5 w-3.5" style={{ color: 'var(--text-3)', alignSelf: 'center' }} />
                       </div>
                     ))}
-                  </div>
+                  </SectionCard>
                 </div>
 
-                <div className="g-card">
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Generated Assets (Demo)</div>
+                <SectionCard title="Generated Assets (Demo)">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                     {[
                       { label: 'Sigma Rules',    value: 14,  color: '#dc2626' },
@@ -735,13 +698,13 @@ export default function AIAssistantEnterprise() {
                       { label: 'Reports',        value: 23,  color: '#6b7280' },
                       { label: 'Hours Saved',    value: 127, color: '#d97706' },
                     ].map((item, i) => (
-                      <div key={i} style={{ background: 'var(--bg-2)', borderRadius: 8, padding: '14px 16px', textAlign: 'center' }}>
+                      <div key={i} style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', textAlign: 'center' }}>
                         <div style={{ fontSize: 28, fontWeight: 700, color: item.color }}>{item.value}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{item.label}</div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </SectionCard>
               </div>
             )}
 
@@ -749,16 +712,16 @@ export default function AIAssistantEnterprise() {
             {tab === 'insights' && (
               <div>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-                  <StatCard label="Detection Gaps"      value={2}    color="#dc2626" />
-                  <StatCard label="Anomalies Detected"  value={5}    color="#ea580c" />
-                  <StatCard label="Attack Patterns"     value={3}    color="#7c3aed" />
-                  <StatCard label="Coverage Score"      value="87%"  color="#16a34a" />
-                  <StatCard label="MITRE Coverage"      value="74%"  color="#0891b2" />
+                  <MetricCard label="Detection Gaps"      value={2}    color="#dc2626" />
+                  <MetricCard label="Anomalies Detected"  value={5}    color="#ea580c" />
+                  <MetricCard label="Attack Patterns"     value={3}    color="#7c3aed" />
+                  <MetricCard label="Coverage Score"      value="87%"  color="#16a34a" />
+                  <MetricCard label="MITRE Coverage"      value="74%"  color="#0891b2" />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
                   {INSIGHTS_DATA.map((insight, i) => (
-                    <div key={i} className="g-card">
+                    <SectionCard key={i}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                         <div style={{ width: 6, height: 6, borderRadius: '50%', background: PILL_COLORS[insight.severity], marginTop: 6, flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
@@ -767,24 +730,23 @@ export default function AIAssistantEnterprise() {
                             {pill(insight.severity)}
                           </div>
                           <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 10px' }}>{insight.description}</p>
-                          <div style={{ background: 'var(--bg-2)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: 'var(--text-2)' }}>
+                          <div style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 12, color: 'var(--text-2)' }}>
                             <strong>Recommendation:</strong> {insight.recommendation}
                           </div>
                         </div>
-                        <button className="g-btn-ghost" style={{ fontSize: 11, flexShrink: 0 }}
+                        <ActionButton variant="ghost" icon={Search} style={{ fontSize: 11, flexShrink: 0 }}
                           onClick={() => { setChatMode('investigate'); setChatInput(`Investigate: ${insight.title}`); setTab('chat'); }}>
                           Investigate
-                        </button>
+                        </ActionButton>
                       </div>
-                    </div>
+                    </SectionCard>
                   ))}
                 </div>
 
-                <div className="g-card">
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Connected Data Sources</div>
+                <SectionCard title="Connected Data Sources">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                     {CONNECTED_SOURCES.map((src, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-2)', borderRadius: 6, padding: '10px 12px' }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-2)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
                           background: src.status === 'connected' ? '#16a34a' : src.status === 'partial' ? '#d97706' : '#6b7280' }} />
                         <div style={{ flex: 1 }}>
@@ -795,7 +757,7 @@ export default function AIAssistantEnterprise() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </SectionCard>
               </div>
             )}
 
@@ -803,15 +765,14 @@ export default function AIAssistantEnterprise() {
             {tab === 'actions' && (
               <div>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-                  <StatCard label="Pending Approval" value={(data.actions ?? []).filter((a: any) => a.status === 'pending_approval').length} color="#d97706" />
-                  <StatCard label="Approved"         value={(data.actions ?? []).filter((a: any) => a.status === 'approved').length}          color="#16a34a" />
-                  <StatCard label="Rejected"         value={(data.actions ?? []).filter((a: any) => a.status === 'rejected').length}           color="#dc2626" />
-                  <StatCard label="Total Actions"    value={(data.actions ?? []).length} />
+                  <MetricCard label="Pending Approval" value={(data.actions ?? []).filter((a: any) => a.status === 'pending_approval').length} color="#d97706" />
+                  <MetricCard label="Approved"         value={(data.actions ?? []).filter((a: any) => a.status === 'approved').length}          color="#16a34a" />
+                  <MetricCard label="Rejected"         value={(data.actions ?? []).filter((a: any) => a.status === 'rejected').length}           color="#dc2626" />
+                  <MetricCard label="Total Actions"    value={(data.actions ?? []).length} color="var(--accent)" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Request AI Action</div>
+                  <SectionCard title="Request AI Action">
                     <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 14 }}>
                       AI-driven actions require human approval before execution — full audit trail maintained.
                     </p>
@@ -825,46 +786,37 @@ export default function AIAssistantEnterprise() {
                       { type: 'generate_report',       label: 'Generate Report' },
                       { type: 'notify_team',           label: 'Notify SOC Team' },
                     ].map((act, i) => (
-                      <button key={i} className="g-btn-ghost" style={{ width: '100%', textAlign: 'left', marginBottom: 6, fontSize: 12 }}
+                      <ActionButton key={i} variant="ghost" icon={Plus} style={{ width: '100%', textAlign: 'left', marginBottom: 6, fontSize: 12 }}
                         onClick={() => {
                           const desc = window.prompt(`Describe the ${act.label} action:`);
                           if (desc) aiaAPI.createAction({ action_type: act.type, description: desc }).then(loadAll);
                         }}>
-                        + {act.label}
-                      </button>
+                        {act.label}
+                      </ActionButton>
                     ))}
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Action Queue</div>
-                    {!(data.actions ?? []).length ? (
-                      <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 40 }}>No actions yet</div>
-                    ) : (
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Action</th><th>Description</th><th>Requested By</th><th>Status</th><th>Approve</th></tr></thead>
-                        <tbody>
-                          {(data.actions ?? []).map((a: any, i: number) => (
-                            <tr key={i}>
-                              <td>{pill((a.action_type ?? '').replace(/_/g, ' '))}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.description}</td>
-                              <td style={{ fontSize: 12 }}>{a.requested_by}</td>
-                              <td>{pill(a.status)}</td>
-                              <td>
-                                {a.status === 'pending_approval' && (
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <button className="g-btn" style={{ fontSize: 11, padding: '4px 10px' }}
-                                      onClick={() => aiaAPI.approveAction(a.action_id, { approve: true }).then(loadAll)}>Approve</button>
-                                    <button className="g-btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}
-                                      onClick={() => aiaAPI.approveAction(a.action_id, { approve: false }).then(loadAll)}>Reject</button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                  <SectionCard title="Action Queue" padded={false}>
+                    <DataTable<any>
+                      rows={data.actions ?? []}
+                      rowKey={(a: any, i: number) => a.action_id ?? i}
+                      emptyState={<EmptyState title="No actions yet" />}
+                      columns={[
+                        { key: 'action_type', header: 'Action', render: (a: any) => pill((a.action_type ?? '').replace(/_/g, ' ')) },
+                        { key: 'description', header: 'Description', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.description}</span> },
+                        { key: 'requested_by', header: 'Requested By', render: (a: any) => <span style={{ fontSize: 12 }}>{a.requested_by}</span> },
+                        { key: 'status', header: 'Status', render: (a: any) => pill(a.status) },
+                        { key: 'approve', header: 'Approve', render: (a: any) => a.status === 'pending_approval' ? (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <ActionButton variant="primary" icon={Check} style={{ fontSize: 11, padding: '4px 10px' }}
+                              onClick={() => aiaAPI.approveAction(a.action_id, { approve: true }).then(loadAll)}>Approve</ActionButton>
+                            <ActionButton variant="ghost" icon={X} style={{ fontSize: 11, padding: '4px 10px' }}
+                              onClick={() => aiaAPI.approveAction(a.action_id, { approve: false }).then(loadAll)}>Reject</ActionButton>
+                          </div>
+                        ) : null },
+                      ]}
+                    />
+                  </SectionCard>
                 </div>
               </div>
             )}
@@ -873,8 +825,7 @@ export default function AIAssistantEnterprise() {
             {tab === 'prompts' && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Save Prompt</div>
+                  <SectionCard title="Save Prompt">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <input className="g-input" placeholder="Prompt title" value={promptTitle} onChange={e => setPromptTitle(e.target.value)} />
                       <select className="g-input" value={promptCat} onChange={e => setPromptCat(e.target.value)}>
@@ -887,53 +838,44 @@ export default function AIAssistantEnterprise() {
                         <option value="executive">Executive</option>
                       </select>
                       <textarea className="g-input" rows={6} placeholder="Prompt content…" value={promptContent} onChange={e => setPromptContent(e.target.value)} style={{ resize: 'vertical' }} />
-                      <button className="g-btn" disabled={savingPrompt || !promptTitle || !promptContent} onClick={savePrompt}>
+                      <ActionButton variant="primary" icon={Save} disabled={savingPrompt || !promptTitle || !promptContent} onClick={savePrompt}>
                         {savingPrompt ? 'Saving…' : 'Save Prompt'}
-                      </button>
+                      </ActionButton>
                     </div>
 
                     <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 8 }}>Quick Templates</div>
                       {Object.entries(TEMPLATE_PROMPTS).flatMap(([mode, ps]) => ps.slice(0, 1).map((p, i) => (
-                        <button key={`${mode}-${i}`} className="g-btn-ghost"
+                        <ActionButton key={`${mode}-${i}`} variant="ghost"
                           onClick={() => { setChatInput(p); setTab('chat'); }}
                           style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 12, marginBottom: 4, padding: '6px 10px' }}>
                           {p}
-                        </button>
+                        </ActionButton>
                       )))}
                     </div>
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>
-                      Prompt Library ({(data.prompts ?? []).length})
-                    </div>
-                    {!(data.prompts ?? []).length ? (
-                      <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 40 }}>
-                        No saved prompts — save your frequently used prompts here for quick access
-                      </div>
-                    ) : (
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Title</th><th>Category</th><th>Used</th><th>Actions</th></tr></thead>
-                        <tbody>
-                          {(data.prompts ?? []).map((p: any, i: number) => (
-                            <tr key={i}>
-                              <td>
-                                <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{p.title}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{(p.content ?? '').slice(0, 80)}{p.content?.length > 80 ? '…' : ''}</div>
-                              </td>
-                              <td>{pill(p.category)}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.usage_count}×</td>
-                              <td>
-                                <button className="g-btn-ghost" style={{ fontSize: 11 }}
-                                  onClick={() => { setChatInput(p.content); setTab('chat'); }}>Use</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                  <SectionCard title={`Prompt Library (${(data.prompts ?? []).length})`} padded={false}>
+                    <DataTable<any>
+                      rows={data.prompts ?? []}
+                      rowKey={(p: any, i: number) => p.prompt_id ?? i}
+                      emptyState={<EmptyState title="No saved prompts" message="Save your frequently used prompts here for quick access" />}
+                      columns={[
+                        { key: 'title', header: 'Title', render: (p: any) => (
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{p.title}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{(p.content ?? '').slice(0, 80)}{p.content?.length > 80 ? '…' : ''}</div>
+                          </div>
+                        ) },
+                        { key: 'category', header: 'Category', render: (p: any) => pill(p.category) },
+                        { key: 'usage_count', header: 'Used', render: (p: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.usage_count}×</span> },
+                        { key: 'actions', header: 'Actions', render: (p: any) => (
+                          <ActionButton variant="ghost" icon={ArrowRight} style={{ fontSize: 11 }}
+                            onClick={() => { setChatInput(p.content); setTab('chat'); }}>Use</ActionButton>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
                 </div>
               </div>
             )}
@@ -942,17 +884,16 @@ export default function AIAssistantEnterprise() {
             {tab === 'analytics' && (
               <div>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-                  <StatCard label="Total Sessions"  value={data.analytics?.total_sessions ?? 0} />
-                  <StatCard label="Total Messages"  value={data.analytics?.total_messages ?? 0} />
-                  <StatCard label="Avg Response"    value={`${data.analytics?.response_quality?.avg_latency_ms ?? 0}ms`} />
-                  <StatCard label="User Rating"     value={`${data.analytics?.response_quality?.user_rating_avg ?? 0}/5`}   color="#16a34a" />
-                  <StatCard label="Accuracy Rate"   value={`${data.analytics?.response_quality?.accuracy_rate ?? 0}%`}       color="#16a34a" />
-                  <StatCard label="Hours Saved"     value={data.analytics?.automation_stats?.analyst_hours_saved ?? 0}        color="#7c3aed" />
+                  <MetricCard label="Total Sessions"  value={data.analytics?.total_sessions ?? 0} color="var(--accent)" />
+                  <MetricCard label="Total Messages"  value={data.analytics?.total_messages ?? 0} color="var(--accent)" />
+                  <MetricCard label="Avg Response"    value={`${data.analytics?.response_quality?.avg_latency_ms ?? 0}ms`} color="var(--accent)" />
+                  <MetricCard label="User Rating"     value={`${data.analytics?.response_quality?.user_rating_avg ?? 0}/5`}   color="#16a34a" />
+                  <MetricCard label="Accuracy Rate"   value={`${data.analytics?.response_quality?.accuracy_rate ?? 0}%`}       color="#16a34a" />
+                  <MetricCard label="Hours Saved"     value={data.analytics?.automation_stats?.analyst_hours_saved ?? 0}        color="#7c3aed" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Usage Trend (7 Days)</div>
+                  <SectionCard title="Usage Trend (7 Days)">
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120 }}>
                       {(data.analytics?.usage_trend ?? []).map((d2: any, i: number) => {
                         const barH = Math.max(4, Math.round((d2.sessions / 35) * 100));
@@ -965,24 +906,20 @@ export default function AIAssistantEnterprise() {
                         );
                       })}
                     </div>
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Top Analysts</div>
-                    <table className="g-table" style={{ width: '100%' }}>
-                      <thead><tr><th>Analyst</th><th>Sessions</th><th>Messages</th><th>Actions</th></tr></thead>
-                      <tbody>
-                        {(data.analytics?.top_analysts ?? []).map((a: any, i: number) => (
-                          <tr key={i}>
-                            <td style={{ fontWeight: 600 }}>{a.analyst}</td>
-                            <td>{a.sessions}</td>
-                            <td>{a.messages}</td>
-                            <td>{a.actions_executed}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <SectionCard title="Top Analysts" padded={false}>
+                    <DataTable<any>
+                      rows={data.analytics?.top_analysts ?? []}
+                      rowKey={(a: any, i: number) => a.analyst ?? i}
+                      columns={[
+                        { key: 'analyst', header: 'Analyst', render: (a: any) => <span style={{ fontWeight: 600 }}>{a.analyst}</span> },
+                        { key: 'sessions', header: 'Sessions', render: (a: any) => <span>{a.sessions}</span> },
+                        { key: 'messages', header: 'Messages', render: (a: any) => <span>{a.messages}</span> },
+                        { key: 'actions_executed', header: 'Actions', render: (a: any) => <span>{a.actions_executed}</span> },
+                      ]}
+                    />
+                  </SectionCard>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -1009,8 +946,7 @@ export default function AIAssistantEnterprise() {
             {tab === 'reports' && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20 }}>
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>Generate AI Report</div>
+                  <SectionCard title="Generate AI Report">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <input className="g-input" placeholder="Report title" value={reportTitle} onChange={e => setReportTitle(e.target.value)} />
                       <select className="g-input" value={reportType} onChange={e => setReportType(e.target.value)}>
@@ -1023,9 +959,9 @@ export default function AIAssistantEnterprise() {
                         <option value="investigation_report">Investigation Report</option>
                         <option value="weekly_digest">Weekly Digest</option>
                       </select>
-                      <button className="g-btn" disabled={genReport || !reportTitle} onClick={genReportFn}>
+                      <ActionButton variant="primary" icon={Wand2} disabled={genReport || !reportTitle} onClick={genReportFn}>
                         {genReport ? 'Generating…' : 'Generate Report'}
-                      </button>
+                      </ActionButton>
                     </div>
 
                     <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
@@ -1036,79 +972,56 @@ export default function AIAssistantEnterprise() {
                         { title: 'Q2 Risk Assessment',        type: 'risk_assessment' },
                         { title: 'SOC2 Compliance Status',    type: 'compliance_report' },
                       ].map((r, i) => (
-                        <button key={i} className="g-btn-ghost"
+                        <ActionButton key={i} variant="ghost"
                           style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 12, marginBottom: 4 }}
                           onClick={() => { setReportTitle(r.title); setReportType(r.type); }}>
                           {r.title}
-                        </button>
+                        </ActionButton>
                       ))}
                     </div>
-                  </div>
+                  </SectionCard>
 
-                  <div className="g-card">
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>
-                      Generated Reports ({(data.reports ?? []).length})
-                    </div>
-                    {!(data.reports ?? []).length ? (
-                      <div style={{ color: 'var(--text-3)', textAlign: 'center', padding: 40 }}>No reports generated yet</div>
-                    ) : (
-                      <table className="g-table" style={{ width: '100%' }}>
-                        <thead><tr><th>Title</th><th>Type</th><th>Format</th><th>Generated By</th><th>Date</th><th></th></tr></thead>
-                        <tbody>
-                          {(data.reports ?? []).map((r: any, i: number) => (
-                            <tr key={i}>
-                              <td style={{ fontWeight: 600, color: 'var(--text-1)' }}>{r.title}</td>
-                              <td>{pill((r.report_type ?? '').replace(/_/g, ' '))}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{(r.format ?? '').toUpperCase()}</td>
-                              <td style={{ fontSize: 12 }}>{r.generated_by}</td>
-                              <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</td>
-                              <td>
-                                <button className="g-btn-ghost" style={{ fontSize: 11 }}
-                                  onClick={() => { setChatMode('executive'); setChatInput(`Generate ${r.report_type} report: ${r.title}`); setTab('chat'); }}>
-                                  Regenerate
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                  <SectionCard title={`Generated Reports (${(data.reports ?? []).length})`} padded={false}>
+                    <DataTable<any>
+                      rows={data.reports ?? []}
+                      rowKey={(r: any, i: number) => r.report_id ?? i}
+                      emptyState={<EmptyState title="No reports generated yet" />}
+                      columns={[
+                        { key: 'title', header: 'Title', render: (r: any) => <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>{r.title}</span> },
+                        { key: 'report_type', header: 'Type', render: (r: any) => pill((r.report_type ?? '').replace(/_/g, ' ')) },
+                        { key: 'format', header: 'Format', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{(r.format ?? '').toUpperCase()}</span> },
+                        { key: 'generated_by', header: 'Generated By', render: (r: any) => <span style={{ fontSize: 12 }}>{r.generated_by}</span> },
+                        { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span> },
+                        { key: 'regenerate', header: '', render: (r: any) => (
+                          <ActionButton variant="ghost" icon={RefreshCw} style={{ fontSize: 11 }}
+                            onClick={() => { setChatMode('executive'); setChatInput(`Generate ${r.report_type} report: ${r.title}`); setTab('chat'); }}>
+                            Regenerate
+                          </ActionButton>
+                        ) },
+                      ]}
+                    />
+                  </SectionCard>
                 </div>
               </div>
             )}
 
             {/* ── AUDIT ────────────────────────────────────────────────────── */}
             {tab === 'audit' && (
-              <div className="g-card">
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14, color: 'var(--text-1)' }}>
-                  Audit Trail ({(data.audit ?? []).length} entries)
-                </div>
-                <table className="g-table" style={{ width: '100%' }}>
-                  <thead>
-                    <tr><th>Time</th><th>Action</th><th>Object Type</th><th>Object ID</th><th>Actor</th><th>Details</th></tr>
-                  </thead>
-                  <tbody>
-                    {(data.audit ?? []).map((e: any, i: number) => (
-                      <tr key={i}>
-                        <td style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                          {e.created_at ? new Date(e.created_at).toLocaleString() : ''}
-                        </td>
-                        <td>{pill((e.action ?? '').replace(/_/g, ' '))}</td>
-                        <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.object_type}</td>
-                        <td style={{ fontSize: 12, color: 'var(--text-3)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {e.object_id ?? '—'}
-                        </td>
-                        <td style={{ fontSize: 12, fontWeight: 600 }}>{e.actor}</td>
-                        <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{e.details ?? '—'}</td>
-                      </tr>
-                    ))}
-                    {!(data.audit ?? []).length && (
-                      <tr><td colSpan={6} style={{ color: 'var(--text-3)', textAlign: 'center', padding: 32 }}>No audit entries yet</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <SectionCard title={`Audit Trail (${(data.audit ?? []).length} entries)`} padded={false}>
+                <DataTable<any>
+                  rows={data.audit ?? []}
+                  rowKey={(e: any, i: number) => i}
+                  emptyState={<EmptyState title="No audit entries yet" />}
+                  columns={[
+                    { key: 'created_at', header: 'Time', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{e.created_at ? new Date(e.created_at).toLocaleString() : ''}</span> },
+                    { key: 'action', header: 'Action', render: (e: any) => pill((e.action ?? '').replace(/_/g, ' ')) },
+                    { key: 'object_type', header: 'Object Type', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.object_type}</span> },
+                    { key: 'object_id', header: 'Object ID', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-3)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{e.object_id ?? '—'}</span> },
+                    { key: 'actor', header: 'Actor', render: (e: any) => <span style={{ fontSize: 12, fontWeight: 600 }}>{e.actor}</span> },
+                    { key: 'details', header: 'Details', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{e.details ?? '—'}</span> },
+                  ]}
+                />
+              </SectionCard>
             )}
           </>
         )}

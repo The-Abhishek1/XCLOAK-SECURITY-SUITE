@@ -2,19 +2,25 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { rpeAPI, complianceAPI, exportAPI } from '@/lib/api';
+import { rpeAPI, exportAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
+import {
+  LayoutDashboard, Library, Wand2, CalendarClock, History, BarChart3, ScrollText, Bell,
+  Sparkles, X, Plus, Play, Trash2, Save, Download, Pause, ChevronUp, ChevronDown,
+  FileText, AlertTriangle, TrendingUp, CheckCircle2, Briefcase, ListChecks,
+} from 'lucide-react';
 
 type Tab = 'dashboard' | 'library' | 'builder' | 'scheduled' | 'history' | 'analytics' | 'audit' | 'notifications';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard',     label: 'Dashboard' },
-  { id: 'library',       label: 'Report Library' },
-  { id: 'builder',       label: 'Report Builder' },
-  { id: 'scheduled',     label: 'Scheduled' },
-  { id: 'history',       label: 'History' },
-  { id: 'analytics',     label: 'Analytics' },
-  { id: 'audit',         label: 'Audit Trail' },
-  { id: 'notifications', label: 'Notifications' },
+const TABS: { key: Tab; label: string; icon: any; count?: number }[] = [
+  { key: 'dashboard',     label: 'Dashboard',       icon: LayoutDashboard },
+  { key: 'library',       label: 'Report Library',  icon: Library },
+  { key: 'builder',       label: 'Report Builder',  icon: Wand2 },
+  { key: 'scheduled',     label: 'Scheduled',       icon: CalendarClock },
+  { key: 'history',       label: 'History',         icon: History },
+  { key: 'analytics',     label: 'Analytics',       icon: BarChart3 },
+  { key: 'audit',         label: 'Audit Trail',     icon: ScrollText },
+  { key: 'notifications', label: 'Notifications',   icon: Bell },
 ];
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -46,35 +52,25 @@ function bytes(n: number) {
   if (n > 1e3) return `${(n / 1e3).toFixed(1)} KB`;
   return `${n} B`;
 }
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
-  return (
-    <div className="g-card" style={{ padding: '14px 18px', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
-function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) => void }) {
+function DashboardTab({ dash }: { dash: any }) {
   if (!dash) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>Loading…</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Reports"      value={dash.total_reports || 0}       color="var(--accent)" />
-        <StatCard label="Scheduled"          value={dash.scheduled_reports || 0}    color="#f97316" />
-        <StatCard label="Generated Today"    value={dash.generated_today || 0}      color="#22c55e" />
-        <StatCard label="Failed"             value={dash.failed_reports || 0}        color="#ef4444" />
-        <StatCard label="Templates"          value={dash.report_templates || 0}     color="#3b82f6" />
-        <StatCard label="Shared"             value={dash.shared_reports || 0}       color="#a855f7" />
-        <StatCard label="Exports"            value={dash.export_history || 0}       color="#06b6d4" />
-        <StatCard label="Storage Used"       value={bytes(dash.storage_bytes || 0)} color="#eab308" />
+        <MetricCard label="Total Reports"      value={dash.total_reports || 0}       color="var(--accent)" />
+        <MetricCard label="Scheduled"          value={dash.scheduled_reports || 0}    color="#f97316" />
+        <MetricCard label="Generated Today"    value={dash.generated_today || 0}      color="#22c55e" />
+        <MetricCard label="Failed"             value={dash.failed_reports || 0}        color="#ef4444" />
+        <MetricCard label="Templates"          value={dash.report_templates || 0}     color="#3b82f6" />
+        <MetricCard label="Shared"             value={dash.shared_reports || 0}       color="#a855f7" />
+        <MetricCard label="Exports"            value={dash.export_history || 0}       color="#06b6d4" />
+        <MetricCard label="Storage Used"       value={bytes(dash.storage_bytes || 0)} color="#eab308" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Reports by Category</div>
+        <SectionCard title="Reports by Category">
           {(!dash.by_category || dash.by_category.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(dash.by_category || []).map((c: any) => {
             const cat = CATEGORIES[c.category];
@@ -91,10 +87,9 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               </div>
             );
           })}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Recent Executions</div>
+        <SectionCard title="Recent Executions">
           {(!dash.recent_executions || dash.recent_executions.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No recent activity</div>}
           {(dash.recent_executions || []).slice(0, 6).map((e: any, i: number) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
@@ -105,10 +100,9 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               {pill(e.status, STATUS_COLOR[e.status] || '#6b7280')}
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Upcoming Schedules</div>
+        <SectionCard title="Upcoming Schedules">
           {(!dash.upcoming_schedules || dash.upcoming_schedules.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No upcoming schedules</div>}
           {(dash.upcoming_schedules || []).map((s: any, i: number) => (
             <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
@@ -119,23 +113,24 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
       </div>
 
       {/* Quick actions */}
-      <div className="g-card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Quick Exports</div>
+      <SectionCard title="Quick Exports">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {[
-            { label: '⬇ Alerts CSV', url: exportAPI.alertsCSV() },
-            { label: '⬇ Incidents CSV', url: exportAPI.incidentsCSV() },
-            { label: '⬇ Vulns CSV', url: exportAPI.vulnsCSV() },
-            { label: '⬇ Audit JSON', url: exportAPI.auditJSON() },
+            { label: 'Alerts CSV', url: exportAPI.alertsCSV() },
+            { label: 'Incidents CSV', url: exportAPI.incidentsCSV() },
+            { label: 'Vulns CSV', url: exportAPI.vulnsCSV() },
+            { label: 'Audit JSON', url: exportAPI.auditJSON() },
           ].map(e => (
-            <a key={e.label} href={e.url} download className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>{e.label}</a>
+            <a key={e.label} href={e.url} download className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>
+              <Download className="h-3.5 w-3.5" /> {e.label}
+            </a>
           ))}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -193,122 +188,104 @@ function LibraryTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
           {['active','inactive'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{filtered.length} of {reports.length}</span>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11, marginLeft: 'auto' }} onClick={() => setShowNew(true)}>+ New Report</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 11, marginLeft: 'auto' }} onClick={() => setShowNew(true)}>New Report</ActionButton>
       </div>
 
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="g-table" style={{ width: '100%' }}>
-            <thead className="g-thead">
-              <tr>{['Report ID','Name','Category','Type','Owner','Last Generated','Generations','Status','Tags',''].map(h => (
-                <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}</tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No reports. Create one to get started.</td></tr>}
-              {filtered.map(r => {
-                const cat = CATEGORIES[r.category];
-                let tags: string[] = [];
-                try { tags = JSON.parse(r.tags || '[]'); } catch {}
-                return (
-                  <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{r.report_id}</td>
-                    <td style={{ padding: '10px 12px', maxWidth: 200 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
-                      {r.description && <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{r.description}</div>}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>{cat ? pill(cat.label, cat.color) : pill(r.category, '#6b7280')}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)' }}>{r.report_type || '—'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{r.owner || '—'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{r.last_generated_at ? timeAgo(r.last_generated_at) : 'Never'}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{r.generation_count}</td>
-                    <td style={{ padding: '10px 12px' }}>{pill(r.status, STATUS_COLOR[r.status] || '#6b7280')}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                        {tags.slice(0, 2).map((t: string) => <span key={t} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--border)', color: 'var(--text-3)' }}>{t}</span>)}
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => gen(r.report_id, r.name)} disabled={generating === r.report_id}>
-                          {generating === r.report_id ? '…' : '▶ Run'}
-                        </button>
-                        <button style={{ fontSize: 13, color: 'var(--text-3)' }} onClick={() => del(r.id, r.name)}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 560 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>New Report</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
+      <DataTable<any>
+        rows={filtered}
+        rowKey={(r: any) => r.id}
+        emptyState={<EmptyState title="No reports" message="Create one to get started." />}
+        columns={[
+          { key: 'report_id', header: 'Report ID', render: (r: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{r.report_id}</span> },
+          { key: 'name', header: 'Name', render: (r: any) => (
+            <div style={{ maxWidth: 200 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
+              {r.description && <div style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{r.description}</div>}
             </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflow: 'auto' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Report Name *</label>
-                  <input className="g-input w-full" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly SOC Report" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Category</label>
-                  <select className="g-select w-full" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                    {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Report Type</label>
-                  <select className="g-select w-full" value={form.report_type} onChange={e => setForm(f => ({ ...f, report_type: e.target.value }))}>
-                    <option value="">Select type…</option>
-                    {CATEGORIES[form.category]?.reports.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Owner</label>
-                  <input className="g-input w-full" value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} placeholder="alice@corp.com" />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description</label>
-                  <input className="g-input w-full" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Tags (comma-separated)</label>
-                  <input className="g-input w-full" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="soc, weekly, security" />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Data Sources</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {DATA_SOURCES.map(ds => {
-                      let selected: string[] = [];
-                      try { selected = JSON.parse(form.data_sources || '[]'); } catch {}
-                      const active = selected.includes(ds);
-                      return (
-                        <button key={ds} type="button" onClick={() => {
-                          const cur = selected.includes(ds) ? selected.filter(s => s !== ds) : [...selected, ds];
-                          setForm(f => ({ ...f, data_sources: JSON.stringify(cur) }));
-                        }} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 8, background: active ? 'var(--accent)22' : 'var(--border)', color: active ? 'var(--accent)' : 'var(--text-3)', border: `1px solid ${active ? 'var(--accent)' : 'transparent'}` }}>
-                          {ds}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+          ) },
+          { key: 'category', header: 'Category', render: (r: any) => { const cat = CATEGORIES[r.category]; return cat ? pill(cat.label, cat.color) : pill(r.category, '#6b7280'); } },
+          { key: 'report_type', header: 'Type', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{r.report_type || '—'}</span> },
+          { key: 'owner', header: 'Owner', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.owner || '—'}</span> },
+          { key: 'last_generated_at', header: 'Last Generated', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{r.last_generated_at ? timeAgo(r.last_generated_at) : 'Never'}</span> },
+          { key: 'generation_count', header: 'Generations', render: (r: any) => <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{r.generation_count}</span> },
+          { key: 'status', header: 'Status', render: (r: any) => pill(r.status, STATUS_COLOR[r.status] || '#6b7280') },
+          { key: 'tags', header: 'Tags', render: (r: any) => {
+            let tags: string[] = [];
+            try { tags = JSON.parse(r.tags || '[]'); } catch {}
+            return (
+              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                {tags.slice(0, 2).map((t: string) => <span key={t} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--border)', color: 'var(--text-3)' }}>{t}</span>)}
               </div>
+            );
+          } },
+          { key: 'actions', header: '', render: (r: any) => (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <ActionButton variant="ghost" icon={Play} style={{ fontSize: 10 }} onClick={() => gen(r.report_id, r.name)} disabled={generating === r.report_id}>
+                {generating === r.report_id ? '…' : 'Run'}
+              </ActionButton>
+              <ActionButton variant="danger" icon={Trash2} onClick={() => del(r.id, r.name)} />
             </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={create} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Report'}</button>
+          ) },
+        ]}
+      />
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="New Report" maxWidth={560}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '60vh', overflow: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Report Name *</label>
+              <input className="g-input w-full" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Weekly SOC Report" />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Category</label>
+              <select className="g-select w-full" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Report Type</label>
+              <select className="g-select w-full" value={form.report_type} onChange={e => setForm(f => ({ ...f, report_type: e.target.value }))}>
+                <option value="">Select type…</option>
+                {CATEGORIES[form.category]?.reports.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Owner</label>
+              <input className="g-input w-full" value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} placeholder="alice@corp.com" />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description</label>
+              <input className="g-input w-full" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Tags (comma-separated)</label>
+              <input className="g-input w-full" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="soc, weekly, security" />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Data Sources</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {DATA_SOURCES.map(ds => {
+                  let selected: string[] = [];
+                  try { selected = JSON.parse(form.data_sources || '[]'); } catch {}
+                  const active = selected.includes(ds);
+                  return (
+                    <button key={ds} type="button" onClick={() => {
+                      const cur = selected.includes(ds) ? selected.filter(s => s !== ds) : [...selected, ds];
+                      setForm(f => ({ ...f, data_sources: JSON.stringify(cur) }));
+                    }} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 8, background: active ? 'var(--accent)22' : 'var(--border)', color: active ? 'var(--accent)' : 'var(--text-3)', border: `1px solid ${active ? 'var(--accent)' : 'transparent'}` }}>
+                      {ds}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Save} onClick={create} disabled={saving || !form.name}>{saving ? 'Creating…' : 'Create Report'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -347,8 +324,7 @@ function BuilderTab({ templates, onRefresh }: { templates: any[]; onRefresh: () 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid var(--accent)', fontSize: 13 }}>{toast}</div>}
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Report Sections</div>
+        <SectionCard title="Report Sections">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
             {BUILDER_SECTIONS.map(s => (
               <button key={s} type="button" onClick={() => toggleSection(s)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 8, background: sections.includes(s) ? 'var(--accent)22' : 'var(--border)', color: sections.includes(s) ? 'var(--accent)' : 'var(--text-3)', border: `1px solid ${sections.includes(s) ? 'var(--accent)44' : 'transparent'}` }}>
@@ -362,18 +338,17 @@ function BuilderTab({ templates, onRefresh }: { templates: any[]; onRefresh: () 
               <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--border)', borderRadius: 8 }}>
                 <span style={{ fontSize: 11, color: 'var(--text-3)', width: 20 }}>{i + 1}.</span>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{s}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button style={{ fontSize: 11, color: 'var(--text-3)', padding: '0 4px' }} onClick={() => moveUp(i)}>↑</button>
-                  <button style={{ fontSize: 11, color: 'var(--text-3)', padding: '0 4px' }} onClick={() => moveDown(i)}>↓</button>
-                  <button style={{ fontSize: 11, color: '#ef4444', padding: '0 4px' }} onClick={() => toggleSection(s)}>×</button>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <button style={{ color: 'var(--text-3)', padding: '0 2px', display: 'flex' }} onClick={() => moveUp(i)}><ChevronUp className="h-3.5 w-3.5" /></button>
+                  <button style={{ color: 'var(--text-3)', padding: '0 2px', display: 'flex' }} onClick={() => moveDown(i)}><ChevronDown className="h-3.5 w-3.5" /></button>
+                  <button style={{ color: '#ef4444', padding: '0 2px', display: 'flex' }} onClick={() => toggleSection(s)}><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Data Sources</div>
+        <SectionCard title="Data Sources">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {DATA_SOURCES.map(ds => (
               <button key={ds} type="button" onClick={() => setSelectedSources(prev => prev.includes(ds) ? prev.filter(x => x !== ds) : [...prev, ds])} style={{ fontSize: 10, padding: '4px 10px', borderRadius: 8, background: selectedSources.includes(ds) ? '#22c55e22' : 'var(--border)', color: selectedSources.includes(ds) ? '#22c55e' : 'var(--text-3)', border: `1px solid ${selectedSources.includes(ds) ? '#22c55e44' : 'transparent'}` }}>
@@ -381,10 +356,9 @@ function BuilderTab({ templates, onRefresh }: { templates: any[]; onRefresh: () 
               </button>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Company Branding</div>
+        <SectionCard title="Company Branding">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Company Name</label>
@@ -398,83 +372,75 @@ function BuilderTab({ templates, onRefresh }: { templates: any[]; onRefresh: () 
               </div>
             </div>
           </div>
-        </div>
+        </SectionCard>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => setShowSaveTemplate(true)}>💾 Save as Template</button>
+          <ActionButton variant="primary" icon={Save} style={{ fontSize: 11 }} onClick={() => setShowSaveTemplate(true)}>Save as Template</ActionButton>
         </div>
       </div>
 
       {/* Preview panel */}
       <div style={{ width: 320, flexShrink: 0 }}>
-        <div className="g-card" style={{ padding: 16, position: 'sticky', top: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Preview</div>
-          <div style={{ background: '#fff', borderRadius: 8, padding: 16, minHeight: 400, border: '1px solid var(--border)' }}>
-            <div style={{ borderBottom: `3px solid ${branding.primary_color}`, marginBottom: 12, paddingBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>{branding.company}</div>
-              <div style={{ fontSize: 10, color: '#666' }}>Security Report — {new Date().toLocaleDateString()}</div>
+        <div style={{ position: 'sticky', top: 20 }}>
+          <SectionCard title="Preview">
+            <div style={{ background: '#fff', borderRadius: 8, padding: 16, minHeight: 400, border: '1px solid var(--border)' }}>
+              <div style={{ borderBottom: `3px solid ${branding.primary_color}`, marginBottom: 12, paddingBottom: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#111' }}>{branding.company}</div>
+                <div style={{ fontSize: 10, color: '#666' }}>Security Report — {new Date().toLocaleDateString()}</div>
+              </div>
+              {sections.map((s, i) => (
+                <div key={s} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: branding.primary_color, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{i + 1}. {s}</div>
+                  <div style={{ height: s === 'Key Metrics KPIs' ? 36 : s === 'Charts & Visualizations' ? 48 : 18, background: '#f3f4f6', borderRadius: 4 }} />
+                </div>
+              ))}
+              <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 12, paddingTop: 8, fontSize: 9, color: '#9ca3af', textAlign: 'center' }}>
+                {selectedSources.slice(0, 3).join(' · ')}{selectedSources.length > 3 ? ` +${selectedSources.length - 3}` : ''}
+              </div>
             </div>
-            {sections.map((s, i) => (
-              <div key={s} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: branding.primary_color, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{i + 1}. {s}</div>
-                <div style={{ height: s === 'Key Metrics KPIs' ? 36 : s === 'Charts & Visualizations' ? 48 : 18, background: '#f3f4f6', borderRadius: 4 }} />
+          </SectionCard>
+
+          {/* Templates */}
+          <SectionCard title={`Saved Templates (${templates.length})`} className="mt-4">
+            {templates.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No templates yet</div>}
+            {templates.map(t => (
+              <div key={t.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{t.name}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{t.is_builtin ? 'Built-in' : `Used ${t.use_count}×`}</div>
+                </div>
+                {!t.is_builtin && <ActionButton variant="danger" icon={Trash2} onClick={() => delTemplate(t.id, t.name)} />}
               </div>
             ))}
-            <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 12, paddingTop: 8, fontSize: 9, color: '#9ca3af', textAlign: 'center' }}>
-              {selectedSources.slice(0, 3).join(' · ')}{selectedSources.length > 3 ? ` +${selectedSources.length - 3}` : ''}
-            </div>
-          </div>
-        </div>
-
-        {/* Templates */}
-        <div className="g-card" style={{ padding: 16, marginTop: 14 }}>
-          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>Saved Templates ({templates.length})</div>
-          {templates.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No templates yet</div>}
-          {templates.map(t => (
-            <div key={t.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{t.name}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{t.is_builtin ? '🔒 Built-in' : `Used ${t.use_count}×`}</div>
-              </div>
-              {!t.is_builtin && <button style={{ fontSize: 13, color: 'var(--text-3)' }} onClick={() => delTemplate(t.id, t.name)}>🗑</button>}
-            </div>
-          ))}
+          </SectionCard>
         </div>
       </div>
 
-      {showSaveTemplate && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowSaveTemplate(false)}>
-          <div className="g-modal" style={{ maxWidth: 420 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>Save Template</div>
-              <button onClick={() => setShowSaveTemplate(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
-            </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Template Name *</label>
-                <input className="g-input w-full" value={tplForm.name} onChange={e => setTplForm(f => ({ ...f, name: e.target.value }))} placeholder="My Security Template" />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description</label>
-                <input className="g-input w-full" value={tplForm.description} onChange={e => setTplForm(f => ({ ...f, description: e.target.value }))} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Category</label>
-                <select className="g-select w-full" value={tplForm.category} onChange={e => setTplForm(f => ({ ...f, category: e.target.value }))}>
-                  {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '8px 12px', background: 'var(--border)', borderRadius: 8 }}>
-                Saving {sections.length} sections · {selectedSources.length} data sources
-              </div>
-            </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowSaveTemplate(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={saveTemplate} disabled={saving || !tplForm.name}>{saving ? 'Saving…' : 'Save Template'}</button>
-            </div>
+      <Modal open={showSaveTemplate} onClose={() => setShowSaveTemplate(false)} title="Save Template" maxWidth={420}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Template Name *</label>
+            <input className="g-input w-full" value={tplForm.name} onChange={e => setTplForm(f => ({ ...f, name: e.target.value }))} placeholder="My Security Template" />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Description</label>
+            <input className="g-input w-full" value={tplForm.description} onChange={e => setTplForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Category</label>
+            <select className="g-select w-full" value={tplForm.category} onChange={e => setTplForm(f => ({ ...f, category: e.target.value }))}>
+              {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '8px 12px', background: 'var(--border)', borderRadius: 8 }}>
+            Saving {sections.length} sections · {selectedSources.length} data sources
           </div>
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowSaveTemplate(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Save} onClick={saveTemplate} disabled={saving || !tplForm.name}>{saving ? 'Saving…' : 'Save Template'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -503,146 +469,125 @@ function ScheduledTab({ schedules, reports, onRefresh }: { schedules: any[]; rep
   const del = async (id: number) => { await rpeAPI.deleteSchedule(id); onRefresh(); notify('Schedule deleted'); };
 
   const FREQ_COLOR: Record<string, string> = { one_time: '#6b7280', hourly: '#3b82f6', daily: '#22c55e', weekly: '#a855f7', monthly: '#f97316', quarterly: '#eab308', yearly: '#06b6d4', cron: '#ef4444' };
-  const DELIVERY_ICON: Record<string, string> = { email: '📧', download_portal: '⬇', api: '🔌', webhook: '🔗', cloud_storage: '☁' };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {toast && <div className="g-card" style={{ padding: '8px 14px', borderLeft: '3px solid var(--accent)', fontSize: 13 }}>{toast}</div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{schedules.length} scheduled reports</div>
-        <button className="g-btn g-btn-primary" style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>+ New Schedule</button>
+        <ActionButton variant="primary" icon={Plus} style={{ fontSize: 11 }} onClick={() => setShowNew(true)}>New Schedule</ActionButton>
       </div>
-      <div className="g-card" style={{ overflow: 'hidden' }}>
-        <table className="g-table" style={{ width: '100%' }}>
-          <thead className="g-thead">
-            <tr>{['Schedule ID','Report','Frequency','Delivery','Format','Last Run','Next Run','Runs','Status',''].map(h => (
-              <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {schedules.length === 0 && <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No schedules configured</td></tr>}
-            {schedules.map(s => (
-              <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', opacity: s.status === 'paused' ? 0.6 : 1 }}>
-                <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{s.schedule_id}</td>
-                <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12, maxWidth: 180 }}>{s.report_name}</td>
-                <td style={{ padding: '10px 12px' }}>{pill(s.frequency, FREQ_COLOR[s.frequency] || '#6b7280')}</td>
-                <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{DELIVERY_ICON[s.delivery_method] || ''} {s.delivery_method}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, textTransform: 'uppercase', color: 'var(--text-3)' }}>{s.export_format}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{s.last_run_at ? timeAgo(s.last_run_at) : '—'}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{s.next_run_at ? timeAgo(s.next_run_at) : '—'}</td>
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)' }}>
-                  <span style={{ color: '#22c55e' }}>✓{s.success_count}</span> / <span style={{ color: '#ef4444' }}>✗{s.failure_count}</span>
-                </td>
-                <td style={{ padding: '10px 12px' }}>{pill(s.status, STATUS_COLOR[s.status] || '#6b7280')}</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }} onClick={() => toggle(s.id, s.status)}>{s.status === 'active' ? 'Pause' : 'Resume'}</button>
-                    <button style={{ fontSize: 13, color: 'var(--text-3)' }} onClick={() => del(s.id)}>🗑</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable<any>
+        rows={schedules}
+        rowKey={(s: any) => s.id}
+        rowStyle={(s: any) => s.status === 'paused' ? { opacity: 0.6 } : undefined}
+        emptyState={<EmptyState title="No schedules configured" />}
+        columns={[
+          { key: 'schedule_id', header: 'Schedule ID', render: (s: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{s.schedule_id}</span> },
+          { key: 'report_name', header: 'Report', render: (s: any) => <span style={{ fontWeight: 600, fontSize: 12, maxWidth: 180, display: 'block' }}>{s.report_name}</span> },
+          { key: 'frequency', header: 'Frequency', render: (s: any) => pill(s.frequency, FREQ_COLOR[s.frequency] || '#6b7280') },
+          { key: 'delivery_method', header: 'Delivery', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.delivery_method}</span> },
+          { key: 'export_format', header: 'Format', render: (s: any) => <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-3)' }}>{s.export_format}</span> },
+          { key: 'last_run_at', header: 'Last Run', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{s.last_run_at ? timeAgo(s.last_run_at) : '—'}</span> },
+          { key: 'next_run_at', header: 'Next Run', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{s.next_run_at ? timeAgo(s.next_run_at) : '—'}</span> },
+          { key: 'runs', header: 'Runs', render: (s: any) => (
+            <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
+              <span style={{ color: '#22c55e' }}>✓{s.success_count}</span> / <span style={{ color: '#ef4444' }}>✗{s.failure_count}</span>
+            </span>
+          ) },
+          { key: 'status', header: 'Status', render: (s: any) => pill(s.status, STATUS_COLOR[s.status] || '#6b7280') },
+          { key: 'actions', header: '', render: (s: any) => (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <ActionButton variant="ghost" icon={s.status === 'active' ? Pause : Play} style={{ fontSize: 10 }} onClick={() => toggle(s.id, s.status)}>{s.status === 'active' ? 'Pause' : 'Resume'}</ActionButton>
+              <ActionButton variant="danger" icon={Trash2} onClick={() => del(s.id)} />
+            </div>
+          ) },
+        ]}
+      />
 
-      {showNew && (
-        <div className="g-modal-backdrop" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
-          <div className="g-modal" style={{ maxWidth: 520 }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700 }}>New Schedule</div>
-              <button onClick={() => setShowNew(false)} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
-            </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Report *</label>
-                <select className="g-select w-full" value={form.report_id} onChange={e => setForm(f => ({ ...f, report_id: e.target.value }))}>
-                  <option value="">Select report…</option>
-                  {reports.map(r => <option key={r.report_id} value={r.report_id}>{r.name}</option>)}
-                </select>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Frequency</label>
-                  <select className="g-select w-full" value={form.frequency} onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}>
-                    {FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Export Format</label>
-                  <select className="g-select w-full" value={form.export_format} onChange={e => setForm(f => ({ ...f, export_format: e.target.value }))}>
-                    {EXPORT_FORMATS.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Delivery Method</label>
-                  <select className="g-select w-full" value={form.delivery_method} onChange={e => setForm(f => ({ ...f, delivery_method: e.target.value }))}>
-                    {DELIVERY_METHODS.map(m => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
-                  </select>
-                </div>
-                {form.frequency === 'cron' && (
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Cron Expression</label>
-                    <input className="g-input w-full" value={form.cron_expr} onChange={e => setForm(f => ({ ...f, cron_expr: e.target.value }))} placeholder="0 8 * * 1" />
-                  </div>
-                )}
-              </div>
-              {form.delivery_method === 'email' && (
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Recipients (comma-separated)</label>
-                  <input className="g-input w-full" value={form.recipients} onChange={e => setForm(f => ({ ...f, recipients: e.target.value }))} placeholder="ciso@corp.com, team@corp.com" />
-                </div>
-              )}
-              {form.delivery_method === 'webhook' && (
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Webhook URL</label>
-                  <input className="g-input w-full" value={form.webhook_url} onChange={e => setForm(f => ({ ...f, webhook_url: e.target.value }))} placeholder="https://hooks.example.com/…" />
-                </div>
-              )}
-            </div>
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="g-btn g-btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="g-btn g-btn-primary" onClick={save} disabled={saving || !form.report_id}>{saving ? 'Saving…' : 'Create Schedule'}</button>
-            </div>
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="New Schedule" maxWidth={520}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Report *</label>
+            <select className="g-select w-full" value={form.report_id} onChange={e => setForm(f => ({ ...f, report_id: e.target.value }))}>
+              <option value="">Select report…</option>
+              {reports.map(r => <option key={r.report_id} value={r.report_id}>{r.name}</option>)}
+            </select>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Frequency</label>
+              <select className="g-select w-full" value={form.frequency} onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}>
+                {FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Export Format</label>
+              <select className="g-select w-full" value={form.export_format} onChange={e => setForm(f => ({ ...f, export_format: e.target.value }))}>
+                {EXPORT_FORMATS.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Delivery Method</label>
+              <select className="g-select w-full" value={form.delivery_method} onChange={e => setForm(f => ({ ...f, delivery_method: e.target.value }))}>
+                {DELIVERY_METHODS.map(m => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+            {form.frequency === 'cron' && (
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Cron Expression</label>
+                <input className="g-input w-full" value={form.cron_expr} onChange={e => setForm(f => ({ ...f, cron_expr: e.target.value }))} placeholder="0 8 * * 1" />
+              </div>
+            )}
+          </div>
+          {form.delivery_method === 'email' && (
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Recipients (comma-separated)</label>
+              <input className="g-input w-full" value={form.recipients} onChange={e => setForm(f => ({ ...f, recipients: e.target.value }))} placeholder="ciso@corp.com, team@corp.com" />
+            </div>
+          )}
+          {form.delivery_method === 'webhook' && (
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Webhook URL</label>
+              <input className="g-input w-full" value={form.webhook_url} onChange={e => setForm(f => ({ ...f, webhook_url: e.target.value }))} placeholder="https://hooks.example.com/…" />
+            </div>
+          )}
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <ActionButton variant="ghost" icon={X} onClick={() => setShowNew(false)}>Cancel</ActionButton>
+          <ActionButton variant="primary" icon={Save} onClick={save} disabled={saving || !form.report_id}>{saving ? 'Saving…' : 'Create Schedule'}</ActionButton>
+        </div>
+      </Modal>
     </div>
   );
 }
 
 // ── History ────────────────────────────────────────────────────────────────
 function HistoryTab({ executions }: { executions: any[] }) {
-  const FORMAT_ICON: Record<string, string> = { pdf: '📄', csv: '📊', xlsx: '📊', json: '{}', html: '🌐', docx: '📝' };
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead className="g-thead">
-          <tr>{['Execution ID','Report','Status','Format','Triggered By','Executed By','Duration','Size','Started',''].map(h => (
-            <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-          ))}</tr>
-        </thead>
-        <tbody>
-          {executions.length === 0 && <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No execution history</td></tr>}
-          {executions.map(e => (
-            <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <td style={{ padding: '10px 12px', fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.execution_id}</td>
-              <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12, maxWidth: 180 }}>{e.report_name}</td>
-              <td style={{ padding: '10px 12px' }}>{pill(e.status, STATUS_COLOR[e.status] || '#6b7280')}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)' }}>{FORMAT_ICON[e.export_format] || ''} {e.export_format?.toUpperCase()}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)' }}>{e.triggered_by}</td>
-              <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{e.executed_by}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)' }}>{e.duration_ms ? `${(e.duration_ms / 1000).toFixed(1)}s` : '—'}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-2)' }}>{bytes(e.file_size_bytes || 0)}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.started_at)}</td>
-              <td style={{ padding: '10px 12px' }}>
-                {e.download_url && <a href={e.download_url} className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }}>⬇ Download</a>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable<any>
+      rows={executions}
+      rowKey={(e: any) => e.id}
+      emptyState={<EmptyState title="No execution history" />}
+      columns={[
+        { key: 'execution_id', header: 'Execution ID', render: (e: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--accent)' }}>{e.execution_id}</span> },
+        { key: 'report_name', header: 'Report', render: (e: any) => <span style={{ fontWeight: 600, fontSize: 12, maxWidth: 180, display: 'block' }}>{e.report_name}</span> },
+        { key: 'status', header: 'Status', render: (e: any) => pill(e.status, STATUS_COLOR[e.status] || '#6b7280') },
+        { key: 'export_format', header: 'Format', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{e.export_format}</span> },
+        { key: 'triggered_by', header: 'Triggered By', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.triggered_by}</span> },
+        { key: 'executed_by', header: 'Executed By', render: (e: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{e.executed_by}</span> },
+        { key: 'duration_ms', header: 'Duration', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.duration_ms ? `${(e.duration_ms / 1000).toFixed(1)}s` : '—'}</span> },
+        { key: 'file_size_bytes', header: 'Size', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{bytes(e.file_size_bytes || 0)}</span> },
+        { key: 'started_at', header: 'Started', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(e.started_at)}</span> },
+        { key: 'download_url', header: '', render: (e: any) => (
+          e.download_url ? (
+            <a href={e.download_url} className="g-btn g-btn-ghost" style={{ fontSize: 10, padding: '2px 8px' }}>
+              <Download className="h-3 w-3" /> Download
+            </a>
+          ) : null
+        ) },
+      ]}
+    />
   );
 }
 
@@ -654,17 +599,16 @@ function AnalyticsTab({ data }: { data: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <StatCard label="Total Executions"  value={data.total_executions || 0}  color="var(--accent)" />
-        <StatCard label="Successful"        value={data.success_executions || 0} color="#22c55e" />
-        <StatCard label="Failed"            value={data.failed_executions || 0}  color="#ef4444" />
-        <StatCard label="Success Rate"      value={`${data.success_rate || 0}%`} color={successRate >= 90 ? '#22c55e' : successRate >= 70 ? '#eab308' : '#ef4444'} />
-        <StatCard label="Avg Duration"      value={data.avg_duration_ms ? `${(data.avg_duration_ms / 1000).toFixed(1)}s` : '—'} color="#3b82f6" />
-        <StatCard label="Storage Used"      value={bytes(data.storage_bytes || 0)} color="#a855f7" />
+        <MetricCard label="Total Executions"  value={data.total_executions || 0}  color="var(--accent)" />
+        <MetricCard label="Successful"        value={data.success_executions || 0} color="#22c55e" />
+        <MetricCard label="Failed"            value={data.failed_executions || 0}  color="#ef4444" />
+        <MetricCard label="Success Rate"      value={`${data.success_rate || 0}%`} color={successRate >= 90 ? '#22c55e' : successRate >= 70 ? '#eab308' : '#ef4444'} />
+        <MetricCard label="Avg Duration"      value={data.avg_duration_ms ? `${(data.avg_duration_ms / 1000).toFixed(1)}s` : '—'} color="#3b82f6" />
+        <MetricCard label="Storage Used"      value={bytes(data.storage_bytes || 0)} color="#a855f7" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Most Generated Reports</div>
+        <SectionCard title="Most Generated Reports">
           {(!data.most_generated || data.most_generated.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(data.most_generated || []).map((r: any, i: number) => (
             <div key={r.report_name} style={{ marginBottom: 8 }}>
@@ -679,10 +623,9 @@ function AnalyticsTab({ data }: { data: any }) {
               </div>
             </div>
           ))}
-        </div>
+        </SectionCard>
 
-        <div className="g-card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>Exports by Format</div>
+        <SectionCard title="Exports by Format">
           {(!data.by_export_format || data.by_export_format.length === 0) && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No data</div>}
           {(data.by_export_format || []).map((f: any) => {
             const color = FORMAT_COLOR[f.format] || '#6b7280';
@@ -699,7 +642,7 @@ function AnalyticsTab({ data }: { data: any }) {
               </div>
             );
           })}
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
@@ -708,28 +651,21 @@ function AnalyticsTab({ data }: { data: any }) {
 // ── Audit Trail ────────────────────────────────────────────────────────────
 function AuditTab({ items }: { items: any[] }) {
   return (
-    <div className="g-card" style={{ overflow: 'hidden' }}>
-      <table className="g-table" style={{ width: '100%' }}>
-        <thead className="g-thead">
-          <tr>{['Time','Action','Object Type','Object Name','Actor','Details'].map(h => (
-            <th key={h} className="g-tr" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-          ))}</tr>
-        </thead>
-        <tbody>
-          {items.length === 0 && <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>No audit events</td></tr>}
-          {items.map(a => (
-            <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(a.created_at)}</td>
-              <td style={{ padding: '10px 12px' }}>{pill(a.action, AUDIT_COLOR[a.action] || '#6b7280')}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{(a.object_type || '').replace(/_/g, ' ')}</td>
-              <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 500 }}>{a.object_name || a.object_id || '—'}</td>
-              <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-2)' }}>{a.actor}</td>
-              <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.details || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <SectionCard padded={false}>
+      <DataTable<any>
+        rows={items}
+        rowKey={(a: any) => a.id}
+        emptyState={<EmptyState title="No audit events" />}
+        columns={[
+          { key: 'created_at', header: 'Time', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{timeAgo(a.created_at)}</span> },
+          { key: 'action', header: 'Action', render: (a: any) => pill(a.action, AUDIT_COLOR[a.action] || '#6b7280') },
+          { key: 'object_type', header: 'Object Type', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'capitalize' }}>{(a.object_type || '').replace(/_/g, ' ')}</span> },
+          { key: 'object_name', header: 'Object Name', render: (a: any) => <span style={{ fontSize: 12, fontWeight: 500 }}>{a.object_name || a.object_id || '—'}</span> },
+          { key: 'actor', header: 'Actor', render: (a: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{a.actor}</span> },
+          { key: 'details', header: 'Details', render: (a: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{a.details || '—'}</span> },
+        ]}
+      />
+    </SectionCard>
   );
 }
 
@@ -741,9 +677,9 @@ function NotificationsTab({ items, onMarkRead }: { items: any[]; onMarkRead: () 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontWeight: 600 }}>Notifications {unread > 0 && <span style={{ fontSize: 11, background: '#3b82f622', color: '#3b82f6', borderRadius: 10, padding: '1px 8px', marginLeft: 6 }}>{unread} unread</span>}</div>
-        {unread > 0 && <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</button>}
+        {unread > 0 && <ActionButton variant="ghost" style={{ fontSize: 11 }} onClick={onMarkRead}>Mark all read</ActionButton>}
       </div>
-      {items.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-3)' }}>No notifications</div>}
+      {items.length === 0 && <EmptyState title="No notifications" />}
       {items.map(n => (
         <div key={n.id} className="g-card" style={{ padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'flex-start', opacity: n.read ? 0.65 : 1, borderLeft: `3px solid ${SEVERITY_COLOR[n.severity] || '#6b7280'}` }}>
           <div style={{ fontSize: 20, width: 28, textAlign: 'center', flexShrink: 0 }}>{NOTIF_ICON[n.event_type] || '📋'}</div>
@@ -766,12 +702,12 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const actions = [
-    { id: 'generate_report',      label: '📋 Generate Report' },
-    { id: 'summarize_findings',   label: '📊 Summarize Findings' },
-    { id: 'highlight_risks',      label: '🚨 Highlight Critical Risks' },
-    { id: 'explain_trends',       label: '📈 Explain Security Trends' },
-    { id: 'recommend_actions',    label: '✅ Recommend Actions' },
-    { id: 'executive_summary',    label: '👔 Executive Summary' },
+    { id: 'generate_report',      label: 'Generate Report',          icon: FileText },
+    { id: 'summarize_findings',   label: 'Summarize Findings',       icon: ListChecks },
+    { id: 'highlight_risks',      label: 'Highlight Critical Risks', icon: AlertTriangle },
+    { id: 'explain_trends',       label: 'Explain Security Trends',  icon: TrendingUp },
+    { id: 'recommend_actions',    label: 'Recommend Actions',        icon: CheckCircle2 },
+    { id: 'executive_summary',    label: 'Executive Summary',        icon: Briefcase },
   ];
   const ask = async (action: string) => {
     setLoading(true);
@@ -781,14 +717,16 @@ function AIPanel({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 460, background: 'var(--glass-bg)', borderLeft: '1px solid var(--border)', zIndex: 100, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.3)' }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>📋 Reports AI Assistant</div>
-        <button onClick={onClose} style={{ fontSize: 18, color: 'var(--text-3)' }}>×</button>
+        <span className="flex items-center gap-2" style={{ fontWeight: 700, fontSize: 14 }}>
+          <Sparkles className="h-4 w-4" style={{ color: 'var(--accent)' }} /> Reports AI Assistant
+        </span>
+        <ActionButton variant="ghost" icon={X} onClick={onClose} />
       </div>
       <div style={{ padding: 16, flex: 1, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto' }}>
         <textarea className="g-input" placeholder="Describe what you want to report on, paste alert data, or specify the audience…" value={input} onChange={e => setInput(e.target.value)} style={{ fontSize: 12, minHeight: 80, resize: 'vertical' }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {actions.map(a => (
-            <button key={a.id} className="g-btn g-btn-ghost" style={{ fontSize: 11, justifyContent: 'flex-start' }} onClick={() => ask(a.id)} disabled={loading}>{a.label}</button>
+            <ActionButton key={a.id} variant="ghost" icon={a.icon} style={{ fontSize: 11, justifyContent: 'flex-start' }} onClick={() => ask(a.id)} disabled={loading}>{a.label}</ActionButton>
           ))}
         </div>
         {loading && <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: 12 }}>Analyzing…</div>}
@@ -844,6 +782,7 @@ export default function CompliancePage() {
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const tabsWithCount = TABS.map(t => t.key === 'notifications' ? { ...t, count: unreadCount || undefined } : t);
 
   return (
     <RootLayout
@@ -852,32 +791,15 @@ export default function CompliancePage() {
       onRefresh={() => loadAll(true)}
       refreshing={refreshing}
       actions={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="g-btn g-btn-ghost" style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>📋 AI</button>
-        </div>
+        <ActionButton variant="ghost" icon={Sparkles} style={{ fontSize: 11 }} onClick={() => setShowAI(v => !v)}>AI Assistant</ActionButton>
       }
     >
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20, overflowX: 'auto' }}>
-        {TABS.map(t => {
-          const badge = t.id === 'notifications' ? unreadCount : 0;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: '10px 14px', fontSize: 12, fontWeight: tab === t.id ? 700 : 400,
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
-              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              background: 'none', whiteSpace: 'nowrap', position: 'relative',
-            }}>
-              {t.label}
-              {badge > 0 && (
-                <span style={{ position: 'absolute', top: 6, right: 2, fontSize: 8, fontWeight: 700, background: '#ef4444', color: '#fff', borderRadius: 8, padding: '1px 4px', minWidth: 14, textAlign: 'center' }}>{badge}</span>
-              )}
-            </button>
-          );
-        })}
+      <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 2, marginBottom: 20, overflowX: 'auto' }}>
+        <TabBar tabs={tabsWithCount} active={tab} onChange={k => setTab(k as Tab)} />
       </div>
 
-      {tab === 'dashboard'     && <DashboardTab dash={dash} onTabChange={setTab} />}
+      {tab === 'dashboard'     && <DashboardTab dash={dash} />}
       {tab === 'library'       && <LibraryTab reports={reports} onRefresh={() => loadAll()} />}
       {tab === 'builder'       && <BuilderTab templates={templates} onRefresh={() => loadAll()} />}
       {tab === 'scheduled'     && <ScheduledTab schedules={schedules} reports={reports} onRefresh={() => loadAll()} />}

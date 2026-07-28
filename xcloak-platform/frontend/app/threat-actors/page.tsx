@@ -6,7 +6,8 @@ import {
 import { RootLayout } from '@/components/layout/RootLayout';
 import { threatActorsAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Clock, Copy, Crosshair, Database, Edit2, Eye, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, Users, X, Zap, Lock } from '@/lib/icon-stubs';
+import { MetricCard } from '@/components/design-system';
+import { Activity, AlertCircle, AlertTriangle, ArrowRight, BarChart3, Brain, Check, CheckCircle2, Clock, Copy, Crosshair, Database, Edit2, Eye, Globe, Layers, Network, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, Users, X, Zap, Lock } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -179,23 +180,6 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
-function KPICard({ label, value, sub, color, icon: Icon }: {
-  label: string; value: number | string; sub?: string; color: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="g-card p-4 flex items-start gap-3">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider mb-0.5 font-medium" style={{ color: 'var(--text-3)' }}>{label}</p>
-        <p className="text-2xl font-bold leading-none" style={{ color }}>{value}</p>
-        {sub && <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
 
 function SparkBar({ data, keyName }: { data: Array<Record<string, unknown>>; keyName: string }) {
   const values = data.map(d => Number(d[keyName] ?? 0));
@@ -1087,12 +1071,12 @@ export default function ThreatActorsPage() {
           {dashboard ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <KPICard label="Total Actors"     value={dashboard.total}            color="var(--accent)"  icon={Users} />
-                <KPICard label="High Risk"        value={dashboard.high_risk}         color="var(--red)"     icon={AlertTriangle} />
-                <KPICard label="New This Month"   value={dashboard.new_this_month}    color="#fbbf24"        icon={Plus} />
-                <KPICard label="Active in Org"    value={dashboard.active_in_org}     color="var(--red)"     icon={Eye}
+                <MetricCard layout="icon-chip" label="Total Actors"     value={dashboard.total}            color="var(--accent)"  icon={Users} />
+                <MetricCard layout="icon-chip" label="High Risk"        value={dashboard.high_risk}         color="var(--red)"     icon={AlertTriangle} />
+                <MetricCard layout="icon-chip" label="New This Month"   value={dashboard.new_this_month}    color="#fbbf24"        icon={Plus} />
+                <MetricCard layout="icon-chip" label="Active in Org"    value={dashboard.active_in_org}     color="var(--red)"     icon={Eye}
                   sub={dashboard.active_in_org > 0 ? 'alerts last 30d' : 'no recent activity'} />
-                <KPICard label="Active Campaigns" value={dashboard.active_campaigns}  color="#fb923c"        icon={Target} />
+                <MetricCard layout="icon-chip" label="Active Campaigns" value={dashboard.active_campaigns}  color="#fb923c"        icon={Target} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1521,10 +1505,10 @@ export default function ThreatActorsPage() {
       {tab === 'exposure' && selected && exposure && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KPICard label="Total Alerts"    value={exposure.alert_count}        color="var(--red)"    icon={AlertTriangle} />
-            <KPICard label="Alerts (30d)"    value={exposure.alert_count_30d}    color="#fb923c"       icon={Clock} />
-            <KPICard label="Matched IOCs"    value={exposure.ioc_count}          color="var(--accent)" icon={Shield} />
-            <KPICard label="Incidents"       value={exposure.incident_count}     color="#a855f7"       icon={Zap} />
+            <MetricCard layout="icon-chip" label="Total Alerts"    value={exposure.alert_count}        color="var(--red)"    icon={AlertTriangle} />
+            <MetricCard layout="icon-chip" label="Alerts (30d)"    value={exposure.alert_count_30d}    color="#fb923c"       icon={Clock} />
+            <MetricCard layout="icon-chip" label="Matched IOCs"    value={exposure.ioc_count}          color="var(--accent)" icon={Shield} />
+            <MetricCard layout="icon-chip" label="Incidents"       value={exposure.incident_count}     color="#a855f7"       icon={Zap} />
           </div>
 
           {/* Exposure score */}
@@ -1599,10 +1583,10 @@ export default function ThreatActorsPage() {
           {detection ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <KPICard label="Coverage" value={`${detection.coverage_pct}%`} color={detection.coverage_pct >= 70 ? 'var(--green)' : detection.coverage_pct >= 40 ? '#fbbf24' : 'var(--red)'} icon={Shield} />
-                <KPICard label="Sigma Rules"   value={detection.sigma_total}       color="var(--accent)"  icon={FileCodeIcon} />
-                <KPICard label="YARA Rules"    value={detection.yara_total}        color="#fb923c"        icon={Lock} />
-                <KPICard label="Uncovered"     value={detection.total_techniques - detection.covered_techniques} color="var(--red)" icon={AlertCircle} />
+                <MetricCard layout="icon-chip" label="Coverage" value={`${detection.coverage_pct}%`} color={detection.coverage_pct >= 70 ? 'var(--green)' : detection.coverage_pct >= 40 ? '#fbbf24' : 'var(--red)'} icon={Shield} />
+                <MetricCard layout="icon-chip" label="Sigma Rules"   value={detection.sigma_total}       color="var(--accent)"  icon={FileCodeIcon} />
+                <MetricCard layout="icon-chip" label="YARA Rules"    value={detection.yara_total}        color="#fb923c"        icon={Lock} />
+                <MetricCard layout="icon-chip" label="Uncovered"     value={detection.total_techniques - detection.covered_techniques} color="var(--red)" icon={AlertCircle} />
               </div>
 
               <div className="g-card p-4 mb-2">
