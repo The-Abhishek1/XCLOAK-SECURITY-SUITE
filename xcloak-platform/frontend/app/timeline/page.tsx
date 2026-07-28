@@ -127,15 +127,13 @@ function EvidencePanel({ ev, onClose, bookmarked, onBookmark }: {
         <span className="text-xs font-bold uppercase flex-1" style={{ color: cat.color }}>
           {cat.label} — Evidence
         </span>
-        <button onClick={onBookmark} title={bookmarked ? 'Remove bookmark' : 'Bookmark'}>
-          {bookmarked
-            ? <BookmarkCheck className="h-4 w-4" style={{ color: 'var(--accent)' }} />
-            : <Bookmark className="h-4 w-4" style={{ color: 'var(--text-3)' }} />}
+        <button onClick={onBookmark} title={bookmarked ? 'Remove bookmark' : 'Bookmark'}
+          style={{ color: bookmarked ? 'var(--accent)' : 'var(--text-3)', fontSize: 14, lineHeight: 1 }}>
+          {bookmarked ? '★' : '☆'}
         </button>
-        <button onClick={copyJSON} title="Copy JSON">
-          {copied
-            ? <Check className="h-4 w-4" style={{ color: 'var(--green)' }} />
-            : <Copy className="h-4 w-4" style={{ color: 'var(--text-3)' }} />}
+        <button onClick={copyJSON} title="Copy JSON"
+          style={{ color: copied ? 'var(--green)' : 'var(--text-3)', fontSize: 11, fontWeight: 600 }}>
+          {copied ? '✓' : 'Copy'}
         </button>
         <button onClick={onClose} style={{ color: 'var(--text-3)', fontSize: 18, lineHeight: 1 }} title="Close">
           ×
@@ -508,13 +506,12 @@ export default function TimelinePage() {
         ...buildTimeParams(),
       };
 
-      let res: { data: TimelineEvent[] | null };
-      if (agentId !== 'all') {
-        const r = await agentsAPI.getTimeline(agentId as number);
-        res = r as { data: TimelineEvent[] | null };
-      } else {
-        res = (await timelineAPI.get(params)) as { data: TimelineEvent[] | null };
-      }
+      // Route agent selection through the general filtered endpoint (which
+      // already accepts agent_id) rather than the dedicated per-agent
+      // endpoint — the latter ignores severity/category/search/time-range
+      // filters entirely, so picking an agent used to silently drop every
+      // other active filter while the toolbar kept showing them as applied.
+      const res = (await timelineAPI.get(params)) as { data: TimelineEvent[] | null };
 
       // A newer load() started while this one was in flight — discard this
       // stale response so it can't overwrite fresher state (was causing the
@@ -679,8 +676,7 @@ export default function TimelinePage() {
             <button onClick={() => setShowBookmarksOnly(x => !x)}
               className="g-btn g-btn-ghost flex items-center gap-1.5"
               style={{ color: showBookmarksOnly ? 'var(--accent)' : undefined }}>
-              <Bookmark className="h-3.5 w-3.5" />
-              {bookmarks.size > 0 ? bookmarks.size : ''}
+              Bookmarks{bookmarks.size > 0 ? ` (${bookmarks.size})` : ''}
             </button>
 
             {/* Export */}

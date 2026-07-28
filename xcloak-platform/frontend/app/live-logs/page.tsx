@@ -4,7 +4,7 @@ import {
   useEffect, useRef, useState, useCallback, useMemo, ReactNode,
 } from 'react';
 import { RootLayout }    from '@/components/layout/RootLayout';
-import { agentsAPI, liveLogAPI } from '@/lib/api';
+import { agentsAPI, liveLogAPI, iocsAPI } from '@/lib/api';
 import { Agent }         from '@/types';
 import { formatDate }    from '@/lib/utils';
 import { Activity, AlertTriangle, ArrowRight, BarChart2, Bookmark, BookmarkCheck, Check, ChevronDown, ChevronRight, Clock, Code, Columns, Copy, Cpu, Database, Download, Eye, EyeOff, FileJson, Filter, Globe, Hash, Key, Monitor, Network, Pause, Play, Plus, RotateCcw, Save, Search, Server, Shield, SlidersHorizontal, Sparkles, Table2, Terminal, Trash2, X, Zap } from '@/lib/icon-stubs';
@@ -469,18 +469,14 @@ function ParsedView({ logs, selected, onSelect, onContextMenu }: {
 // Context / right panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ContextPanel({ log, logs, tab, onTabChange, bookmarked, onBookmark, aiResult, aiLoading, onExplain, onSummarize, dbStats }: {
+function ContextPanel({ log, logs, tab, onTabChange, bookmarked, onBookmark, aiResult, aiLoading, onExplain, onSummarize, dbStats, notesByLogId, onNoteChange }: {
   log: LogEntry | null; logs: LogEntry[]; tab: RightTab; onTabChange: (t: RightTab) => void;
   bookmarked: Set<number>; onBookmark: (id: number) => void;
   aiResult: string; aiLoading: boolean; onExplain: () => void; onSummarize: () => void;
   dbStats: any;
+  notesByLogId: Record<number, string>; onNoteChange: (id: number, note: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [note, setNote]     = useState(log?.note ?? '');
-  const [tagInput, setTagInput] = useState('');
-  const [sigmaModal, setSigmaModal] = useState(false);
-
-  useEffect(() => { setNote(log?.note ?? ''); }, [log?.id]);
 
   const copyLog = () => {
     if (!log) return;
@@ -580,51 +576,38 @@ function ContextPanel({ log, logs, tab, onTabChange, bookmarked, onBookmark, aiR
               </div>
             )}
 
-            {/* Note */}
+            {/* Note — session-scoped (kept in the page's in-memory buffer only,
+                not persisted server-side; there is no note/tag column on
+                endpoint_logs to save it to). Keyed by log id so switching
+                between logs and back within this session doesn't silently
+                discard what was typed, unlike the previous version whose
+                local state reset on every log-id change. */}
             <div>
-              <p className="text-[9px] uppercase font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Analyst Note</p>
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+              <p className="text-[9px] uppercase font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Analyst Note (this session)</p>
+              <textarea value={notesByLogId[log.id] ?? ''} onChange={e => onNoteChange(log.id, e.target.value)} rows={2}
                 placeholder="Add a note to this log…"
                 className="w-full rounded-lg p-2 text-[11px] font-mono resize-none g-input" />
             </div>
 
-            {/* Tags */}
-            <div>
-              <p className="text-[9px] uppercase font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Tags</p>
-              <div className="flex items-center gap-1.5">
-                <input value={tagInput} onChange={e => setTagInput(e.target.value)}
-                  placeholder="Add tag…" className="g-input text-[10px] h-6 flex-1" />
-                <button className="g-btn g-btn-ghost text-[10px] h-6" title="Add tag">+</button>
-              </div>
-              {log.tags && log.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {log.tags.map(t => (
-                    <span key={t} className="text-[9px] px-1.5 py-0.5 rounded"
-                      style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Quick analyst actions */}
+            {/* Quick analyst actions — real navigation to the relevant page
+                for each (none of these can be deep-linked to this specific
+                log; that page would need to be built first). */}
             <div>
               <p className="text-[9px] uppercase font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Analyst Actions</p>
               <div className="grid grid-cols-2 gap-1">
                 {[
-                  { label: 'Create Sigma Rule', icon: Code },
-                  { label: 'Hunt Similar',      icon: Search },
-                  { label: 'Add to Case',        icon: Plus },
-                  { label: 'Open Investigation', icon: Eye },
-                ].map(({ label, icon: Icon }) => (
-                  <button key={label}
+                  { label: 'Create Sigma Rule', icon: Code,   href: '/sigma-rules' },
+                  { label: 'Hunt Similar',      icon: Search, href: '/hunt-workbench' },
+                  { label: 'Add to Case',        icon: Plus,  href: '/cases' },
+                  { label: 'Open Investigation', icon: Eye,   href: '/dfir' },
+                ].map(({ label, icon: Icon, href }) => (
+                  <a key={label} href={href} target="_blank" rel="noreferrer"
                     className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] text-left transition-colors"
                     style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
                     <Icon className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} /> {label}
-                  </button>
+                  </a>
                 ))}
               </div>
             </div>
@@ -704,19 +687,33 @@ function ContextPanel({ log, logs, tab, onTabChange, bookmarked, onBookmark, aiR
               </div>
             )}
 
+            {/* These three used to be static, unclickable suggestion rows.
+                The first two map onto real, already-wired actions above
+                (Explain / Summarize); the third has no real one-click
+                backend path, so it links to the real Sigma Rules page
+                instead of pretending to generate a rule inline. */}
             <div className="space-y-1">
-              {[
-                'Why is this log suspicious?',
-                'Convert to Sigma rule',
-                'Identify anomalies in stream',
-              ].map(q => (
-                <button key={q} className="w-full text-left px-3 py-2 rounded-lg text-[10px] transition-colors flex items-center gap-2"
-                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
-                  <ArrowRight className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} /> {q}
-                </button>
-              ))}
+              <button onClick={onExplain} disabled={!log || aiLoading}
+                className="w-full text-left px-3 py-2 rounded-lg text-[10px] transition-colors flex items-center gap-2 disabled:opacity-40"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
+                <ArrowRight className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} /> Why is this log suspicious?
+              </button>
+              <button onClick={onSummarize} disabled={logs.length === 0 || aiLoading}
+                className="w-full text-left px-3 py-2 rounded-lg text-[10px] transition-colors flex items-center gap-2 disabled:opacity-40"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
+                <ArrowRight className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} /> Identify anomalies in stream
+              </button>
+              <a href="/sigma-rules" target="_blank" rel="noreferrer"
+                className="w-full text-left px-3 py-2 rounded-lg text-[10px] transition-colors flex items-center gap-2"
+                style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'}>
+                <ArrowRight className="h-3 w-3 shrink-0" style={{ color: 'var(--text-3)' }} /> Convert to Sigma rule
+              </a>
             </div>
           </>
         )}
@@ -749,10 +746,12 @@ function StatList({ title, items, max }: { title: string; items: [string, number
 // Context menu
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CtxMenu({ x, y, log, onClose, onBookmark, bookmarked, onAddFilter }: {
+function CtxMenu({ x, y, log, onClose, onBookmark, bookmarked, onAddFilter, onCreateIOC, notify }: {
   x: number; y: number; log: LogEntry; onClose: () => void;
   onBookmark: () => void; bookmarked: boolean;
   onAddFilter: (field: string, value: string) => void;
+  onCreateIOC: (indicator: string, type: string) => void;
+  notify: (m: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -765,6 +764,7 @@ function CtxMenu({ x, y, log, onClose, onBookmark, bookmarked, onAddFilter }: {
   const host    = log.fields.hostname;
   const user    = log.fields.user ?? log.fields.target_user;
   const process = log.fields.process;
+  const domain  = log.fields.domain;
 
   const items = [
     { label: bookmarked ? 'Remove Bookmark' : 'Bookmark', icon: Bookmark, action: onBookmark },
@@ -780,8 +780,9 @@ function CtxMenu({ x, y, log, onClose, onBookmark, bookmarked, onAddFilter }: {
     ...(user   ? [{ label: `Investigate User: ${user}`, icon: Eye, action: () => window.open(`/risk-posture?user=${user}`, '_blank') }] : []),
     { label: 'Open Timeline', icon: Clock, action: () => window.open('/timeline', '_blank') },
     { label: '─', icon: null, action: () => {} },
-    { label: 'Create IOC',        icon: Plus, action: () => {} },
-    { label: 'Create Alert Rule', icon: AlertTriangle, action: () => {} },
+    ...(src_ip ? [{ label: `Create IOC: ${src_ip}`, icon: Plus, action: () => onCreateIOC(src_ip, 'ip') }] : []),
+    ...(domain ? [{ label: `Create IOC: ${domain}`, icon: Plus, action: () => onCreateIOC(domain, 'domain') }] : []),
+    { label: 'Create Alert Rule', icon: AlertTriangle, action: () => notify('Create Alert Rule — coming soon') },
   ];
 
   return (
@@ -854,6 +855,9 @@ export default function LiveLogsPage() {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [selectedLog, setSelectedLog]   = useState<LogEntry | null>(null);
   const [contextMenu, setContextMenu]   = useState<{ x: number; y: number; log: LogEntry } | null>(null);
+  const [notesByLogId, setNotesByLogId] = useState<Record<number, string>>({});
+  const [toast, setToast]               = useState<string | null>(null);
+  const [showColumnsPicker, setShowColumnsPicker] = useState(false);
 
   // Stats
   const [epsRate, setEpsRate]           = useState(0);
@@ -1022,6 +1026,20 @@ export default function LiveLogsPage() {
 
   const toggleBookmark = (id: number) =>
     setBookmarked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const notify = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
+
+  const createIOCFromLog = async (indicator: string, type: string) => {
+    try {
+      await iocsAPI.create({ indicator, type, severity: 'medium', enabled: true, description: `Added from Live Logs (${type})` });
+      notify(`IOC created: ${indicator}`);
+    } catch {
+      notify('Failed to create IOC');
+    }
+  };
+
+  const onNoteChange = (id: number, note: string) =>
+    setNotesByLogId(prev => ({ ...prev, [id]: note }));
 
   const addFilter = (field?: string, value?: string) => {
     const f = field ?? addField;
@@ -1269,9 +1287,24 @@ export default function LiveLogsPage() {
           </button>
 
           {viewMode === 'table' && (
-            <button onClick={() => {}} className="g-btn g-btn-ghost text-xs flex items-center gap-1.5">
-              <Columns className="h-3.5 w-3.5" /> Columns
-            </button>
+            <div className="relative">
+              <button onClick={() => setShowColumnsPicker(v => !v)}
+                className={`g-btn text-xs ${showColumnsPicker ? 'g-btn-primary' : 'g-btn-ghost'} flex items-center gap-1.5`}>
+                <Columns className="h-3.5 w-3.5" /> Columns
+              </button>
+              {showColumnsPicker && (
+                <div className="absolute right-0 top-full mt-1 rounded-lg overflow-hidden z-50 p-2"
+                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)', minWidth: 150, backdropFilter: 'blur(12px)' }}>
+                  {TABLE_COLS.map(c => (
+                    <label key={c.key} className="flex items-center gap-2 px-1 py-1 text-xs cursor-pointer" style={{ color: 'var(--text-2)' }}>
+                      <input type="checkbox" checked={!hiddenCols.includes(c.key)}
+                        onChange={() => setHiddenCols(h => h.includes(c.key) ? h.filter(k => k !== c.key) : [...h, c.key])} />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Right panel toggle */}
@@ -1454,6 +1487,7 @@ export default function LiveLogsPage() {
                 aiResult={aiResult} aiLoading={aiLoading}
                 onExplain={handleExplain} onSummarize={handleSummarize}
                 dbStats={dbStats}
+                notesByLogId={notesByLogId} onNoteChange={onNoteChange}
               />
             </div>
           )}
@@ -1473,11 +1507,20 @@ export default function LiveLogsPage() {
           bookmarked={bookmarked.has(contextMenu.log.id)}
           onBookmark={() => toggleBookmark(contextMenu.log.id)}
           onClose={() => setContextMenu(null)}
-          onAddFilter={(f, v) => { addFilter(f, v); setShowFilters(true); }} />
+          onAddFilter={(f, v) => { addFilter(f, v); setShowFilters(true); }}
+          onCreateIOC={createIOCFromLog}
+          notify={notify} />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 rounded-lg px-4 py-2 text-xs"
+          style={{ background: 'var(--glass-bg)', border: '1px solid var(--accent-border)', color: 'var(--text-1)', backdropFilter: 'blur(12px)' }}>
+          {toast}
+        </div>
       )}
 
       {/* Close overlays on backdrop click */}
-      {(showExport) && <div className="fixed inset-0 z-40" onClick={() => setShowExport(false)} />}
+      {(showExport || showColumnsPicker) && <div className="fixed inset-0 z-40" onClick={() => { setShowExport(false); setShowColumnsPicker(false); }} />}
     </RootLayout>
   );
 }
