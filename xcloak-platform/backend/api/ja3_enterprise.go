@@ -508,11 +508,11 @@ func GetJA3Relationships(c *gin.Context) {
 	}
 
 	ipRows, _ := database.DB.Query(`
-		SELECT DISTINCT SPLIT_PART(remote_addr,':',1) AS ip, COUNT(*) AS cnt
+		SELECT DISTINCT SPLIT_PART(remote_address,':',1) AS ip, COUNT(*) AS cnt
 		FROM endpoint_connections ec
 		JOIN agents a ON a.id = ec.agent_id
 		WHERE a.tenant_id = $1
-		  AND remote_addr NOT LIKE '10.%' AND remote_addr NOT LIKE '192.168.%' AND remote_addr NOT LIKE '172.%'
+		  AND remote_address NOT LIKE '10.%' AND remote_address NOT LIKE '192.168.%' AND remote_address NOT LIKE '172.%'
 		GROUP BY 1 ORDER BY cnt DESC LIMIT 8
 	`, tid)
 	if ipRows != nil {
@@ -548,11 +548,11 @@ func GetJA3Relationships(c *gin.Context) {
 	}
 
 	connRows, _ := database.DB.Query(`
-		SELECT DISTINCT ec.agent_id, SPLIT_PART(ec.remote_addr,':',1)
+		SELECT DISTINCT ec.agent_id, SPLIT_PART(ec.remote_address,':',1)
 		FROM endpoint_connections ec
 		JOIN agents a ON a.id = ec.agent_id
 		WHERE a.tenant_id = $1
-		  AND remote_addr NOT LIKE '10.%' AND remote_addr NOT LIKE '192.168.%' AND remote_addr NOT LIKE '172.%'
+		  AND remote_address NOT LIKE '10.%' AND remote_address NOT LIKE '192.168.%' AND remote_address NOT LIKE '172.%'
 		LIMIT 20
 	`, tid)
 	if connRows != nil {
@@ -1066,25 +1066,32 @@ func GetJA3FingerprintDetail(c *gin.Context) {
 
 	type alEntry struct {
 		ID         int    `json:"id"`
+		AgentID    int    `json:"agent_id"`
 		Severity   string `json:"severity"`
 		LogMessage string `json:"log_message"`
 		CreatedAt  string `json:"created_at"`
 		Hostname   string `json:"hostname"`
 	}
 	alRows, _ := database.DB.Query(`
-		SELECT al.id, al.severity, al.log_message, al.created_at, ag.hostname
+		SELECT al.id, al.agent_id, al.severity, al.log_message, al.created_at, ag.hostname
 		FROM alerts al
 		JOIN agents ag ON ag.id = al.agent_id
 		WHERE al.tenant_id = $1 AND al.log_message ILIKE '%' || $2 || '%'
 		ORDER BY al.created_at DESC LIMIT 20
 	`, tid, h)
 	alerts := []alEntry{}
+	matchedAgentIDs := []int{}
+	seenAgent := map[int]bool{}
 	if alRows != nil {
 		defer alRows.Close()
 		for alRows.Next() {
 			var a alEntry
-			if alRows.Scan(&a.ID, &a.Severity, &a.LogMessage, &a.CreatedAt, &a.Hostname) == nil {
+			if alRows.Scan(&a.ID, &a.AgentID, &a.Severity, &a.LogMessage, &a.CreatedAt, &a.Hostname) == nil {
 				alerts = append(alerts, a)
+				if !seenAgent[a.AgentID] {
+					seenAgent[a.AgentID] = true
+					matchedAgentIDs = append(matchedAgentIDs, a.AgentID)
+				}
 			}
 		}
 	}
@@ -1092,27 +1099,45 @@ func GetJA3FingerprintDetail(c *gin.Context) {
 		alerts = []alEntry{}
 	}
 
+	// Connections aren't tagged with the JA3 hash that triggered them (no such
+	// column exists on endpoint_connections), so the closest real correlation
+	// is "recent connections from the agents that actually matched this
+	// fingerprint" — scoped via the alert list above — rather than the
+	// tenant's unrelated top-10 overall (what this returned before being
+	// scoped, on top of `remote_addr`/`created_at` both being wrong column
+	// names that made the query fail outright every time: the real columns
+	// are `remote_address`/`collected_at`).
 	type connEntry struct {
 		RemoteAddr string `json:"remote_addr"`
 		Protocol   string `json:"protocol"`
 		Hostname   string `json:"hostname"`
 		Count      int    `json:"count"`
 	}
-	connRows, _ := database.DB.Query(`
-		SELECT DISTINCT ec.remote_addr, ec.protocol, ag.hostname, COUNT(*) AS cnt
-		FROM endpoint_connections ec
-		JOIN agents ag ON ag.id = ec.agent_id
-		WHERE ag.tenant_id = $1 AND ec.created_at > NOW() - INTERVAL '7 days'
-		GROUP BY ec.remote_addr, ec.protocol, ag.hostname
-		ORDER BY cnt DESC LIMIT 10
-	`, tid)
 	connections := []connEntry{}
-	if connRows != nil {
-		defer connRows.Close()
-		for connRows.Next() {
-			var co connEntry
-			if connRows.Scan(&co.RemoteAddr, &co.Protocol, &co.Hostname, &co.Count) == nil {
-				connections = append(connections, co)
+	if len(matchedAgentIDs) > 0 {
+		ph := make([]string, len(matchedAgentIDs))
+		args := make([]any, 0, len(matchedAgentIDs)+1)
+		args = append(args, tid)
+		for i, id := range matchedAgentIDs {
+			ph[i] = fmt.Sprintf("$%d", i+2)
+			args = append(args, id)
+		}
+		connRows, _ := database.DB.Query(fmt.Sprintf(`
+			SELECT ec.remote_address, ec.protocol, ag.hostname, COUNT(*) AS cnt
+			FROM endpoint_connections ec
+			JOIN agents ag ON ag.id = ec.agent_id
+			WHERE ag.tenant_id = $1 AND ec.agent_id IN (%s)
+			  AND ec.collected_at > NOW() - INTERVAL '7 days'
+			GROUP BY ec.remote_address, ec.protocol, ag.hostname
+			ORDER BY cnt DESC LIMIT 10
+		`, strings.Join(ph, ",")), args...)
+		if connRows != nil {
+			defer connRows.Close()
+			for connRows.Next() {
+				var co connEntry
+				if connRows.Scan(&co.RemoteAddr, &co.Protocol, &co.Hostname, &co.Count) == nil {
+					connections = append(connections, co)
+				}
 			}
 		}
 	}

@@ -501,6 +501,32 @@ export default function JA3FingerprintsPage() {
             </div>
           )}
 
+          {timelineData && (timelineData.daily?.length > 0 || timelineData.fingerprints?.some((f: any) => f.total_matches > 0)) && (
+            <div className="g-card p-4 grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--text-3)' }}>Match Trend (30d)</p>
+                <SparkTrend trend={timelineData.daily ?? []} />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--text-3)' }}>Most Recently Active</p>
+                <div className="space-y-1">
+                  {(timelineData.fingerprints ?? [])
+                    .filter((f: any) => f.total_matches > 0)
+                    .slice(0, 4)
+                    .map((f: any) => (
+                      <div key={f.hash} className="flex items-center justify-between text-[10px]">
+                        <span className="font-mono truncate" style={{ color: 'var(--text-2)' }}>{f.threat_name}</span>
+                        <span style={{ color: 'var(--text-3)' }}>{f.last_match ? timeAgo(f.last_match) : '—'} · {f.total_matches}×</span>
+                      </div>
+                    ))}
+                  {(timelineData.fingerprints ?? []).every((f: any) => f.total_matches === 0) && (
+                    <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>No fingerprints have matched yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-3)' }} />
@@ -888,6 +914,25 @@ export default function JA3FingerprintsPage() {
               <Zap className="h-3.5 w-3.5" />{aiLoading ? 'Analyzing…' : 'Run AI Analysis'}
             </button>
           </div>
+
+          {analyticsData?.fingerprints?.some((f: any) => f.total > 0) && (
+            <div className="g-card p-4">
+              <p className="text-[10px] uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--text-3)' }}>Top Matched Fingerprints (all-time) — click to analyze</p>
+              <div className="space-y-1">
+                {analyticsData.fingerprints
+                  .filter((f: any) => f.total > 0)
+                  .slice(0, 5)
+                  .map((f: any) => (
+                    <button key={f.hash} onClick={() => { setAiHash(f.hash); setAiThreat(f.name); }}
+                      className="flex items-center justify-between w-full text-left text-[10px] px-2 py-1.5 rounded-lg hover:opacity-80"
+                      style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
+                      <span style={{ color: 'var(--text-2)' }}>{f.name}</span>
+                      <span style={{ color: 'var(--text-3)' }}>{f.total} matches · {f.agents_hit} agent{f.agents_hit !== 1 ? 's' : ''}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {aiResult && (
             <div className="g-card p-4">
