@@ -100,7 +100,7 @@ function SevBadge({ sev }: { sev: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const color = status === 'stable' ? 'var(--green)' : status === 'test' ? 'var(--yellow)' : status === 'deprecated' ? 'var(--red)' : 'var(--text-3)';
+  const color = status === 'stable' ? 'var(--green)' : status === 'test' || status === 'testing' ? 'var(--yellow)' : status === 'deprecated' ? 'var(--red)' : 'var(--text-3)';
   return <span className="text-[10px] font-mono" style={{ color }}>{status || 'exp'}</span>;
 }
 
@@ -611,16 +611,21 @@ export default function SigmaRulesPage() {
 
   // ── Bulk ──────────────────────────────────────────────────────────────────
 
+  const BULK_ACTION_LABEL: Record<string, string> = {
+    enable: 'enabled', disable: 'disabled', delete: 'deleted',
+    set_severity: 'updated (severity)', set_status: 'updated (status)',
+  };
+
   const runBulk = async () => {
     if (selected.size === 0) { notify('Select rules first'); return; }
     setBulkLoading(true);
     try {
       const res = await sigmaAPI.bulk(bulkAction, Array.from(selected), bulkValue);
-      notify(`${res.data.affected} rules ${bulkAction}d`);
+      notify(`${res.data.affected} rules ${BULK_ACTION_LABEL[bulkAction] ?? bulkAction}`);
       setSelected(new Set());
       loaded.current = {};
       loadBase();
-    } catch { notify('Bulk action failed'); }
+    } catch (e: any) { notify(e?.response?.data?.error ?? 'Bulk action failed'); }
     finally { setBulkLoading(false); }
   };
 
@@ -1344,7 +1349,21 @@ export default function SigmaRulesPage() {
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>Action</label>
-                <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} className="g-select">
+                <select value={bulkAction} onChange={e => {
+                  const next = e.target.value;
+                  setBulkAction(next);
+                  // bulkValue defaults to '' — the Value <select> below has no
+                  // option matching that, so the browser silently falls back
+                  // to displaying its first option as "selected" while React
+                  // state stays empty. Apply then sends value:"" and the
+                  // backend correctly 400s ("value required"), which the
+                  // catch block only ever surfaced as a generic "Bulk action
+                  // failed" toast — so a real user who trusted the visibly-
+                  // selected value never learns why it failed. Keep state in
+                  // sync with what's actually displayed.
+                  if (next === 'set_severity') setBulkValue(v => SEVERITIES.includes(v) ? v : SEVERITIES[0]);
+                  else if (next === 'set_status') setBulkValue(v => STATUSES.includes(v) ? v : STATUSES[0]);
+                }} className="g-select">
                   <option value="enable">Enable selected</option>
                   <option value="disable">Disable selected</option>
                   <option value="delete">Delete selected</option>

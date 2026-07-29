@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -1418,17 +1419,24 @@ func PostActorResponse(c *gin.Context) {
 				}
 			}
 		}
+		// `sigma_rules` has no `updated_at` column (confirmed via `\d
+		// sigma_rules`) and `keywords` is `jsonb`, not an array type — this
+		// INSERT always failed outright (500) on every click, on both
+		// counts. Fixed to match the real schema and the JSON encoding
+		// `repositories.CreateSigmaRule` already uses for this column.
+		keywordsJSON, _ := json.Marshal([]string{actorName})
 		_, err := database.DB.Exec(`
-			INSERT INTO sigma_rules (tenant_id, title, severity, mitre_technique, keywords, enabled, created_at, updated_at)
-			VALUES ($1, $2, 'high', $3, ARRAY[$4], true, NOW(), NOW())`,
+			INSERT INTO sigma_rules (tenant_id, title, severity, mitre_technique, keywords, enabled, created_at)
+			VALUES ($1, $2, 'high', $3, $4, true, NOW())`,
 			tid,
 			fmt.Sprintf("Hunt: %s Technique %s", actorName, primaryTech),
 			primaryTech,
-			actorName)
+			keywordsJSON)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
+		services.InvalidateSigmaCache(tid)
 		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Created Sigma rule for %s technique %s", actorName, primaryTech)})
 
 	case "notify":

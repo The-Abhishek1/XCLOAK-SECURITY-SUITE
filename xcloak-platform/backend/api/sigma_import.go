@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 
+	"xcloak-platform/database"
 	"xcloak-platform/models"
 	"xcloak-platform/services"
 )
@@ -69,6 +70,27 @@ func ImportSigmaYAML(c *gin.Context) {
 
 	tid := tenantIDFromContext(c)
 
+	// The UI explicitly promises "duplicates skipped", but CreateSigmaRule
+	// does a plain INSERT with no uniqueness check anywhere (sigma_rules has
+	// no unique constraint on title) — re-importing the same file silently
+	// created a duplicate row every time while still reporting "skipped: 0"
+	// (verified live: importing the same rule twice produced 2 rows and 0
+	// reported skips). Load existing titles once up front and treat an
+	// exact case-insensitive title match, for this tenant, as a duplicate —
+	// also tracking newly-imported titles so multiple documents with the
+	// same title inside one upload are caught too.
+	existingTitles := map[string]bool{}
+	rows, err := database.DB.Query(`SELECT LOWER(title) FROM sigma_rules WHERE tenant_id=$1`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var t string
+			if rows.Scan(&t) == nil {
+				existingTitles[t] = true
+			}
+		}
+	}
+
 	for _, fh := range files {
 		f, err := fh.Open()
 		if err != nil {
@@ -101,11 +123,18 @@ func ImportSigmaYAML(c *gin.Context) {
 				skipped++
 				continue
 			}
+			titleKey := strings.ToLower(rule.Title)
+			if existingTitles[titleKey] {
+				errs = append(errs, fmt.Sprintf("%s[%d]: %q already exists — skipped", fh.Filename, i, rule.Title))
+				skipped++
+				continue
+			}
 			if err := services.CreateSigmaRule(*rule, tid); err != nil {
 				errs = append(errs, fmt.Sprintf("%s[%d]: %v", fh.Filename, i, err))
 				skipped++
 				continue
 			}
+			existingTitles[titleKey] = true
 			imported++
 		}
 	}

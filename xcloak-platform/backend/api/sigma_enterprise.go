@@ -813,9 +813,6 @@ func PostSigmaBulk(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "value required for set_severity"})
 			return
 		}
-		args = append([]interface{}{tid, body.Value}, args[1:]...)
-		query = fmt.Sprintf(`UPDATE sigma_rules SET severity=$2 WHERE tenant_id=$1 AND id IN (%s)`, inClause)
-		// Rebuild args properly
 		args = []interface{}{tid, body.Value}
 		for _, id := range body.RuleIDs {
 			args = append(args, id)
@@ -849,6 +846,13 @@ func PostSigmaBulk(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// Unlike every single-rule mutation (create/update/delete/enable/disable),
+	// this bulk path writes directly via database.DB.Exec instead of going
+	// through the services layer, so it never invalidated the in-memory
+	// sigma rule cache used by live log evaluation — a bulk-disabled rule
+	// could keep firing, and a bulk severity/status change could stay
+	// unreflected, for up to sigmaCacheTTL (30s) after the API call.
+	services.InvalidateSigmaCache(tid)
 	affected, _ := result.RowsAffected()
 	c.JSON(http.StatusOK, gin.H{"affected": affected, "action": body.Action})
 }

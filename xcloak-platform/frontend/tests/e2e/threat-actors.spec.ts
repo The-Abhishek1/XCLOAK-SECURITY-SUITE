@@ -167,4 +167,17 @@ test.describe('Threat Actors — Response Actions against the live backend', () 
     await expect(page.getByText(/Enabled blocking for \d+/)).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('body')).toContainText(name);
   });
+
+  // Found during the Sigma Rules pass while grepping every write to
+  // sigma_rules for a missing-cache-invalidation bug: this action always
+  // 500'd outright — sigma_rules has no updated_at column, and keywords is
+  // jsonb (not an array type Postgres can implicitly cast a bare ARRAY[...]
+  // into). Fixed to match the real schema; this locks in that the button
+  // now actually creates a rule instead of erroring.
+  test('Create Sigma Rule succeeds against the real schema (was a 500 on every click)', async ({ page }) => {
+    await selectFirstActor(page);
+    await page.getByRole('button', { name: 'Hunt', exact: true }).click();
+    await page.getByRole('button', { name: 'Create Sigma Rule' }).click();
+    await expect(page.getByText(/^Created Sigma rule for/)).toBeVisible({ timeout: 10_000 });
+  });
 });
