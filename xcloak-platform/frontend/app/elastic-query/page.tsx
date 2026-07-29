@@ -6,7 +6,7 @@ import { elasticAPI } from '@/lib/api';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Activity, AlertCircle, ArrowUpDown, BookOpen, Bot, Braces, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Database, DatabaseZap, Download, FileJson, Filter, Hash, Layers, Lightbulb, Play, RefreshCw, RotateCcw, Save, Server, Star, StarOff, Table2, Terminal, Trash2, Wand2, X } from '@/lib/icon-stubs';
+import { Activity, AlertCircle, ArrowUpDown, BookOpen, Bot, Braces, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Database, DatabaseZap, Download, FileJson, Filter, Hash, Layers, Lightbulb, Play, RefreshCw, RotateCcw, Save, Server, Table2, Terminal, Wand2 } from '@/lib/icon-stubs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -240,7 +240,7 @@ function HitRow({ hit, idx, hiddenCols, allCols }: {
                 <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(hit._source, null, 2)); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
                   className="text-[10px] px-2 py-0.5 rounded flex items-center gap-1"
                   style={{ background:'transparent', color:'var(--text-3)', border:'1px solid var(--border)' }}>
-                  {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                  {copied ? '✓' : 'Copy'}
                 </button>
               </div>
             </div>
@@ -697,8 +697,8 @@ export default function ElasticQueryPage() {
               </button>
               {tabs.length > 1 && (
                 <button onClick={e => { e.stopPropagation(); closeTab(t.id); }}
-                  className="pr-2 hover:opacity-70" style={{ color:'var(--text-3)' }}>
-                  <X className="h-3 w-3" />
+                  className="px-2 py-2 hover:opacity-70" style={{ color:'var(--text-3)' }} title="Close tab">
+                  ×
                 </button>
               )}
             </div>
@@ -764,18 +764,16 @@ export default function ElasticQueryPage() {
                     <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color:'var(--text-3)' }}>Saved</p>
                     {savedQueries.slice(0,8).map(q => (
                       <div key={q.id} className="group flex items-center gap-1 py-1">
-                        <button onClick={() => toggleStar(q.id)} className="shrink-0">
-                          {q.starred
-                            ? <Star    className="h-3 w-3" style={{ color:'var(--yellow)' }} />
-                            : <StarOff className="h-3 w-3" style={{ color:'var(--text-3)' }} />}
+                        <button onClick={() => toggleStar(q.id)} className="g-btn g-btn-ghost text-[10px] py-0.5 px-1 shrink-0"
+                          title={q.starred ? 'Unstar' : 'Star'} style={{ color: q.starred ? 'var(--yellow)' : 'var(--text-3)' }}>
+                          {q.starred ? '★' : '☆'}
                         </button>
                         <button onClick={() => updateTab(activeTabId, { dsl:q.dsl, index:q.index, name:q.name })}
                           className="flex-1 text-left text-[10px] truncate hover:opacity-80" style={{ color:'var(--text-2)' }}>
                           {q.name}
                         </button>
-                        <button onClick={() => deleteSaved(q.id)} className="opacity-0 group-hover:opacity-100 shrink-0">
-                          <Trash2 className="h-3 w-3" style={{ color:'var(--red)' }} />
-                        </button>
+                        <button onClick={() => deleteSaved(q.id)} className="g-btn g-btn-ghost text-[10px] py-0.5 px-1 opacity-0 group-hover:opacity-100 shrink-0"
+                          style={{ color:'var(--red)' }} title="Delete">🗑️</button>
                       </div>
                     ))}
                   </div>
@@ -861,9 +859,7 @@ export default function ElasticQueryPage() {
                   <Bot className="h-4 w-4" style={{ color:'var(--accent)' }} />
                   <p className="text-xs font-semibold" style={{ color:'var(--text-1)' }}>AI Query Assistant</p>
                   <p className="text-[10px]" style={{ color:'var(--text-3)' }}>Describe what to find — AI generates ES DSL</p>
-                  <button onClick={() => setShowAI(false)} className="ml-auto" style={{ color:'var(--text-3)' }}>
-                    <X className="h-4 w-4" />
-                  </button>
+                  <button onClick={() => setShowAI(false)} className="g-btn g-btn-ghost text-sm py-0.5 px-1.5 ml-auto" style={{ color:'var(--text-3)' }} title="Close">×</button>
                 </div>
                 <div className="flex gap-2">
                   <input value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
@@ -917,9 +913,7 @@ export default function ElasticQueryPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <Layers className="h-3.5 w-3.5" style={{ color:'var(--accent)' }} />
                   <p className="text-xs font-semibold" style={{ color:'var(--text-1)' }}>Aggregation Builder</p>
-                  <button onClick={() => setShowAggBuilder(false)} className="ml-auto" style={{ color:'var(--text-3)' }}>
-                    <X className="h-4 w-4" />
-                  </button>
+                  <button onClick={() => setShowAggBuilder(false)} className="g-btn g-btn-ghost text-sm py-0.5 px-1.5 ml-auto" style={{ color:'var(--text-3)' }} title="Close">×</button>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {AGG_TEMPLATES.map(a => (
@@ -1182,7 +1176,7 @@ export default function ElasticQueryPage() {
           <div className="g-modal" style={{ maxWidth:400 }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5" style={{ borderBottom:'1px solid var(--border)' }}>
               <h2 className="text-sm font-semibold" style={{ color:'var(--text-1)' }}>Save Query</h2>
-              <button onClick={() => setShowSave(false)}><X className="h-4 w-4" style={{ color:'var(--text-3)' }} /></button>
+              <button onClick={() => setShowSave(false)} className="g-btn g-btn-ghost text-sm py-0.5 px-1.5" style={{ color:'var(--text-3)' }} title="Close">×</button>
             </div>
             <div className="p-5 space-y-3">
               <div>
@@ -1220,7 +1214,7 @@ export default function ElasticQueryPage() {
                 <Terminal className="h-4 w-4" style={{ color:'var(--accent)' }} />
                 <h2 className="text-sm font-semibold" style={{ color:'var(--text-1)' }}>REST API Code Generator</h2>
               </div>
-              <button onClick={() => setShowRestAPI(false)}><X className="h-4 w-4" style={{ color:'var(--text-3)' }} /></button>
+              <button onClick={() => setShowRestAPI(false)} className="g-btn g-btn-ghost text-sm py-0.5 px-1.5" style={{ color:'var(--text-3)' }} title="Close">×</button>
             </div>
             <div className="p-5 space-y-4">
               <div className="flex gap-2">
@@ -1239,11 +1233,9 @@ export default function ElasticQueryPage() {
                 </pre>
                 <button
                   onClick={() => { navigator.clipboard.writeText(tryGenCode(activeTab.index,activeTab.dsl,restLang,host)); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-                  className="absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background:'var(--glass-bg)', border:'1px solid var(--border)' }}>
-                  {copied
-                    ? <Check className="h-3.5 w-3.5" style={{ color:'var(--green)' }} />
-                    : <Copy  className="h-3.5 w-3.5" style={{ color:'var(--text-3)' }} />}
+                  className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background:'var(--glass-bg)', border:'1px solid var(--border)', color: copied ? 'var(--green)' : 'var(--text-3)' }}>
+                  {copied ? '✓ Copied' : 'Copy'}
                 </button>
               </div>
               <p className="text-[11px]" style={{ color:'var(--text-3)' }}>Replace the session token with your actual auth cookie or API key.</p>
@@ -1261,7 +1253,7 @@ export default function ElasticQueryPage() {
                 <Lightbulb className="h-4 w-4" style={{ color:'var(--yellow)' }} />
                 <h2 className="text-sm font-semibold" style={{ color:'var(--text-1)' }}>Query Explain</h2>
               </div>
-              <button onClick={() => setShowExplain(false)}><X className="h-4 w-4" style={{ color:'var(--text-3)' }} /></button>
+              <button onClick={() => setShowExplain(false)} className="g-btn g-btn-ghost text-sm py-0.5 px-1.5" style={{ color:'var(--text-3)' }} title="Close">×</button>
             </div>
             {!explainResult ? (
               <div className="py-10 text-center">

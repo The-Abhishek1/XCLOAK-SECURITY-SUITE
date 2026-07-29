@@ -38,14 +38,16 @@ func GetLogSourceHealth(c *gin.Context) {
 		).Scan(&eps)
 	}
 
+	// parsing_status/auth_status were previously hardcoded "ok" with no real
+	// check behind them — nothing in the ingest pipeline tracks per-source
+	// parse failures or auth failures, so there was nothing to report.
+	// Removed rather than fabricate a status.
 	c.JSON(200, gin.H{
 		"status":           status,
 		"last_event":       src.LastEvent,
 		"last_heartbeat":   src.LastEvent,
 		"eps":              eps,
 		"ingestion_status": ingestionStatus(status, src.EventCount),
-		"parsing_status":   "ok",
-		"auth_status":      "ok",
 		"enabled":          src.Enabled,
 		"event_count":      src.EventCount,
 	})
@@ -105,18 +107,24 @@ func GetLogSourceStats(c *gin.Context) {
 		).Scan(&eps)
 	}
 
-	// Estimate: ~500 bytes/log, 3:1 compression
-	storageMB := float64(src.EventCount) * 500 / (1024 * 1024) / 3.0
+	// Rough estimate only (~500 bytes/log, uncompressed) — endpoint_logs is a
+	// natively-partitioned table, explicitly exempted from TimescaleDB
+	// compression (see migration 000067's header comment), so there is no
+	// real compression ratio to report; a hardcoded "3:1" here previously
+	// claimed a capability this table doesn't have.
+	storageMB := float64(src.EventCount) * 500 / (1024 * 1024)
 
+	// parsing_errors is always 0 by design, not by measurement: NormalizeLog
+	// never fails — it falls back to a raw key=value extractor as a last
+	// resort, so every ingested line always produces a ParsedFields result.
+	// dropped_logs/queue_length were removed — this ingest path is fully
+	// synchronous with no queue or drop mechanism anywhere to measure.
 	c.JSON(200, gin.H{
-		"eps":               eps,
-		"daily_events":      daily,
-		"total_logs":        src.EventCount,
-		"storage_used_mb":   fmt.Sprintf("%.2f", storageMB),
-		"compression_ratio": "3:1",
-		"parsing_errors":    0,
-		"dropped_logs":      0,
-		"queue_length":      0,
+		"eps":             eps,
+		"daily_events":    daily,
+		"total_logs":      src.EventCount,
+		"storage_used_mb": fmt.Sprintf("%.2f", storageMB),
+		"parsing_errors":  0,
 	})
 }
 
@@ -135,10 +143,9 @@ func GetLogSourceParser(c *gin.Context) {
 		return
 	}
 
-	name, ecsMapping, fieldMapping := parserForSource(src)
+	name, fieldMapping := parserForSource(src)
 	c.JSON(200, gin.H{
 		"parser_used":    name,
-		"ecs_mapping":    ecsMapping,
 		"field_mapping":  fieldMapping,
 		"parsing_errors": 0,
 		"unknown_fields": []string{},
@@ -146,29 +153,63 @@ func GetLogSourceParser(c *gin.Context) {
 	})
 }
 
-func parserForSource(src *models.LogSource) (string, map[string]string, map[string]string) {
-	switch src.Format {
+// parserForSource describes the field mapping the given format actually
+// produces in services.NormalizeLog/ParsedFields — every entry here must
+// correspond to a real assignment in log_normalizer.go. A previous version
+// of this also returned an "ecs_mapping" table claiming dotted ECS paths
+// like "source.ip"/"host.name"/"winlog.event_id" — nothing in this codebase
+// (Postgres storage or the optional Elasticsearch mirror, which indexes
+// parsed_fields verbatim) ever produces those paths, so it was pure fiction
+// presented as parser documentation. Removed rather than left half-fixed;
+// several of its per-field claims were also wrong even as an aspirational
+// mapping (e.g. CEF's "deviceProduct" actually lands in device_product, not
+// "product"; syslog never extracts a facility at all).
+func parserForSource(src *models.LogSource) (string, map[string]string) {
+	// CreateLogSource never normalizes case on the free-text `format` field,
+	// and existing sources hold a mix ("CEF", "cef", "Windows Event",
+	// "WinEvent", "JSON", "json", ...) — an exact-match switch on the raw
+	// value silently fell through to "Auto-Detect Parser" for every
+	// non-lowercase-exact source (verified live: a seeded source with
+	// format="CEF" reported "Auto-Detect Parser" instead of the real CEF
+	// parser identification, despite being a genuine CEF source). Fold to
+	// lowercase and recognize the "Windows Event"/"evtx" spelling variants
+	// before matching.
+	format := strings.ToLower(strings.TrimSpace(src.Format))
+	if format == "windows event" || format == "evtx" || format == "winlog" {
+		format = "winevent"
+	}
+	switch format {
 	case "cef":
 		return "CEF Parser (ArcSight)", map[string]string{
-			"src": "source.ip", "dst": "destination.ip", "dpt": "destination.port",
-			"act": "event.action", "msg": "log.message",
-		}, map[string]string{"severity": "parsed_fields.severity", "deviceProduct": "parsed_fields.product"}
+			"src": "parsed_fields.src_ip", "dst": "parsed_fields.dst_ip",
+			"suser/duser": "parsed_fields.user", "sproc": "parsed_fields.process",
+			"deviceProduct": "parsed_fields.device_product", "header severity": "parsed_fields.cef_severity",
+		}
 	case "winevent":
 		return "Windows Event Parser", map[string]string{
-			"EventID": "winlog.event_id", "Computer": "host.name", "User": "user.name",
-		}, map[string]string{"event_id": "parsed_fields.event_id", "user": "parsed_fields.user"}
+			"Event ID":               "parsed_fields.event_id",
+			"Target/Subject User":    "parsed_fields.user",
+			"Logon Type":             "parsed_fields.logon_type",
+			"Source Network Address": "parsed_fields.src_ip",
+		}
 	case "json":
 		return "JSON Parser", map[string]string{
-			"host": "host.name", "pid": "process.pid", "level": "log.level",
-		}, map[string]string{"src_ip": "parsed_fields.src_ip", "user": "parsed_fields.user"}
+			"src_ip/src/source_ip": "parsed_fields.src_ip",
+			"user/username":        "parsed_fields.user",
+			"hostname/host":        "parsed_fields.hostname",
+			"event_id/EventID":     "parsed_fields.event_id",
+		}
 	case "syslog":
-		return "Syslog Parser (RFC 5424)", map[string]string{
-			"hostname": "host.name", "appname": "process.name", "procid": "process.pid",
-		}, map[string]string{"facility": "parsed_fields.facility", "severity": "parsed_fields.severity"}
+		return "Syslog Parser (RFC 3164/5424)", map[string]string{
+			"hostname":                               "parsed_fields.hostname",
+			"process/app":                            "parsed_fields.process",
+			"pid/procid":                             "parsed_fields.pid",
+			"severity (heuristic from message body)": "parsed_fields.severity",
+		}
 	default:
 		return "Auto-Detect Parser", map[string]string{
-			"host": "host.name", "message": "log.message",
-		}, map[string]string{"src_ip": "parsed_fields.src_ip"}
+			"(routes through the syslog/CEF/JSON/Windows-Event parsers above based on message content)": "parsed_fields.*",
+		}
 	}
 }
 
@@ -234,7 +275,20 @@ func TestLogSourceConnection(c *gin.Context) {
 		return
 	}
 
-	conn, auth, msg := "ok", "ok", "Connection test passed."
+	// auth/parser/permissions were previously hardcoded "ok" and latency_ms
+	// a fixed "12" — none had any real check behind them (nothing actually
+	// contacts the source or validates credentials here). Removed the fake
+	// fields; latency_ms now times the one real query this handler can
+	// meaningfully run against this source's own data.
+	start := time.Now()
+	var probe int64
+	database.DB.QueryRow(
+		`SELECT COUNT(*) FROM endpoint_logs WHERE log_source=$1 AND tenant_id=$2 AND collected_at > NOW()-INTERVAL '1 minute'`,
+		src.Name, src.TenantID,
+	).Scan(&probe)
+	latencyMs := time.Since(start).Milliseconds()
+
+	conn, msg := "ok", "Connection test passed."
 	if !src.Enabled {
 		conn = "error"
 		msg = "Source is disabled."
@@ -243,13 +297,10 @@ func TestLogSourceConnection(c *gin.Context) {
 		msg = "Source enabled but no events received yet."
 	}
 	c.JSON(200, gin.H{
-		"connection":  conn,
-		"auth":        auth,
-		"tls":         src.SourceType == "http",
-		"parser":      "ok",
-		"permissions": "ok",
-		"latency_ms":  12,
-		"message":     msg,
+		"connection": conn,
+		"tls":        src.SourceType == "http",
+		"latency_ms": latencyMs,
+		"message":    msg,
 	})
 }
 

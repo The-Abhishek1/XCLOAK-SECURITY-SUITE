@@ -386,6 +386,7 @@ func CreateScheduledSearch(c *gin.Context) {
 	}
 	body.ID = id
 	body.TenantID = 0
+	body.Enabled = true
 	body.CreatedAt = time.Now()
 	c.JSON(201, body)
 }

@@ -10,7 +10,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { AlertCircle, AlertTriangle, AlignLeft, ArrowRight, BarChart2, BookOpen, Bookmark as BookmarkIcon, BookmarkCheck, Calendar, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code, Copy, Download, ExternalLink, Eye, EyeOff, FileJson, FileText, Filter, GitMerge, Globe, Hash, Layers, Link2, Monitor, Play, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, StarOff, Table2, Terminal, Trash2, TrendingUp, User, X } from '@/lib/icon-stubs';
+import { AlertCircle, AlertTriangle, AlignLeft, ArrowRight, BarChart2, BookOpen, Bookmark as BookmarkIcon, BookmarkCheck, Calendar, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Code, Copy, Download, ExternalLink, Eye, EyeOff, FileJson, FileText, Filter, GitMerge, Globe, Hash, Layers, Link2, Monitor, Play, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, Table2, Terminal, TrendingUp, User, X } from '@/lib/icon-stubs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -626,9 +626,10 @@ function VizPanel({ aggRows, field, vizType, setVizType }: {
 // Context menu
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CtxMenu({ x, y, log, onClose, onPivot, onBookmark, bookmarked }: {
+function CtxMenu({ x, y, log, onClose, onPivot, onBookmark, bookmarked, onBuildDetection }: {
   x: number; y: number; log: LogEntry; onClose: () => void;
   onPivot: (f: string, v: string) => void; onBookmark: () => void; bookmarked: boolean;
+  onBuildDetection: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -648,10 +649,10 @@ function CtxMenu({ x, y, log, onClose, onPivot, onBookmark, bookmarked }: {
     ...(fields.user || fields.target_user ? [{ label: `Filter user:${fields.user || fields.target_user}`, icon: User, action: () => onPivot('user', fields.user || fields.target_user) }] : []),
     { label: '─', icon: null, action: () => {} },
     { label: 'Open Timeline', icon: TrendingUp, action: () => window.open('/timeline', '_blank') },
-    { label: 'Create Alert Rule', icon: AlertTriangle, action: () => {} },
-    { label: 'Create Sigma Rule', icon: Code, action: () => {} },
-    { label: 'Add to Case', icon: Plus, action: () => {} },
-    { label: 'Hunt Similar', icon: Search, action: () => {} },
+    { label: 'Create Alert Rule', icon: AlertTriangle, action: onBuildDetection },
+    { label: 'Create Sigma Rule', icon: Code, action: onBuildDetection },
+    { label: 'Add to Case', icon: Plus, action: () => window.open('/cases', '_blank') },
+    { label: 'Hunt Similar', icon: Search, action: () => window.open('/hunt-workbench', '_blank') },
   ];
   return (
     <div ref={ref} style={{ position: 'fixed', top: y, left: x, zIndex: 9999, background: 'var(--glass-bg)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 210, padding: '4px 0', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)' }}>
@@ -1073,9 +1074,14 @@ export default function LogSearchPage() {
               <div className="space-y-1.5">
                 {scheduled.length === 0 && <p className="text-xs text-center py-3" style={{ color: 'var(--text-3)' }}>No scheduled searches</p>}
                 {scheduled.map(s => (
-                  <div key={s.id} className="rounded-lg px-3 py-2" style={{ border: '1px solid var(--border)' }}>
-                    <p className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{s.name}</p>
-                    <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>{s.schedule} → {s.action}</p>
+                  <div key={s.id} className="group flex items-start gap-1 rounded-lg px-3 py-2" style={{ border: '1px solid var(--border)' }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-1)' }}>{s.name}</p>
+                      <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>{s.schedule} → {s.action}</p>
+                    </div>
+                    <button className="g-btn g-btn-ghost text-[10px] py-0.5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={() => logSearchAPI.deleteScheduled(s.id).then(() => setScheduled(ss => ss.filter(x => x.id !== s.id)))}
+                      style={{ color: 'var(--red)' }} title="Delete">🗑️</button>
                   </div>
                 ))}
               </div>
@@ -1124,12 +1130,13 @@ export default function LogSearchPage() {
                       <p className="text-[9px]" style={{ color: 'var(--text-3)' }}>{s.run_count} runs</p>
                     </button>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setPinnedIds(p => { const n = new Set(p); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
-                        {pinnedIds.has(s.id) ? <Star className="h-3 w-3" style={{ color: 'var(--yellow)' }} /> : <StarOff className="h-3 w-3" style={{ color: 'var(--text-3)' }} />}
+                      <button onClick={() => setPinnedIds(p => { const n = new Set(p); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}
+                        className="g-btn g-btn-ghost text-[10px] py-0.5 px-1.5" title={pinnedIds.has(s.id) ? 'Unpin' : 'Pin'}
+                        style={{ color: pinnedIds.has(s.id) ? 'var(--yellow)' : 'var(--text-3)' }}>
+                        {pinnedIds.has(s.id) ? '★' : '☆'}
                       </button>
-                      <button onClick={() => logSearchAPI.deleteSearch(s.id).then(() => setSaved(ss => ss.filter(x => x.id !== s.id)))}>
-                        <Trash2 className="h-3 w-3" style={{ color: 'var(--red)' }} />
-                      </button>
+                      <button onClick={() => logSearchAPI.deleteSearch(s.id).then(() => setSaved(ss => ss.filter(x => x.id !== s.id)))}
+                        className="g-btn g-btn-ghost text-[10px] py-0.5 px-1.5" style={{ color: 'var(--red)' }} title="Delete">🗑️</button>
                     </div>
                   </div>
                 ))}
@@ -1189,8 +1196,13 @@ export default function LogSearchPage() {
                 </div>
                 {scheduled.length === 0 && <p className="text-[10px] text-center py-4" style={{ color: 'var(--text-3)' }}>No scheduled searches</p>}
                 {scheduled.map(s => (
-                  <div key={s.id} className="rounded-lg p-2.5" style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
-                    <p className="text-[11px] font-semibold" style={{ color: 'var(--text-1)' }}>{s.name}</p>
+                  <div key={s.id} className="group rounded-lg p-2.5" style={{ background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-start gap-1">
+                      <p className="flex-1 min-w-0 text-[11px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{s.name}</p>
+                      <button className="g-btn g-btn-ghost text-[10px] py-0.5 px-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={() => logSearchAPI.deleteScheduled(s.id).then(() => setScheduled(ss => ss.filter(x => x.id !== s.id)))}
+                        style={{ color: 'var(--red)' }} title="Delete">🗑️</button>
+                    </div>
                     <p className="text-[9px] font-mono truncate" style={{ color: 'var(--text-3)' }}>{s.query || '(all)'}</p>
                     <div className="flex items-center gap-2 mt-1 text-[9px]" style={{ color: 'var(--text-3)' }}>
                       <span>{s.schedule}</span><span>→</span><span>{s.action}</span>
@@ -1751,6 +1763,7 @@ export default function LogSearchPage() {
           onClose={() => setCtxMenu(null)}
           onPivot={addPivot}
           onBookmark={() => toggleBookmark({ id: String(Date.now()), type: 'event', label: ctxMenu.log.log_message.slice(0, 60), logId: ctxMenu.log.id, ts: Date.now() })}
+          onBuildDetection={() => setShowDetect(true)}
         />
       )}
     </RootLayout>

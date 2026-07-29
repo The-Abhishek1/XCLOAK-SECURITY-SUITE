@@ -1390,18 +1390,26 @@ func PostActorResponse(c *gin.Context) {
 
 	switch body.Action {
 	case "block_iocs":
-		// Insert ioc_blocks for all enabled IOCs attributed to actor
+		// `ioc_blocks` doesn't exist anywhere in this schema (confirmed via
+		// `\d ioc_blocks` — the same missing-table bug found repeatedly
+		// elsewhere this phase, on NBA/Behavioral Detection/Threat Intel).
+		// This INSERT always failed outright and was silently discarded, so
+		// "Block IOCs" reported a fake success ("Blocked 0 IOCs attributed
+		// to X") on every single click regardless of real state — nothing
+		// was ever actually blocked. `iocs.enabled` is the real flag every
+		// other blocking mechanism in this codebase (NBA/DPI's block_ip
+		// action, the IOC list's own enable toggle) treats as "actively
+		// enforced" — ensure it for every IOC attributed to this actor
+		// instead of writing to a table that was never real.
 		result, _ := database.DB.Exec(`
-			INSERT INTO ioc_blocks (tenant_id, ioc_id, blocked_by, blocked_at)
-			SELECT $1, id, $2, NOW() FROM iocs
-			WHERE tenant_id=$1 AND enabled=true AND description ILIKE '%'||$3||'%'
-			ON CONFLICT DO NOTHING`,
-			tid, usernameFromContext(c), actorName)
+			UPDATE iocs SET enabled=true
+			WHERE tenant_id=$1 AND enabled=false AND description ILIKE '%'||$2||'%'`,
+			tid, actorName)
 		var affected int64
 		if result != nil {
 			affected, _ = result.RowsAffected()
 		}
-		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Blocked %d IOCs attributed to %s", affected, actorName)})
+		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Enabled blocking for %d previously-disabled IOCs attributed to %s", affected, actorName)})
 
 	case "create_sigma":
 		// Create a sigma rule for actor's primary technique

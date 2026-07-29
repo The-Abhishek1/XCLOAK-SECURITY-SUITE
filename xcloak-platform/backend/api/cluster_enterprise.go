@@ -330,13 +330,18 @@ func GetClusterDetail(c *gin.Context) {
 		hosts = []HostEntry{}
 	}
 
-	// Distinct source IPs
+	// Distinct source IPs. `alerts` has no source_ip column at all (this
+	// used to reference one that doesn't exist, so the query always failed
+	// and this list was permanently empty) — the closest real per-alert IP
+	// is the originating agent's own host IP, via the same agents join the
+	// "Distinct hosts" query above already uses.
 	ipRows, _ := database.DB.Query(`
-		SELECT COALESCE(a.source_ip,''), COUNT(*)::int
+		SELECT COALESCE(ag.ip_address,''), COUNT(*)::int
 		FROM alert_cluster_members acm
 		JOIN alerts a ON a.id=acm.alert_id
-		WHERE acm.cluster_id=$1 AND a.tenant_id=$2 AND a.source_ip IS NOT NULL AND a.source_ip!=''
-		GROUP BY a.source_ip ORDER BY 2 DESC LIMIT 20`, id, tid)
+		LEFT JOIN agents ag ON ag.id=a.agent_id
+		WHERE acm.cluster_id=$1 AND a.tenant_id=$2 AND ag.ip_address IS NOT NULL AND ag.ip_address!=''
+		GROUP BY ag.ip_address ORDER BY 2 DESC LIMIT 20`, id, tid)
 	type IPEntry struct {
 		IP    string `json:"ip"`
 		Count int    `json:"count"`
@@ -381,11 +386,11 @@ func GetClusterDetail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"cluster":   r,
-		"alerts":    alerts,
-		"hosts":     hosts,
-		"ips":       ips,
-		"mitre":     mitre,
+		"cluster": r,
+		"alerts":  alerts,
+		"hosts":   hosts,
+		"ips":     ips,
+		"mitre":   mitre,
 	})
 }
 
@@ -400,11 +405,16 @@ func GetClusterTimeline(c *gin.Context) {
 	// outright and returned a 500 (silently swallowed by the frontend's
 	// `.catch(() => ({ data: null }))`, so the cluster timeline just never
 	// rendered and nobody saw an error). Also added COALESCE for the other
-	// nullable columns and now check each row's scan error.
+	// nullable columns and now check each row's scan error. The frontend's
+	// `source_ip` display (line ~425 of clusters/page.tsx) was consequently
+	// always blank even after that fix landed — it was never actually
+	// populated. Wired to the originating agent's real host IP, same as
+	// GetClusterDetail's "Distinct source IPs" panel and GetClusterGraph's
+	// IP nodes.
 	rows, err := database.DB.Query(`
 		SELECT a.id, COALESCE(a.rule_name,''), COALESCE(a.severity,''), COALESCE(ag.hostname,'unknown'),
 		       a.created_at, COALESCE(a.mitre_technique,''), COALESCE(a.mitre_tactic,''),
-		       COALESCE(a.status,'open')
+		       COALESCE(a.status,'open'), COALESCE(ag.ip_address,'')
 		FROM alert_cluster_members acm
 		JOIN alerts a ON a.id=acm.alert_id
 		LEFT JOIN agents ag ON ag.id=a.agent_id
@@ -425,12 +435,13 @@ func GetClusterTimeline(c *gin.Context) {
 		MitreTechnique string    `json:"mitre_technique"`
 		MitreTactic    string    `json:"mitre_tactic"`
 		Status         string    `json:"status"`
+		SourceIP       string    `json:"source_ip"`
 	}
 	events := []TimelineEvent{}
 	for rows.Next() {
 		var e TimelineEvent
 		if err := rows.Scan(&e.ID, &e.RuleName, &e.Severity, &e.Hostname,
-			&e.Time, &e.MitreTechnique, &e.MitreTactic, &e.Status); err != nil {
+			&e.Time, &e.MitreTechnique, &e.MitreTactic, &e.Status, &e.SourceIP); err != nil {
 			continue
 		}
 		events = append(events, e)
@@ -509,12 +520,16 @@ func GetClusterGraph(c *gin.Context) {
 		ruleRows.Close()
 	}
 
-	// IP nodes + edges to rules
+	// IP nodes + edges to rules. Same fix as GetClusterDetail's "Distinct
+	// source IPs" above: `alerts` has no source_ip column, so this query
+	// always failed outright and these graph nodes never appeared — use
+	// the originating agent's host IP instead.
 	ipRows, _ := database.DB.Query(`
-		SELECT DISTINCT a.source_ip, a.rule_name
+		SELECT DISTINCT ag.ip_address, a.rule_name
 		FROM alert_cluster_members acm
 		JOIN alerts a ON a.id=acm.alert_id
-		WHERE acm.cluster_id=$1 AND a.tenant_id=$2 AND a.source_ip IS NOT NULL AND a.source_ip!=''
+		LEFT JOIN agents ag ON ag.id=a.agent_id
+		WHERE acm.cluster_id=$1 AND a.tenant_id=$2 AND ag.ip_address IS NOT NULL AND ag.ip_address!=''
 		LIMIT 20`, id, tid)
 	ipsSeen := map[string]bool{}
 	if ipRows != nil {
@@ -733,13 +748,24 @@ func GetClusterCampaigns(c *gin.Context) {
 func PostClusterAI(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	var body struct {
-		Action    string `json:"action"`    // summarize, root_cause, chain, campaign_detect
+		Action    string `json:"action"` // summarize, root_cause, chain, campaign_detect
 		ClusterID int    `json:"cluster_id"`
 		Context   string `json:"context"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid request"})
 		return
+	}
+
+	// The frontend's cluster selector explicitly promises "uses most recent
+	// if blank" (cluster_id=0) — but nothing here ever implemented that
+	// fallback, so a blank selection sent zero real context to the LLM,
+	// which then hallucinated a plausible-looking but entirely fictional
+	// analysis (verified live: invented systems "DBS1"/"WAS1" that don't
+	// exist anywhere in this tenant's real agents). Resolve to the tenant's
+	// most recently active cluster first.
+	if body.ClusterID <= 0 {
+		database.DB.QueryRow(`SELECT id FROM alert_clusters WHERE tenant_id=$1 ORDER BY last_seen DESC LIMIT 1`, tid).Scan(&body.ClusterID)
 	}
 
 	// Build context from cluster data

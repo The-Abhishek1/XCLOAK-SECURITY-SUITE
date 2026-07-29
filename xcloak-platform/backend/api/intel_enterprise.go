@@ -94,20 +94,20 @@ func GetIntelOverview(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_iocs":       totalIOCs,
-		"enabled_iocs":     enabledIOCs,
-		"new_today":        newToday,
-		"ioc_matches":      iocMatches,
-		"recent_matches":   recentMatches,
-		"high_confidence":  highConfidence,
-		"total_actors":     totalActors,
-		"total_feeds":      totalFeeds,
-		"enabled_feeds":    enabledFeeds,
-		"healthy_feeds":    healthyFeeds,
-		"sigma_rules":      sigmaRules,
-		"yara_rules":       yaraRules,
-		"trend":            trend,
-		"type_breakdown":   typeBreakdown,
+		"total_iocs":      totalIOCs,
+		"enabled_iocs":    enabledIOCs,
+		"new_today":       newToday,
+		"ioc_matches":     iocMatches,
+		"recent_matches":  recentMatches,
+		"high_confidence": highConfidence,
+		"total_actors":    totalActors,
+		"total_feeds":     totalFeeds,
+		"enabled_feeds":   enabledFeeds,
+		"healthy_feeds":   healthyFeeds,
+		"sigma_rules":     sigmaRules,
+		"yara_rules":      yaraRules,
+		"trend":           trend,
+		"type_breakdown":  typeBreakdown,
 	})
 }
 
@@ -155,11 +155,11 @@ func GetIntelAnalytics(c *gin.Context) {
 		ORDER BY alert_count DESC, ta.name
 		LIMIT 10`, tid)
 	type ActorStat struct {
-		ID           int    `json:"id"`
-		Name         string `json:"name"`
-		Motivation   string `json:"motivation"`
+		ID             int    `json:"id"`
+		Name           string `json:"name"`
+		Motivation     string `json:"motivation"`
 		Sophistication string `json:"sophistication"`
-		AlertCount   int    `json:"alert_count"`
+		AlertCount     int    `json:"alert_count"`
 	}
 	topActors := []ActorStat{}
 	if actorRows != nil {
@@ -207,12 +207,12 @@ func GetIntelAnalytics(c *gin.Context) {
 		GROUP BY tf.id, tf.name, tf.enabled, tf.last_sync, tf.feed_type
 		ORDER BY ioc_count DESC`, tid)
 	type FeedStat struct {
-		Name      string     `json:"name"`
-		Enabled   bool       `json:"enabled"`
-		LastSync  *time.Time `json:"last_sync"`
-		FeedType  string     `json:"feed_type"`
-		IOCCount  int        `json:"ioc_count"`
-		Healthy   bool       `json:"healthy"`
+		Name     string     `json:"name"`
+		Enabled  bool       `json:"enabled"`
+		LastSync *time.Time `json:"last_sync"`
+		FeedType string     `json:"feed_type"`
+		IOCCount int        `json:"ioc_count"`
+		Healthy  bool       `json:"healthy"`
 	}
 	feedStats := []FeedStat{}
 	if feedRows != nil {
@@ -248,10 +248,10 @@ func GetIntelAnalytics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"top_iocs":           topIOCs,
-		"top_actors":         topActors,
-		"ioc_growth":         growth,
-		"feed_reliability":   feedStats,
+		"top_iocs":              topIOCs,
+		"top_actors":            topActors,
+		"ioc_growth":            growth,
+		"feed_reliability":      feedStats,
 		"severity_distribution": sevDist,
 	})
 }
@@ -357,24 +357,25 @@ func GetIntelMITRECoverage(c *gin.Context) {
 		techniques = []TechBucket{}
 	}
 
-	// Tactic summary
-	tacticMap := map[string]int{}
-	tacticNames := []string{"Initial Access", "Execution", "Persistence", "Privilege Escalation",
-		"Defense Evasion", "Credential Access", "Discovery", "Lateral Movement",
-		"Collection", "C2", "Exfiltration", "Impact"}
-	for _, t := range techniques {
-		for _, tactic := range tacticNames {
-			if strings.Contains(strings.ToLower(tactic), strings.ToLower(t.Technique[:min(len(t.Technique), 4)])) {
-				tacticMap[tactic] += t.Total
-				break
-			}
-		}
-	}
+	// Tactic summary. Previously tried to derive tactic coverage by
+	// lowercasing the first 4 characters of each technique ID (e.g.
+	// "T1071.001" -> "t107") and checking whether that substring appeared
+	// inside a hardcoded tactic name like "Initial Access" — technique IDs
+	// and tactic names share no character overlap by construction, so this
+	// never matched anything and `covered_tactics` (rendered on the page as
+	// the "Tactics Mapped" KPI) was always 0 regardless of real coverage
+	// (verified live: 45 real techniques, 0 covered_tactics before this
+	// fix). `sigma_rules` already has a real `mitre_tactic` column set
+	// alongside `mitre_technique` — use it directly instead of guessing.
+	var coveredTactics int
+	database.DB.QueryRow(`
+		SELECT COUNT(DISTINCT mitre_tactic) FROM sigma_rules
+		WHERE tenant_id=$1 AND mitre_tactic IS NOT NULL AND mitre_tactic != ''`, tid).Scan(&coveredTactics)
 
 	c.JSON(http.StatusOK, gin.H{
-		"techniques":   techniques,
-		"total":        len(techniques),
-		"covered_tactics": len(tacticMap),
+		"techniques":      techniques,
+		"total":           len(techniques),
+		"covered_tactics": coveredTactics,
 	})
 }
 
@@ -467,15 +468,28 @@ func GetIntelRelationships(c *gin.Context) {
 		actorEdgeRows.Close()
 	}
 
-	// Campaign → IOC edges (heuristic: IOC type = ip or domain, hit_count > 0)
+	// Campaign → IOC edges. Previously joined a nonexistent `ioc_blocks`
+	// table (the same missing-table bug already found on the NBA and
+	// Behavioral Detection pages this phase) — the query always failed
+	// outright, so these edges never appeared in the graph regardless of
+	// real data. There's no direct alert<->IOC link table anywhere in this
+	// schema, so — matching the file's own already-honest "heuristic" label
+	// on the nearby feed-reliability query — correlate by time instead: an
+	// IOC with a real hit (`hit_count > 0`, `last_seen` bumped by
+	// `repositories.RecordIOCHit`) whose last-seen timestamp falls inside a
+	// campaign's aggregate active window (earliest first_seen to latest
+	// last_seen across all clusters sharing that technique).
 	campToIOCRows, _ := database.DB.Query(`
-		SELECT DISTINCT 'camp_' || REPLACE(COALESCE(NULLIF(ac.mitre_technique,''),'Unknown'),'.',  '_'),
+		SELECT DISTINCT 'camp_' || REPLACE(camp.technique,'.','_'),
 		       'ioc_' || i.id::text
-		FROM alert_clusters ac
-		JOIN alerts a ON a.created_at BETWEEN ac.first_seen AND ac.last_seen
-		JOIN ioc_blocks ib ON ib.alert_id=a.id
-		JOIN iocs i ON i.id=ib.ioc_id
-		WHERE ac.tenant_id=$1
+		FROM (
+			SELECT COALESCE(NULLIF(mitre_technique,''),'Unknown') AS technique,
+			       MIN(first_seen) AS win_start, MAX(last_seen) AS win_end
+			FROM alert_clusters WHERE tenant_id=$1
+			GROUP BY 1
+		) camp
+		JOIN iocs i ON i.tenant_id=$1 AND i.hit_count > 0
+			AND i.last_seen BETWEEN camp.win_start AND camp.win_end
 		LIMIT 15`, tid)
 	if campToIOCRows != nil {
 		for campToIOCRows.Next() {
@@ -590,12 +604,20 @@ func PostIntelSearch(c *gin.Context) {
 		sigma = []SigmaResult{}
 	}
 
-	// Alert matches
+	// Alert matches. `alerts` has no source_ip column at all (the same
+	// missing-column bug already found and fixed 3 times over on the Alert
+	// Clusters page this phase) — this query always failed outright and the
+	// "alerts" section of every search was silently empty regardless of
+	// what was searched (verified live: searching "c2" against a tenant
+	// with real "C2 Beacon Detected" alerts returned zero alert results).
+	// Use the originating agent's real ip_address instead, same fix as
+	// Alert Clusters.
 	alertRows, _ := database.DB.Query(`
-		SELECT id, rule_name, severity, created_at, COALESCE(source_ip,'')
-		FROM alerts
-		WHERE tenant_id=$1 AND (LOWER(rule_name) LIKE $2 OR LOWER(source_ip) LIKE $2)
-		ORDER BY created_at DESC LIMIT 10`, tid, q)
+		SELECT a.id, a.rule_name, a.severity, a.created_at, COALESCE(ag.ip_address,'')
+		FROM alerts a
+		LEFT JOIN agents ag ON ag.id=a.agent_id
+		WHERE a.tenant_id=$1 AND (LOWER(a.rule_name) LIKE $2 OR LOWER(ag.ip_address) LIKE $2)
+		ORDER BY a.created_at DESC LIMIT 10`, tid, q)
 	type AlertResult struct {
 		ID       int       `json:"id"`
 		RuleName string    `json:"rule_name"`
@@ -651,11 +673,17 @@ func PostIntelAI(c *gin.Context) {
 		if iocDesc != "" {
 			contextLines = append(contextLines, fmt.Sprintf("IOC: %s (type=%s, severity=%s, hits=%d, desc=%s)", body.Indicator, iocType, iocSev, iocHits, iocDesc))
 		}
-		// Alert context
+		// Alert context. Same missing-column bug as PostIntelSearch just
+		// above (and Alert Clusters, fixed earlier this phase): `alerts` has
+		// no source_ip column, so this always failed outright and silently
+		// contributed zero alert evidence to the AI prompt for any
+		// IP-indicator lookup. Match against the originating agent's real
+		// ip_address instead.
 		alertCtxRows, _ := database.DB.Query(`
-			SELECT rule_name, severity, created_at FROM alerts
-			WHERE tenant_id=$1 AND (source_ip=$2 OR rule_name ILIKE '%' || $2 || '%')
-			ORDER BY created_at DESC LIMIT 5`, tid, body.Indicator)
+			SELECT a.rule_name, a.severity, a.created_at FROM alerts a
+			LEFT JOIN agents ag ON ag.id=a.agent_id
+			WHERE a.tenant_id=$1 AND (ag.ip_address=$2 OR a.rule_name ILIKE '%' || $2 || '%')
+			ORDER BY a.created_at DESC LIMIT 5`, tid, body.Indicator)
 		if alertCtxRows != nil {
 			for alertCtxRows.Next() {
 				var rname, sev string

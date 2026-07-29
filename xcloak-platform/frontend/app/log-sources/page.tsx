@@ -18,18 +18,18 @@ interface LogSource {
 interface SourceHealth {
   status: 'online' | 'offline' | 'warning';
   last_event: string | null; last_heartbeat: string | null;
-  eps: number; ingestion_status: string; parsing_status: string;
-  auth_status: string; enabled: boolean; event_count: number;
+  eps: number; ingestion_status: string;
+  enabled: boolean; event_count: number;
 }
 
 interface SourceStats {
   eps: number; daily_events: number; total_logs: number;
-  storage_used_mb: string; compression_ratio: string;
-  parsing_errors: number; dropped_logs: number; queue_length: number;
+  storage_used_mb: string;
+  parsing_errors: number;
 }
 
 interface ParserInfo {
-  parser_used: string; ecs_mapping: Record<string, string>;
+  parser_used: string;
   field_mapping: Record<string, string>; parsing_errors: number;
   unknown_fields: string[]; parser_version: string;
 }
@@ -37,8 +37,8 @@ interface ParserInfo {
 interface RecentLog { id: number; log_source: string; log_message: string; collected_at: string; }
 
 interface TestResult {
-  connection: string; auth: string; tls: boolean; parser: string;
-  permissions: string; latency_ms: number; message: string;
+  connection: string; tls: boolean;
+  latency_ms: number; message: string;
 }
 
 interface MonitoringData {
@@ -54,7 +54,7 @@ interface CatalogEntry {
   collection_methods: string[];
 }
 
-type DetailTab = 'health' | 'stats' | 'parser' | 'logs' | 'config' | 'test' | 'alerts';
+type DetailTab = 'health' | 'stats' | 'parser' | 'logs' | 'config' | 'test';
 type MainTab   = 'sources' | 'marketplace' | 'monitoring' | 'pipeline';
 
 // ── Catalog ───────────────────────────────────────────────────────────────────
@@ -616,7 +616,7 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
   const runTest = async () => {
     setTesting(true); setTest(null);
     try { const r = await logSourcesAPI.test(src.id); setTest(r.data as TestResult); }
-    catch { setTest({ connection:'error', auth:'unknown', tls:false, parser:'unknown', permissions:'unknown', latency_ms:0, message:'Test request failed.' }); }
+    catch { setTest({ connection:'error', tls:false, latency_ms:0, message:'Test request failed.' }); }
     finally { setTesting(false); }
   };
 
@@ -627,7 +627,6 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
     { id:'logs',   label:'Logs',     Icon:FileText },
     { id:'config', label:'Config',   Icon:Settings },
     { id:'test',   label:'Test',     Icon:TestTube2 },
-    { id:'alerts', label:'Alerts',   Icon:Bell },
   ];
 
   const StatusChip = ({ val }: { val: string }) => {
@@ -703,8 +702,6 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
                 <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:'var(--text-3)' }}>Status Checks</p>
                 {[
                   { label:'Ingestion',  val: health.ingestion_status },
-                  { label:'Parsing',    val: health.parsing_status },
-                  { label:'Auth',       val: health.auth_status },
                 ].map(({ label, val }) => (
                   <div key={label} className="flex items-center justify-between">
                     <span style={{ color:'var(--text-2)' }}>{label}</span>
@@ -725,11 +722,8 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
                   { label:'Events / Second',   val: stats.eps.toString(),           color:'var(--accent)' },
                   { label:'Daily Events',      val: stats.daily_events.toLocaleString() },
                   { label:'Total Logs',        val: stats.total_logs.toLocaleString() },
-                  { label:'Storage Used',      val: `${stats.storage_used_mb} MB` },
-                  { label:'Compression',       val: stats.compression_ratio },
+                  { label:'Storage Used (est.)', val: `${stats.storage_used_mb} MB` },
                   { label:'Parsing Errors',    val: stats.parsing_errors.toString(), color: stats.parsing_errors > 0 ? 'var(--red)' : undefined },
-                  { label:'Dropped Logs',      val: stats.dropped_logs.toString(),   color: stats.dropped_logs > 0 ? 'var(--red)' : undefined },
-                  { label:'Queue Length',      val: stats.queue_length.toString() },
                 ].map(({ label, val, color }) => (
                   <div key={label} className="flex items-center justify-between py-1.5" style={{ borderBottom:'1px solid var(--border)' }}>
                     <span style={{ color:'var(--text-3)' }}>{label}</span>
@@ -748,17 +742,6 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
               <>
                 <div className="flex items-center justify-between"><span style={{ color:'var(--text-3)' }}>Parser</span><span className="font-mono text-[11px]" style={{ color:'var(--accent)' }}>{parser.parser_used}</span></div>
                 <div className="flex items-center justify-between"><span style={{ color:'var(--text-3)' }}>Version</span><span className="font-mono text-[11px]" style={{ color:'var(--text-2)' }}>{parser.parser_version}</span></div>
-                <p className="text-[10px] font-bold uppercase tracking-wider pt-2" style={{ color:'var(--text-3)' }}>ECS Field Mapping</p>
-                <div className="rounded-xl overflow-hidden" style={{ border:'1px solid var(--border)' }}>
-                  {Object.entries(parser.ecs_mapping).map(([from, to], i) => (
-                    <div key={from} className="flex items-center gap-2 px-3 py-1.5 text-[10px]"
-                      style={{ background: i%2===0 ? 'transparent' : 'rgba(255,255,255,0.01)', borderBottom: '1px solid var(--border)' }}>
-                      <span className="font-mono w-24 shrink-0" style={{ color:'var(--text-3)' }}>{from}</span>
-                      <ArrowRight className="h-3 w-3 shrink-0" style={{ color:'var(--text-3)' }} />
-                      <span className="font-mono" style={{ color:'var(--accent)' }}>{to}</span>
-                    </div>
-                  ))}
-                </div>
                 <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color:'var(--text-3)' }}>Field Mapping</p>
                 <div className="rounded-xl overflow-hidden" style={{ border:'1px solid var(--border)' }}>
                   {Object.entries(parser.field_mapping).map(([from, to], i) => (
@@ -814,7 +797,7 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
               { label:'Device Type',      val: src.device_type || '—' },
               { label:'Address / Key',    val: src.source_type === 'syslog' ? (src.ip_address || 'Any') : (src.api_key_hint ? `…${src.api_key_hint}` : '—') },
               { label:'Created',          val: new Date(src.created_at).toLocaleDateString() },
-              { label:'TLS',              val: src.source_type === 'http' ? 'Yes (HTTPS)' : 'Port 6514 optional' },
+              { label:'TLS',              val: src.source_type === 'http' ? 'Yes (HTTPS)' : 'No (UDP/TCP :514 only, no TLS listener)' },
               { label:'Timezone',         val: 'UTC (server default)' },
               { label:'Rate Limit',       val: '10 MB / 5,000 events per request' },
               { label:'Retention',        val: '90 days (tenant default)' },
@@ -840,48 +823,23 @@ function SourceDetailPanel({ src, def, onClose, onToggle, onDelete, host }: {
                   style={{ background: testResult.connection==='ok' ? 'rgba(34,197,94,0.08)' : 'rgba(248,81,73,0.08)', color: testResult.connection==='ok' ? 'var(--green)' : 'var(--red)', border:`1px solid ${testResult.connection==='ok'?'rgba(34,197,94,0.3)':'rgba(248,81,73,0.3)'}` }}>
                   {testResult.message}
                 </div>
-                {[
-                  { label:'Connection',  val: testResult.connection },
-                  { label:'Auth',        val: testResult.auth },
-                  { label:'TLS',         val: testResult.tls ? 'enabled' : 'disabled' },
-                  { label:'Parser',      val: testResult.parser },
-                  { label:'Permissions', val: testResult.permissions },
-                  { label:'Latency',     val: `${testResult.latency_ms}ms` },
-                ].map(({ label, val }) => (
-                  <div key={label} className="flex items-center justify-between py-1.5" style={{ borderBottom:'1px solid var(--border)' }}>
-                    <span style={{ color:'var(--text-3)' }}>{label}</span>
-                    <StatusChip val={val} />
-                  </div>
-                ))}
+                <div className="flex items-center justify-between py-1.5" style={{ borderBottom:'1px solid var(--border)' }}>
+                  <span style={{ color:'var(--text-3)' }}>Connection</span>
+                  <StatusChip val={testResult.connection} />
+                </div>
+                <div className="flex items-center justify-between py-1.5" style={{ borderBottom:'1px solid var(--border)' }}>
+                  <span style={{ color:'var(--text-3)' }}>TLS</span>
+                  <span className="font-mono" style={{ color: testResult.tls ? 'var(--green)' : 'var(--text-3)' }}>
+                    {testResult.tls ? 'enabled' : 'disabled'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1.5" style={{ borderBottom:'1px solid var(--border)' }}>
+                  <span style={{ color:'var(--text-3)' }}>Latency</span>
+                  <span className="font-mono" style={{ color:'var(--text-1)' }}>{testResult.latency_ms}ms</span>
+                </div>
               </div>
             )}
           </>
-        )}
-
-        {/* ── Alerts ── */}
-        {tab === 'alerts' && (
-          <div className="space-y-3">
-            <p style={{ color:'var(--text-3)' }}>Alerts are triggered when conditions are met for this source.</p>
-            {[
-              { label:'Source Offline',       active: true },
-              { label:'No Logs > 15 min',     active: true },
-              { label:'Parser Failures',       active: false },
-              { label:'Auth Failures',         active: true },
-              { label:'EPS Drops > 50%',      active: false },
-              { label:'Queue Full',            active: false },
-            ].map(({ label, active }) => (
-              <div key={label} className="flex items-center justify-between rounded-lg px-3 py-2.5"
-                style={{ background:'var(--glass-bg)', border:'1px solid var(--border)' }}>
-                <span style={{ color:'var(--text-2)' }}>{label}</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px]" style={{ color: active ? 'var(--green)' : 'var(--text-3)' }}>{active ? 'Enabled' : 'Disabled'}</span>
-                  <div className="h-4 w-8 rounded-full relative cursor-pointer" style={{ background: active ? 'var(--accent)' : 'var(--border)' }}>
-                    <div className="absolute top-0.5 h-3 w-3 rounded-full transition-all" style={{ background:'#fff', left: active ? '18px' : '2px' }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         )}
 
       </div>
@@ -899,7 +857,7 @@ function PipelineView({ sources }: { sources: LogSource[] }) {
     { name:'Normalizer',     icon:Layers,    desc:'ECS field mapping · field extraction',          color:'var(--yellow)' },
     { name:'Enrichment',     icon:Zap,       desc:'GeoIP · ASN · TI · Asset · User · MITRE',      color:'var(--orange)' },
     { name:'Correlation',    icon:GitBranch, desc:'Rules · Sequences · Time windows',              color:'var(--accent)' },
-    { name:'Storage',        icon:HardDrive, desc:'PostgreSQL + compression · 90d hot retention', color:'var(--blue)' },
+    { name:'Storage',        icon:HardDrive, desc:'PostgreSQL · 90d hot retention',               color:'var(--blue)' },
     { name:'Detection',      icon:Shield,    desc:'Sigma rules · YARA · ML anomaly · IOC match',  color:'var(--red)' },
     { name:'Alert',          icon:Bell,      desc:'Incidents · Playbooks · Notifications',         color:'var(--red)' },
   ];
@@ -1450,8 +1408,8 @@ export default function LogSourcesPage() {
           <p className="text-xs font-semibold" style={{ color:'var(--text-2)' }}>Receiver Endpoints</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <p className="text-[10px] mb-1.5" style={{ color:'var(--text-3)' }}>Syslog (UDP / TCP / TLS)</p>
-              <CodeBlock code={`<host>:514   UDP\n<host>:514   TCP\n<host>:6514  TLS`} host={host} />
+              <p className="text-[10px] mb-1.5" style={{ color:'var(--text-3)' }}>Syslog (UDP / TCP)</p>
+              <CodeBlock code={`<host>:514   UDP\n<host>:514   TCP`} host={host} />
             </div>
             <div>
               <p className="text-[10px] mb-1.5" style={{ color:'var(--text-3)' }}>HTTP Ingest (REST / Webhook)</p>

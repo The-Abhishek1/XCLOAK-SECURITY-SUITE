@@ -1310,7 +1310,14 @@ func GetNBAAnalytics(c *gin.Context) {
 
 	var totalConns, uniqueHosts, blockedIPs int
 	database.DB.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT agent_id) FROM network_connect_events WHERE tenant_id=$1 AND created_at>=$2`, tid, since).Scan(&totalConns, &uniqueHosts)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM ioc_blocks WHERE tenant_id=$1`, tid).Scan(&blockedIPs)
+	// `ioc_blocks` doesn't exist anywhere in this schema (confirmed via `\d
+	// ioc_blocks`; the same missing-table bug already found and fixed
+	// elsewhere in this file and on the Behavioral Detection/Threat Intel
+	// pages) — this query always failed outright, silently zeroing
+	// "blocked_ips" for every tenant, forever. The real mechanism NBA/DPI's
+	// own block_ip response actions use is `repositories.CreateIOC`, which
+	// creates an enabled `iocs` row — count those instead.
+	database.DB.QueryRow(`SELECT COUNT(*) FROM iocs WHERE tenant_id=$1 AND type='ip' AND enabled=true`, tid).Scan(&blockedIPs)
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_connections":      totalConns,

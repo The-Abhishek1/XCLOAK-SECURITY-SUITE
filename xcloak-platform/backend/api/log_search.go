@@ -220,7 +220,15 @@ func buildSearchParams(c *gin.Context) services.LogSearchParams {
 
 func expandTimeRange(r string, tenantID int) services.LogSearchParams {
 	p := services.LogSearchParams{TenantID: tenantID}
-	now := time.Now()
+	// endpoint_logs.collected_at is `timestamp without time zone`. Postgres
+	// drops the offset (rather than converting) when a tz-aware value is
+	// cast into a tz-less column, so a non-UTC server clock (e.g. IST,
+	// UTC+5:30) silently shifted every relative window here forward by the
+	// server's offset — "24h" was actually filtering from ~5.5h in the
+	// future back to now, excluding all real recent rows. Force UTC so the
+	// serialized value's offset is always +00:00, matching how the data
+	// was seeded/stored.
+	now := time.Now().UTC()
 	switch r {
 	case "5m":
 		p.From = now.Add(-5 * time.Minute)
