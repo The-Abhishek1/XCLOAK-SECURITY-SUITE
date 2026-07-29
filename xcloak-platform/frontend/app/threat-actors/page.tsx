@@ -286,11 +286,16 @@ function RelGraph({ nodes, edges }: { nodes: RelNode[]; edges: RelEdge[] }) {
 // ── Kill Chain Visualizer ──────────────────────────────────────────────────────
 
 function KillChainView({ techniques }: { techniques: string[] }) {
-  const techSet = new Set(techniques);
-  const active = KILL_CHAIN_STAGES.filter(s => s.techniques.some(t => techSet.has(t)));
+  // Actor records store MITRE IDs as either a base technique ("T1078") or a
+  // sub-technique ("T1071.001") — an exact-match Set lookup against the
+  // stage list's base IDs misses every sub-technique, which is most of the
+  // real seeded data (e.g. APT28's {T1071.001,T1059.001,T1078,T1027} only
+  // matched Credential Access, silently dropping Execution and C2).
+  const hasTech = (base: string) => techniques.some(t => t === base || t.startsWith(base + '.'));
+  const active = KILL_CHAIN_STAGES.filter(s => s.techniques.some(hasTech));
   const stages = KILL_CHAIN_STAGES.map(s => ({
     ...s,
-    covered: s.techniques.some(t => techSet.has(t)),
+    covered: s.techniques.some(hasTech),
   }));
 
   return (
@@ -310,7 +315,7 @@ function KillChainView({ techniques }: { techniques: string[] }) {
             </div>
             <div className="flex flex-wrap gap-1 flex-1">
               {s.techniques.map(t => {
-                const hit = techSet.has(t);
+                const hit = hasTech(t);
                 return (
                   <span key={t} className="font-mono text-[9px] px-1.5 py-0.5 rounded"
                     style={{
@@ -1647,14 +1652,10 @@ export default function ThreatActorsPage() {
               Generate hunt parameters for this actor's IOCs, TTPs, and common behaviors.
             </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-2 gap-2 mb-4">
               {[
-                { id: 'iocs',    label: 'Hunt IOCs',        icon: Shield },
-                { id: 'ttps',    label: 'Hunt TTPs',        icon: Layers },
-                { id: 'logs',    label: 'Search Logs',      icon: Database },
-                { id: 'dns',     label: 'Search DNS',       icon: Globe },
-                { id: 'network', label: 'Search Firewall',  icon: Network },
-                { id: 'cloud',   label: 'Search Cloud',     icon: Activity },
+                { id: 'iocs', label: 'Hunt IOCs', icon: Shield },
+                { id: 'ttps', label: 'Hunt TTPs', icon: Layers },
               ].map(h => (
                 <button key={h.id} onClick={() => setHuntType(h.id)}
                   className={`p-3 rounded-xl text-left flex items-center gap-2 text-xs transition-colors ${huntType === h.id ? 'g-btn g-btn-primary' : 'g-card'}`}>
@@ -1668,6 +1669,9 @@ export default function ThreatActorsPage() {
               <Play className={`w-3.5 h-3.5 ${hunting ? 'animate-spin' : ''}`} />
               {hunting ? 'Generating…' : 'Generate Hunt Parameters'}
             </button>
+            <p className="text-[11px] mt-3" style={{ color: 'var(--text-3)' }}>
+              Need log/DNS/network-specific hunt guidance? Use <span className="font-medium">AI Intel → Hunt Guide</span> for an LLM-generated hunting playbook covering those categories.
+            </p>
           </div>
 
           {huntResult && (
@@ -1712,6 +1716,19 @@ export default function ThreatActorsPage() {
                     style={{ background: 'var(--bg-0)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
                     {String(huntResult.sigma_hunt)}
                   </code>
+                </div>
+              )}
+              {Array.isArray(huntResult.queries) && (huntResult.queries as string[]).length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider mb-1 font-semibold" style={{ color: 'var(--text-3)' }}>Hunt Queries</p>
+                  <div className="space-y-1">
+                    {(huntResult.queries as string[]).map((q, i) => (
+                      <code key={i} className="text-[11px] px-3 py-2 rounded block"
+                        style={{ background: 'var(--bg-0)', color: 'var(--accent)', border: '1px solid var(--border)' }}>
+                        {q}
+                      </code>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

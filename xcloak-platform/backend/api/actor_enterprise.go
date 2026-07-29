@@ -277,17 +277,8 @@ func PostActorAI(c *gin.Context) {
 		var name, motivation, sophistication, description, origin string
 		techniques := []string{}
 		sectors := []string{}
-		database.DB.QueryRow(`
-			SELECT name, motivation, sophistication, description, origin_country,
-			       mitre_techniques, targeted_sectors
-			FROM threat_actors WHERE id=$1 AND tenant_id=$2`,
-			body.ActorID, tid).
-			Scan(&name, &motivation, &sophistication, &description, &origin,
-				(*strings.Builder)(nil), (*strings.Builder)(nil))
-
-		// Re-query for arrays
-		row := database.DB.QueryRow(`SELECT name, motivation, sophistication, COALESCE(description,''), COALESCE(origin_country,'') FROM threat_actors WHERE id=$1 AND tenant_id=$2`, body.ActorID, tid)
-		row.Scan(&name, &motivation, &sophistication, &description, &origin)
+		database.DB.QueryRow(`SELECT name, motivation, sophistication, COALESCE(description,''), COALESCE(origin_country,'') FROM threat_actors WHERE id=$1 AND tenant_id=$2`, body.ActorID, tid).
+			Scan(&name, &motivation, &sophistication, &description, &origin)
 
 		techRows, _ := database.DB.Query(`SELECT UNNEST(mitre_techniques) FROM threat_actors WHERE id=$1 AND tenant_id=$2 LIMIT 20`, body.ActorID, tid)
 		if techRows != nil {

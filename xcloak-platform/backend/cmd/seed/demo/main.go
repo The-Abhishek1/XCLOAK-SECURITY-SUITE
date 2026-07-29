@@ -984,14 +984,23 @@ func seedThreatActors(db *sql.DB) {
 		},
 	}
 	for _, a := range actors {
+		// threat_actors has no unique constraint at all, so a bare `ON
+		// CONFLICT DO NOTHING` (as used elsewhere in this file) never
+		// actually triggers — re-running this seeder duplicated every one
+		// of these 3 actors on this tenant. Guard with an explicit
+		// existence check instead, matching the SeedBuiltinActors idiom.
+		var exists int
+		db.QueryRow(`SELECT COUNT(*) FROM threat_actors WHERE tenant_id=9999 AND name=$1`, a.name).Scan(&exists)
+		if exists > 0 {
+			continue
+		}
 		aliases := fmt.Sprintf(`{"%s"}`, joinStr(a.aliases, `","`))
 		sectors := fmt.Sprintf(`{"%s"}`, joinStr(a.sectors, `","`))
 		techniques := fmt.Sprintf(`{"%s"}`, joinStr(a.techniques, `","`))
 		mustExec(db, `
 			INSERT INTO threat_actors
 				(name, aliases, origin_country, motivation, sophistication, description, targeted_sectors, mitre_techniques, tenant_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,9999)
-			ON CONFLICT DO NOTHING`,
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,9999)`,
 			a.name, aliases, a.country, a.motivation, a.sophistication, a.desc, sectors, techniques,
 		)
 	}
