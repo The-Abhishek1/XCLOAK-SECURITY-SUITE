@@ -18,6 +18,14 @@ import { SHARED_STORAGE_STATE } from './global-setup';
 // No fabricated data was found anywhere in the dashboard/analytics/MITRE-
 // coverage/categories/relationships endpoints.
 //
+// Found during the later YARA Rules pass (missed here originally): a fully
+// built "Graph" tab — a real RelGraph component (defined in this same file)
+// and the real GetSigmaRelationships endpoint this comment already vouched
+// for — was never added to the TABS array or given a render block, making
+// it completely unreachable dead code despite being entirely real
+// underneath. Wired it in (TABS entry + render block using the existing
+// RelGraph component), matching the identical fix applied to YARA Rules.
+//
 // Real bugs found and fixed:
 //  - `PostSigmaBulk` (enable/disable/delete/set_severity/set_status) wrote
 //    directly via `database.DB.Exec`, bypassing the services layer that
@@ -179,5 +187,13 @@ test.describe('Sigma Rules — Bulk Ops tab: no grammatically-broken action labe
     await expect(page.getByText(/rules? (enabled|disabled|deleted|updated)/)).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('body')).not.toContainText('set_severityd');
     await expect(page.locator('body')).not.toContainText('set_statusd');
+  });
+});
+
+test.describe('Sigma Rules — Graph tab is real and reachable', () => {
+  test('the Graph tab button exists and renders real relationship data', async ({ page }) => {
+    await page.goto('/sigma-rules');
+    await page.getByRole('button', { name: 'Graph', exact: true }).click();
+    await expect(page.locator('svg').first()).toBeVisible({ timeout: 15_000 });
   });
 });

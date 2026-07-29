@@ -296,6 +296,7 @@ func SetupRoutes(router *gin.Engine) {
 	// ── YARA ──────────────────────────────────────────────────────
 	router.POST("/api/yara/matches", middleware.RequireAgentAuth(), api.ReceiveYaraMatches)
 	router.GET("/api/yara/matches", middleware.RequireAuth(), api.GetYaraMatches)
+	router.POST("/api/yara/matches/:id/respond", middleware.RequireAuth(), api.PostYaraMatchResponse)
 	router.POST("/api/yara/rules", middleware.RequireAuth(), middleware.RequirePermission("manage_detection_rules"), api.CreateYaraRule)
 	router.GET("/api/yara/rules", middleware.RequireAuth(), api.GetYaraRules)
 	router.GET("/api/yara/rules/enabled", middleware.RequireAgentAuth(), api.GetEnabledYaraRules)

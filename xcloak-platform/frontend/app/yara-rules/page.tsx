@@ -7,7 +7,7 @@ import { YaraRule, YaraMatch } from '@/types';
 import { timeAgo, sevClass } from '@/lib/utils';
 import { Agent } from '@/types';
 import { MetricCard } from '@/components/design-system';
-import { AlertTriangle, BarChart, Bot, CheckSquare, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Download, Edit2, FileWarning, Grid, Hash, Layers, Plus, Search, Shield, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from 'lucide-react';
+import { BarChart, Bot, CheckSquare, ChevronDown, ChevronRight, ChevronUp, Clock, Code2, Copy, Download, Edit2, FileWarning, Grid, Hash, Layers, Network, Plus, Search, Shield, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +50,7 @@ const TABS = [
   { id: 'matches',    label: 'Matches',     icon: FileWarning },
   { id: 'analytics',  label: 'Analytics',   icon: BarChart },
   { id: 'categories', label: 'Categories',  icon: Shield },
+  { id: 'relationships', label: 'Graph',    icon: Network },
   { id: 'ai',         label: 'AI Assistant',icon: Bot },
   { id: 'bulk',       label: 'Bulk / Export',icon: CheckSquare },
 ];
@@ -202,6 +203,7 @@ export default function YaraRulesPage() {
   const [selected,   setSelected]   = useState<Set<number>>(new Set());
   const [matchSevFilter, setMatchSevFilter] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [respondingMatchId, setRespondingMatchId] = useState<number | null>(null);
 
   // Editor state
   const [editMode,   setEditMode]   = useState<'create' | 'edit'>('create');
@@ -326,6 +328,18 @@ export default function YaraRulesPage() {
       r.enabled ? await yaraAPI.disable(r.id) : await yaraAPI.enable(r.id);
       setRules(p => p.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
     } catch { notify('Toggle failed'); }
+  };
+
+  const quarantineMatchFile = async (matchId: number) => {
+    setRespondingMatchId(matchId);
+    try {
+      const r = await yaraAPI.respond(matchId, 'quarantine_file');
+      notify(r.data?.message ?? 'Quarantine dispatched');
+    } catch (e: any) {
+      notify(e?.response?.data?.error ?? 'Quarantine dispatch failed');
+    } finally {
+      setRespondingMatchId(null);
+    }
   };
 
   // ── Import / export ──────────────────────────────────────────────────────
@@ -780,11 +794,10 @@ export default function YaraRulesPage() {
                         </div>
                       )}
                       <div className="flex gap-2 mt-2">
-                        <button className="g-btn g-btn-ghost text-[10px]" style={{ padding: '2px 8px' }}>
-                          <AlertTriangle className="h-3 w-3" /> Create Alert
-                        </button>
-                        <button className="g-btn g-btn-ghost text-[10px]" style={{ padding: '2px 8px' }}>
-                          <Shield className="h-3 w-3" /> Quarantine File
+                        <button onClick={e => { e.stopPropagation(); quarantineMatchFile(m.id); }}
+                          disabled={respondingMatchId === m.id}
+                          className="g-btn g-btn-ghost text-[10px]" style={{ padding: '2px 8px' }}>
+                          <Shield className="h-3 w-3" /> {respondingMatchId === m.id ? 'Dispatching…' : 'Quarantine File'}
                         </button>
                       </div>
                     </div>
@@ -880,6 +893,24 @@ export default function YaraRulesPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ GRAPH ═══ */}
+      {tab === 'relationships' && (
+        <div className="space-y-4">
+          {!relData ? (
+            <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading relationship graph…</div>
+          ) : relData.nodes.length === 0 ? (
+            <div className="py-16 text-center text-sm" style={{ color: 'var(--text-3)' }}>No matches in the last 7 days to graph yet</div>
+          ) : (
+            <div className="g-card p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>
+                Rule → Agent / File Relationships (7d)
+              </p>
+              <RelGraph nodes={relData.nodes} edges={relData.edges} />
             </div>
           )}
         </div>

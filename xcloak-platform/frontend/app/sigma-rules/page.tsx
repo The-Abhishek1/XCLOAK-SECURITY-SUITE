@@ -6,7 +6,7 @@ import { sigmaAPI } from '@/lib/api';
 import { SigmaRule, SigmaRuleStat } from '@/types';
 import { sevClass, timeAgo } from '@/lib/utils';
 import { MetricCard } from '@/components/design-system';
-import { AlertTriangle, BarChart, BarChart2, Bot, CheckSquare, ChevronRight, Copy, Download, Edit2, Eye, FileCode, Grid, Layers, Plus, Repeat2, Search, Shield, TestTube, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from 'lucide-react';
+import { AlertTriangle, BarChart, BarChart2, Bot, CheckSquare, ChevronRight, Copy, Download, Edit2, Eye, FileCode, Grid, Layers, Network, Plus, Repeat2, Search, Shield, TestTube, ToggleLeft, ToggleRight, Trash2, Upload, X, Zap } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ const TABS = [
   { id: 'mitre',      label: 'MITRE',        icon: Shield },
   { id: 'analytics',  label: 'Analytics',    icon: BarChart },
   { id: 'categories', label: 'Categories',   icon: BarChart2 },
+  { id: 'relationships', label: 'Graph',     icon: Network },
   { id: 'ai',         label: 'AI Assistant', icon: Bot },
   { id: 'convert',    label: 'Convert',      icon: Repeat2 },
   { id: 'bulk',       label: 'Bulk Ops',     icon: CheckSquare },
@@ -1141,6 +1142,24 @@ export default function SigmaRulesPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ GRAPH ═══ */}
+      {tab === 'relationships' && (
+        <div className="space-y-4">
+          {!relData ? (
+            <div className="py-16 text-center text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>Loading relationship graph…</div>
+          ) : relData.nodes.length === 0 ? (
+            <div className="py-16 text-center text-sm" style={{ color: 'var(--text-3)' }}>No hits in the last 7 days to graph yet</div>
+          ) : (
+            <div className="g-card p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>
+                Rule → Agent / MITRE Relationships (7d)
+              </p>
+              <RelGraph nodes={relData.nodes} edges={relData.edges} />
             </div>
           )}
         </div>

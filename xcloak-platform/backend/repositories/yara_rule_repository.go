@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 
 	"xcloak-platform/database"
@@ -75,23 +77,50 @@ func queryYaraRules(query string, args ...interface{}) ([]models.YaraRule, error
 
 func UpdateYaraRule(id string, rule models.YaraRule, tenantID int) error {
 
-	tag, err := database.DB.Exec(`
-		UPDATE yara_rules
-		SET name = $1, description = $2, rule_content = $3, enabled = $4
-		WHERE id = $5 AND tenant_id = $6
-	`,
-		rule.Name,
-		rule.Description,
-		rule.RuleContent,
-		rule.Enabled,
-		id,
-		tenantID,
-	)
+	// yara_matches has no rule_id column at all — the agent's YARA engine
+	// only ever reports a matched rule's declared *name* (that's inherent to
+	// how YARA scanning works), so every match-history query joins on
+	// rule_name instead. Renaming a rule here without also updating its
+	// past matches silently orphaned all of that rule's history from its
+	// own detail page (verified live: match_count dropped from 1 to 0
+	// immediately after a rename, with zero warning to the user, while the
+	// matches remained visible elsewhere e.g. the global Matches tab).
+	// Cascade the rename inside the same transaction so history follows it.
+	err := database.WithTenantTx(context.Background(), tenantID, func(tx *sql.Tx) error {
+		var oldName string
+		if err := tx.QueryRow(`SELECT name FROM yara_rules WHERE id=$1 AND tenant_id=$2`, id, tenantID).Scan(&oldName); err != nil {
+			return ErrYaraRuleNotFound
+		}
+
+		tag, err := tx.Exec(`
+			UPDATE yara_rules
+			SET name = $1, description = $2, rule_content = $3, enabled = $4
+			WHERE id = $5 AND tenant_id = $6
+		`,
+			rule.Name,
+			rule.Description,
+			rule.RuleContent,
+			rule.Enabled,
+			id,
+			tenantID,
+		)
+		if err != nil {
+			return err
+		}
+		if n, _ := tag.RowsAffected(); n == 0 {
+			return ErrYaraRuleNotFound
+		}
+
+		if oldName != rule.Name {
+			_, err = tx.Exec(`UPDATE yara_matches SET rule_name=$1 WHERE rule_name=$2 AND tenant_id=$3`, rule.Name, oldName, tenantID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return err
-	}
-	if n, _ := tag.RowsAffected(); n == 0 {
-		return ErrYaraRuleNotFound
 	}
 	return nil
 }

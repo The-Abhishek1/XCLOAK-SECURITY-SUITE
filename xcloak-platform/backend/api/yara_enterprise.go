@@ -12,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -826,4 +828,56 @@ func GetYaraRuleDetail(c *gin.Context) {
 		"last_match":    lastMatch,
 		"recent_hits":   recentHits,
 	})
+}
+
+// ── PostYaraMatchResponse ─────────────────────────────────────────────────
+// POST /api/yara/matches/:id/respond — dispatches a real response action
+// against the agent that reported a match (currently just quarantine_file;
+// an alert is already auto-created for every match by SaveYaraMatches, so
+// there is no separate "create alert" action here).
+func PostYaraMatchResponse(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	var body struct {
+		Action string `json:"action"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if body.Action != "quarantine_file" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action: " + body.Action})
+		return
+	}
+
+	var agentID int
+	var filePath, ruleName string
+	err = database.DB.QueryRow(`SELECT agent_id, file_path, rule_name FROM yara_matches WHERE id=$1 AND tenant_id=$2`, id, tid).
+		Scan(&agentID, &filePath, &ruleName)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "match not found"})
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]any{"path": filePath, "yara_match_id": id, "rule_name": ruleName})
+	task := models.AgentTask{AgentID: agentID, TaskType: "quarantine_file", Payload: payload}
+
+	if services.IsDestructiveTask("quarantine_file") {
+		if err := repositories.CreateTaskPendingApproval(task); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("quarantine_file queued for agent %d, pending approval", agentID)})
+		return
+	}
+	if err := repositories.CreateTask(task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("quarantine_file dispatched to agent %d", agentID)})
 }

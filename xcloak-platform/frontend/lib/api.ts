@@ -396,6 +396,7 @@ export const yaraAPI = {
     api.post('/yara/bulk', { action, rule_ids }),
   export:        (format: string, rule_ids?: number[], all?: boolean) =>
     api.post('/yara/export', { format, rule_ids: rule_ids ?? [], all: all ?? false }),
+  respond:       (matchId: number, action: string) => api.post(`/yara/matches/${matchId}/respond`, { action }),
 };
 
 export const firewallAPI = {
