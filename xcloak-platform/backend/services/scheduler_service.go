@@ -22,6 +22,7 @@ func StartScheduler() {
 			WithSingletonLock("scheduler", func() {
 				runDueScheduledTasks()
 				ExpireStaleTasks()
+				ExpireStaleApprovals()
 			})
 		}
 	}()
@@ -47,6 +48,13 @@ func StartScheduler() {
 
 	StartBehavioralScorer()
 	StartProcessNoveltyDetector()
+}
+
+// ExpireStaleApprovals marks any still-pending aq_requests row whose due_at
+// has passed as 'expired' — the status/count already exists on the
+// dashboard and analytics endpoints, but nothing was ever setting it.
+func ExpireStaleApprovals() {
+	database.DB.Exec(`UPDATE aq_requests SET status='expired', updated_at=NOW() WHERE status='pending' AND due_at IS NOT NULL AND due_at < NOW()`)
 }
 
 // scanAgentIDs converts PostgreSQL integer[] text "{1,2}" or JSON "[1,2]" to []int

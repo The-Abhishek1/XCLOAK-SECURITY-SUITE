@@ -80,15 +80,13 @@ function DueTag({ dueAt, status }: { dueAt?: string; status: string }) {
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
+const CATEGORY_ICON: Record<string, any> = {
+  endpoint: Monitor, identity: User, network: Globe, email: Mail, cloud: Cloud,
+};
+
 function OverviewTab({ dash }: { dash: any }) {
   if (!dash) return <div style={{ color: 'var(--text-3)', padding: 40, textAlign: 'center' }}>Loading dashboard…</div>;
-  const REQUEST_TYPES = [
-    { label: 'Endpoint Actions', icon: Monitor, pct: 32 },
-    { label: 'Identity Actions', icon: User, pct: 24 },
-    { label: 'Network Actions', icon: Globe, pct: 21 },
-    { label: 'Email Actions', icon: Mail, pct: 15 },
-    { label: 'Cloud Actions', icon: Cloud, pct: 8 },
-  ];
+  const totalByCategory = (dash.by_category || []).reduce((sum: number, c: any) => sum + c.count, 0) || 1;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -98,44 +96,43 @@ function OverviewTab({ dash }: { dash: any }) {
         <MetricCard label="Expired" value={dash.expired} color="#6b7280" />
         <MetricCard label="High Risk" value={dash.high_risk} color="#ef4444" sub="critical + high severity" />
         <MetricCard label="Emergency" value={dash.emergency} color="#ef4444" sub="break-glass events" />
-        <MetricCard label="Avg Approval" value={`${dash.avg_approval_time_min}m`} color="var(--accent)" />
-        <MetricCard label="SLA Compliance" value={`${dash.sla_compliance}%`} color={dash.sla_compliance >= 95 ? '#22c55e' : '#f97316'} />
+        <MetricCard label="Avg Approval" value={`${dash.avg_approval_time_min?.toFixed(1)}m`} color="var(--accent)" />
+        <MetricCard label="SLA Compliance" value={`${dash.sla_compliance?.toFixed(1)}%`} color={dash.sla_compliance >= 95 ? '#22c55e' : '#f97316'} />
         <MetricCard label="Auto-Approved" value={dash.auto_approved} color="#22c55e" sub="no human required" />
         <MetricCard label="Total Requests" value={dash.total_requests} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <SectionCard title="Approval Flow">
-          {[
-            { label: 'Auto-Approved (no action required)', count: dash.auto_approved, color: '#22c55e' },
-            { label: 'Approved by SOC Lead', count: Math.floor(dash.approved * 0.25), color: '#3b82f6' },
-            { label: 'Approved by Manager', count: Math.floor(dash.approved * 0.35), color: '#f97316' },
-            { label: 'Dual Approval', count: Math.floor(dash.approved * 0.28), color: '#a855f7' },
-            { label: 'Executive Approval', count: Math.floor(dash.approved * 0.12), color: '#ef4444' },
-          ].map(item => (
-            <div key={item.label} style={{ marginBottom: 8 }}>
+        <SectionCard title="Approval Flow" subtitle="Approved requests, by policy">
+          {(dash.by_policy || []).length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No approved requests yet.</div>
+          ) : (dash.by_policy || []).map((item: any) => (
+            <div key={item.policy} style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                <span style={{ color: 'var(--text-2)' }}>{item.label}</span>
+                <span style={{ color: 'var(--text-2)', textTransform: 'capitalize' }}>{item.policy.replace(/_/g, ' ')}</span>
                 <span style={{ fontWeight: 600 }}>{item.count}</span>
               </div>
               <div style={{ background: 'var(--border)', borderRadius: 2, height: 6 }}>
-                <div style={{ background: item.color, borderRadius: 2, height: 6, width: `${Math.min(100, (item.count / (dash.total_requests || 1)) * 100)}%` }} />
+                <div style={{ background: 'var(--accent)', borderRadius: 2, height: 6, width: `${Math.min(100, (item.count / (dash.approved || 1)) * 100)}%` }} />
               </div>
             </div>
           ))}
         </SectionCard>
 
-        <SectionCard title="By Request Type">
-          {REQUEST_TYPES.map(item => {
-            const Icon = item.icon;
+        <SectionCard title="By Request Category">
+          {(dash.by_category || []).length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No requests yet.</div>
+          ) : (dash.by_category || []).map((item: any) => {
+            const Icon = CATEGORY_ICON[item.category] || Globe;
+            const pct = Math.round((item.count / totalByCategory) * 100);
             return (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div key={item.category} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <Icon style={{ width: 14, height: 14, color: 'var(--text-3)' }} />
-                <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1 }}>{item.label}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, textTransform: 'capitalize' }}>{item.category.replace(/_/g, ' ')}</span>
                 <div style={{ width: 100, background: 'var(--border)', borderRadius: 2, height: 6 }}>
-                  <div style={{ background: 'var(--accent)', borderRadius: 2, height: 6, width: `${item.pct}%` }} />
+                  <div style={{ background: 'var(--accent)', borderRadius: 2, height: 6, width: `${pct}%` }} />
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-3)', width: 30, textAlign: 'right' }}>{item.pct}%</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', width: 30, textAlign: 'right' }}>{pct}%</span>
               </div>
             );
           })}
@@ -362,45 +359,20 @@ function QueueTab({
                 )}
                 {evidence?.threat_intel && (
                   <div className="g-card" style={{ padding: 12, borderLeft: '3px solid #ef4444' }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Threat Intelligence</div>
+                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Threat Intelligence (matched IOC)</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {[['Indicator', evidence.threat_intel.indicator], ['Verdict', evidence.threat_intel.verdict], ['Confidence', `${evidence.threat_intel.confidence}%`], ['Category', evidence.threat_intel.category], ['Threat Actor', evidence.threat_intel.threat_actor], ['First Seen', evidence.threat_intel.first_seen]].map(([k, v]) => (
+                      {[['Indicator', evidence.threat_intel.indicator], ['Type', evidence.threat_intel.type], ['Severity', evidence.threat_intel.severity], ['Description', evidence.threat_intel.description], ['Hit Count', evidence.threat_intel.hit_count], ['Last Seen', evidence.threat_intel.last_seen ? timeAgo(evidence.threat_intel.last_seen) : '—']].map(([k, v]) => (
                         <div key={k}>
                           <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{k}</div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: k === 'Verdict' && v === 'malicious' ? '#ef4444' : 'var(--text-1)' }}>{v}</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: k === 'Severity' && (v === 'critical' || v === 'high') ? '#ef4444' : 'var(--text-1)' }}>{v}</div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-                {evidence?.process_tree && (
-                  <div className="g-card" style={{ padding: 12 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Process Tree</div>
-                    {evidence.process_tree.map((proc: any, i: number) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 0', borderBottom: i < evidence.process_tree.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                        {i > 0 && <span style={{ color: 'var(--text-3)', fontSize: 12, paddingLeft: i * 12 }}>└─</span>}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: proc.suspicious ? '#ef4444' : 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {proc.name}
-                            {proc.suspicious && <span style={{ fontSize: 9, background: '#ef4444', color: '#fff', padding: '1px 5px', borderRadius: 3 }}>SUSPICIOUS</span>}
-                          </div>
-                          <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'monospace', marginTop: 2 }}>{proc.cmdline}</div>
-                          <div style={{ fontSize: 10, color: 'var(--text-3)' }}>PID: {proc.pid} · Parent: {proc.parent}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {evidence?.recent_logs && (
-                  <div className="g-card" style={{ padding: 12 }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Recent Security Events</div>
-                    {evidence.recent_logs.map((log: any, i: number) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, padding: '5px 0', borderBottom: i < evidence.recent_logs.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 12 }}>
-                        <span style={{ color: 'var(--text-3)', fontSize: 10, whiteSpace: 'nowrap', minWidth: 70 }}>{new Date(log.time).toLocaleTimeString()}</span>
-                        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)', minWidth: 36 }}>{log.event}</span>
-                        <span style={{ color: 'var(--text-2)' }}>{log.description}</span>
-                      </div>
-                    ))}
+                {!evidence?.incident && !evidence?.threat_intel && (
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: '1.5rem' }}>
+                    No linked incident, alert, or matching IOC found for this request.
                   </div>
                 )}
               </div>
@@ -639,7 +611,7 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <MetricCard label="Avg Approval Time" value={`${analytics.avg_approval_time_min}m`} color="var(--accent)" />
+        <MetricCard label="Avg Approval Time" value={`${analytics.avg_approval_time_min?.toFixed(1)}m`} color="var(--accent)" />
         <MetricCard label="Total Requests" value={analytics.total} />
         <MetricCard label="Approved" value={analytics.approved} color="#22c55e" />
         <MetricCard label="Rejected" value={analytics.rejected} color="#ef4444" />
@@ -668,14 +640,14 @@ function AnalyticsTab({ analytics }: { analytics: any }) {
           ))}
         </SectionCard>
 
-        <SectionCard title="By Team" padded={false}>
+        <SectionCard title="By Approver" padded={false}>
           <DataTable<any>
-            rows={analytics.by_team || []}
-            rowKey={(t: any) => t.team}
+            rows={analytics.by_approver || []}
+            rowKey={(t: any) => t.approver}
             columns={[
-              { key: 'team', header: 'Team', render: (t: any) => <span style={{ fontSize: 12 }}>{t.team}</span> },
+              { key: 'approver', header: 'Approver', render: (t: any) => <span style={{ fontSize: 12, fontFamily: 'monospace' }}>{t.approver}</span> },
               { key: 'approved', header: 'Approved', render: (t: any) => <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{t.approved}</span> },
-              { key: 'avg_time_min', header: 'Avg Time', render: (t: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{t.avg_time_min}m</span> },
+              { key: 'avg_time_min', header: 'Avg Time', render: (t: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{t.avg_time_min.toFixed(1)}m</span> },
             ]}
           />
         </SectionCard>
@@ -796,10 +768,36 @@ function ReportsTab() {
               ))}
             </div>
           )}
+          {result.top_requestors && result.top_requestors.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Top Requestors</div>
+              {result.top_requestors.map((r: any) => (
+                <div key={r.requestor} style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-2)', marginBottom: 4 }}>
+                  <span style={{ flex: 1, fontFamily: 'monospace' }}>{r.requestor}</span>
+                  <span>{r.count} requests</span>
+                  <span style={{ color: 'var(--text-3)' }}>({r.auto_approved} auto)</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {result.risk_breakdown && result.risk_breakdown.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Risk Breakdown</div>
+              {result.risk_breakdown.map((r: any) => (
+                <div key={r.level} style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-2)', marginBottom: 4 }}>
+                  <span style={{ flex: 1, textTransform: 'capitalize' }}>{r.level}</span>
+                  <span>{r.count} requests</span>
+                  <span style={{ color: r.all_approved ? '#22c55e' : '#eab308' }}>{r.all_approved ? 'all approved' : 'mixed outcome'}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {result.recommendations && (
             <div>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Recommendations</div>
-              {result.recommendations.map((r: string, i: number) => (
+              {result.recommendations.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Not enough data yet to make recommendations.</div>
+              ) : result.recommendations.map((r: string, i: number) => (
                 <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>
                   <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{i + 1}.</span>
                   <span>{r}</span>
@@ -874,30 +872,46 @@ export default function SoarApprovalsPage() {
 
   const onDecide = async (type: string) => {
     if (!selectedId) return;
-    await aqAPI.decide(selectedId, { decision: type });
-    setRequestDetail((r: any) => r ? { ...r, status: type === 'approve' ? 'approved' : type === 'reject' ? 'rejected' : type } : r);
-    loadRequests();
+    try {
+      await aqAPI.decide(selectedId, { decision: type });
+      setRequestDetail((r: any) => r ? { ...r, status: type === 'approve' ? 'approved' : type === 'reject' ? 'rejected' : type } : r);
+      loadRequests();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record decision');
+    }
   };
 
   const onDelegate = async (delegatee: string, notes: string) => {
     if (!selectedId) return;
-    await aqAPI.delegate(selectedId, { delegatee, notes });
-    setRequestDetail((r: any) => r ? { ...r, status: 'delegated', current_approver: delegatee } : r);
-    loadRequests();
+    try {
+      await aqAPI.delegate(selectedId, { delegatee, notes });
+      setRequestDetail((r: any) => r ? { ...r, status: 'delegated', current_approver: delegatee } : r);
+      loadRequests();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to delegate');
+    }
   };
 
   const onEmergency = async (justification: string) => {
     if (!selectedId) return;
-    await aqAPI.emergency(selectedId, { justification });
-    setRequestDetail((r: any) => r ? { ...r, status: 'approved', is_emergency: true } : r);
-    loadRequests();
+    try {
+      await aqAPI.emergency(selectedId, { justification });
+      setRequestDetail((r: any) => r ? { ...r, status: 'approved', is_emergency: true } : r);
+      loadRequests();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to submit emergency override');
+    }
   };
 
   const onAddComment = async (content: string, type: string) => {
     if (!selectedId || !content.trim()) return;
-    await aqAPI.addComment(selectedId, { content, comment_type: type });
-    const res = await aqAPI.getComments(selectedId);
-    setComments(res.data || []);
+    try {
+      await aqAPI.addComment(selectedId, { content, comment_type: type });
+      const res = await aqAPI.getComments(selectedId);
+      setComments(res.data || []);
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to add comment');
+    }
   };
 
   const switchTab = (t: Tab) => {

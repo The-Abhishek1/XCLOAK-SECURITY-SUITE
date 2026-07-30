@@ -177,6 +177,8 @@ func main() {
 	seedDefenseEvasion(db)
 	log.Println("Seeding SOAR workflow builder (pb_*)…")
 	seedPBWorkflows(db)
+	log.Println("Seeding approval queue (aq_*)…")
+	seedApprovalQueue(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -8019,4 +8021,120 @@ func seedPBWorkflows(db *sql.DB) {
 	}
 
 	log.Printf("PB workflow seed: %d playbooks, %d executions, real approval/version/schedule rows", len(pbIDs), len(execs))
+}
+
+// seedApprovalQueue seeds api/approval_queue_enterprise.go's aq_* tables.
+// Guarded on a seeder-specific approval_id prefix rather than a blanket
+// row count, since this dev environment already has 2 real (non-seeded)
+// aq_requests rows from live-testing OT/ICS's escalate_emergency action
+// earlier this session.
+func seedApprovalQueue(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS aq_requests (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, approval_id TEXT NOT NULL,
+		request_type TEXT NOT NULL, action_category TEXT NOT NULL, severity TEXT DEFAULT 'high',
+		risk_score INTEGER DEFAULT 50, description TEXT, requested_action TEXT NOT NULL,
+		target_asset TEXT, target_user TEXT, requester TEXT, current_approver TEXT,
+		status TEXT DEFAULT 'pending', incident_id TEXT, case_id TEXT, alert_id TEXT,
+		mitre_technique TEXT, business_impact TEXT, risk_level TEXT DEFAULT 'high',
+		policy TEXT DEFAULT 'manager_approval', is_emergency BOOLEAN DEFAULT false,
+		due_at TIMESTAMPTZ, approved_at TIMESTAMPTZ, executed_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS aq_decisions (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, request_id INTEGER NOT NULL,
+		decision TEXT NOT NULL, actor TEXT, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS aq_policies (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT, action_type TEXT NOT NULL,
+		asset_criticality TEXT DEFAULT 'any', policy TEXT DEFAULT 'manager_approval',
+		approvers TEXT, auto_conditions TEXT, enabled BOOLEAN DEFAULT true,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS aq_comments (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, request_id INTEGER NOT NULL,
+		author TEXT, content TEXT, comment_type TEXT DEFAULT 'note',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS aq_audit (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, request_id INTEGER, approval_id TEXT,
+		actor TEXT, action TEXT, details TEXT, ip_address TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM aq_requests WHERE tenant_id=9999 AND approval_id LIKE 'AQ-SEED-%'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	now := time.Now()
+
+	policies := []struct {
+		name, actionType, criticality, policy, approvers string
+	}{
+		{"Kill malware process — workstation", "kill_process", "low", "automatic", "auto"},
+		{"Isolate server", "isolate_endpoint", "high", "manager_approval", "SOC Manager"},
+		{"Disable Domain Admin account", "disable_user", "high", "dual_approval", "SOC Manager + Identity Team"},
+		{"Block IP at firewall", "block_ip", "any", "automatic", "auto"},
+		{"Stop production database", "stop_service", "critical", "dual_approval", "SOC Manager + App Owner"},
+		{"Revoke AWS IAM credentials", "revoke_credentials", "any", "manager_approval", "SOC Manager + Cloud Security"},
+	}
+	var existingPolicies int
+	db.QueryRow(`SELECT COUNT(*) FROM aq_policies WHERE tenant_id=9999`).Scan(&existingPolicies)
+	if existingPolicies == 0 {
+		for _, p := range policies {
+			mustExec(db, `INSERT INTO aq_policies (tenant_id,name,action_type,asset_criticality,policy,approvers,enabled) VALUES (9999,$1,$2,$3,$4,$5,true)`,
+				p.name, p.actionType, p.criticality, p.policy, p.approvers)
+		}
+	}
+
+	type reqSeed struct {
+		category, severity, riskLevel, policy, description, action, asset, user, incidentID, alertID string
+		riskScore                                                                                    int
+		status                                                                                       string
+		hoursAgo                                                                                     float64
+		dueMinutesFromCreate                                                                         float64
+		isEmergency                                                                                  bool
+	}
+	reqs := []reqSeed{
+		{"endpoint", "critical", "critical", "manager_approval", "Cobalt Strike beacon confirmed on workstation, LSASS credential dump detected.", "Isolate endpoint win-workstation-05", "win-workstation-05", "", "", "", 88, "pending", 0.25, 30, false},
+		{"identity", "high", "high", "dual_approval", "Multiple failed logons followed by a successful login from a new geography.", "Disable AD account jsmith", "", "jsmith", "", "", 71, "pending", 0.1, 30, false},
+		{"network", "medium", "medium", "automatic", "Known malicious C2 IP observed in outbound traffic.", "Block IP 185.220.101.45 at firewall", "185.220.101.45", "", "", "", 52, "approved", 6, 30, false},
+		{"endpoint", "high", "high", "manager_approval", "Ransomware file-encryption pattern detected on file server.", "Isolate endpoint db-server-02", "db-server-02", "", "", "", 81, "rejected", 12, 30, false},
+		{"identity", "critical", "critical", "emergency", "Domain Admin account showing signs of active compromise — immediate containment required.", "Disable Domain Admin account hcraig", "", "hcraig", "", "", 95, "approved", 20, 30, true},
+		{"cloud", "high", "high", "manager_approval", "Anomalous API activity from a previously unused AWS access key.", "Revoke AWS IAM credentials for svc_backup", "svc_backup", "", "", "", 68, "expired", 3, 30, false},
+	}
+	for i, r := range reqs {
+		approvalID := fmt.Sprintf("AQ-SEED-%06d", i+1)
+		createdAt := now.Add(-time.Duration(r.hoursAgo * float64(time.Hour)))
+		dueAt := createdAt.Add(time.Duration(r.dueMinutesFromCreate * float64(time.Minute)))
+		var reqID int
+		err := db.QueryRow(`
+			INSERT INTO aq_requests (tenant_id,approval_id,request_type,action_category,severity,risk_score,description,requested_action,target_asset,target_user,requester,status,incident_id,alert_id,risk_level,policy,is_emergency,due_at,created_at,updated_at)
+			VALUES (9999,$1,'manual_response',$2,$3,$4,$5,$6,$7,$8,'admin',$9,$10,$11,$12,$13,$14,$15,$16,$16)
+			RETURNING id`,
+			approvalID, r.category, r.severity, r.riskScore, r.description, r.action, r.asset, r.user, r.status,
+			r.incidentID, r.alertID, r.riskLevel, r.policy, r.isEmergency, dueAt, createdAt,
+		).Scan(&reqID)
+		if err != nil {
+			log.Printf("aq_requests: %v", err)
+			continue
+		}
+		mustExec(db, `INSERT INTO aq_audit (tenant_id,request_id,approval_id,actor,action,details,created_at) VALUES (9999,$1,$2,'admin','created','Request submitted',$3)`,
+			reqID, approvalID, createdAt)
+		if r.status == "approved" || r.status == "rejected" {
+			decidedAt := createdAt.Add(8 * time.Minute)
+			decision := "approve"
+			if r.status == "rejected" {
+				decision = "reject"
+			}
+			if r.isEmergency {
+				decision = "emergency_override"
+			}
+			mustExec(db, `UPDATE aq_requests SET approved_at=$1, current_approver='admin' WHERE id=$2 AND status='approved'`, decidedAt, reqID)
+			mustExec(db, `INSERT INTO aq_decisions (tenant_id,request_id,decision,actor,notes,created_at) VALUES (9999,$1,$2,'admin',$3,$4)`,
+				reqID, decision, "Reviewed and "+r.status, decidedAt)
+			mustExec(db, `INSERT INTO aq_audit (tenant_id,request_id,approval_id,actor,action,details,created_at) VALUES (9999,$1,$2,'admin',$3,$4,$5)`,
+				reqID, approvalID, decision, "Reviewed and "+r.status, decidedAt)
+		}
+		if i == 0 {
+			mustExec(db, `INSERT INTO aq_comments (tenant_id,request_id,author,content,comment_type,created_at) VALUES (9999,$1,'admin','Confirmed with the endpoint team — this host has no production workload.','note',$2)`,
+				reqID, createdAt.Add(2*time.Minute))
+		}
+	}
+
+	log.Printf("Approval queue seed: %d policies, %d requests with decisions/audit trail", len(policies), len(reqs))
 }
