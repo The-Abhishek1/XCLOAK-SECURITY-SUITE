@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { dfirAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { MetricCard } from '@/components/design-system';
-import { Activity, BookOpen, Brain, ChevronDown, ChevronRight, Clock, Database, Download, Eye, FileText, GitBranch, Globe, Package, Play, Plus, Save, Search, Shield, Trash2, X, Zap } from 'lucide-react';
+import { Activity, BookOpen, Brain, ChevronDown, ChevronRight, Clock, Database, Download, ExternalLink, Eye, FileText, GitBranch, Globe, Package, Play, Plus, Save, Search, Shield, Trash2, X, Zap } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,11 @@ const ARTIFACT_TYPES: Record<string, string[]> = {
 
 const FORENSIC_TABS = ['file','malware','network','artifacts','registry','browser'];
 const REPORT_TYPES  = ['dfir','executive','timeline','evidence','malware','chain_of_custody'];
-const RESPONSE_ACTS = ['isolate_host','kill_process','delete_file','quarantine_file','block_ip','run_soar','open_incident','open_case'];
+// delete_file and run_soar removed: the real agent executor has no delete
+// capability (only quarantine_file, which moves rather than deletes), and
+// run_soar needs a playbook selection this modal was never built to offer
+// (see the real link to /playbooks in the Reports tab instead).
+const RESPONSE_ACTS = ['isolate_host','kill_process','quarantine_file','block_ip','open_incident','open_case'];
 
 const EMPTY_INV: Partial<Investigation> = {
   title: '', case_id: '', incident_id: 0, analyst: '', priority: 'high', status: 'open',
@@ -124,7 +128,7 @@ export default function DFIRPage() {
   const [addingEvent, setAddingEvent]     = useState(false);
 
   // Process tree
-  const [expandedPids, setExpandedPids]   = useState<Set<number>>(new Set([1032, 2048, 2144, 2312]));
+  const [expandedPids, setExpandedPids]   = useState<Set<number>>(new Set());
 
   // Forensics
   const [ftab, setFtab]                   = useState('file');
@@ -161,6 +165,7 @@ export default function DFIRPage() {
   // Response modal
   const [responseAction, setResponseAction] = useState('isolate_host');
   const [responseTarget, setResponseTarget] = useState('');
+  const [responseTargetHost, setResponseTargetHost] = useState('');
   const [showResponse, setShowResponse]   = useState(false);
 
   // Search
@@ -336,9 +341,13 @@ export default function DFIRPage() {
 
   const sendResponse = async () => {
     const id = activeInv?.id || invForm.id || 0;
-    await dfirAPI.response(id, { action: responseAction, target: responseTarget, target_type: 'host' });
-    notify(`${responseAction} queued for ${responseTarget}`);
-    setShowResponse(false);
+    try {
+      const r = await dfirAPI.response(id, { action: responseAction, target: responseTarget, target_host: responseTargetHost });
+      notify(r.data?.message || `${responseAction} queued for ${responseTarget}`);
+      setShowResponse(false);
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Response action failed');
+    }
   };
 
   const loadCustody = async (eid: number) => {
@@ -400,7 +409,7 @@ export default function DFIRPage() {
             {node.cmdline && <p className="text-[10px] font-mono truncate" style={{ color: suspicious ? '#fb923c' : 'var(--text-3)', maxWidth: 480 }}>{node.cmdline}</p>}
             {node.exe_path && <p className="text-[9px] truncate" style={{ color: 'var(--text-3)' }}>{node.exe_path}</p>}
           </div>
-          <button onClick={() => { setResponseTarget(node.process_name); setResponseAction('kill_process'); setShowResponse(true); }}
+          <button onClick={() => { setResponseTarget(String(node.pid)); setResponseTargetHost(node.host); setResponseAction('kill_process'); setShowResponse(true); }}
             className="opacity-0 group-hover:opacity-100 g-btn g-btn-ghost text-[9px] px-1.5 py-0.5 shrink-0">Kill</button>
         </div>
         {expanded && hasChildren && node.children.map((child: any) => <ProcessNode key={child.pid} node={child} depth={depth + 1} />)}
@@ -423,7 +432,11 @@ export default function DFIRPage() {
             <select value={responseAction} onChange={e => setResponseAction(e.target.value)} className="g-select w-full text-sm">
               {RESPONSE_ACTS.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
             </select>
-            <input value={responseTarget} onChange={e => setResponseTarget(e.target.value)} className="g-input w-full text-sm" placeholder="Target (host, IP, PID, file path…)" />
+            <input value={responseTarget} onChange={e => setResponseTarget(e.target.value)} className="g-input w-full text-sm"
+              placeholder={responseAction === 'kill_process' ? 'PID' : responseAction === 'quarantine_file' ? 'File path' : responseAction === 'block_ip' ? 'IP address' : 'Target host'} />
+            {(responseAction === 'kill_process' || responseAction === 'quarantine_file') && (
+              <input value={responseTargetHost} onChange={e => setResponseTargetHost(e.target.value)} className="g-input w-full text-sm" placeholder="Target host (which agent to dispatch to)" />
+            )}
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowResponse(false)} className="g-btn g-btn-ghost text-xs">Cancel</button>
               <button onClick={sendResponse} className="g-btn g-btn-primary text-xs">Execute</button>
@@ -569,7 +582,7 @@ export default function DFIRPage() {
               <button onClick={saveInvestigation} disabled={savingInv} className="g-btn g-btn-primary text-xs flex items-center gap-1.5">
                 <Save className="h-3 w-3" />{savingInv ? 'Saving…' : isEditInv ? 'Update' : 'Create'}
               </button>
-              {isEditInv && <button onClick={() => { setResponseTarget(invForm.target_hosts?.split(',')[0] || ''); setShowResponse(true); }} className="g-btn g-btn-ghost text-xs flex items-center gap-1.5"><Zap className="h-3 w-3" />Respond</button>}
+              {isEditInv && <button onClick={() => { const h = invForm.target_hosts?.split(',')[0] || ''; setResponseTarget(h); setResponseTargetHost(h); setShowResponse(true); }} className="g-btn g-btn-ghost text-xs flex items-center gap-1.5"><Zap className="h-3 w-3" />Respond</button>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -970,9 +983,9 @@ export default function DFIRPage() {
                     <tr key={c.id} className="hover:bg-[var(--glass-bg)]">
                       <td className="g-tr font-mono text-[10px]" style={{ color: 'var(--accent)' }}>{c.protocol}</td>
                       <td className="g-tr font-mono text-[10px]" style={{ color: 'var(--text-3)' }}>{c.local_address}</td>
-                      <td className="g-tr font-mono text-[10px]" style={{ color: c.remote_address?.startsWith('185.') ? '#f85149' : 'var(--text-1)' }}>{c.remote_address}</td>
+                      <td className="g-tr font-mono text-[10px]" style={{ color: 'var(--text-1)' }}>{c.remote_address}</td>
                       <td className="g-tr text-[10px]" style={{ color: 'var(--text-3)' }}>{c.state}</td>
-                      <td className="g-tr text-[10px]" style={{ color: c.process_name?.includes('svchost32') ? '#f85149' : 'var(--text-2)' }}>{c.process_name}</td>
+                      <td className="g-tr text-[10px]" style={{ color: 'var(--text-2)' }}>{c.process_name}</td>
                       <td className="g-tr text-[10px]" style={{ color: 'var(--text-3)' }}>{c.country}</td>
                       <td className="g-tr"><button onClick={() => { setResponseTarget(c.remote_address?.split(':')[0]); setResponseAction('block_ip'); setShowResponse(true); }} className="g-btn g-btn-ghost text-[9px] px-1.5">Block</button></td>
                     </tr>
@@ -1125,11 +1138,14 @@ export default function DFIRPage() {
                 <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>One-Click Response</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {RESPONSE_ACTS.map(a => (
-                    <button key={a} onClick={() => { setResponseAction(a); setResponseTarget(activeInv?.target_hosts?.split(',')[0] || ''); setShowResponse(true); }}
+                    <button key={a} onClick={() => { const h = activeInv?.target_hosts?.split(',')[0] || ''; setResponseAction(a); setResponseTarget(h); setResponseTargetHost(h); setShowResponse(true); }}
                       className="g-btn g-btn-ghost text-[10px] capitalize text-left px-2 py-1.5">
                       {a.replace(/_/g,' ')}
                     </button>
                   ))}
+                  <a href="/playbooks" className="g-btn g-btn-ghost text-[10px] text-left px-2 py-1.5 flex items-center gap-1">
+                    <ExternalLink className="h-2.5 w-2.5" />Run playbook
+                  </a>
                 </div>
               </div>
               <div className="g-card p-4">

@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -203,20 +205,20 @@ func GetDFIRInvestigations(c *gin.Context) {
 	}
 
 	type Inv struct {
-		ID               int    `json:"id"`
-		InvestigationID  string `json:"investigation_id"`
-		CaseID           string `json:"case_id"`
-		Title            string `json:"title"`
-		Analyst          string `json:"analyst"`
-		Priority         string `json:"priority"`
-		Status           string `json:"status"`
-		Tags             string `json:"tags"`
-		TargetHosts      string `json:"target_hosts"`
-		EvidenceCount    int    `json:"evidence_count"`
-		MitreTechniques  string `json:"mitre_techniques"`
-		Version          int    `json:"version"`
-		CreatedAt        string `json:"created_at"`
-		UpdatedAt        string `json:"updated_at"`
+		ID              int    `json:"id"`
+		InvestigationID string `json:"investigation_id"`
+		CaseID          string `json:"case_id"`
+		Title           string `json:"title"`
+		Analyst         string `json:"analyst"`
+		Priority        string `json:"priority"`
+		Status          string `json:"status"`
+		Tags            string `json:"tags"`
+		TargetHosts     string `json:"target_hosts"`
+		EvidenceCount   int    `json:"evidence_count"`
+		MitreTechniques string `json:"mitre_techniques"`
+		Version         int    `json:"version"`
+		CreatedAt       string `json:"created_at"`
+		UpdatedAt       string `json:"updated_at"`
 	}
 	result := []Inv{}
 	rows, _ := database.DB.Query(fmt.Sprintf(`
@@ -246,16 +248,16 @@ func PostDFIRInvestigation(c *gin.Context) {
 	createDFIRTables()
 	tid := tenantIDFromContext(c)
 	var body struct {
-		Title           string `json:"title"`
-		CaseID          string `json:"case_id"`
-		IncidentID      int    `json:"incident_id"`
-		Analyst         string `json:"analyst"`
-		Priority        string `json:"priority"`
-		Classification  string `json:"classification"`
-		Tags            string `json:"tags"`
-		TargetHosts     string `json:"target_hosts"`
-		TargetUsers     string `json:"target_users"`
-		Notes           string `json:"notes"`
+		Title          string `json:"title"`
+		CaseID         string `json:"case_id"`
+		IncidentID     int    `json:"incident_id"`
+		Analyst        string `json:"analyst"`
+		Priority       string `json:"priority"`
+		Classification string `json:"classification"`
+		Tags           string `json:"tags"`
+		TargetHosts    string `json:"target_hosts"`
+		TargetUsers    string `json:"target_users"`
+		Notes          string `json:"notes"`
 	}
 	if err := c.BindJSON(&body); err != nil || body.Title == "" {
 		c.JSON(400, gin.H{"error": "title required"})
@@ -290,26 +292,26 @@ func GetDFIRInvestigation(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	var inv struct {
-		ID              int    `json:"id"`
-		InvestigationID string `json:"investigation_id"`
-		CaseID          string `json:"case_id"`
-		Title           string `json:"title"`
-		IncidentID      int    `json:"incident_id"`
-		Analyst         string `json:"analyst"`
-		Priority        string `json:"priority"`
-		Status          string `json:"status"`
-		Classification  string `json:"classification"`
-		Tags            string `json:"tags"`
-		Notes           string `json:"notes"`
-		TargetHosts     string `json:"target_hosts"`
-		TargetUsers     string `json:"target_users"`
-		MitreTechniques string `json:"mitre_techniques"`
-		RootCause       string `json:"root_cause"`
+		ID               int    `json:"id"`
+		InvestigationID  string `json:"investigation_id"`
+		CaseID           string `json:"case_id"`
+		Title            string `json:"title"`
+		IncidentID       int    `json:"incident_id"`
+		Analyst          string `json:"analyst"`
+		Priority         string `json:"priority"`
+		Status           string `json:"status"`
+		Classification   string `json:"classification"`
+		Tags             string `json:"tags"`
+		Notes            string `json:"notes"`
+		TargetHosts      string `json:"target_hosts"`
+		TargetUsers      string `json:"target_users"`
+		MitreTechniques  string `json:"mitre_techniques"`
+		RootCause        string `json:"root_cause"`
 		ExecutiveSummary string `json:"executive_summary"`
-		Version         int    `json:"version"`
-		EvidenceCount   int    `json:"evidence_count"`
-		CreatedAt       string `json:"created_at"`
-		UpdatedAt       string `json:"updated_at"`
+		Version          int    `json:"version"`
+		EvidenceCount    int    `json:"evidence_count"`
+		CreatedAt        string `json:"created_at"`
+		UpdatedAt        string `json:"updated_at"`
 	}
 	err := database.DB.QueryRow(`
 		SELECT id, investigation_id, case_id, title, incident_id, analyst, priority, status,
@@ -530,16 +532,16 @@ func GetDFIRCollectionTasks(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	invID, _ := strconv.Atoi(c.Param("id"))
 	type Task struct {
-		ID            int    `json:"id"`
-		TargetHost    string `json:"target_host"`
+		ID             int    `json:"id"`
+		TargetHost     string `json:"target_host"`
 		CollectionType string `json:"collection_type"`
-		Artifacts     string `json:"artifacts"`
-		Status        string `json:"status"`
-		RequestedBy   string `json:"requested_by"`
-		EvidenceCount int    `json:"evidence_count"`
-		ResultSummary string `json:"result_summary"`
-		CreatedAt     string `json:"created_at"`
-		CompletedAt   string `json:"completed_at"`
+		Artifacts      string `json:"artifacts"`
+		Status         string `json:"status"`
+		RequestedBy    string `json:"requested_by"`
+		EvidenceCount  int    `json:"evidence_count"`
+		ResultSummary  string `json:"result_summary"`
+		CreatedAt      string `json:"created_at"`
+		CompletedAt    string `json:"completed_at"`
 	}
 	tasks := []Task{}
 	rows, _ := database.DB.Query(`SELECT id, target_host, collection_type, artifacts, status, requested_by,
@@ -1291,9 +1293,9 @@ func GetDFIRRelationshipGraph(c *gin.Context) {
 		Extra string `json:"extra,omitempty"`
 	}
 	type Edge struct {
-		From   string `json:"from"`
-		To     string `json:"to"`
-		Label  string `json:"label"`
+		From  string `json:"from"`
+		To    string `json:"to"`
+		Label string `json:"label"`
 	}
 	nodes := []Node{}
 	edges := []Edge{}
@@ -1461,25 +1463,152 @@ func DeleteDFIRNotebookEntry(c *gin.Context) {
 
 // ── Response ──────────────────────────────────────────────────────────────────
 
+// PostDFIRResponse dispatches a response action from an investigation.
+//
+// Previously this validated nothing and always returned a canned "queued"
+// success with a literal "In production: route to agent command queue or
+// SOAR" comment admitting it was a stub — the same 100%-fake-button pattern
+// found and fixed on nearly every page this phase. No agent_tasks row, no
+// incident, no case, no IOC was ever actually created.
 func PostDFIRResponse(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	uid := userIDFromContext(c)
+	user := usernameFromContext(c)
+	invID, _ := strconv.Atoi(c.Param("id"))
 	var body struct {
 		Action     string `json:"action"`
 		Target     string `json:"target"`
-		TargetType string `json:"target_type"`
-		InvID      int    `json:"investigation_id"`
+		TargetHost string `json:"target_host"`
 		Notes      string `json:"notes"`
 	}
 	if err := c.BindJSON(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid body"})
 		return
 	}
-	// In production: route to agent command queue or SOAR
+	if body.Target == "" {
+		c.JSON(400, gin.H{"error": "target is required"})
+		return
+	}
+
+	resolveAgent := func(host string) (int, error) {
+		var agentID int
+		err := database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND hostname ILIKE $2 LIMIT 1`, tid, host).Scan(&agentID)
+		if err != nil {
+			return 0, fmt.Errorf("no agent found with hostname '%s'", host)
+		}
+		return agentID, nil
+	}
+	dispatchAgentTask := func(agentID int, taskType string, payload map[string]any) error {
+		payloadJSON, _ := json.Marshal(payload)
+		task := models.AgentTask{AgentID: agentID, TaskType: taskType, Payload: payloadJSON}
+		return repositories.CreateTaskPendingApproval(task)
+	}
+
+	var result string
+	switch body.Action {
+	case "isolate_host":
+		agentID, err := resolveAgent(body.Target)
+		if err != nil {
+			c.JSON(404, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatchAgentTask(agentID, "isolate_host", map[string]any{"reason": body.Notes, "source": "dfir", "investigation_id": invID}); err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("isolate_host queued for agent %d (%s), pending approval", agentID, body.Target)
+
+	case "kill_process":
+		if body.TargetHost == "" {
+			c.JSON(400, gin.H{"error": "target_host required to resolve which agent to dispatch to"})
+			return
+		}
+		pid, err := strconv.Atoi(body.Target)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "target must be a numeric pid"})
+			return
+		}
+		agentID, err := resolveAgent(body.TargetHost)
+		if err != nil {
+			c.JSON(404, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatchAgentTask(agentID, "kill_process", map[string]any{"pid": pid, "reason": body.Notes}); err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("kill_process(pid=%d) queued for agent %d (%s), pending approval", pid, agentID, body.TargetHost)
+
+	case "quarantine_file":
+		if body.TargetHost == "" {
+			c.JSON(400, gin.H{"error": "target_host required to resolve which agent to dispatch to"})
+			return
+		}
+		agentID, err := resolveAgent(body.TargetHost)
+		if err != nil {
+			c.JSON(404, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatchAgentTask(agentID, "quarantine_file", map[string]any{"path": body.Target, "reason": body.Notes}); err != nil {
+			c.JSON(500, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("quarantine_file(%s) queued for agent %d (%s), pending approval", body.Target, agentID, body.TargetHost)
+
+	case "block_ip":
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Target, Type: "ip", Severity: "high", Enabled: true,
+			Description: "Blocked via DFIR: " + body.Notes,
+		}, tid); err != nil {
+			c.JSON(500, gin.H{"error": "failed to block ip: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("IP %s blocked via IOC", body.Target)
+
+	case "open_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, fmt.Sprintf("DFIR Escalation: %s", body.Target),
+			fmt.Sprintf("Escalated from DFIR investigation #%d. %s", invID, body.Notes),
+		).Scan(&incidentID); err != nil {
+			c.JSON(500, gin.H{"error": "failed to create incident: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Incident #%d created", incidentID)
+
+	case "open_case":
+		cas, err := services.CreateCase(models.Case{
+			TenantID:    tid,
+			Title:       fmt.Sprintf("DFIR Escalation: %s", body.Target),
+			Description: fmt.Sprintf("Escalated from DFIR investigation #%d. %s", invID, body.Notes),
+			Severity:    "high",
+		}, uid, user)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to open case: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Case #%d opened", cas.ID)
+
+	default:
+		c.JSON(400, gin.H{"error": "unknown action"})
+		return
+	}
+
+	repositories.CreateAuditLog(
+		fmt.Sprintf("dfir.response.%s", body.Action),
+		fmt.Sprintf(`{"investigation_id":%d,"action":"%s","target":"%s","target_host":"%s","analyst":"%s","notes":"%s"}`,
+			invID, body.Action, body.Target, body.TargetHost, user, body.Notes),
+		user,
+	)
+
 	c.JSON(200, gin.H{
 		"ok":      true,
 		"action":  body.Action,
 		"target":  body.Target,
 		"queued":  true,
-		"message": fmt.Sprintf("Response action '%s' queued for %s", body.Action, body.Target),
+		"message": result,
 	})
 }
 
@@ -1682,11 +1811,11 @@ func GetDFIRAnalytics(c *gin.Context) {
 		FROM dfir_investigations WHERE tenant_id=$1 AND closed_at IS NOT NULL`, tid).Scan(&avgMTTR)
 
 	c.JSON(200, gin.H{
-		"by_priority":    byPriority,
-		"by_status":      byStatus,
+		"by_priority":      byPriority,
+		"by_status":        byStatus,
 		"by_evidence_type": byEvidenceType,
-		"daily":          daily,
-		"avg_mttr_hours": avgMTTR,
+		"daily":            daily,
+		"avg_mttr_hours":   avgMTTR,
 	})
 }
 
@@ -1704,17 +1833,17 @@ func GetDFIRArtifacts(c *gin.Context) {
 
 	// Map artifact queries to log message patterns
 	artifactPatterns := map[string]string{
-		"prefetch":     "prefetch",
-		"amcache":      "amcache",
-		"shimcache":    "shimcache",
-		"srum":         "srum",
-		"jump_lists":   "jumplist",
-		"mft":          "\\$MFT",
-		"bash_history": ".bash_history",
-		"cron":         "cron",
-		"journal":      "journal",
-		"audit_log":    "audit",
-		"unified_logs": "ASL",
+		"prefetch":      "prefetch",
+		"amcache":       "amcache",
+		"shimcache":     "shimcache",
+		"srum":          "srum",
+		"jump_lists":    "jumplist",
+		"mft":           "\\$MFT",
+		"bash_history":  ".bash_history",
+		"cron":          "cron",
+		"journal":       "journal",
+		"audit_log":     "audit",
+		"unified_logs":  "ASL",
 		"launch_agents": "LaunchAgent",
 	}
 
@@ -1743,8 +1872,8 @@ func GetDFIRArtifacts(c *gin.Context) {
 			if agentID == 0 {
 				continue
 			}
-			rows, _ := database.DB.Query(`SELECT COALESCE(log_source,''), log_message, created_at
-				FROM endpoint_logs WHERE agent_id=$1 AND log_message ILIKE $2 ORDER BY created_at DESC LIMIT 50`,
+			rows, _ := database.DB.Query(`SELECT COALESCE(log_source,''), log_message, collected_at
+				FROM endpoint_logs WHERE agent_id=$1 AND log_message ILIKE $2 ORDER BY collected_at DESC LIMIT 50`,
 				agentID, "%"+pattern+"%")
 			if rows != nil {
 				defer rows.Close()
@@ -1769,9 +1898,9 @@ func GetDFIRArtifacts(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"platform":          platform,
-		"available":         platformArtifacts[platform],
-		"artifact_type":     artifactType,
-		"entries":           artifacts,
+		"platform":      platform,
+		"available":     platformArtifacts[platform],
+		"artifact_type": artifactType,
+		"entries":       artifacts,
 	})
 }
