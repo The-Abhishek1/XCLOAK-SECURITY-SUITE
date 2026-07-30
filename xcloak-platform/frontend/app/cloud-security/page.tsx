@@ -482,6 +482,8 @@ function DetectionTab() {
   const [selected, setSelected] = useState<any>(null);
   const [subTab, setSubTab] = useState<'threats' | 'vulns'>('threats');
   const [responding, setResponding] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
   const reload = () => {
     setLoading(true);
@@ -495,7 +497,15 @@ function DetectionTab() {
 
   const doRespond = async (action: string, t: any) => {
     setResponding(true);
-    await cloudSecurityAPI.respond({ action, resource_id: t.resource_id, provider: t.provider });
+    try {
+      const r = await cloudSecurityAPI.respond({
+        action, resource_id: t.resource_id, provider: t.provider,
+        source_ip: t.source_ip, source_user: t.source_user,
+      });
+      notify(r.data?.message || `${action} done`);
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Response action failed');
+    }
     setResponding(false);
   };
 
@@ -503,6 +513,7 @@ function DetectionTab() {
 
   return (
     <div className="space-y-4">
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
       <div className="flex gap-2">
         {(['threats', 'vulns'] as const).map(s => (
           <ActionButton key={s} variant={subTab === s ? 'primary' : 'ghost'} onClick={() => setSubTab(s)} className="text-xs">

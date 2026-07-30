@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 
 	"github.com/gin-gonic/gin"
@@ -936,6 +938,8 @@ func PostCloudResponse(c *gin.Context) {
 		Provider   string `json:"provider"`
 		FindingID  int    `json:"finding_id"`
 		IdentityID int    `json:"identity_id"`
+		SourceUser string `json:"source_user"`
+		SourceIP   string `json:"source_ip"`
 	}
 	c.ShouldBindJSON(&body)
 	username := usernameFromContext(c)
@@ -944,8 +948,38 @@ func PostCloudResponse(c *gin.Context) {
 
 	switch body.Action {
 	case "disable_iam_user":
+		// DetectionTab's threat-response call site never has a numeric
+		// cloud_identities.id (a threat's cloud_threats row only has
+		// source_user, a name string) — this branch previously only
+		// checked IdentityID, so it silently did nothing for every
+		// real invocation from the UI. Resolve by name too, and report
+		// honestly when there's no matching identity on file (a threat's
+		// source_user is often an external/unmanaged account, not
+		// something we track in cloud_identities).
 		if body.IdentityID > 0 {
 			database.DB.Exec(`UPDATE cloud_identities SET is_dormant=true WHERE tenant_id=$1 AND id=$2`, tid, body.IdentityID)
+		} else if body.SourceUser != "" {
+			tag, _ := database.DB.Exec(`UPDATE cloud_identities SET is_dormant=true WHERE tenant_id=$1 AND name=$2`, tid, body.SourceUser)
+			if n, _ := tag.RowsAffected(); n == 0 {
+				message = fmt.Sprintf("no cloud identity named '%s' on file — likely an external/unmanaged account", body.SourceUser)
+			}
+		}
+	case "block_ip":
+		// Was entirely unhandled — fell through the switch doing nothing
+		// while still reporting success. This domain has no real cloud
+		// firewall/security-group API integration to enforce an IP block
+		// against, so — matching every other page's block_ip this phase —
+		// the real, meaningful effect is a real enabled IOC.
+		if body.SourceIP == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source_ip required"})
+			return
+		}
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.SourceIP, Type: "ip", Severity: "high", Enabled: true,
+			Description: "Blocked via Cloud Security: " + message,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ip: " + err.Error()})
+			return
 		}
 	case "resolve_finding":
 		if body.FindingID > 0 {
@@ -958,6 +992,9 @@ func PostCloudResponse(c *gin.Context) {
 		if body.FindingID > 0 {
 			database.DB.Exec(`UPDATE cloud_findings SET status='resolved',resolved_at=$1 WHERE tenant_id=$2 AND id=$3`, time.Now(), tid, body.FindingID)
 		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
 	}
 
 	// alerts has no title/description column (real: rule_name/log_message) —

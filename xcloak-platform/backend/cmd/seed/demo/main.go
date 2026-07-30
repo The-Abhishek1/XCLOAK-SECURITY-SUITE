@@ -136,6 +136,8 @@ func main() {
 	seedEndpointUsers(db, agentIDs)
 	log.Println("Seeding cloud/infra alerts…")
 	seedCloudInfraAlerts(db, agentIDs)
+	log.Println("Seeding cloud security (CSPM/CIEM)…")
+	seedCloudSecurity(db)
 	log.Println("Seeding scheduled tasks enterprise…")
 	seedScheduledTasksEnterprise(db)
 	log.Println("Seeding firewall enterprise…")
@@ -209,32 +211,32 @@ func seedScheduledTasksEnterprise(db *sql.DB) {
 
 	type task struct {
 		taskID, name, desc, category, taskType, scriptLang, owner, priority string
-		scheduleType, cronExpr, targetType                                   string
-		requiresApproval                                                      bool
-		approvalPolicy, tags                                                  string
-		maxRuntime, runCount, successCount, failureCount, avgDuration        int
-		lastMinsAgo, nextMinsFromNow                                          int
+		scheduleType, cronExpr, targetType                                  string
+		requiresApproval                                                    bool
+		approvalPolicy, tags                                                string
+		maxRuntime, runCount, successCount, failureCount, avgDuration       int
+		lastMinsAgo, nextMinsFromNow                                        int
 	}
 
 	tasks := []task{
-		{"ST-001001", "Daily Threat Hunt — All Endpoints", "Comprehensive threat hunt across all endpoints using IOC feeds and behavioral analysis", "security_operations", "threat_hunt", "", "alice@corp.com", "high", "cron", "0 2 * * *", "all", false, "", `["threat-hunt","daily","production"]`, 7200, 45, 44, 1, 3240, 22*60, -2*60},
-		{"ST-001002", "IOC Search — Threat Intel Feeds", "Cross-reference all endpoint logs against latest threat intelligence IOC feeds", "security_operations", "ioc_search", "", "bob@corp.com", "critical", "cron", "0 */4 * * *", "all", false, "", `["ioc","threat-intel","critical"]`, 3600, 180, 175, 5, 1820, 3*60, 1*60},
-		{"ST-001003", "Weekly Full Vulnerability Scan", "Complete vulnerability assessment across all managed endpoints and services", "security_operations", "vulnerability_scan", "", "alice@corp.com", "high", "cron", "0 3 * * 0", "all", true, "production_systems", `["vuln-scan","weekly","production"]`, 14400, 12, 11, 1, 9600, 5*24*60, 2*24*60},
-		{"ST-001004", "SOC Executive Report", "Generate weekly SOC metrics and executive summary for leadership", "reporting", "executive_report", "", "charlie@corp.com", "medium", "cron", "0 7 * * 1", "all", false, "", `["reporting","executive","weekly"]`, 1800, 20, 20, 0, 950, 7*24*60, 7*24*60},
+		{"ST-001001", "Daily Threat Hunt — All Endpoints", "Comprehensive threat hunt across all endpoints using IOC feeds and behavioral analysis", "security_operations", "threat_hunt", "", "alice@corp.com", "high", "cron", "0 2 * * *", "all", false, "", `["threat-hunt","daily","production"]`, 7200, 45, 44, 1, 3240, 22 * 60, -2 * 60},
+		{"ST-001002", "IOC Search — Threat Intel Feeds", "Cross-reference all endpoint logs against latest threat intelligence IOC feeds", "security_operations", "ioc_search", "", "bob@corp.com", "critical", "cron", "0 */4 * * *", "all", false, "", `["ioc","threat-intel","critical"]`, 3600, 180, 175, 5, 1820, 3 * 60, 1 * 60},
+		{"ST-001003", "Weekly Full Vulnerability Scan", "Complete vulnerability assessment across all managed endpoints and services", "security_operations", "vulnerability_scan", "", "alice@corp.com", "high", "cron", "0 3 * * 0", "all", true, "production_systems", `["vuln-scan","weekly","production"]`, 14400, 12, 11, 1, 9600, 5 * 24 * 60, 2 * 24 * 60},
+		{"ST-001004", "SOC Executive Report", "Generate weekly SOC metrics and executive summary for leadership", "reporting", "executive_report", "", "charlie@corp.com", "medium", "cron", "0 7 * * 1", "all", false, "", `["reporting","executive","weekly"]`, 1800, 20, 20, 0, 950, 7 * 24 * 60, 7 * 24 * 60},
 		{"ST-001005", "PowerShell — Collect Auth Logs", "Collect Windows Security event logs from all Windows endpoints via PowerShell", "security_operations", "powershell", "powershell", "alice@corp.com", "high", "cron", "*/30 * * * *", "multiple_endpoints", false, "", `["collection","windows","auth-logs"]`, 600, 2880, 2860, 20, 45, 25, 5},
-		{"ST-001006", "Database Cleanup — Audit Tables", "Remove audit log entries older than 90 days to manage storage", "system_maintenance", "database_cleanup", "", "ops@corp.com", "low", "cron", "0 1 1 * *", "all", true, "bulk_operations", `["maintenance","database","monthly"]`, 3600, 8, 8, 0, 1200, 15*24*60, 14*24*60},
-		{"ST-001007", "Asset Discovery Scan", "Discover new assets across network segments and update CMDB", "security_operations", "asset_discovery", "", "bob@corp.com", "medium", "cron", "0 0 * * *", "all", false, "", `["asset-discovery","daily"]`, 7200, 60, 58, 2, 4500, 24*60, 23*60},
-		{"ST-001008", "Compliance Scan — CIS Benchmarks", "Assess endpoint compliance against CIS benchmark controls", "compliance", "compliance_scan", "", "charlie@corp.com", "high", "cron", "0 4 * * 3", "all", true, "critical_infrastructure", `["compliance","cis","weekly"]`, 10800, 16, 15, 1, 7800, 4*24*60, 3*24*60},
-		{"ST-001009", "Bash — Log Rotation", "Rotate and compress application logs on Linux servers", "system_maintenance", "bash", "bash", "ops@corp.com", "low", "cron", "0 0 * * *", "multiple_endpoints", false, "", `["maintenance","logs","linux"]`, 300, 90, 89, 1, 38, 24*60, 23*60},
+		{"ST-001006", "Database Cleanup — Audit Tables", "Remove audit log entries older than 90 days to manage storage", "system_maintenance", "database_cleanup", "", "ops@corp.com", "low", "cron", "0 1 1 * *", "all", true, "bulk_operations", `["maintenance","database","monthly"]`, 3600, 8, 8, 0, 1200, 15 * 24 * 60, 14 * 24 * 60},
+		{"ST-001007", "Asset Discovery Scan", "Discover new assets across network segments and update CMDB", "security_operations", "asset_discovery", "", "bob@corp.com", "medium", "cron", "0 0 * * *", "all", false, "", `["asset-discovery","daily"]`, 7200, 60, 58, 2, 4500, 24 * 60, 23 * 60},
+		{"ST-001008", "Compliance Scan — CIS Benchmarks", "Assess endpoint compliance against CIS benchmark controls", "compliance", "compliance_scan", "", "charlie@corp.com", "high", "cron", "0 4 * * 3", "all", true, "critical_infrastructure", `["compliance","cis","weekly"]`, 10800, 16, 15, 1, 7800, 4 * 24 * 60, 3 * 24 * 60},
+		{"ST-001009", "Bash — Log Rotation", "Rotate and compress application logs on Linux servers", "system_maintenance", "bash", "bash", "ops@corp.com", "low", "cron", "0 0 * * *", "multiple_endpoints", false, "", `["maintenance","logs","linux"]`, 300, 90, 89, 1, 38, 24 * 60, 23 * 60},
 		{"ST-001010", "Incident Response — Collect Memory", "Collect memory dumps from endpoints flagged in active incidents", "incident_response", "memory_collection", "", "alice@corp.com", "critical", "event_based", "", "single_endpoint", true, "production_systems", `["ir","memory","forensics"]`, 7200, 3, 3, 0, 5400, 7*24*60 + 3*60, 0},
-		{"ST-001011", "Python — Vuln Report Generator", "Generate detailed vulnerability reports using Python data analysis", "reporting", "python", "python", "charlie@corp.com", "medium", "cron", "0 6 * * 5", "all", false, "", `["reporting","vuln","python"]`, 1800, 24, 23, 1, 780, 2*24*60, 5*24*60},
-		{"ST-001012", "Index Optimization — Elasticsearch", "Optimize Elasticsearch indices for better search performance", "system_maintenance", "index_optimization", "", "ops@corp.com", "low", "cron", "0 3 * * 6", "all", false, "", `["maintenance","elasticsearch","weekly"]`, 5400, 10, 10, 0, 3200, 6*24*60, 6*24*60},
-		{"ST-001013", "Network Diagnostics — Firewall Check", "Verify firewall rules and test network connectivity across segments", "security_operations", "network_diagnostics", "", "bob@corp.com", "medium", "cron", "0 */12 * * *", "all", false, "", `["network","firewall","diagnostics"]`, 600, 42, 41, 1, 280, 11*60, 1*60},
-		{"ST-001014", "Backup — Critical Config Files", "Backup critical system and application configuration files", "system_maintenance", "backup", "", "ops@corp.com", "high", "cron", "0 1 * * *", "all", true, "critical_infrastructure", `["backup","config","daily"]`, 3600, 55, 54, 1, 1800, 23*60, 1*60},
+		{"ST-001011", "Python — Vuln Report Generator", "Generate detailed vulnerability reports using Python data analysis", "reporting", "python", "python", "charlie@corp.com", "medium", "cron", "0 6 * * 5", "all", false, "", `["reporting","vuln","python"]`, 1800, 24, 23, 1, 780, 2 * 24 * 60, 5 * 24 * 60},
+		{"ST-001012", "Index Optimization — Elasticsearch", "Optimize Elasticsearch indices for better search performance", "system_maintenance", "index_optimization", "", "ops@corp.com", "low", "cron", "0 3 * * 6", "all", false, "", `["maintenance","elasticsearch","weekly"]`, 5400, 10, 10, 0, 3200, 6 * 24 * 60, 6 * 24 * 60},
+		{"ST-001013", "Network Diagnostics — Firewall Check", "Verify firewall rules and test network connectivity across segments", "security_operations", "network_diagnostics", "", "bob@corp.com", "medium", "cron", "0 */12 * * *", "all", false, "", `["network","firewall","diagnostics"]`, 600, 42, 41, 1, 280, 11 * 60, 1 * 60},
+		{"ST-001014", "Backup — Critical Config Files", "Backup critical system and application configuration files", "system_maintenance", "backup", "", "ops@corp.com", "high", "cron", "0 1 * * *", "all", true, "critical_infrastructure", `["backup","config","daily"]`, 3600, 55, 54, 1, 1800, 23 * 60, 1 * 60},
 		{"ST-001015", "Webhook — SIEM Event Push", "Push critical security events to external SIEM via webhook integration", "custom", "webhook", "", "alice@corp.com", "critical", "cron", "*/5 * * * *", "all", false, "", `["integration","siem","webhook"]`, 60, 8640, 8620, 20, 8, 3, -2},
 		{"ST-001016", "Health Check — All Agents", "Verify agent connectivity and collect health metrics across all endpoints", "system_maintenance", "health_check", "", "ops@corp.com", "medium", "cron", "*/10 * * * *", "all", false, "", `["health","agents","monitoring"]`, 120, 4320, 4315, 5, 15, 8, 2},
-		{"ST-001017", "Playbook — Ransomware Response", "Execute automated ransomware response playbook on triggered alerts", "incident_response", "playbook_execution", "", "alice@corp.com", "critical", "event_based", "", "single_endpoint", true, "destructive_tasks", `["playbook","ransomware","ir","automated"]`, 7200, 2, 2, 0, 6300, 30*24*60, 0},
-		{"ST-001018", "Compliance Report — SOC2", "Generate SOC2 compliance evidence report for audit trail", "reporting", "compliance_report", "", "charlie@corp.com", "high", "cron", "0 5 1 * *", "all", false, "", `["compliance","soc2","reporting","monthly"]`, 5400, 6, 6, 0, 3600, 30*24*60, 30*24*60},
+		{"ST-001017", "Playbook — Ransomware Response", "Execute automated ransomware response playbook on triggered alerts", "incident_response", "playbook_execution", "", "alice@corp.com", "critical", "event_based", "", "single_endpoint", true, "destructive_tasks", `["playbook","ransomware","ir","automated"]`, 7200, 2, 2, 0, 6300, 30 * 24 * 60, 0},
+		{"ST-001018", "Compliance Report — SOC2", "Generate SOC2 compliance evidence report for audit trail", "reporting", "compliance_report", "", "charlie@corp.com", "high", "cron", "0 5 1 * *", "all", false, "", `["compliance","soc2","reporting","monthly"]`, 5400, 6, 6, 0, 3600, 30 * 24 * 60, 30 * 24 * 60},
 	}
 
 	for _, t := range tasks {
@@ -271,20 +273,20 @@ func seedScheduledTasksEnterprise(db *sql.DB) {
 
 	triggers := []struct {
 		execID, taskID, taskName, status, trigger, by string
-		minsAgo, duration, exitCode                    int
+		minsAgo, duration, exitCode                   int
 	}{
-		{"EX-00100001", "ST-001001", "Daily Threat Hunt — All Endpoints", "completed", "scheduled", "system", 22*60, 3240000, 0},
-		{"EX-00100002", "ST-001001", "Daily Threat Hunt — All Endpoints", "completed", "scheduled", "system", 46*60, 3180000, 0},
-		{"EX-00100003", "ST-001001", "Daily Threat Hunt — All Endpoints", "failed", "scheduled", "system", 70*60, 1200000, 1},
-		{"EX-00100004", "ST-001002", "IOC Search — Threat Intel Feeds", "completed", "scheduled", "system", 4*60, 1820000, 0},
-		{"EX-00100005", "ST-001002", "IOC Search — Threat Intel Feeds", "completed", "scheduled", "system", 8*60, 1750000, 0},
-		{"EX-00100006", "ST-001003", "Weekly Full Vulnerability Scan", "completed", "manual", "alice@corp.com", 5*24*60, 9600000, 0},
-		{"EX-00100007", "ST-001004", "SOC Executive Report", "completed", "scheduled", "system", 7*24*60, 950000, 0},
+		{"EX-00100001", "ST-001001", "Daily Threat Hunt — All Endpoints", "completed", "scheduled", "system", 22 * 60, 3240000, 0},
+		{"EX-00100002", "ST-001001", "Daily Threat Hunt — All Endpoints", "completed", "scheduled", "system", 46 * 60, 3180000, 0},
+		{"EX-00100003", "ST-001001", "Daily Threat Hunt — All Endpoints", "failed", "scheduled", "system", 70 * 60, 1200000, 1},
+		{"EX-00100004", "ST-001002", "IOC Search — Threat Intel Feeds", "completed", "scheduled", "system", 4 * 60, 1820000, 0},
+		{"EX-00100005", "ST-001002", "IOC Search — Threat Intel Feeds", "completed", "scheduled", "system", 8 * 60, 1750000, 0},
+		{"EX-00100006", "ST-001003", "Weekly Full Vulnerability Scan", "completed", "manual", "alice@corp.com", 5 * 24 * 60, 9600000, 0},
+		{"EX-00100007", "ST-001004", "SOC Executive Report", "completed", "scheduled", "system", 7 * 24 * 60, 950000, 0},
 		{"EX-00100008", "ST-001005", "PowerShell — Collect Auth Logs", "completed", "scheduled", "system", 30, 45000, 0},
 		{"EX-00100009", "ST-001005", "PowerShell — Collect Auth Logs", "completed", "scheduled", "system", 60, 47000, 0},
 		{"EX-00100010", "ST-001005", "PowerShell — Collect Auth Logs", "failed", "scheduled", "system", 90, 12000, 1},
-		{"EX-00100011", "ST-001007", "Asset Discovery Scan", "completed", "scheduled", "system", 24*60, 4500000, 0},
-		{"EX-00100012", "ST-001013", "Network Diagnostics — Firewall Check", "completed", "scheduled", "system", 12*60, 280000, 0},
+		{"EX-00100011", "ST-001007", "Asset Discovery Scan", "completed", "scheduled", "system", 24 * 60, 4500000, 0},
+		{"EX-00100012", "ST-001013", "Network Diagnostics — Firewall Check", "completed", "scheduled", "system", 12 * 60, 280000, 0},
 		{"EX-00100013", "ST-001015", "Webhook — SIEM Event Push", "completed", "scheduled", "system", 5, 8000, 0},
 		{"EX-00100014", "ST-001016", "Health Check — All Agents", "completed", "scheduled", "system", 10, 15000, 0},
 		{"EX-00100015", "ST-001016", "Health Check — All Agents", "running", "scheduled", "system", 0, 0, -1},
@@ -320,8 +322,8 @@ func seedScheduledTasksEnterprise(db *sql.DB) {
 
 	approvals := []struct {
 		taskID, taskName, requester, approver, status, policy, note string
-		minsAgo                                                       int
-		decided                                                       bool
+		minsAgo                                                     int
+		decided                                                     bool
 	}{
 		{"ST-001003", "Weekly Full Vulnerability Scan", "alice@corp.com", "", "pending", "production_systems", "", 15, false},
 		{"ST-001006", "Database Cleanup — Audit Tables", "ops@corp.com", "admin@corp.com", "approved", "bulk_operations", "Reviewed and approved. Off-hours window confirmed.", 30 * 24 * 60, true},
@@ -354,17 +356,17 @@ func seedScheduledTasksEnterprise(db *sql.DB) {
 
 	notifications := []struct {
 		taskID, taskName, eventType, message, severity string
-		minsAgo                                         int
-		read                                            bool
+		minsAgo                                        int
+		read                                           bool
 	}{
 		{"ST-001005", "PowerShell — Collect Auth Logs", "task_failed", "Task 'PowerShell — Collect Auth Logs' failed on web-prod-01: exit code 1", "critical", 90, true},
 		{"ST-001003", "Weekly Full Vulnerability Scan", "approval_required", "Task 'Weekly Full Vulnerability Scan' requires approval before execution", "warning", 15, false},
 		{"ST-001010", "Incident Response — Collect Memory", "approval_required", "Task 'Incident Response — Collect Memory' requires approval before execution", "warning", 45, false},
-		{"ST-001001", "Daily Threat Hunt — All Endpoints", "task_completed", "Task 'Daily Threat Hunt — All Endpoints' completed successfully in 54 minutes", "info", 22*60, true},
-		{"ST-001002", "IOC Search — Threat Intel Feeds", "task_completed", "Task 'IOC Search — Threat Intel Feeds' completed: 3 IOC matches found", "info", 4*60, false},
+		{"ST-001001", "Daily Threat Hunt — All Endpoints", "task_completed", "Task 'Daily Threat Hunt — All Endpoints' completed successfully in 54 minutes", "info", 22 * 60, true},
+		{"ST-001002", "IOC Search — Threat Intel Feeds", "task_completed", "Task 'IOC Search — Threat Intel Feeds' completed: 3 IOC matches found", "info", 4 * 60, false},
 		{"ST-001016", "Health Check — All Agents", "task_started", "Task 'Health Check — All Agents' started — checking 4 agents", "info", 0, false},
-		{"ST-001017", "Playbook — Ransomware Response", "approval_rejected", "Task 'Playbook — Ransomware Response' rejected by admin@corp.com: escalate to IR team first", "warning", 14*24*60, true},
-		{"ST-001003", "Weekly Full Vulnerability Scan", "schedule_modified", "Schedule for 'Weekly Full Vulnerability Scan' updated by alice@corp.com", "info", 2*24*60, true},
+		{"ST-001017", "Playbook — Ransomware Response", "approval_rejected", "Task 'Playbook — Ransomware Response' rejected by admin@corp.com: escalate to IR team first", "warning", 14 * 24 * 60, true},
+		{"ST-001003", "Weekly Full Vulnerability Scan", "schedule_modified", "Schedule for 'Weekly Full Vulnerability Scan' updated by alice@corp.com", "info", 2 * 24 * 60, true},
 	}
 
 	for _, n := range notifications {
@@ -380,7 +382,7 @@ func seedScheduledTasksEnterprise(db *sql.DB) {
 
 	auditEntries := []struct {
 		taskID, taskName, action, actor, details string
-		minsAgo                                   int
+		minsAgo                                  int
 	}{
 		{"ST-001001", "Daily Threat Hunt — All Endpoints", "created", "alice@corp.com", "Task created with cron schedule", 30 * 24 * 60},
 		{"ST-001003", "Weekly Full Vulnerability Scan", "created", "alice@corp.com", "Task created requiring approval", 28 * 24 * 60},
@@ -938,7 +940,7 @@ func seedIOCs(db *sql.DB) {
 func seedThreatFeeds(db *sql.DB) {
 	feeds := []struct {
 		name, source, feedType, format string
-		iocCount                        int
+		iocCount                       int
 	}{
 		{"Emerging Threats", "https://rules.emergingthreats.net/blockrules/compromised-ips.txt", "flatfile", "plaintext", 48231},
 		{"CISA KEV", "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json", "flatfile", "json", 1112},
@@ -1020,7 +1022,7 @@ func joinStr(s []string, sep string) string {
 func seedSigmaRules(db *sql.DB) {
 	rules := []struct {
 		title, severity, tactic, technique, mitreN, logsrc, desc string
-		keywords                                                  []string
+		keywords                                                 []string
 	}{
 		{"Mimikatz LSASS Dump", "critical", "Credential Access", "T1003.001", "OS Credential Dumping: LSASS Memory", "process", "Detects mimikatz credential dump via LSASS access", []string{"mimikatz", "sekurlsa", "lsass"}},
 		{"PowerShell Base64 Encoded Command", "high", "Execution", "T1059.001", "PowerShell", "process", "Detects PowerShell running base64 encoded payloads", []string{"-EncodedCommand", "-enc", "powershell"}},
@@ -1127,11 +1129,11 @@ func seedYaraRules(db *sql.DB, agentIDs []int) {
 		return
 	}
 	matches := []struct {
-		agentIdx  int
-		ruleIdx   int
-		path      string
-		hash      string
-		minsAgo   int
+		agentIdx int
+		ruleIdx  int
+		path     string
+		hash     string
+		minsAgo  int
 	}{
 		{0, 0, "/tmp/.hidden/beacon", "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f", 240},
 		{2, 1, "C:\\Windows\\Temp\\mimikatz.exe", "44d88612fea8a8f36de82e1278abb02f", 43},
@@ -1152,7 +1154,7 @@ func seedYaraRules(db *sql.DB, agentIDs []int) {
 func seedFirewallRules(db *sql.DB) {
 	rules := []struct {
 		name, src, dst, proto, action, desc, group string
-		port, priority                              int
+		port, priority                             int
 	}{
 		{"Block Cobalt Strike C2", "0.0.0.0/0", "185.220.101.47", "tcp", "drop", "Auto-blocked C2 IP from IOC feed", "IOC Blocks", 443, 1},
 		{"Block Known Exfil Server", "10.0.0.0/8", "94.102.49.190", "tcp", "drop", "Outbound exfiltration staging server", "IOC Blocks", 443, 2},
@@ -1356,8 +1358,8 @@ func seedCases(db *sql.DB, alertIDs, incidentIDs []int) {
 	now := time.Now()
 	cases := []struct {
 		title, desc, severity, status, phase, mitreTactic, mitreTechnique string
-		slaHours                                                            int
-		hoursAgo                                                            int
+		slaHours                                                          int
+		hoursAgo                                                          int
 	}{
 		{
 			"C2 Implant Investigation — web-prod-01", "Active Cobalt Strike beacon detected on web-prod-01. Memory acquisition triggered. Isolating host and hunting for lateral movement.",
@@ -1396,7 +1398,7 @@ func seedCases(db *sql.DB, alertIDs, incidentIDs []int) {
 func seedSuppressionRules(db *sql.DB) {
 	rules := []struct {
 		name, desc, ruleName, severity, technique string
-		windowMins                                 int
+		windowMins                                int
 	}{
 		{"Suppress Low USB Noise", "Suppress low severity USB debugging alerts from Android test devices", "USB Debugging Enabled", "low", "T1562", 1440},
 		{"Suppress TLS Negotiation Warnings", "Suppress TLS 1.0 warnings from legacy monitoring systems", "Weak TLS Negotiated", "low", "T1573", 720},
@@ -1446,14 +1448,14 @@ func seedNetworkAnomalies(db *sql.DB, agentIDs []int) {
 	}
 	now := time.Now()
 	anomalies := []struct {
-		agentIdx     int
-		anomalyType  string
-		dstIP        string
-		dstPort      int
-		proto        string
-		score        int
-		desc         string
-		minsAgo      int
+		agentIdx    int
+		anomalyType string
+		dstIP       string
+		dstPort     int
+		proto       string
+		score       int
+		desc        string
+		minsAgo     int
 	}{
 		{0, "beacon", "185.220.101.47", 443, "tcp", 98, "Periodic HTTPS beacon every 60s — Cobalt Strike jitter profile", 25},
 		{0, "exfiltration", "94.102.49.190", 443, "tcp", 87, "Large data transfer 15 MB outbound — potential exfiltration", 31},
@@ -1571,13 +1573,13 @@ func seedDetectionHits(db *sql.DB, agentIDs []int) {
 func seedUEBA(db *sql.DB, agentIDs []int) {
 	now := time.Now()
 	events := []struct {
-		username    string
-		eventType   string
-		severity    string
-		desc        string
-		sourceIP    string
-		agentIdx    int
-		minsAgo     int
+		username  string
+		eventType string
+		severity  string
+		desc      string
+		sourceIP  string
+		agentIdx  int
+		minsAgo   int
 	}{
 		{"jdoe", "impossible_travel", "high", "Login from Lagos, Nigeria — user's last login was New York 30 min earlier", "41.184.102.17", 2, 300},
 		{"admin", "privilege_escalation", "critical", "Admin account ran mimikatz — credentials likely compromised", "10.0.2.55", 2, 43},
@@ -1603,15 +1605,15 @@ func seedUEBA(db *sql.DB, agentIDs []int) {
 	}
 
 	users := []struct {
-		username    string
-		riskScore   int
-		totalEvents int
+		username     string
+		riskScore    int
+		totalEvents  int
 		failedLogins int
-		offHours    int
-		uniqueIPs   int
-		privEsc     int
-		flags       []string
-		lastIP      string
+		offHours     int
+		uniqueIPs    int
+		privEsc      int
+		flags        []string
+		lastIP       string
 	}{
 		{"admin", 89, 142, 42, 3, 5, 2, []string{"compromised_credential", "lateral_movement"}, "10.0.2.55"},
 		{"jdoe", 72, 87, 2, 5, 12, 0, []string{"impossible_travel", "large_download"}, "41.184.102.17"},
@@ -1633,10 +1635,10 @@ func seedUEBA(db *sql.DB, agentIDs []int) {
 func seedInsiderThreat(db *sql.DB) {
 	now := time.Now()
 	scores := []struct {
-		username    string
-		score       int
-		riskLevel   string
-		alertFired  bool
+		username   string
+		score      int
+		riskLevel  string
+		alertFired bool
 	}{
 		{"jdoe", 72, "high", true},
 		{"asmith", 45, "medium", false},
@@ -1724,7 +1726,7 @@ func seedCanary(db *sql.DB, agentIDs []int) {
 	now := time.Now()
 	tokens := []struct {
 		tokenType, name, tokenValue, desc, deployedTo string
-		tripCount                                      int
+		tripCount                                     int
 	}{
 		{"url", "AWS Credentials Doc", "xck-aws-creds-2026-demo", "Fake AWS credentials document placed in /etc/aws/credentials", "/etc/aws/credentials", 3},
 		{"dns", "Internal API Spec DNS Token", "xck-api-spec-internal", "DNS canary token embedded in internal API documentation", "Confluence: API-INTERNAL-v2", 1},
@@ -1965,8 +1967,8 @@ func seedITDR(db *sql.DB, agentIDs []int) {
 	now := time.Now()
 	findings := []struct {
 		findingType, severity, identity, idType, srcIP, desc, technique, status string
-		agentIdx                                                                  int
-		minsAgo                                                                   int
+		agentIdx                                                                int
+		minsAgo                                                                 int
 	}{
 		{"credential_theft", "critical", "admin", "user", "10.0.2.55", "Admin credentials extracted via mimikatz — NTLM hash captured", "T1003.001", "open", 2, 43},
 		{"lateral_movement", "high", "jdoe", "user", "10.0.2.55", "Pass-the-hash lateral movement from workstation to DC detected", "T1550.002", "investigating", 2, 120},
@@ -1995,8 +1997,8 @@ func seedDFIRInvestigations(db *sql.DB, incidentIDs []int) {
 	now := time.Now()
 	type inv struct {
 		invID, caseID, title, analyst, priority, status, classification, tags, targetHosts, targetUsers, mitreTechs, rootCause, summary string
-		incidentIdx                                                                                                                       int
-		hoursAgo                                                                                                                          int
+		incidentIdx                                                                                                                     int
+		hoursAgo                                                                                                                        int
 	}
 	items := []inv{
 		{"INV-2026-001", "CASE-2026-042", "APT29 Cozy Bear Intrusion — web-prod-01", "alice.zhang@corp.com", "critical", "in_progress", "apt", "apt29,cozy-bear,credential-theft", "web-prod-01,db-server-02", "jdoe,svc_account", "T1078,T1003,T1021", "", "Active APT29 intrusion via stolen credentials. Lateral movement to DB server confirmed.", 0, 3},
@@ -2150,9 +2152,9 @@ func seedMDM(db *sql.DB, agentIDs []int) {
 func seedIdentity(db *sql.DB) {
 	users := []struct {
 		username, displayName, email, dept, title, manager, status string
-		groups                                                      string
+		groups                                                     string
 	}{
-		{"admin", "System Administrator", "admin@democorp.com", "IT Security", "Security Admin", "CISO", "active", `{"Domain Admins","Security"}` },
+		{"admin", "System Administrator", "admin@democorp.com", "IT Security", "Security Admin", "CISO", "active", `{"Domain Admins","Security"}`},
 		{"jdoe", "John Doe", "jdoe@democorp.com", "Engineering", "Senior Engineer", "alice.m", "active", `{"Engineering","VPN Users"}`},
 		{"asmith", "Alice Smith", "asmith@democorp.com", "Sales", "Account Executive", "vp.sales", "active", `{"Sales","Remote Users"}`},
 		{"svc_backdoor", "Service Account (Backdoor)", "", "IT", "Service Account", "", "suspicious", `{"Domain Users"}`},
@@ -2173,7 +2175,7 @@ func seedIdentity(db *sql.DB) {
 func seedCorrelation(db *sql.DB) {
 	rules := []struct {
 		name, desc, severity, ruleName, technique, action, corrType, condValue string
-		windowMins, threshold                                                    int
+		windowMins, threshold                                                  int
 	}{
 		{"C2 + Lateral Movement Chain", "Correlates C2 beacon with subsequent lateral movement within 60 minutes", "critical", "C2 Beacon Detected", "T1071.001", "create_incident", "temporal", "lateral_movement", 60, 2},
 		{"Credential Dump → Privilege Escalation", "Links credential dump with privilege escalation from same host", "critical", "Credential Dump — LSASS", "T1003.001", "escalate", "causal", "privilege_escalation", 30, 1},
@@ -2219,11 +2221,11 @@ func seedHoneyports(db *sql.DB, agentIDs []int) {
 		return
 	}
 	ports := []struct {
-		agentIdx    int
-		port        int
-		proto       string
-		desc        string
-		severity    string
+		agentIdx int
+		port     int
+		proto    string
+		desc     string
+		severity string
 	}{
 		{0, 4444, "tcp", "Meterpreter listener honeypot — any connection is a threat signal", "critical"},
 		{0, 1433, "tcp", "Fake MSSQL honeypot — detects lateral SQL connection attempts", "high"},
@@ -2396,6 +2398,225 @@ func seedCloudInfraAlerts(db *sql.DB, agentIDs []int) {
 	}
 }
 
+// seedCloudSecurity populates the /cloud-security page's own dedicated
+// tables (cloud_accounts/cloud_assets/cloud_findings/cloud_identities/
+// cloud_threats/cloud_drift_events) — distinct from seedCloudInfraAlerts
+// above, which only ever writes generic `alerts` rows for the Behavioral
+// Detection feed. Confirmed live that nothing else in this codebase
+// populates these tables at all: no scan/sync endpoint exists (this app
+// has no real AWS/Azure/GCP API integration anywhere), so without this the
+// entire page — dashboard, CSPM, CIEM, exposure, compliance, attack paths,
+// drift, vulnerabilities, threat intel — showed permanently empty for any
+// tenant that hadn't manually created a cloud_accounts row by hand.
+//
+// These tables are lazily created by cloud_security_enterprise.go's
+// createCloudSecurityTables() (called inside its own handlers, not at
+// server startup), not by a real migration — so unlike most other seed
+// functions in this file, this one creates them itself first. Otherwise
+// seeding would silently no-op on a fresh environment where no
+// /api/cloud/* endpoint has ever been hit yet to lazily create them.
+func seedCloudSecurity(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS cloud_accounts (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL,
+		provider TEXT NOT NULL, account_id TEXT, region TEXT DEFAULT 'us-east-1',
+		status TEXT DEFAULT 'connected', asset_count INTEGER DEFAULT 0,
+		finding_count INTEGER DEFAULT 0, risk_score INTEGER DEFAULT 0,
+		last_scan TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS cloud_assets (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		account_id INTEGER REFERENCES cloud_accounts(id) ON DELETE SET NULL,
+		name TEXT NOT NULL, resource_type TEXT NOT NULL, provider TEXT NOT NULL,
+		region TEXT, owner TEXT, tags TEXT, risk_score INTEGER DEFAULT 0,
+		internet_exposed BOOLEAN DEFAULT false, status TEXT DEFAULT 'active',
+		last_activity TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS cloud_findings (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, asset_id INTEGER,
+		category TEXT NOT NULL, title TEXT NOT NULL, description TEXT,
+		severity TEXT DEFAULT 'medium', provider TEXT, region TEXT,
+		resource_type TEXT, resource_id TEXT, remediation TEXT,
+		status TEXT DEFAULT 'open', framework TEXT, control_id TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW(), resolved_at TIMESTAMPTZ)`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS cloud_threats (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, threat_type TEXT NOT NULL,
+		provider TEXT, region TEXT, source_ip TEXT, source_user TEXT,
+		resource_id TEXT, resource_type TEXT, severity TEXT DEFAULT 'high',
+		details JSONB DEFAULT '{}', status TEXT DEFAULT 'open', mitre_technique TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS cloud_drift_events (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, resource_id TEXT,
+		resource_type TEXT, change_type TEXT NOT NULL, previous_state TEXT,
+		new_state TEXT, changed_by TEXT, provider TEXT, region TEXT,
+		severity TEXT DEFAULT 'medium', acknowledged BOOLEAN DEFAULT false,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS cloud_identities (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL,
+		identity_type TEXT NOT NULL, provider TEXT NOT NULL, account_id TEXT,
+		permissions TEXT, last_used TIMESTAMPTZ, is_dormant BOOLEAN DEFAULT false,
+		mfa_enabled BOOLEAN DEFAULT false, access_key_age_days INTEGER DEFAULT 0,
+		risk_level TEXT DEFAULT 'low', created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	// None of these tables have a natural unique key to hang ON CONFLICT off
+	// of, so — matching the fix applied to seedThreatActors' identical gap
+	// earlier this phase — guard re-runs with an explicit existence check
+	// instead, rather than duplicating all six tables' worth of rows every
+	// time the demo seeder runs again.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM cloud_accounts WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+
+	accounts := []struct{ name, provider, acctID, region string }{
+		{"Production AWS", "aws", "123456789012", "us-east-1"},
+		{"Corp Azure Tenant", "azure", "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "eastus"},
+		{"Analytics GCP Project", "gcp", "xcloak-analytics-prod", "us-central1"},
+	}
+	accountIDs := make([]int, len(accounts))
+	for i, a := range accounts {
+		db.QueryRow(`
+			INSERT INTO cloud_accounts (tenant_id, name, provider, account_id, region, status, last_scan)
+			VALUES (9999,$1,$2,$3,$4,'connected',$5) RETURNING id`,
+			a.name, a.provider, a.acctID, a.region, now.Add(-2*time.Hour),
+		).Scan(&accountIDs[i])
+	}
+
+	assets := []struct {
+		acctIdx                            int
+		name, rtype, provider, region, own string
+		risk                               int
+		exposed                            bool
+	}{
+		{0, "prod-backups-us-east-1", "s3", "aws", "us-east-1", "DevOps Team", 85, true},
+		{0, "web-prod-alb", "ec2", "aws", "us-east-1", "DevOps Team", 60, true},
+		{0, "orders-db-primary", "rds", "aws", "us-east-1", "Data Engineering", 90, false},
+		{0, "ci-deploy-lambda", "lambda", "aws", "us-east-1", "DevOps Team", 45, false},
+		{1, "corp-fileshare", "storage_account", "azure", "eastus", "IT Admin", 75, true},
+		{1, "hr-app-service", "app_service", "azure", "eastus", "HR Systems", 50, false},
+		{1, "billing-sql-db", "sql_database", "azure", "eastus", "Finance", 70, false},
+		{2, "analytics-raw-events", "cloud_storage", "gcp", "us-central1", "Data Engineering", 55, true},
+		{2, "ml-training-cluster", "compute", "gcp", "us-central1", "ML Team", 40, false},
+		{2, "events-warehouse", "bigquery", "gcp", "us-central1", "Data Engineering", 65, false},
+	}
+	assetIDs := make([]int, len(assets))
+	for i, a := range assets {
+		db.QueryRow(`
+			INSERT INTO cloud_assets (tenant_id, account_id, name, resource_type, provider, region, owner, risk_score, internet_exposed, status, last_activity)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,'active',$9) RETURNING id`,
+			accountIDs[a.acctIdx], a.name, a.rtype, a.provider, a.region, a.own, a.risk, a.exposed, now.Add(-time.Duration(i+1)*time.Hour),
+		).Scan(&assetIDs[i])
+	}
+
+	findings := []struct {
+		assetIdx                                        int
+		category, title, desc, severity, framework, ctl string
+		resolved                                        bool
+		hoursAgo                                        int
+	}{
+		{0, "public_storage", "S3 Bucket Publicly Readable", "prod-backups-us-east-1 has ACL public-read; 847 objects exposed to the internet.", "critical", "CIS AWS", "2.1.5", false, 55},
+		{2, "unencrypted_storage", "RDS Instance Without Encryption at Rest", "orders-db-primary has storage encryption disabled.", "high", "PCI-DSS", "3.4", false, 130},
+		{3, "excessive_permissions", "Lambda Execution Role Overly Permissive", "ci-deploy-lambda's IAM role has iam:*  on resource *.", "high", "CIS AWS", "1.16", false, 200},
+		{4, "public_storage", "Azure Storage Account Allows Anonymous Access", "corp-fileshare has allowBlobPublicAccess=true.", "critical", "CIS Azure", "3.6", false, 90},
+		{6, "unencrypted_storage", "SQL Database Transparent Data Encryption Disabled", "billing-sql-db has TDE off — cardholder-adjacent data at rest unencrypted.", "high", "PCI-DSS", "3.4", false, 310},
+		{5, "open_security_group", "App Service Allows All Inbound Traffic", "hr-app-service NSG has an any-any inbound allow rule.", "medium", "CIS Azure", "6.2", true, 400},
+		{7, "public_storage", "GCS Bucket World-Readable", "analytics-raw-events bucket IAM grants allUsers objectViewer.", "critical", "CIS GCP", "5.1", false, 60},
+		{9, "logging_disabled", "BigQuery Dataset Access Logging Disabled", "events-warehouse has no Data Access audit log config.", "medium", "NIST 800-53", "AU-2", false, 500},
+		{1, "open_security_group", "Security Group Permits 0.0.0.0/0 on Port 22", "web-prod-alb's SG allows SSH from any source.", "critical", "CIS AWS", "5.2", false, 40},
+		{8, "missing_patch", "Compute Instance OS Patch Level Outdated", "ml-training-cluster nodes are 62 days behind on kernel security patches.", "medium", "NIST 800-53", "SI-2", false, 600},
+	}
+	for _, f := range findings {
+		status := "open"
+		var resolvedAt any
+		if f.resolved {
+			status = "resolved"
+			resolvedAt = now.Add(-time.Duration(f.hoursAgo/2) * time.Hour)
+		}
+		a := assets[f.assetIdx]
+		db.Exec(`
+			INSERT INTO cloud_findings (tenant_id, asset_id, category, title, description, severity, provider, region, resource_type, resource_id, remediation, status, framework, control_id, created_at, resolved_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+			assetIDs[f.assetIdx], f.category, f.title, f.desc, f.severity, a.provider, a.region, a.rtype, a.name,
+			"Review and remediate per "+f.framework+" control "+f.ctl, status, f.framework, f.ctl,
+			now.Add(-time.Duration(f.hoursAgo)*time.Hour), resolvedAt,
+		)
+	}
+
+	identities := []struct {
+		name, itype, provider, acctID, perms string
+		dormant, mfa                         bool
+		keyAge                               int
+		risk                                 string
+		lastUsedDaysAgo                      int
+	}{
+		{"ci-deploy", "iam_user", "aws", "123456789012", "AdministratorAccess", false, false, 210, "critical", 0},
+		{"staging-ci", "iam_user", "aws", "123456789012", "AdministratorAccess,PowerUserAccess", false, false, 45, "critical", 1},
+		{"jdoe@corp.com", "iam_user", "aws", "123456789012", "ReadOnlyAccess", false, true, 30, "low", 2},
+		{"old-svc-account", "service_account", "aws", "123456789012", "S3FullAccess", true, false, 340, "high", 190},
+		{"admin@corp.com", "iam_user", "azure", "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "Global Administrator", false, true, 20, "medium", 0},
+		{"attacker@evil.com", "guest_user", "azure", "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "Global Administrator", false, false, 2, "critical", 0},
+		{"compute-engine@project.iam.gserviceaccount.com", "service_account", "gcp", "xcloak-analytics-prod", "Editor", false, false, 5, "high", 0},
+		{"analyst-readonly@corp.com", "iam_user", "gcp", "xcloak-analytics-prod", "Viewer", false, true, 15, "low", 3},
+	}
+	for _, id := range identities {
+		db.Exec(`
+			INSERT INTO cloud_identities (tenant_id, name, identity_type, provider, account_id, permissions, last_used, is_dormant, mfa_enabled, access_key_age_days, risk_level)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			id.name, id.itype, id.provider, id.acctID, id.perms,
+			now.Add(-time.Duration(id.lastUsedDaysAgo)*24*time.Hour), id.dormant, id.mfa, id.keyAge, id.risk,
+		)
+	}
+
+	threats := []struct {
+		ttype, provider, region, srcIP, srcUser, resourceID, rtype, severity, technique string
+		hoursAgo                                                                        int
+	}{
+		{"public_bucket_access", "aws", "us-east-1", "45.33.32.156", "", "prod-backups-us-east-1", "s3", "critical", "T1530", 50},
+		{"privilege_escalation", "aws", "us-east-1", "", "staging-ci", "ci-deploy-lambda", "lambda", "high", "T1078.004", 125},
+		{"impossible_travel", "azure", "eastus", "185.220.101.12", "jdoe@corp.com", "corp-fileshare", "storage_account", "high", "T1110", 300},
+		{"anomalous_key_creation", "gcp", "us-central1", "", "compute-engine@project.iam.gserviceaccount.com", "ml-training-cluster", "compute", "high", "T1098.001", 410},
+		{"guest_admin_grant", "azure", "eastus", "", "admin@corp.com", "hr-app-service", "app_service", "critical", "T1098.003", 205},
+		{"port_scan", "aws", "us-east-1", "193.106.31.98", "", "web-prod-alb", "ec2", "medium", "T1046", 15},
+	}
+	for _, t := range threats {
+		db.Exec(`
+			INSERT INTO cloud_threats (tenant_id, threat_type, provider, region, source_ip, source_user, resource_id, resource_type, severity, status, mitre_technique, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,'open',$9,$10)`,
+			t.ttype, t.provider, t.region, t.srcIP, t.srcUser, t.resourceID, t.rtype, t.severity, t.technique,
+			now.Add(-time.Duration(t.hoursAgo)*time.Hour),
+		)
+	}
+
+	drift := []struct {
+		resourceID, rtype, changeType, prev, next, changedBy, provider, region, severity string
+		hoursAgo                                                                         int
+	}{
+		{"prod-backups-us-east-1", "s3", "acl_changed", "private", "public-read", "ci-deploy", "aws", "us-east-1", "critical", 55},
+		{"web-prod-alb", "ec2", "security_group_modified", "22/tcp: 10.0.0.0/8", "22/tcp: 0.0.0.0/0", "staging-ci", "aws", "us-east-1", "critical", 40},
+		{"corp-fileshare", "storage_account", "public_access_enabled", "disabled", "enabled", "admin@corp.com", "azure", "eastus", "high", 90},
+		{"billing-sql-db", "sql_database", "encryption_disabled", "TDE: on", "TDE: off", "unknown", "azure", "eastus", "high", 310},
+	}
+	for _, d := range drift {
+		db.Exec(`
+			INSERT INTO cloud_drift_events (tenant_id, resource_id, resource_type, change_type, previous_state, new_state, changed_by, provider, region, severity, acknowledged, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10)`,
+			d.resourceID, d.rtype, d.changeType, d.prev, d.next, d.changedBy, d.provider, d.region, d.severity,
+			now.Add(-time.Duration(d.hoursAgo)*time.Hour),
+		)
+	}
+
+	// Keep cloud_accounts' own denormalized counters honest rather than
+	// leaving them at their zero defaults forever.
+	for _, acctID := range accountIDs {
+		mustExec(db, `
+			UPDATE cloud_accounts SET
+				asset_count = (SELECT COUNT(*) FROM cloud_assets WHERE account_id=$1),
+				finding_count = (SELECT COUNT(*) FROM cloud_findings f JOIN cloud_assets a ON a.id=f.asset_id WHERE a.account_id=$1 AND f.status='open'),
+				risk_score = COALESCE((SELECT AVG(risk_score)::int FROM cloud_assets WHERE account_id=$1), 0)
+			WHERE id=$1`, acctID)
+	}
+}
+
 func seedFirewallEnterprise(db *sql.DB) {
 	const tid = 9999
 	now := time.Now()
@@ -2521,9 +2742,9 @@ func seedFirewallEnterprise(db *sql.DB) {
 
 	// ── NAT rules ───────────────────────────────────────────────────────────
 	type fweNAT struct {
-		id, name, ntype, srcip, dstip, tIP  string
-		srcP, dstP, tP, proto, iface        string
-		hits                                int64
+		id, name, ntype, srcip, dstip, tIP string
+		srcP, dstP, tP, proto, iface       string
+		hits                               int64
 	}
 	natRules := []fweNAT{
 		{"NAT-001", "Outbound Internet SNAT", "snat", "10.0.0.0/8", "", "203.0.113.1", "", "", "", "any", "eth0", 4823941},
@@ -2574,8 +2795,8 @@ func seedFirewallEnterprise(db *sql.DB) {
 	// ── live connections ─────────────────────────────────────────────────────
 	type fweConn struct {
 		id, srcIP, dstIP, proto, app, state, zsrc, zdst, rule string
-		srcP, dstP, dur                                        int
-		bsent, brecv                                           int64
+		srcP, dstP, dur                                       int
+		bsent, brecv                                          int64
 	}
 	connRows := []fweConn{
 		{"CONN-001", "10.5.1.100", "203.0.113.50", "tcp", "HTTPS", "established", "lan", "wan", "RULE-003", 54321, 443, 1823, 48234, 189234},
@@ -2599,7 +2820,7 @@ func seedFirewallEnterprise(db *sql.DB) {
 	// ── approvals ────────────────────────────────────────────────────────────
 	type fweApproval struct {
 		id, ctype, desc, requester, approver, status, priority, note string
-		daysAgo                                                       int
+		daysAgo                                                      int
 	}
 	approvalRows := []fweApproval{
 		{"APR-001", "internet_facing", "Allow TCP/8443 from WAN to web cluster 192.168.100.0/28", "alice.zhang@corp.com", "", "pending", "high", "", 0},
@@ -2861,8 +3082,8 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── reports ─────────────────────────────────────────────────────────────
 	type rpeReport struct {
 		id, name, desc, category, rtype, owner, tags string
-		genCount                                      int
-		daysAgo                                       int
+		genCount                                     int
+		daysAgo                                      int
 	}
 	reports := []rpeReport{
 		{"RPT-001", "Weekly SOC Report — W28 2025", "Weekly security operations center digest", "security", "Weekly SOC Report", "alice.zhang@corp.com", `["soc","weekly","security"]`, 4, 0},
@@ -2904,10 +3125,10 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── schedules ────────────────────────────────────────────────────────────
 	type rpeSchedule struct {
 		id, reportID, reportName, freq, delivery, format string
-		recipients                                        string
-		runCount, successCount, failureCount              int
-		daysAgoLastRun, hoursUntilNext                    int
-		status                                            string
+		recipients                                       string
+		runCount, successCount, failureCount             int
+		daysAgoLastRun, hoursUntilNext                   int
+		status                                           string
 	}
 	schedules := []rpeSchedule{
 		{"SCH-001", "RPT-014", "Daily SOC Report — 2025-07-17", "daily", "email", "pdf", `["soc-team@corp.com","alice.zhang@corp.com"]`, 183, 180, 3, 1, 20, "active"},
@@ -2932,9 +3153,9 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── executions ────────────────────────────────────────────────────────────
 	type rpeExecution struct {
 		id, reportID, reportName, status, format, triggeredBy, executedBy string
-		durationMs                                                         int
-		fileSizeBytes                                                      int64
-		minsAgo                                                            int
+		durationMs                                                        int
+		fileSizeBytes                                                     int64
+		minsAgo                                                           int
 	}
 	executions := []rpeExecution{
 		{"EXC-001", "RPT-014", "Daily SOC Report — 2025-07-17", "completed", "pdf", "scheduled", "system", 2341, 284320, 5},
@@ -2978,8 +3199,8 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── exports ──────────────────────────────────────────────────────────────
 	type rpeExport struct {
 		id, reportID, reportName, execID, format, exportedBy string
-		fileSize                                              int64
-		minsAgo                                               int
+		fileSize                                             int64
+		minsAgo                                              int
 	}
 	exports := []rpeExport{
 		{"EXP-001", "RPT-001", "Weekly SOC Report — W28 2025", "EXC-002", "pdf", "alice.zhang@corp.com", 512480, 32},
@@ -3003,8 +3224,8 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── shared links ──────────────────────────────────────────────────────────
 	type rpeShare struct {
 		id, reportID, reportName, execID, sharedBy, shareType string
-		viewCount, hrsExpiry                                   int
-		minsAgo                                                int
+		viewCount, hrsExpiry                                  int
+		minsAgo                                               int
 	}
 	shares := []rpeShare{
 		{"SHR-001", "RPT-002", "Executive Security Briefing — July 2025", "EXC-004", "carol.kim@corp.com", "external", 7, 168, 185},
@@ -3028,8 +3249,8 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── notifications ─────────────────────────────────────────────────────────
 	type rpeNotif struct {
 		etype, title, msg, sev, reportID, reportName string
-		minsAgo                                       int
-		read                                          bool
+		minsAgo                                      int
+		read                                         bool
 	}
 	notifs := []rpeNotif{
 		{"report_generated", "Report Generated", "Daily SOC Report — 2025-07-17 generated successfully (PDF, 278 KB)", "info", "RPT-014", "Daily SOC Report — 2025-07-17", 5, false},
@@ -3076,7 +3297,7 @@ func seedReportsEnterprise(db *sql.DB) {
 	// ── audit trail ──────────────────────────────────────────────────────────
 	type rpeAuditRow struct {
 		action, otype, oid, oname, actor, details string
-		minsAgo                                    int
+		minsAgo                                   int
 	}
 	auditRows := []rpeAuditRow{
 		{"report_generated", "report", "RPT-014", "Daily SOC Report — 2025-07-17", "system", "Scheduled generation — PDF, 278 KB, 2.3s", 5},
@@ -3228,9 +3449,9 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	// ── 30+ frameworks ────────────────────────────────────────────────────────
 	type fwRow struct {
 		fid, name, version, category, description, owner, status string
-		total, passed, failed, na, notAssessed, score              int
-		daysAgo                                                     int
-		builtin                                                     bool
+		total, passed, failed, na, notAssessed, score            int
+		daysAgo                                                  int
+		builtin                                                  bool
 	}
 	frameworks := []fwRow{
 		// Security
@@ -3290,7 +3511,7 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	// ── controls (ISO 27001 and NIST CSF as representative samples) ──────────
 	type ctrlRow struct {
 		fid, cid, name, category, priority, status, risk, owner, requirement string
-		score, evidenceCount                                                    int
+		score, evidenceCount                                                 int
 	}
 	controls := []ctrlRow{
 		// ISO 27001 controls
@@ -3361,8 +3582,8 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	// ── evidence ──────────────────────────────────────────────────────────────
 	type evidRow struct {
 		eid, fid, cid, name, etype, fname, source, uploader string
-		verified                                              bool
-		daysAgo                                               int
+		verified                                            bool
+		daysAgo                                             int
 	}
 	evidences := []evidRow{
 		{"EVD-001", "ISO-27001", "A.8.15", "Q2 2025 Security Log Retention Report", "report", "log_retention_q2_2025.pdf", "SIEM", "alice.zhang@corp.com", true, 5},
@@ -3405,8 +3626,8 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	type assessRow struct {
 		aid, fid, fname, atype, actor string
 		total, passed, failed, na     int
-		score                          int
-		daysAgo                        int
+		score                         int
+		daysAgo                       int
 	}
 	assessments := []assessRow{
 		{"ASS-001", "ISO-27001", "ISO/IEC 27001:2022", "scheduled", "system", 114, 82, 24, 8, 78, 7},
@@ -3434,9 +3655,9 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	// ── remediations ──────────────────────────────────────────────────────────
 	type remedRow struct {
 		rid, fid, cid, cname, title, priority, status, assignee, team string
-		daysUntilDue                                                    int
-		createdBy                                                        string
-		daysAgo                                                          int
+		daysUntilDue                                                  int
+		createdBy                                                     string
+		daysAgo                                                       int
 	}
 	remeds := []remedRow{
 		{"REM-001", "ISO-27001", "A.8.2", "Privileged Access Rights", "Implement PAM solution for privileged access control", "critical", "in_progress", "alice.zhang@corp.com", "Security Ops", 14, "alice.zhang@corp.com", 10},
@@ -3474,8 +3695,8 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	// ── notifications ─────────────────────────────────────────────────────────
 	type notifRow struct {
 		etype, title, msg, sev, fid string
-		read                          bool
-		minsAgo                       int
+		read                        bool
+		minsAgo                     int
 	}
 	notifs := []notifRow{
 		{"assessment_completed", "PCI DSS Assessment Completed", "PCI DSS v4.0 assessment completed — score: 71%. 3 critical controls failing.", "high", "PCI-DSS", false, 10},
@@ -3501,7 +3722,7 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	// ── audit trail ───────────────────────────────────────────────────────────
 	type auditRow struct {
 		action, otype, oid, oname, actor, details string
-		minsAgo                                    int
+		minsAgo                                   int
 	}
 	auditEntries := []auditRow{
 		{"assessment_completed", "assessment", "ASS-003", "PCI DSS v4.0", "system", "Score: 71%, Passed: 183, Failed: 62", 10},
@@ -3534,7 +3755,9 @@ func seedFrameworkComplianceEnterprise(db *sql.DB) {
 }
 
 func fceNullStrSeed(s string) interface{} {
-	if s == "" { return nil }
+	if s == "" {
+		return nil
+	}
 	return s
 }
 
@@ -3599,9 +3822,9 @@ func seedExecutiveEnterprise(db *sql.DB) {
 	// 90 days of snapshots (trending data)
 	type snapRow struct {
 		sec, risk, comp, inc, critInc, vulns, critVulns, assets, critAssets int
-		mttd, mttr, falsePos                                                 float64
-		sla, patch, detCov, autoRate                                         int
-		finRisk                                                               int64
+		mttd, mttr, falsePos                                                float64
+		sla, patch, detCov, autoRate                                        int
+		finRisk                                                             int64
 	}
 	// Start values and end values for linear interpolation
 	start := snapRow{68, 81, 69, 24, 6, 478, 71, 3248, 149, 6.1, 18.4, 4.2, 71, 72, 71, 52, 5_800_000}
@@ -3648,12 +3871,15 @@ func seedExecutiveEnterprise(db *sql.DB) {
 	}
 
 	// 30-day forecast
-	metrics := []struct{ name string; base, delta float64 }{
-		{"risk_score",    68, 1.8},
-		{"incidents",     9,  0.5},
-		{"critical_vulns",47, 2.1},
-		{"compliance",    74, 0.3},
-		{"patch_backlog", 354,4.5},
+	metrics := []struct {
+		name        string
+		base, delta float64
+	}{
+		{"risk_score", 68, 1.8},
+		{"incidents", 9, 0.5},
+		{"critical_vulns", 47, 2.1},
+		{"compliance", 74, 0.3},
+		{"patch_backlog", 354, 4.5},
 	}
 	for _, m := range metrics {
 		for day := 1; day <= 30; day++ {
@@ -3671,9 +3897,9 @@ func seedExecutiveEnterprise(db *sql.DB) {
 	// pre-generated reports
 	type rptRow struct {
 		rid, title, rtype, by, format string
-		sec, risk                      int
-		daysAgo                         int
-		sizeKB                          int
+		sec, risk                     int
+		daysAgo                       int
+		sizeKB                        int
 	}
 	reports := []rptRow{
 		{"EXE-RPT-001", "Monthly Executive Security Briefing — June 2025", "executive_summary", "carol.kim@corp.com", "pdf", 73, 68, 1, 420},
@@ -3698,23 +3924,23 @@ func seedExecutiveEnterprise(db *sql.DB) {
 	// integrations
 	type intRow struct {
 		iid, name, cat, status, cfg string
-		records                      int64
-		health, errors               int
-		minsAgo                      int
+		records                     int64
+		health, errors              int
+		minsAgo                     int
 	}
 	integrations := []intRow{
-		{"INT-SIEM",    "Splunk Enterprise SIEM",      "siem",           "active",  "Index: main, Lookback: 90d",          14_203_442, 99, 0, 5},
-		{"INT-EDR",     "CrowdStrike Falcon EDR",      "edr",            "active",  "1,847 endpoints enrolled",             8_924_331,  98, 0, 3},
-		{"INT-SOAR",    "Palo Alto XSOAR",             "soar",           "active",  "47 active playbooks, 1,204 auto-closed",2_341_180, 97, 1, 10},
-		{"INT-TI",      "Recorded Future Threat Intel","threat_intel",   "active",  "7 feeds active, 1.2M IOCs",           1_203_445,  100,0, 1},
-		{"INT-VULN",    "Tenable.io",                  "vulnerability",  "active",  "3,448 assets scanned",                 354_112,   96, 2, 30},
-		{"INT-CMDB",    "ServiceNow CMDB",             "cmdb",           "active",  "3,448 CIs synced",                     3_448,     99, 0, 60},
-		{"INT-FIREWALL","Palo Alto Firewall",           "firewall",       "active",  "14 policies, 2,847 rules",            22_341_009, 100,0, 2},
-		{"INT-CLOUD",   "AWS Security Hub",            "cloud_security", "active",  "412 cloud assets, 4 accounts",         1_893_445, 97, 1, 15},
-		{"INT-COMPLY",  "Framework Compliance Engine",  "compliance",    "active",  "12 frameworks, 1,200+ controls",       12_445,    100,0, 20},
-		{"INT-IAM",     "Azure Active Directory",       "iam",           "active",  "4,200 users, 850 groups",              4_200,     98, 0, 5},
-		{"INT-TICKET",  "Jira Service Management",      "ticketing",     "active",  "Open: 47 tickets linked",              1_204,     96, 3, 45},
-		{"INT-EMAIL",   "Microsoft Defender for O365",  "email_security","degraded","19 blocked campaigns, latency elevated",892_341,  72, 14, 2},
+		{"INT-SIEM", "Splunk Enterprise SIEM", "siem", "active", "Index: main, Lookback: 90d", 14_203_442, 99, 0, 5},
+		{"INT-EDR", "CrowdStrike Falcon EDR", "edr", "active", "1,847 endpoints enrolled", 8_924_331, 98, 0, 3},
+		{"INT-SOAR", "Palo Alto XSOAR", "soar", "active", "47 active playbooks, 1,204 auto-closed", 2_341_180, 97, 1, 10},
+		{"INT-TI", "Recorded Future Threat Intel", "threat_intel", "active", "7 feeds active, 1.2M IOCs", 1_203_445, 100, 0, 1},
+		{"INT-VULN", "Tenable.io", "vulnerability", "active", "3,448 assets scanned", 354_112, 96, 2, 30},
+		{"INT-CMDB", "ServiceNow CMDB", "cmdb", "active", "3,448 CIs synced", 3_448, 99, 0, 60},
+		{"INT-FIREWALL", "Palo Alto Firewall", "firewall", "active", "14 policies, 2,847 rules", 22_341_009, 100, 0, 2},
+		{"INT-CLOUD", "AWS Security Hub", "cloud_security", "active", "412 cloud assets, 4 accounts", 1_893_445, 97, 1, 15},
+		{"INT-COMPLY", "Framework Compliance Engine", "compliance", "active", "12 frameworks, 1,200+ controls", 12_445, 100, 0, 20},
+		{"INT-IAM", "Azure Active Directory", "iam", "active", "4,200 users, 850 groups", 4_200, 98, 0, 5},
+		{"INT-TICKET", "Jira Service Management", "ticketing", "active", "Open: 47 tickets linked", 1_204, 96, 3, 45},
+		{"INT-EMAIL", "Microsoft Defender for O365", "email_security", "degraded", "19 blocked campaigns, latency elevated", 892_341, 72, 14, 2},
 	}
 	for _, i := range integrations {
 		syncAt := now.Add(-time.Duration(i.minsAgo) * time.Minute)
@@ -3729,20 +3955,20 @@ func seedExecutiveEnterprise(db *sql.DB) {
 	// notifications
 	type notifRow struct {
 		etype, title, msg, sev, source string
-		read                            bool
-		minsAgo                         int
+		read                           bool
+		minsAgo                        int
 	}
 	notifs := []notifRow{
-		{"critical_incident",    "CRITICAL: Ransomware Activity Detected",         "LockBit 3.0 IOCs matched on 3 endpoints. Containment in progress.", "critical", "EDR",          false, 15},
-		{"sla_breach",           "SLA Breach: P1 Incident — Finance VPN",          "Incident INC-2847 has breached 4-hour P1 SLA. CISO notification required.", "critical", "SOAR",  false, 32},
-		{"compliance_failure",   "PCI DSS Critical Control Failure",               "CVE-2024-3400 patch not applied to payment gateway. PCI audit at risk.", "critical", "Compliance", false, 60},
-		{"high_risk",            "High Business Risk: Data Exfiltration Attempt",  "Anomalous data transfer detected from Finance workstation to external IP.", "high", "SIEM",         false, 90},
-		{"major_breach",         "Phishing Campaign Targeting C-Suite",            "4 targeted phishing emails intercepted. Credentials not compromised.", "high", "Email Security", false, 180},
-		{"report_available",     "Board Report Ready: Q2 2025",                    "Quarterly board security report has been generated and is ready for review.", "info", "Reports",  true,  10080},
-		{"compliance_milestone", "ISO 27001 Score Improved to 78%",                "Assessment completed — score improved 4 points following patch campaign.", "info", "Compliance",  true,  4320},
-		{"integration_error",    "Integration Warning: Email Security Degraded",   "Microsoft Defender for O365 reporting elevated latency. Monitoring.", "medium", "Integration",  true,  120},
-		{"kpi_alert",            "MTTR Below SLA Target",                          "Mean Time to Respond is 14.8h, above the 12h executive target. Review required.", "medium", "KPIs", true,  2880},
-		{"report_available",     "Weekly Briefing Available — W28 2025",           "Your weekly security briefing has been generated.", "info", "Reports",                              true,  4320},
+		{"critical_incident", "CRITICAL: Ransomware Activity Detected", "LockBit 3.0 IOCs matched on 3 endpoints. Containment in progress.", "critical", "EDR", false, 15},
+		{"sla_breach", "SLA Breach: P1 Incident — Finance VPN", "Incident INC-2847 has breached 4-hour P1 SLA. CISO notification required.", "critical", "SOAR", false, 32},
+		{"compliance_failure", "PCI DSS Critical Control Failure", "CVE-2024-3400 patch not applied to payment gateway. PCI audit at risk.", "critical", "Compliance", false, 60},
+		{"high_risk", "High Business Risk: Data Exfiltration Attempt", "Anomalous data transfer detected from Finance workstation to external IP.", "high", "SIEM", false, 90},
+		{"major_breach", "Phishing Campaign Targeting C-Suite", "4 targeted phishing emails intercepted. Credentials not compromised.", "high", "Email Security", false, 180},
+		{"report_available", "Board Report Ready: Q2 2025", "Quarterly board security report has been generated and is ready for review.", "info", "Reports", true, 10080},
+		{"compliance_milestone", "ISO 27001 Score Improved to 78%", "Assessment completed — score improved 4 points following patch campaign.", "info", "Compliance", true, 4320},
+		{"integration_error", "Integration Warning: Email Security Degraded", "Microsoft Defender for O365 reporting elevated latency. Monitoring.", "medium", "Integration", true, 120},
+		{"kpi_alert", "MTTR Below SLA Target", "Mean Time to Respond is 14.8h, above the 12h executive target. Review required.", "medium", "KPIs", true, 2880},
+		{"report_available", "Weekly Briefing Available — W28 2025", "Your weekly security briefing has been generated.", "info", "Reports", true, 4320},
 	}
 	for _, n := range notifs {
 		createdAt := now.Add(-time.Duration(n.minsAgo) * time.Minute)
@@ -3756,21 +3982,21 @@ func seedExecutiveEnterprise(db *sql.DB) {
 	// audit trail
 	type auditRow struct {
 		action, otype, oid, oname, actor, ip, details string
-		minsAgo                                        int
+		minsAgo                                       int
 	}
 	audits := []auditRow{
-		{"dashboard_accessed",  "dashboard", "",          "Executive Dashboard",    "carol.kim@corp.com",   "10.0.1.45",  "Tab: dashboard",                                  2},
-		{"report_generated",    "report",    "EXE-RPT-004","Business Risk Analysis","carol.kim@corp.com",   "10.0.1.45",  "Type: risk_analysis, Format: pdf, Size: 540KB",   5},
-		{"report_generated",    "report",    "EXE-RPT-003","Weekly Briefing W28",   "system",              "127.0.0.1",  "Scheduled generation — Type: weekly_briefing",     4320},
-		{"dashboard_accessed",  "dashboard", "",          "Executive Dashboard",    "alice.zhang@corp.com", "10.0.1.22",  "Tab: threats",                                    60},
-		{"report_shared",       "report",    "EXE-RPT-002","Q2 Board Report",       "alice.zhang@corp.com", "10.0.1.22",  "Shared with: board@corp.com, ceo@corp.com",       10080},
-		{"report_generated",    "report",    "EXE-RPT-002","Q2 2025 Board Report",  "alice.zhang@corp.com", "10.0.1.22",  "Type: board_report, Size: 890KB",                 10090},
-		{"notification_viewed", "notification","",        "Critical Incident Alert","carol.kim@corp.com",   "10.0.1.45",  "Ransomware activity notification acknowledged",    15},
-		{"dashboard_accessed",  "dashboard", "",          "Executive Dashboard",    "bob.patel@corp.com",   "10.0.2.11",  "Tab: compliance",                                 180},
-		{"report_generated",    "report",    "EXE-RPT-001","Monthly Briefing Jun",  "carol.kim@corp.com",   "10.0.1.45",  "Type: executive_summary, Size: 420KB",            1440},
-		{"config_changed",      "dashboard", "FILTER-001","Dashboard Filter",       "alice.zhang@corp.com", "10.0.1.22",  "Default time range changed: 7d → 30d",            2880},
-		{"dashboard_accessed",  "dashboard", "",          "Executive Dashboard",    "carol.kim@corp.com",   "10.0.1.45",  "Tab: forecasting",                                720},
-		{"report_generated",    "report",    "EXE-RPT-006","Compliance Summary H1", "carol.kim@corp.com",   "10.0.1.45",  "Type: compliance_summary, Size: 650KB",           20160},
+		{"dashboard_accessed", "dashboard", "", "Executive Dashboard", "carol.kim@corp.com", "10.0.1.45", "Tab: dashboard", 2},
+		{"report_generated", "report", "EXE-RPT-004", "Business Risk Analysis", "carol.kim@corp.com", "10.0.1.45", "Type: risk_analysis, Format: pdf, Size: 540KB", 5},
+		{"report_generated", "report", "EXE-RPT-003", "Weekly Briefing W28", "system", "127.0.0.1", "Scheduled generation — Type: weekly_briefing", 4320},
+		{"dashboard_accessed", "dashboard", "", "Executive Dashboard", "alice.zhang@corp.com", "10.0.1.22", "Tab: threats", 60},
+		{"report_shared", "report", "EXE-RPT-002", "Q2 Board Report", "alice.zhang@corp.com", "10.0.1.22", "Shared with: board@corp.com, ceo@corp.com", 10080},
+		{"report_generated", "report", "EXE-RPT-002", "Q2 2025 Board Report", "alice.zhang@corp.com", "10.0.1.22", "Type: board_report, Size: 890KB", 10090},
+		{"notification_viewed", "notification", "", "Critical Incident Alert", "carol.kim@corp.com", "10.0.1.45", "Ransomware activity notification acknowledged", 15},
+		{"dashboard_accessed", "dashboard", "", "Executive Dashboard", "bob.patel@corp.com", "10.0.2.11", "Tab: compliance", 180},
+		{"report_generated", "report", "EXE-RPT-001", "Monthly Briefing Jun", "carol.kim@corp.com", "10.0.1.45", "Type: executive_summary, Size: 420KB", 1440},
+		{"config_changed", "dashboard", "FILTER-001", "Dashboard Filter", "alice.zhang@corp.com", "10.0.1.22", "Default time range changed: 7d → 30d", 2880},
+		{"dashboard_accessed", "dashboard", "", "Executive Dashboard", "carol.kim@corp.com", "10.0.1.45", "Tab: forecasting", 720},
+		{"report_generated", "report", "EXE-RPT-006", "Compliance Summary H1", "carol.kim@corp.com", "10.0.1.45", "Type: compliance_summary, Size: 650KB", 20160},
 	}
 	for _, a := range audits {
 		createdAt := now.Add(-time.Duration(a.minsAgo) * time.Minute)
@@ -3787,7 +4013,9 @@ func seedExecutiveEnterprise(db *sql.DB) {
 }
 
 func exeNullStrSeed(s string) interface{} {
-	if s == "" { return nil }
+	if s == "" {
+		return nil
+	}
 	return s
 }
 
@@ -3889,20 +4117,20 @@ func seedSOCMetricsEnterprise(db *sql.DB) {
 
 	// ── 90 days of daily snapshots ───────────────────────────────────────────────
 	type snap struct {
-		health, analysts, online, autoCov                      int
+		health, analysts, online, autoCov                         int
 		totalAlerts, critAlerts, highAlerts, medAlerts, lowAlerts int
-		suppressed, fp, escalated, dups, queue                 int
-		procMins                                               float64
-		totalInc, critInc, openInc, closedInc                 int
-		mttd, mtta, mttc, mttr, mttrec                        float64
-		sla, openCases, closedCases, backlog, esc, reopen     int
-		pbExec, autoRate                                       int
-		hoursSaved                                             float64
-		srExec, iocHits, malware, ransomware, actorHits       int
-		healthy, offline, quarantine, fwBlocks, netAnom       int
-		critVulns, highVulns, patchComp, compScore            int
-		logRate                                               int64
-		eps, storage                                          int
+		suppressed, fp, escalated, dups, queue                    int
+		procMins                                                  float64
+		totalInc, critInc, openInc, closedInc                     int
+		mttd, mtta, mttc, mttr, mttrec                            float64
+		sla, openCases, closedCases, backlog, esc, reopen         int
+		pbExec, autoRate                                          int
+		hoursSaved                                                float64
+		srExec, iocHits, malware, ransomware, actorHits           int
+		healthy, offline, quarantine, fwBlocks, netAnom           int
+		critVulns, highVulns, patchComp, compScore                int
+		logRate                                                   int64
+		eps, storage                                              int
 	}
 
 	start := snap{
@@ -4094,10 +4322,10 @@ func seedSOCMetricsEnterprise(db *sql.DB) {
 
 	// ── playbook stats ───────────────────────────────────────────────────────────
 	type pbRow struct {
-		id, name, cat string
+		id, name, cat               string
 		total, succ, fail, runtimeS int
-		hrsSaved float64
-		minsAgo  int
+		hrsSaved                    float64
+		minsAgo                     int
 	}
 	playbooks := []pbRow{
 		{"PB-001", "Phishing Email Auto-Triage", "email_security", 2847, 2812, 35, 42, 284.7, 5},
@@ -4180,7 +4408,7 @@ func seedSOCMetricsEnterprise(db *sql.DB) {
 	// ── audit trail ──────────────────────────────────────────────────────────────
 	type auditRow struct {
 		action, otype, oid, oname, actor, ip, details string
-		minsAgo                                        int
+		minsAgo                                       int
 	}
 	audits := []auditRow{
 		{"dashboard_accessed", "dashboard", "", "SOC Metrics Dashboard", "carol.kim", "10.0.1.45", "Tab: dashboard", 2},
@@ -4663,13 +4891,13 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 	// ── Timeline events ───────────────────────────────────────────────────────
 
 	type tlEvent struct {
-		assetID   string
-		etype     string
-		summary   string
-		actor     string
-		severity  string
-		details   string
-		minsAgo   int
+		assetID  string
+		etype    string
+		summary  string
+		actor    string
+		severity string
+		details  string
+		minsAgo  int
 	}
 	events := []tlEvent{
 		{"ACE-WS-001", "alert", "Suspicious PowerShell execution detected", "CrowdStrike Falcon", "medium", "Script: Invoke-Mimikatz pattern matched (Sigma rule: PS_Credential_Theft)", 127},
@@ -4698,7 +4926,11 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 
 	// ── Reports ───────────────────────────────────────────────────────────────
 
-	type rpt struct{ id, title, rtype, by, format string; assetCnt int; daysAgo int }
+	type rpt struct {
+		id, title, rtype, by, format string
+		assetCnt                     int
+		daysAgo                      int
+	}
 	reports := []rpt{
 		{"ACE-RPT-001", "Full Asset Inventory Q2 2025", "asset_inventory", "carol.kim", "pdf", 3448, 7},
 		{"ACE-RPT-002", "Critical Asset Risk Report June 2025", "risk_report", "alice.zhang", "pdf", 89, 14},
@@ -4719,7 +4951,10 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 
 	// ── Notifications ─────────────────────────────────────────────────────────
 
-	type notif struct{ etype, title, msg, severity, source, assetID string; minsAgo int }
+	type notif struct {
+		etype, title, msg, severity, source, assetID string
+		minsAgo                                      int
+	}
 	notifs := []notif{
 		{"rogue_device", "Rogue Device Detected", "Unmanaged device detected on Finance subnet (10.20.47.199) — no EDR, ports 445+4444 open", "critical", "Network Discovery", "ACE-WS-005", 67},
 		{"cert_expiry_critical", "AD Certificate Expiring in 7 Days", "Domain Controller AD-DC-01 Kerberos certificate expires in 7 days — Kerberos auth will fail", "critical", "Certificate Monitor", "ACE-SRV-003", 30},
@@ -4743,7 +4978,10 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 
 	// ── Audit entries ─────────────────────────────────────────────────────────
 
-	type aud struct{ action, otype, oid, oname, actor, ip, details string; minsAgo int }
+	type aud struct {
+		action, otype, oid, oname, actor, ip, details string
+		minsAgo                                       int
+	}
 	audits := []aud{
 		{"asset_updated", "asset", "ACE-WS-001", "WKSTN-FIN-047", "carol.kim", "10.0.1.45", "criticality: medium → high, owner assigned: john.smith", 43200},
 		{"asset_updated", "asset", "ACE-SRV-001", "SQLDB-FIN-01", "alice.zhang", "10.0.1.22", "cert_expiry_days updated: 45 → 18, alert triggered", 1440},
@@ -4853,15 +5091,15 @@ func seedMDMEnterprise(db *sql.DB) {
 	// ── Devices ───────────────────────────────────────────────────────────────
 
 	type mdmDev struct {
-		deviceID, name, dtype, platform, manufacturer, model string
+		deviceID, name, dtype, platform, manufacturer, model   string
 		serial, imei, osVersion, patch, owner, email, dept, bu string
-		enrollStatus, compStatus string
-		risk, battery int
-		storTotal, storUsed, memTotal, memUsed float64
-		wifiSSID, carrier, gpsLoc string
-		wifiSig, cellSig, lockTimeout int
-		bt, enc, rooted, jailb, lock, bio, lost, quar bool
-		lastCheckinMins, enrolledDaysAgo int
+		enrollStatus, compStatus                               string
+		risk, battery                                          int
+		storTotal, storUsed, memTotal, memUsed                 float64
+		wifiSSID, carrier, gpsLoc                              string
+		wifiSig, cellSig, lockTimeout                          int
+		bt, enc, rooted, jailb, lock, bio, lost, quar          bool
+		lastCheckinMins, enrolledDaysAgo                       int
 	}
 
 	devices := []mdmDev{
@@ -5033,7 +5271,11 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Apps per device ───────────────────────────────────────────────────────
 
-	type appRow struct{ devID, appID, name, bid, version, vendor, category, status string; sizeMB float64; managed bool }
+	type appRow struct {
+		devID, appID, name, bid, version, vendor, category, status string
+		sizeMB                                                     float64
+		managed                                                    bool
+	}
 	commonApps := []appRow{
 		{"MDME-IOS-001", "APP-OUT", "Microsoft Outlook", "com.microsoft.Outlook", "4.2312.0", "Microsoft", "productivity", "approved", 184.2, true},
 		{"MDME-IOS-001", "APP-TMS", "Microsoft Teams", "com.microsoft.skype.teams", "6.3.1", "Microsoft", "communication", "approved", 312.4, true},
@@ -5068,15 +5310,15 @@ func seedMDMEnterprise(db *sql.DB) {
 	// ── Policies ──────────────────────────────────────────────────────────────
 
 	type policy struct {
-		id, name, ptype, platform string
-		enabled bool
-		priority int
-		minOS string
-		reqEnc, reqLock bool
-		lockTimeout int
+		id, name, ptype, platform                               string
+		enabled                                                 bool
+		priority                                                int
+		minOS                                                   string
+		reqEnc, reqLock                                         bool
+		lockTimeout                                             int
 		reqBio, blockCam, blockUSB, blockBT, reqVPN, reqComplex bool
-		minPwdLen, maxFail, devApplied int
-		createdBy string
+		minPwdLen, maxFail, devApplied                          int
+		createdBy                                               string
 	}
 	policies := []policy{
 		{
@@ -5131,7 +5373,10 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Threats ───────────────────────────────────────────────────────────────
 
-	type threat struct{ id, devID, dname, ttype, title, desc, severity, status string; minsAgo int }
+	type threat struct {
+		id, devID, dname, ttype, title, desc, severity, status string
+		minsAgo                                                int
+	}
 	threats := []threat{
 		{"MDME-THR-001", "MDME-IOS-005", "iPhone-HR-JAILBROKEN", "jailbreak", "Jailbreak Detected on HR Device",
 			"Unc0ver jailbreak detected on iPhone 13 belonging to HR contractor. Device has Cydia installed and SSH enabled.", "critical", "open", 720},
@@ -5166,7 +5411,10 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Remote Actions ────────────────────────────────────────────────────────
 
-	type action struct{ id, devID, dname, atype, status, by, result string; minsAgo int }
+	type action struct {
+		id, devID, dname, atype, status, by, result string
+		minsAgo                                     int
+	}
 	actions := []action{
 		{"MDME-ACT-001", "MDME-IOS-005", "iPhone-HR-JAILBROKEN", "quarantine", "completed", "alice.zhang", "Device quarantined successfully", 718},
 		{"MDME-ACT-002", "MDME-AND-004", "Android-ROOTED-THREAT", "quarantine", "completed", "carol.kim", "Device quarantined and isolated from corporate resources", 2877},
@@ -5193,7 +5441,10 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Timeline ──────────────────────────────────────────────────────────────
 
-	type tlev struct{ devID, etype, summary, actor, severity, details string; minsAgo int }
+	type tlev struct {
+		devID, etype, summary, actor, severity, details string
+		minsAgo                                         int
+	}
 	tlEvents := []tlev{
 		{"MDME-IOS-005", "threat_detected", "Jailbreak detected by compliance engine", "MDM Compliance Engine", "critical", "Unc0ver jailbreak, Cydia package manager, SSH enabled", 720},
 		{"MDME-IOS-005", "quarantine", "Device quarantined by security team", "alice.zhang", "high", "All corporate resources revoked pending investigation", 718},
@@ -5218,7 +5469,10 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Reports ───────────────────────────────────────────────────────────────
 
-	type rpt struct{ id, title, rtype, by, format string; cnt, daysAgo int }
+	type rpt struct {
+		id, title, rtype, by, format string
+		cnt, daysAgo                 int
+	}
 	reports := []rpt{
 		{"MDME-RPT-001", "Monthly Device Inventory Report — June 2025", "device_inventory", "carol.kim", "pdf", 427, 7},
 		{"MDME-RPT-002", "Q2 2025 MDM Compliance Report", "compliance_report", "alice.zhang", "pdf", 427, 14},
@@ -5238,7 +5492,10 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Notifications ─────────────────────────────────────────────────────────
 
-	type notif struct{ etype, title, msg, severity, devID string; minsAgo int }
+	type notif struct {
+		etype, title, msg, severity, devID string
+		minsAgo                            int
+	}
 	notifs := []notif{
 		{"jailbreak_detected", "Jailbreak Detected: iPhone-HR-JAILBROKEN", "Jailbreak detected on iPhone 13 (HR contractor). Device quarantined automatically.", "critical", "MDME-IOS-005", 720},
 		{"root_detected", "Root Access: Android-ROOTED-THREAT", "Rooted Android device with Kali NetHunter detected. Security investigation initiated.", "critical", "MDME-AND-004", 2880},
@@ -5260,7 +5517,10 @@ func seedMDMEnterprise(db *sql.DB) {
 
 	// ── Audit ─────────────────────────────────────────────────────────────────
 
-	type aud struct{ action, otype, oid, oname, actor, ip, details string; minsAgo int }
+	type aud struct {
+		action, otype, oid, oname, actor, ip, details string
+		minsAgo                                       int
+	}
 	audits := []aud{
 		{"device_enrolled", "device", "MDME-IOS-001", "iPhone-EXEC-CEO", "carol.kim", "10.0.1.45", "DEP enrollment, supervised mode, platform:ios", 365 * 24 * 60},
 		{"policy_applied", "policy", "POL-EXEC-001", "Executive Device Policy", "carol.kim", "10.0.1.45", "Applied to device MDME-IOS-001", 364 * 24 * 60},
@@ -5342,9 +5602,9 @@ func seedAIAssistantEnterprise(db *sql.DB) {
 
 	type sess struct {
 		id, title, mode, model, by, status string
-		msgs                                int
-		bookmarked                          bool
-		minsAgo                             int
+		msgs                               int
+		bookmarked                         bool
+		minsAgo                            int
 	}
 	sessions := []sess{
 		{"AIA-SES-001", "Ransomware Alert Investigation — WKSTN-FIN-047", "investigate", "claude-sonnet-4-6", "alice.zhang", "active", 14, true, 47},
@@ -5416,7 +5676,7 @@ func seedAIAssistantEnterprise(db *sql.DB) {
 
 	type rec struct {
 		id, title, desc, cat, priority, status, impact, effort string
-		minsAgo                                                  int
+		minsAgo                                                int
 	}
 	recs := []rec{
 		{"AIA-REC-001", "Deploy Ransomware Honeypot Decoys in Finance Shares", "AI detected 3 ransomware staging attempts targeting Finance file shares. Honeypot decoy files would detect encryption attempts 10-15 minutes earlier, enabling faster containment.", "detection", "critical", "open", "Detect ransomware 10-15 min earlier, reduce blast radius 90%", "Low (2h)", 47},
@@ -5439,7 +5699,7 @@ func seedAIAssistantEnterprise(db *sql.DB) {
 
 	type act struct {
 		id, atype, desc, status, by, approvedBy string
-		minsAgo                                  int
+		minsAgo                                 int
 	}
 	actions := []act{
 		{"AIA-ACT-001", "block_ip", "Block IP 185.220.101.44 at Palo Alto perimeter firewall (LockBit C2 node)", "approved", "alice.zhang", "carol.kim", 46},
@@ -5464,7 +5724,7 @@ func seedAIAssistantEnterprise(db *sql.DB) {
 
 	type rpt struct {
 		id, title, rtype, by, format string
-		minsAgo                       int
+		minsAgo                      int
 	}
 	reports := []rpt{
 		{"AIA-RPT-001", "June 28 Ransomware Incident — Executive Report", "incident_report", "carol.kim", "markdown", 108},
@@ -5487,7 +5747,7 @@ func seedAIAssistantEnterprise(db *sql.DB) {
 
 	type aud struct {
 		action, otype, oid, actor, details string
-		minsAgo                             int
+		minsAgo                            int
 	}
 	audits := []aud{
 		{"session_created", "session", "AIA-SES-001", "alice.zhang", "mode:investigate model:claude-sonnet-4-6", 47},
@@ -5625,11 +5885,11 @@ func seedSettingsEnterprise(db *sql.DB) {
 		budget                         float64
 	}
 	providers := []prov{
-		{"anthropic",   "claude-sonnet-4-6",  "sk-an-****-DEMO", "",                   true,  true,  8192, 0.3, 200, 500},
-		{"openai",       "gpt-4o-mini",         "sk-****-DEMO",    "",                   true,  false, 4096, 0.3, 100, 200},
-		{"gemini",       "gemini-1.5-pro",      "AIza****DEMO",    "",                   true,  false, 4096, 0.4, 60,  100},
-		{"azure_openai", "gpt-4-turbo",         "****DEMO",        "https://corp.openai.azure.com", false, false, 4096, 0.3, 60, 150},
-		{"ollama",       "llama3.1:70b",        "",                "http://ollama:11434", false, false, 2048, 0.2, 30,  0},
+		{"anthropic", "claude-sonnet-4-6", "sk-an-****-DEMO", "", true, true, 8192, 0.3, 200, 500},
+		{"openai", "gpt-4o-mini", "sk-****-DEMO", "", true, false, 4096, 0.3, 100, 200},
+		{"gemini", "gemini-1.5-pro", "AIza****DEMO", "", true, false, 4096, 0.4, 60, 100},
+		{"azure_openai", "gpt-4-turbo", "****DEMO", "https://corp.openai.azure.com", false, false, 4096, 0.3, 60, 150},
+		{"ollama", "llama3.1:70b", "", "http://ollama:11434", false, false, 2048, 0.2, 30, 0},
 	}
 	for _, p := range providers {
 		db.Exec(`INSERT INTO stte_ai_config (tenant_id,provider,model,api_key_masked,endpoint,enabled,is_default,
@@ -5661,18 +5921,18 @@ func seedSettingsEnterprise(db *sql.DB) {
 
 	type bkp struct {
 		id, btype, status, by string
-		size                   int64
-		dur, minsAgo           int
+		size                  int64
+		dur, minsAgo          int
 	}
 	backups := []bkp{
-		{"STTE-BKP-001", "full",        "completed", "system",     524288000, 87,  14 * 60},
-		{"STTE-BKP-002", "full",        "completed", "system",     518123456, 84,  38 * 60},
-		{"STTE-BKP-003", "full",        "completed", "system",     502345678, 91,  62 * 60},
-		{"STTE-BKP-004", "full",        "completed", "carol.kim",  496234567, 79,  86 * 60},
-		{"STTE-BKP-005", "incremental", "completed", "system",     48234567,  12,  90 * 60},
-		{"STTE-BKP-006", "full",        "failed",    "system",     0,         0,   110 * 60},
-		{"STTE-BKP-007", "full",        "completed", "system",     488345678, 83,  110 * 60},
-		{"STTE-BKP-008", "incremental", "completed", "system",     42123456,  11,  114 * 60},
+		{"STTE-BKP-001", "full", "completed", "system", 524288000, 87, 14 * 60},
+		{"STTE-BKP-002", "full", "completed", "system", 518123456, 84, 38 * 60},
+		{"STTE-BKP-003", "full", "completed", "system", 502345678, 91, 62 * 60},
+		{"STTE-BKP-004", "full", "completed", "carol.kim", 496234567, 79, 86 * 60},
+		{"STTE-BKP-005", "incremental", "completed", "system", 48234567, 12, 90 * 60},
+		{"STTE-BKP-006", "full", "failed", "system", 0, 0, 110 * 60},
+		{"STTE-BKP-007", "full", "completed", "system", 488345678, 83, 110 * 60},
+		{"STTE-BKP-008", "incremental", "completed", "system", 42123456, 11, 114 * 60},
 	}
 	for _, b := range backups {
 		t := now.Add(-time.Duration(b.minsAgo) * time.Minute)
@@ -5689,7 +5949,7 @@ func seedSettingsEnterprise(db *sql.DB) {
 
 	type upd struct {
 		ver, rtype, title, desc, by string
-		minsAgo                      int
+		minsAgo                     int
 	}
 	updates := []upd{
 		{"2.14.3", "patch", "Bug fixes and performance improvements", "Fixed memory leak in SIEM ingestion pipeline; improved Elasticsearch query performance by 34%", "carol.kim", 720},
@@ -5729,20 +5989,20 @@ func seedSettingsEnterprise(db *sql.DB) {
 
 	type aud struct {
 		action, section, actor, details string
-		ip                               string
-		minsAgo                          int
+		ip                              string
+		minsAgo                         int
 	}
 	audits := []aud{
-		{"license_activated",     "system",  "carol.kim",   "key:XCLS-DEMO-ENTR-2025-0001 tier:enterprise", "10.0.1.45", 60480},
-		{"org_updated",           "general", "carol.kim",   "Organization settings updated",                 "10.0.1.45", 5040},
-		{"ai_config_updated",     "ai",      "carol.kim",   "provider:anthropic",                            "10.0.1.45", 720},
-		{"ai_config_updated",     "ai",      "carol.kim",   "provider:openai",                               "10.0.1.45", 719},
-		{"backup_triggered",      "system",  "carol.kim",   "backup_id:STTE-BKP-004",                       "10.0.1.45", 86 * 60},
-		{"backup_config_updated", "system",  "carol.kim",   "Backup schedule updated",                       "10.0.1.45", 90 * 60},
-		{"agents_config_updated", "security","carol.kim",   "Agent configuration updated",                   "10.0.1.45", 10080},
-		{"org_updated",           "general", "alice.zhang", "Organization settings updated",                 "10.0.1.22", 4320},
-		{"ai_config_updated",     "ai",      "alice.zhang", "provider:gemini",                               "10.0.1.22", 1440},
-		{"org_updated",           "general", "carol.kim",   "MFA requirement enabled",                       "10.0.1.45", 2880},
+		{"license_activated", "system", "carol.kim", "key:XCLS-DEMO-ENTR-2025-0001 tier:enterprise", "10.0.1.45", 60480},
+		{"org_updated", "general", "carol.kim", "Organization settings updated", "10.0.1.45", 5040},
+		{"ai_config_updated", "ai", "carol.kim", "provider:anthropic", "10.0.1.45", 720},
+		{"ai_config_updated", "ai", "carol.kim", "provider:openai", "10.0.1.45", 719},
+		{"backup_triggered", "system", "carol.kim", "backup_id:STTE-BKP-004", "10.0.1.45", 86 * 60},
+		{"backup_config_updated", "system", "carol.kim", "Backup schedule updated", "10.0.1.45", 90 * 60},
+		{"agents_config_updated", "security", "carol.kim", "Agent configuration updated", "10.0.1.45", 10080},
+		{"org_updated", "general", "alice.zhang", "Organization settings updated", "10.0.1.22", 4320},
+		{"ai_config_updated", "ai", "alice.zhang", "provider:gemini", "10.0.1.22", 1440},
+		{"org_updated", "general", "carol.kim", "MFA requirement enabled", "10.0.1.45", 2880},
 	}
 	for _, a := range audits {
 		t := now.Add(-time.Duration(a.minsAgo) * time.Minute)
@@ -5866,22 +6126,22 @@ func seedTenantsEnterprise(db *sql.DB) {
 	type tenant struct {
 		ref, name, org, domain, status, plan, licType string
 		admin, email, region, tz, color               string
-		cStart, cEnd, renewal                          string
-		users, agents, assets, storagGb                int
-		eps                                            float64
+		cStart, cEnd, renewal                         string
+		users, agents, assets, storagGb               int
+		eps                                           float64
 	}
 
 	tenants := []tenant{
-		{"TNE-001", "Acme Corp SOC",     "Acme Corporation",       "acme.example.com",      "active",    "enterprise",      "subscription", "alice.zhang",  "alice@acme.example.com",    "us-east-1",    "America/New_York",   "#2563eb", "2024-01-01", "2026-12-31", "2026-12-01", 48,  847, 12400, 1240, 3250},
-		{"TNE-002", "TechStart Inc",     "TechStart Incorporated", "techstart.io",           "active",    "professional",    "subscription", "bob.johnson",  "bob@techstart.io",          "us-west-2",    "America/Los_Angeles","#7c3aed", "2024-06-01", "2026-05-31", "2026-05-01", 22,  312,  4800,  380, 1120},
-		{"TNE-003", "FinSecure Ltd",     "FinSecure Limited",      "finsecure.co.uk",        "active",    "enterprise_plus", "subscription", "carol.kim",    "carol@finsecure.co.uk",     "eu-west-1",    "Europe/London",      "#059669", "2023-03-01", "2027-02-28", "2027-02-01", 73,  1240, 18700, 2100, 5840},
-		{"TNE-004", "MedGuard Health",   "MedGuard Health Systems","medguard.health",         "trial",     "enterprise",      "trial",        "david.chen",   "david@medguard.health",     "us-east-2",    "America/Chicago",    "#dc2626", "2026-06-18", "2026-09-18", "2026-09-01", 12,   87,  1200,   94,  287},
-		{"TNE-005", "GovShield Agency",  "US Federal Agency",      "govshield.gov",           "active",    "enterprise_plus", "perpetual",    "emily.foster", "emily@govshield.gov",       "us-gov-east-1","America/Washington","#b45309", "2022-10-01", "2027-09-30", "2027-09-01", 112, 2840, 34500, 4200, 9340},
-		{"TNE-006", "RetailGuard LLC",   "RetailGuard",            "retailguard.com",         "active",    "professional",    "subscription", "frank.miller", "frank@retailguard.com",     "us-west-1",    "America/Denver",     "#0891b2", "2025-01-01", "2026-12-31", "2026-12-01", 18,  147,  2100,  210,  540},
-		{"TNE-007", "CloudNative Corp",  "CloudNative Corporation","cloudnative.io",          "suspended", "enterprise",      "subscription", "grace.lee",    "grace@cloudnative.io",      "ap-southeast-1","Asia/Singapore",    "#7c3aed", "2024-03-01", "2026-02-28", "2026-02-01",  8,   34,   400,   28,   72},
-		{"TNE-008", "EduSecure Uni",     "State University System","edusecure.edu",            "active",    "community",       "perpetual",    "henry.park",   "henry@edusecure.edu",       "us-east-1",    "America/New_York",   "#2563eb",  "",           "",           "",            5,   12,   240,   18,   34},
-		{"TNE-009", "AeroDefense Inc",   "AeroDefense Systems",    "aerodefense.mil",         "active",    "enterprise_plus", "perpetual",    "iris.chen",    "iris@aerodefense.mil",      "us-gov-west-1","America/Los_Angeles","#b45309", "2021-07-01", "2028-06-30", "2028-06-01", 89,  1640, 22100, 3400, 7820},
-		{"TNE-010", "StartupSec Co",     "StartupSec",             "startupsec.io",           "active",    "professional",    "subscription", "jack.ryan",    "jack@startupsec.io",        "eu-central-1", "Europe/Berlin",      "#059669", "2026-02-01", "2027-01-31", "2027-01-01",  6,   28,   380,   42,   97},
+		{"TNE-001", "Acme Corp SOC", "Acme Corporation", "acme.example.com", "active", "enterprise", "subscription", "alice.zhang", "alice@acme.example.com", "us-east-1", "America/New_York", "#2563eb", "2024-01-01", "2026-12-31", "2026-12-01", 48, 847, 12400, 1240, 3250},
+		{"TNE-002", "TechStart Inc", "TechStart Incorporated", "techstart.io", "active", "professional", "subscription", "bob.johnson", "bob@techstart.io", "us-west-2", "America/Los_Angeles", "#7c3aed", "2024-06-01", "2026-05-31", "2026-05-01", 22, 312, 4800, 380, 1120},
+		{"TNE-003", "FinSecure Ltd", "FinSecure Limited", "finsecure.co.uk", "active", "enterprise_plus", "subscription", "carol.kim", "carol@finsecure.co.uk", "eu-west-1", "Europe/London", "#059669", "2023-03-01", "2027-02-28", "2027-02-01", 73, 1240, 18700, 2100, 5840},
+		{"TNE-004", "MedGuard Health", "MedGuard Health Systems", "medguard.health", "trial", "enterprise", "trial", "david.chen", "david@medguard.health", "us-east-2", "America/Chicago", "#dc2626", "2026-06-18", "2026-09-18", "2026-09-01", 12, 87, 1200, 94, 287},
+		{"TNE-005", "GovShield Agency", "US Federal Agency", "govshield.gov", "active", "enterprise_plus", "perpetual", "emily.foster", "emily@govshield.gov", "us-gov-east-1", "America/Washington", "#b45309", "2022-10-01", "2027-09-30", "2027-09-01", 112, 2840, 34500, 4200, 9340},
+		{"TNE-006", "RetailGuard LLC", "RetailGuard", "retailguard.com", "active", "professional", "subscription", "frank.miller", "frank@retailguard.com", "us-west-1", "America/Denver", "#0891b2", "2025-01-01", "2026-12-31", "2026-12-01", 18, 147, 2100, 210, 540},
+		{"TNE-007", "CloudNative Corp", "CloudNative Corporation", "cloudnative.io", "suspended", "enterprise", "subscription", "grace.lee", "grace@cloudnative.io", "ap-southeast-1", "Asia/Singapore", "#7c3aed", "2024-03-01", "2026-02-28", "2026-02-01", 8, 34, 400, 28, 72},
+		{"TNE-008", "EduSecure Uni", "State University System", "edusecure.edu", "active", "community", "perpetual", "henry.park", "henry@edusecure.edu", "us-east-1", "America/New_York", "#2563eb", "", "", "", 5, 12, 240, 18, 34},
+		{"TNE-009", "AeroDefense Inc", "AeroDefense Systems", "aerodefense.mil", "active", "enterprise_plus", "perpetual", "iris.chen", "iris@aerodefense.mil", "us-gov-west-1", "America/Los_Angeles", "#b45309", "2021-07-01", "2028-06-30", "2028-06-01", 89, 1640, 22100, 3400, 7820},
+		{"TNE-010", "StartupSec Co", "StartupSec", "startupsec.io", "active", "professional", "subscription", "jack.ryan", "jack@startupsec.io", "eu-central-1", "Europe/Berlin", "#059669", "2026-02-01", "2027-01-31", "2027-01-01", 6, 28, 380, 42, 97},
 	}
 
 	modulesByPlan := map[string][]string{
@@ -5959,12 +6219,12 @@ func seedTenantsEnterprise(db *sql.DB) {
 			status string
 			detail string
 		}{
-			{"agent_connectivity",  92, "healthy",  "97.2% agents connected"},
-			{"log_ingestion",       88, "degraded", "Average lag: 4.2s (threshold: 3s)"},
-			{"database",            99, "healthy",  "Query latency: 2.1ms p99"},
-			{"storage",             78, "degraded", "Utilization: 78% (threshold: 80%)"},
-			{"api_performance",     95, "healthy",  "p99 latency: 142ms"},
-			{"license_compliance",  100, "healthy", "All limits within bounds"},
+			{"agent_connectivity", 92, "healthy", "97.2% agents connected"},
+			{"log_ingestion", 88, "degraded", "Average lag: 4.2s (threshold: 3s)"},
+			{"database", 99, "healthy", "Query latency: 2.1ms p99"},
+			{"storage", 78, "degraded", "Utilization: 78% (threshold: 80%)"},
+			{"api_performance", 95, "healthy", "p99 latency: 142ms"},
+			{"license_compliance", 100, "healthy", "All limits within bounds"},
 		}
 		if t.status == "suspended" {
 			checks[0].score = 0
@@ -6019,24 +6279,24 @@ func seedTenantsEnterprise(db *sql.DB) {
 	// audit entries
 	type audEntry struct {
 		action, otype, ref, actor, details, ip string
-		minsAgo                                 int
+		minsAgo                                int
 	}
 	audits := []audEntry{
-		{"tenant_created",        "tenant", "TNE-010", "carol.kim",    "name:StartupSec Co plan:professional",               "10.0.0.1",  2880},
-		{"tenant_status_changed", "tenant", "TNE-007", "carol.kim",    "status→suspended",                                   "10.0.0.1",  7200},
-		{"module_updated",        "tenant", "TNE-003", "carol.kim",    "module:executive_ai enabled:true",                   "10.0.0.1",   720},
-		{"resources_updated",     "tenant", "TNE-002", "alice.zhang",  "Resource limits updated",                            "10.0.0.22", 1440},
-		{"tenant_created",        "tenant", "TNE-004", "carol.kim",    "name:MedGuard Health plan:enterprise",               "10.0.0.1",  5040},
-		{"tenant_updated",        "tenant", "TNE-001", "carol.kim",    "renewal_date:2026-12-01",                            "10.0.0.1",   360},
-		{"module_updated",        "tenant", "TNE-005", "emily.foster", "module:ot_ics enabled:true",                         "10.1.0.5",   480},
-		{"resources_updated",     "tenant", "TNE-005", "emily.foster", "max_agents:2840→5000",                               "10.1.0.5",   481},
-		{"tenant_status_changed", "tenant", "TNE-004", "carol.kim",    "status:trial trial_ends:2026-09-18",                 "10.0.0.1",  5041},
-		{"tenant_created",        "tenant", "TNE-009", "carol.kim",    "name:AeroDefense Inc plan:enterprise_plus",          "10.0.0.1", 14400},
-		{"module_updated",        "tenant", "TNE-009", "carol.kim",    "module:firewall enabled:true",                       "10.0.0.1", 14399},
-		{"tenant_updated",        "tenant", "TNE-003", "carol.kim",    "plan:enterprise→enterprise_plus",                    "10.0.0.1",  2160},
-		{"resources_updated",     "tenant", "TNE-001", "alice.zhang",  "max_users:48→96",                                    "10.0.0.22",  720},
-		{"module_updated",        "tenant", "TNE-008", "henry.park",   "module:siem enabled:true",                           "10.2.0.8",  2880},
-		{"tenant_created",        "tenant", "TNE-006", "carol.kim",    "name:RetailGuard LLC plan:professional",             "10.0.0.1", 10800},
+		{"tenant_created", "tenant", "TNE-010", "carol.kim", "name:StartupSec Co plan:professional", "10.0.0.1", 2880},
+		{"tenant_status_changed", "tenant", "TNE-007", "carol.kim", "status→suspended", "10.0.0.1", 7200},
+		{"module_updated", "tenant", "TNE-003", "carol.kim", "module:executive_ai enabled:true", "10.0.0.1", 720},
+		{"resources_updated", "tenant", "TNE-002", "alice.zhang", "Resource limits updated", "10.0.0.22", 1440},
+		{"tenant_created", "tenant", "TNE-004", "carol.kim", "name:MedGuard Health plan:enterprise", "10.0.0.1", 5040},
+		{"tenant_updated", "tenant", "TNE-001", "carol.kim", "renewal_date:2026-12-01", "10.0.0.1", 360},
+		{"module_updated", "tenant", "TNE-005", "emily.foster", "module:ot_ics enabled:true", "10.1.0.5", 480},
+		{"resources_updated", "tenant", "TNE-005", "emily.foster", "max_agents:2840→5000", "10.1.0.5", 481},
+		{"tenant_status_changed", "tenant", "TNE-004", "carol.kim", "status:trial trial_ends:2026-09-18", "10.0.0.1", 5041},
+		{"tenant_created", "tenant", "TNE-009", "carol.kim", "name:AeroDefense Inc plan:enterprise_plus", "10.0.0.1", 14400},
+		{"module_updated", "tenant", "TNE-009", "carol.kim", "module:firewall enabled:true", "10.0.0.1", 14399},
+		{"tenant_updated", "tenant", "TNE-003", "carol.kim", "plan:enterprise→enterprise_plus", "10.0.0.1", 2160},
+		{"resources_updated", "tenant", "TNE-001", "alice.zhang", "max_users:48→96", "10.0.0.22", 720},
+		{"module_updated", "tenant", "TNE-008", "henry.park", "module:siem enabled:true", "10.2.0.8", 2880},
+		{"tenant_created", "tenant", "TNE-006", "carol.kim", "name:RetailGuard LLC plan:professional", "10.0.0.1", 10800},
 	}
 	for _, a := range audits {
 		t := now.Add(-time.Duration(a.minsAgo) * time.Minute)
