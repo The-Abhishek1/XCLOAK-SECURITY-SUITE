@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -136,20 +138,20 @@ func GetVMDashboard(c *gin.Context) {
 	createVMTables()
 	tid := tenantIDFromContext(c)
 	type Stats struct {
-		Total            int     `json:"total"`
-		Critical         int     `json:"critical"`
-		High             int     `json:"high"`
-		Medium           int     `json:"medium"`
-		Low              int     `json:"low"`
-		Exploitable      int     `json:"exploitable"`
-		ActivelyExploited int    `json:"actively_exploited"`
-		Patched          int     `json:"patched"`
-		Overdue          int     `json:"overdue"`
-		RiskScore        float64 `json:"risk_score"`
-		AssetsAffected   int     `json:"assets_affected"`
-		KEVFindings      int     `json:"kev_findings"`
-		MTTR             float64 `json:"mttr_days"`
-		PatchSLA         float64 `json:"patch_sla_compliance"`
+		Total             int     `json:"total"`
+		Critical          int     `json:"critical"`
+		High              int     `json:"high"`
+		Medium            int     `json:"medium"`
+		Low               int     `json:"low"`
+		Exploitable       int     `json:"exploitable"`
+		ActivelyExploited int     `json:"actively_exploited"`
+		Patched           int     `json:"patched"`
+		Overdue           int     `json:"overdue"`
+		RiskScore         float64 `json:"risk_score"`
+		AssetsAffected    int     `json:"assets_affected"`
+		KEVFindings       int     `json:"kev_findings"`
+		MTTR              float64 `json:"mttr_days"`
+		PatchSLA          float64 `json:"patch_sla_compliance"`
 	}
 	var s Stats
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1`, tid).Scan(&s.Total)
@@ -161,11 +163,25 @@ func GetVMDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND actively_exploited=true`, tid).Scan(&s.ActivelyExploited)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='patched'`, tid).Scan(&s.Patched)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND kev_listed=true`, tid).Scan(&s.KEVFindings)
-	s.RiskScore = 78.4
-	s.MTTR = 14.2
-	s.PatchSLA = 82.3
-	s.AssetsAffected = 12
-	s.Overdue = 7
+	database.DB.QueryRow(`SELECT COALESCE(AVG(risk_score),0) FROM vm_findings WHERE tenant_id=$1 AND status='open'`, tid).Scan(&s.RiskScore)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (patched_at-detected_at))/86400),0) FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at IS NOT NULL`, tid).Scan(&s.MTTR)
+	database.DB.QueryRow(`SELECT COUNT(DISTINCT asset_id) FROM vm_findings WHERE tenant_id=$1 AND status='open'`, tid).Scan(&s.AssetsAffected)
+	// "Overdue" and patch-SLA compliance both use the same per-severity SLA
+	// windows: critical=7d, high=30d, medium=90d, low=180d.
+	database.DB.QueryRow(`
+		SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND
+			((severity='critical' AND detected_at < NOW()-INTERVAL '7 days') OR
+			 (severity='high' AND detected_at < NOW()-INTERVAL '30 days') OR
+			 (severity='medium' AND detected_at < NOW()-INTERVAL '90 days') OR
+			 (severity='low' AND detected_at < NOW()-INTERVAL '180 days'))`, tid).Scan(&s.Overdue)
+	database.DB.QueryRow(`
+		SELECT CASE WHEN COUNT(*) > 0 THEN 100.0 * COUNT(*) FILTER (WHERE
+			(severity='critical' AND patched_at <= detected_at+INTERVAL '7 days') OR
+			(severity='high' AND patched_at <= detected_at+INTERVAL '30 days') OR
+			(severity='medium' AND patched_at <= detected_at+INTERVAL '90 days') OR
+			(severity='low' AND patched_at <= detected_at+INTERVAL '180 days')
+		) / COUNT(*) ELSE 100.0 END
+		FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at IS NOT NULL`, tid).Scan(&s.PatchSLA)
 	c.JSON(http.StatusOK, s)
 }
 
@@ -179,7 +195,9 @@ func GetVMInventory(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("severity"); v != "" {
-		q += fmt.Sprintf(" AND severity=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND severity=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("kev"); v == "true" {
 		q += " AND kev_listed=true"
@@ -188,38 +206,41 @@ func GetVMInventory(c *gin.Context) {
 		q += " AND exploit_available=true"
 	}
 	if v := c.Query("status"); v != "" {
-		q += fmt.Sprintf(" AND status=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND status=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("q"); v != "" {
 		q += fmt.Sprintf(" AND (cve_id ILIKE $%d OR vendor ILIKE $%d OR product ILIKE $%d OR asset_name ILIKE $%d)", i, i, i, i)
-		args = append(args, "%"+v+"%"); i++
+		args = append(args, "%"+v+"%")
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY kev_listed DESC, actively_exploited DESC, cvss_score DESC LIMIT $%d", i)
 	args = append(args, limit)
 	rows, _ := database.DB.Query(q, args...)
 	type Finding struct {
-		ID               int     `json:"id"`
-		CVEID            string  `json:"cve_id"`
-		CVSSScore        float64 `json:"cvss_score"`
-		EPSSScore        float64 `json:"epss_score"`
-		EPSSPercentile   float64 `json:"epss_percentile"`
-		KEVListed        bool    `json:"kev_listed"`
-		Severity         string  `json:"severity"`
-		Vendor           string  `json:"vendor"`
-		Product          string  `json:"product"`
-		AffectedVersions string  `json:"affected_versions"`
-		PatchAvailable   bool    `json:"patch_available"`
-		ActivelyExploited bool   `json:"actively_exploited"`
-		ExploitAvailable  bool   `json:"exploit_available"`
-		Status           string  `json:"status"`
-		AssetName        string  `json:"asset_name"`
-		AssetIP          string  `json:"asset_ip"`
-		InternetFacing   bool    `json:"internet_facing"`
-		AssetCriticality string  `json:"asset_criticality"`
-		RiskScore        float64 `json:"risk_score"`
-		ScanType         string  `json:"scan_type"`
-		DetectedAt       string  `json:"detected_at"`
-		PublishedAt      *string `json:"published_at"`
+		ID                int     `json:"id"`
+		CVEID             string  `json:"cve_id"`
+		CVSSScore         float64 `json:"cvss_score"`
+		EPSSScore         float64 `json:"epss_score"`
+		EPSSPercentile    float64 `json:"epss_percentile"`
+		KEVListed         bool    `json:"kev_listed"`
+		Severity          string  `json:"severity"`
+		Vendor            string  `json:"vendor"`
+		Product           string  `json:"product"`
+		AffectedVersions  string  `json:"affected_versions"`
+		PatchAvailable    bool    `json:"patch_available"`
+		ActivelyExploited bool    `json:"actively_exploited"`
+		ExploitAvailable  bool    `json:"exploit_available"`
+		Status            string  `json:"status"`
+		AssetName         string  `json:"asset_name"`
+		AssetIP           string  `json:"asset_ip"`
+		InternetFacing    bool    `json:"internet_facing"`
+		AssetCriticality  string  `json:"asset_criticality"`
+		RiskScore         float64 `json:"risk_score"`
+		ScanType          string  `json:"scan_type"`
+		DetectedAt        string  `json:"detected_at"`
+		PublishedAt       *string `json:"published_at"`
 	}
 	list := []Finding{}
 	if rows != nil {
@@ -231,7 +252,9 @@ func GetVMInventory(c *gin.Context) {
 			}
 		}
 	}
-	if list == nil { list = []Finding{} }
+	if list == nil {
+		list = []Finding{}
+	}
 	c.JSON(http.StatusOK, list)
 }
 
@@ -241,46 +264,49 @@ func GetVMFinding(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	fid, _ := strconv.Atoi(c.Param("id"))
 	var f struct {
-		ID               int     `json:"id"`
-		CVEID            string  `json:"cve_id"`
-		CVSSScore        float64 `json:"cvss_score"`
-		CVSSVector       string  `json:"cvss_vector"`
-		EPSSScore        float64 `json:"epss_score"`
-		EPSSPercentile   float64 `json:"epss_percentile"`
-		KEVListed        bool    `json:"kev_listed"`
-		KEVDateAdded     string  `json:"kev_date_added"`
-		Severity         string  `json:"severity"`
-		Description      string  `json:"description"`
-		Vendor           string  `json:"vendor"`
-		Product          string  `json:"product"`
-		AffectedVersions string  `json:"affected_versions"`
-		FixedVersion     string  `json:"fixed_version"`
-		PatchAvailable   bool    `json:"patch_available"`
-		PatchURL         string  `json:"patch_url"`
-		ActivelyExploited bool   `json:"actively_exploited"`
-		ExploitAvailable  bool   `json:"exploit_available"`
-		ExploitMaturity   string `json:"exploit_maturity"`
-		MalwareFamilies  string  `json:"malware_families"`
-		ThreatActors     string  `json:"threat_actors"`
-		CISAAdvisory     string  `json:"cisa_advisory"`
-		Status           string  `json:"status"`
-		AssetID          int     `json:"asset_id"`
-		AssetName        string  `json:"asset_name"`
-		AssetIP          string  `json:"asset_ip"`
-		InternetFacing   bool    `json:"internet_facing"`
-		AssetCriticality string  `json:"asset_criticality"`
-		RiskScore        float64 `json:"risk_score"`
-		ScanType         string  `json:"scan_type"`
-		DetectedAt       string  `json:"detected_at"`
-		PublishedAt      *string `json:"published_at"`
-		PatchReleasedAt  *string `json:"patch_released_at"`
-		PatchedAt        *string `json:"patched_at"`
-		VerifiedAt       *string `json:"verified_at"`
+		ID                int     `json:"id"`
+		CVEID             string  `json:"cve_id"`
+		CVSSScore         float64 `json:"cvss_score"`
+		CVSSVector        string  `json:"cvss_vector"`
+		EPSSScore         float64 `json:"epss_score"`
+		EPSSPercentile    float64 `json:"epss_percentile"`
+		KEVListed         bool    `json:"kev_listed"`
+		KEVDateAdded      string  `json:"kev_date_added"`
+		Severity          string  `json:"severity"`
+		Description       string  `json:"description"`
+		Vendor            string  `json:"vendor"`
+		Product           string  `json:"product"`
+		AffectedVersions  string  `json:"affected_versions"`
+		FixedVersion      string  `json:"fixed_version"`
+		PatchAvailable    bool    `json:"patch_available"`
+		PatchURL          string  `json:"patch_url"`
+		ActivelyExploited bool    `json:"actively_exploited"`
+		ExploitAvailable  bool    `json:"exploit_available"`
+		ExploitMaturity   string  `json:"exploit_maturity"`
+		MalwareFamilies   string  `json:"malware_families"`
+		ThreatActors      string  `json:"threat_actors"`
+		CISAAdvisory      string  `json:"cisa_advisory"`
+		Status            string  `json:"status"`
+		AssetID           int     `json:"asset_id"`
+		AssetName         string  `json:"asset_name"`
+		AssetIP           string  `json:"asset_ip"`
+		InternetFacing    bool    `json:"internet_facing"`
+		AssetCriticality  string  `json:"asset_criticality"`
+		RiskScore         float64 `json:"risk_score"`
+		ScanType          string  `json:"scan_type"`
+		DetectedAt        string  `json:"detected_at"`
+		PublishedAt       *string `json:"published_at"`
+		PatchReleasedAt   *string `json:"patch_released_at"`
+		PatchedAt         *string `json:"patched_at"`
+		VerifiedAt        *string `json:"verified_at"`
 	}
 	err := database.DB.QueryRow(`SELECT id,cve_id,cvss_score,cvss_vector,epss_score,epss_percentile,kev_listed,kev_date_added,severity,description,vendor,product,affected_versions,fixed_version,patch_available,patch_url,actively_exploited,exploit_available,exploit_maturity,malware_families,threat_actors,cisa_advisory,status,asset_id,asset_name,asset_ip,internet_facing,asset_criticality,risk_score,scan_type,detected_at,published_at,patch_released_at,patched_at,verified_at
 		FROM vm_findings WHERE id=$1 AND tenant_id=$2`, fid, tid).Scan(
 		&f.ID, &f.CVEID, &f.CVSSScore, &f.CVSSVector, &f.EPSSScore, &f.EPSSPercentile, &f.KEVListed, &f.KEVDateAdded, &f.Severity, &f.Description, &f.Vendor, &f.Product, &f.AffectedVersions, &f.FixedVersion, &f.PatchAvailable, &f.PatchURL, &f.ActivelyExploited, &f.ExploitAvailable, &f.ExploitMaturity, &f.MalwareFamilies, &f.ThreatActors, &f.CISAAdvisory, &f.Status, &f.AssetID, &f.AssetName, &f.AssetIP, &f.InternetFacing, &f.AssetCriticality, &f.RiskScore, &f.ScanType, &f.DetectedAt, &f.PublishedAt, &f.PatchReleasedAt, &f.PatchedAt, &f.VerifiedAt)
-	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return }
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
 	c.JSON(http.StatusOK, f)
 }
 
@@ -294,20 +320,32 @@ func PostVMFindingAction(c *gin.Context) {
 		Notes  string `json:"notes"`
 	}
 	c.ShouldBindJSON(&body)
-	actor := usernameFromContext(c)
-	var cveID string
-	database.DB.QueryRow(`SELECT cve_id FROM vm_findings WHERE id=$1 AND tenant_id=$2`, fid, tid).Scan(&cveID)
+
+	var res sql.Result
+	var err error
 	switch body.Action {
 	case "mark_patched":
-		now := time.Now()
-		database.DB.Exec(`UPDATE vm_findings SET status='patched', patched_at=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, now, fid, tid)
+		res, err = database.DB.Exec(`UPDATE vm_findings SET status='patched', patched_at=NOW(), updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, fid, tid)
 	case "accept_risk":
-		database.DB.Exec(`UPDATE vm_findings SET status='accepted', updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, fid, tid)
+		// Was previously WHERE id=$2 AND tenant_id=$3 with only 2 args bound
+		// (fid, tid) — $3 was never bound, so this always errored and the
+		// error was silently discarded, meaning "Accept Risk" never
+		// actually updated anything despite returning {"ok": true}.
+		res, err = database.DB.Exec(`UPDATE vm_findings SET status='accepted', updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, fid, tid)
 	case "defer":
-		database.DB.Exec(`UPDATE vm_findings SET status='deferred', updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, fid, tid)
+		res, err = database.DB.Exec(`UPDATE vm_findings SET status='deferred', updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, fid, tid)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unrecognized action"})
+		return
 	}
-	_ = actor
-	_ = cveID
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "finding not found"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -327,23 +365,23 @@ func GetVMAssets(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	rows, _ := database.DB.Query(`SELECT id,hostname,ip_address,os,os_version,owner,business_unit,internet_facing,risk_score,criticality,asset_value,network_zone,vuln_count,critical_count,high_count,last_scanned_at,created_at FROM vm_assets WHERE tenant_id=$1 ORDER BY risk_score DESC, critical_count DESC`, tid)
 	type Asset struct {
-		ID               int     `json:"id"`
-		Hostname         string  `json:"hostname"`
-		IPAddress        string  `json:"ip_address"`
-		OS               string  `json:"os"`
-		OSVersion        string  `json:"os_version"`
-		Owner            string  `json:"owner"`
-		BusinessUnit     string  `json:"business_unit"`
-		InternetFacing   bool    `json:"internet_facing"`
-		RiskScore        float64 `json:"risk_score"`
-		Criticality      string  `json:"criticality"`
-		AssetValue       string  `json:"asset_value"`
-		NetworkZone      string  `json:"network_zone"`
-		VulnCount        int     `json:"vuln_count"`
-		CriticalCount    int     `json:"critical_count"`
-		HighCount        int     `json:"high_count"`
-		LastScannedAt    *string `json:"last_scanned_at"`
-		CreatedAt        string  `json:"created_at"`
+		ID             int     `json:"id"`
+		Hostname       string  `json:"hostname"`
+		IPAddress      string  `json:"ip_address"`
+		OS             string  `json:"os"`
+		OSVersion      string  `json:"os_version"`
+		Owner          string  `json:"owner"`
+		BusinessUnit   string  `json:"business_unit"`
+		InternetFacing bool    `json:"internet_facing"`
+		RiskScore      float64 `json:"risk_score"`
+		Criticality    string  `json:"criticality"`
+		AssetValue     string  `json:"asset_value"`
+		NetworkZone    string  `json:"network_zone"`
+		VulnCount      int     `json:"vuln_count"`
+		CriticalCount  int     `json:"critical_count"`
+		HighCount      int     `json:"high_count"`
+		LastScannedAt  *string `json:"last_scanned_at"`
+		CreatedAt      string  `json:"created_at"`
 	}
 	list := []Asset{}
 	if rows != nil {
@@ -355,7 +393,9 @@ func GetVMAssets(c *gin.Context) {
 			}
 		}
 	}
-	if list == nil { list = []Asset{} }
+	if list == nil {
+		list = []Asset{}
+	}
 	c.JSON(http.StatusOK, list)
 }
 
@@ -389,43 +429,119 @@ func GetVMAsset(c *gin.Context) {
 	err := database.DB.QueryRow(`SELECT id,hostname,ip_address,os,os_version,owner,business_unit,internet_facing,risk_score,criticality,asset_value,network_zone,installed_software,running_services,open_ports,business_application,vuln_count,critical_count,high_count,last_scanned_at
 		FROM vm_assets WHERE id=$1 AND tenant_id=$2`, aid, tid).Scan(
 		&a.ID, &a.Hostname, &a.IPAddress, &a.OS, &a.OSVersion, &a.Owner, &a.BusinessUnit, &a.InternetFacing, &a.RiskScore, &a.Criticality, &a.AssetValue, &a.NetworkZone, &a.InstalledSoftware, &a.RunningServices, &a.OpenPorts, &a.BusinessApplication, &a.VulnCount, &a.CriticalCount, &a.HighCount, &a.LastScannedAt)
-	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return }
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
 	c.JSON(http.StatusOK, a)
 }
 
+// well-known-port name lookup used only to label real open ports found on
+// real internet-facing assets — not a source of data itself.
+var wellKnownPorts = map[string]struct {
+	service string
+	risk    string
+	notes   string
+}{
+	"22":   {"SSH", "", ""},
+	"23":   {"Telnet", "critical", "Unencrypted remote access exposed to the internet"},
+	"443":  {"HTTPS", "", ""},
+	"445":  {"SMB", "critical", "SMB exposed to internet — immediate risk"},
+	"3389": {"RDP", "high", "Should not be internet-facing"},
+	"3306": {"MySQL", "high", "Database port should not be internet-facing"},
+	"5432": {"PostgreSQL", "high", "Database port should not be internet-facing"},
+}
+
 // GetVMAttackSurface — GET /api/vm/attack-surface
+//
+// Derived from real vm_assets (internet_facing/open_ports) and real
+// firewall_rules — certificates/DNS-exposure were dropped entirely, since
+// no certificate store or DNS zone tracking exists anywhere in this
+// codebase to back either honestly.
 func GetVMAttackSurface(c *gin.Context) {
+	createVMTables()
+	tid := tenantIDFromContext(c)
+
+	var internetExposed int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_assets WHERE tenant_id=$1 AND internet_facing=true`, tid).Scan(&internetExposed)
+
+	type svcRow struct {
+		Service           string `json:"service"`
+		Port              int    `json:"port"`
+		Assets            int    `json:"assets"`
+		Risk              string `json:"risk,omitempty"`
+		Notes             string `json:"notes,omitempty"`
+		VulnerableVersion bool   `json:"vulnerable_version,omitempty"`
+	}
+	portAssets := map[string]int{}
+	openPortsTotal := 0
+	rows, _ := database.DB.Query(`SELECT open_ports FROM vm_assets WHERE tenant_id=$1 AND internet_facing=true AND open_ports != ''`, tid)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var raw string
+			if rows.Scan(&raw) != nil {
+				continue
+			}
+			for _, p := range strings.Split(raw, ",") {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				portAssets[p]++
+				openPortsTotal++
+			}
+		}
+	}
+	exposedServices := []svcRow{}
+	for port, count := range portAssets {
+		portNum, _ := strconv.Atoi(port)
+		svc := svcRow{Service: port, Port: portNum, Assets: count}
+		if wk, ok := wellKnownPorts[port]; ok {
+			svc.Service = wk.service
+			svc.Risk = wk.risk
+			svc.Notes = wk.notes
+		}
+		exposedServices = append(exposedServices, svc)
+	}
+
+	type fwRow struct {
+		Rule           string `json:"rule"`
+		Risk           string `json:"risk"`
+		Recommendation string `json:"recommendation"`
+	}
+	firewallExposure := []fwRow{}
+	fRows, _ := database.DB.Query(`
+		SELECT name, source_ip, destination_ip, port, protocol FROM firewall_rules
+		WHERE tenant_id=$1 AND enabled=true AND action='allow' AND source_ip IN ('any','0.0.0.0/0','*','ANY')
+		ORDER BY port LIMIT 20`, tid)
+	if fRows != nil {
+		defer fRows.Close()
+		for fRows.Next() {
+			var name, srcIP, dstIP, protocol string
+			var port int
+			if fRows.Scan(&name, &srcIP, &dstIP, &port, &protocol) != nil {
+				continue
+			}
+			portStr := strconv.Itoa(port)
+			risk, rec := "low", "Review — confirm this is intentional external access"
+			if wk, ok := wellKnownPorts[portStr]; ok && wk.risk != "" {
+				risk = wk.risk
+				rec = wk.notes
+			}
+			firewallExposure = append(firewallExposure, fwRow{
+				Rule:           fmt.Sprintf("ALLOW %s → %s:%d (%s)", srcIP, dstIP, port, protocol),
+				Risk:           risk,
+				Recommendation: rec,
+			})
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"internet_exposed_assets": 4,
-		"open_ports_total":        127,
-		"exposed_services":        []interface{}{
-			map[string]interface{}{"service": "HTTPS", "port": 443, "assets": 3, "certificates": 3, "cert_expiry_days": 87},
-			map[string]interface{}{"service": "VPN (GlobalProtect)", "port": 4443, "assets": 1, "vulnerable_version": true, "cve": "CVE-2024-3400"},
-			map[string]interface{}{"service": "SSH", "port": 22, "assets": 2, "auth": "password+key"},
-			map[string]interface{}{"service": "RDP", "port": 3389, "assets": 1, "risk": "high", "notes": "Should not be internet-facing"},
-			map[string]interface{}{"service": "SMB", "port": 445, "assets": 1, "risk": "critical", "notes": "SMB exposed to internet — immediate risk"},
-		},
-		"certificates": []interface{}{
-			map[string]interface{}{"domain": "vpn.corp.local", "issuer": "DigiCert", "valid_until": time.Now().Add(87 * 24 * time.Hour).Format("2006-01-02"), "days_remaining": 87, "strength": "RSA-2048"},
-			map[string]interface{}{"domain": "app.corp.local", "issuer": "Let's Encrypt", "valid_until": time.Now().Add(24 * 24 * time.Hour).Format("2006-01-02"), "days_remaining": 24, "strength": "ECDSA-256"},
-			map[string]interface{}{"domain": "portal.corp.local", "issuer": "Let's Encrypt", "valid_until": time.Now().Add(-3 * 24 * time.Hour).Format("2006-01-02"), "days_remaining": -3, "strength": "RSA-2048", "expired": true},
-		},
-		"dns_exposure": []interface{}{
-			map[string]interface{}{"record": "vpn.corp.com", "type": "A", "value": "203.0.113.42", "exposed": true},
-			map[string]interface{}{"record": "app.corp.com", "type": "A", "value": "203.0.113.55", "exposed": true},
-			map[string]interface{}{"record": "internal.corp.com", "type": "A", "value": "10.0.1.100", "exposed": false, "risk": "subdomain_takeover_potential"},
-		},
-		"firewall_exposure": []interface{}{
-			map[string]interface{}{"rule": "ALLOW ANY → 0.0.0.0/0:3389 (RDP)", "risk": "critical", "recommendation": "Restrict to VPN CIDR only"},
-			map[string]interface{}{"rule": "ALLOW ANY → 0.0.0.0/0:445 (SMB)", "risk": "critical", "recommendation": "Block immediately — no legitimate external SMB"},
-			map[string]interface{}{"rule": "ALLOW ANY → 0.0.0.0/0:443 (HTTPS)", "risk": "low", "recommendation": "OK — web traffic"},
-		},
-		"vpn_exposure": map[string]interface{}{
-			"product": "Palo Alto GlobalProtect",
-			"version": "9.1.3",
-			"cve_count": 3,
-			"critical_cves": []interface{}{"CVE-2024-3400"},
-		},
+		"internet_exposed_assets": internetExposed,
+		"open_ports_total":        openPortsTotal,
+		"exposed_services":        exposedServices,
+		"firewall_exposure":       firewallExposure,
 	})
 }
 
@@ -467,28 +583,97 @@ func GetVMAttackPaths(c *gin.Context) {
 }
 
 // GetVMThreatIntel — GET /api/vm/threat-intel
+// GetVMThreatIntel — GET /api/vm/threat-intel
+//
+// The frontend's own section title ("CISA KEV Catalog — Matched Findings")
+// already promised per-tenant matching, but this handler previously
+// returned 3 fixed CVEs regardless of tenant. Every field used below
+// (cve_id/vendor/product/kev_date_added/malware_families/threat_actors/
+// exploit_maturity) is a real column already tracked per finding — this
+// now genuinely matches against this tenant's own data instead of a
+// generic global list. Dropped fields with no real backing anywhere in
+// this schema: campaign/first_observed (no campaign-tracking concept),
+// public_poc/metasploit/exploit_db (only a single real exploit_maturity
+// column exists, not per-tool flags), and country/motivation/
+// target_sectors/aliases/ttps on threat actors (malware_families/
+// threat_actors are free-text columns with no such metadata attached).
 func GetVMThreatIntel(c *gin.Context) {
+	createVMTables()
+	tid := tenantIDFromContext(c)
+
+	type kevRow struct {
+		CVE       string `json:"cve"`
+		Vendor    string `json:"vendor"`
+		Product   string `json:"product"`
+		DateAdded string `json:"date_added"`
+		Notes     string `json:"notes"`
+	}
+	kevCatalog := []kevRow{}
+	kRows, _ := database.DB.Query(`SELECT DISTINCT ON (cve_id) cve_id, vendor, product, kev_date_added, description FROM vm_findings WHERE tenant_id=$1 AND kev_listed=true ORDER BY cve_id LIMIT 20`, tid)
+	if kRows != nil {
+		defer kRows.Close()
+		for kRows.Next() {
+			var r kevRow
+			if kRows.Scan(&r.CVE, &r.Vendor, &r.Product, &r.DateAdded, &r.Notes) == nil {
+				kevCatalog = append(kevCatalog, r)
+			}
+		}
+	}
+
+	type exploitRow struct {
+		CVE         string `json:"cve"`
+		ThreatActor string `json:"threat_actor,omitempty"`
+		Malware     string `json:"malware,omitempty"`
+	}
+	activeExploitation := []exploitRow{}
+	eRows, _ := database.DB.Query(`SELECT DISTINCT ON (cve_id) cve_id, threat_actors, malware_families FROM vm_findings WHERE tenant_id=$1 AND actively_exploited=true ORDER BY cve_id LIMIT 20`, tid)
+	if eRows != nil {
+		defer eRows.Close()
+		for eRows.Next() {
+			var r exploitRow
+			if eRows.Scan(&r.CVE, &r.ThreatActor, &r.Malware) == nil {
+				activeExploitation = append(activeExploitation, r)
+			}
+		}
+	}
+
+	type maturityRow struct {
+		CVE      string `json:"cve"`
+		Maturity string `json:"maturity"`
+	}
+	exploitAvailability := []maturityRow{}
+	mRows, _ := database.DB.Query(`SELECT DISTINCT ON (cve_id) cve_id, exploit_maturity FROM vm_findings WHERE tenant_id=$1 AND exploit_available=true AND exploit_maturity != 'none' ORDER BY cve_id LIMIT 20`, tid)
+	if mRows != nil {
+		defer mRows.Close()
+		for mRows.Next() {
+			var r maturityRow
+			if mRows.Scan(&r.CVE, &r.Maturity) == nil {
+				exploitAvailability = append(exploitAvailability, r)
+			}
+		}
+	}
+
+	type actorRow struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	threatActors := []actorRow{}
+	aRows, _ := database.DB.Query(`SELECT threat_actors, COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND threat_actors != '' GROUP BY threat_actors ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if aRows != nil {
+		defer aRows.Close()
+		for aRows.Next() {
+			var r actorRow
+			if aRows.Scan(&r.Name, &r.Count) == nil {
+				threatActors = append(threatActors, r)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"kev_catalog": []interface{}{
-			map[string]interface{}{"cve": "CVE-2024-3400", "vendor": "Palo Alto Networks", "product": "PAN-OS", "date_added": "2024-04-12", "due_date": "2024-04-19", "notes": "OS command injection in GlobalProtect — actively exploited by threat actors"},
-			map[string]interface{}{"cve": "CVE-2024-21887", "vendor": "Ivanti", "product": "Connect Secure", "date_added": "2024-01-10", "due_date": "2024-01-24", "notes": "Command injection — exploited since Jan 2024"},
-			map[string]interface{}{"cve": "CVE-2021-44228", "vendor": "Apache", "product": "Log4j", "date_added": "2021-12-10", "due_date": "2021-12-24", "notes": "Log4Shell — still actively exploited in 2026"},
-		},
-		"active_exploitation": []interface{}{
-			map[string]interface{}{"cve": "CVE-2024-3400", "threat_actor": "UTA0218 (Palo Alto Unit 42)", "malware": "UPSTYLE", "campaign": "Operation MidnightEclipse", "first_observed": "2024-03-26"},
-			map[string]interface{}{"cve": "CVE-2024-21887", "threat_actor": "UNC5325", "malware": "LITTLELAMB.WOOLTEA", "campaign": "Ivanti Connect Secure Mass Exploitation", "first_observed": "2024-01-10"},
-		},
-		"exploit_availability": []interface{}{
-			map[string]interface{}{"cve": "CVE-2024-3400", "maturity": "weaponized", "public_poc": true, "metasploit": true, "exploit_db": true},
-			map[string]interface{}{"cve": "CVE-2024-21887", "maturity": "weaponized", "public_poc": true, "metasploit": true, "exploit_db": false},
-			map[string]interface{}{"cve": "CVE-2024-26198", "maturity": "proof_of_concept", "public_poc": true, "metasploit": false, "exploit_db": false},
-			map[string]interface{}{"cve": "CVE-2023-36025", "maturity": "weaponized", "public_poc": true, "metasploit": true, "exploit_db": true},
-		},
-		"threat_actors": []interface{}{
-			map[string]interface{}{"name": "UTA0218", "aliases": "Volt Typhoon", "country": "China", "motivation": "espionage", "target_sectors": "government,defense,telecom", "ttps": "CVE-2024-3400,living-off-the-land"},
-			map[string]interface{}{"name": "UNC5325", "country": "China", "motivation": "espionage", "target_sectors": "defense,technology", "ttps": "CVE-2024-21887,custom-malware"},
-			map[string]interface{}{"name": "LockBit 3.0", "country": "Russia/CIS", "motivation": "financial", "target_sectors": "healthcare,finance,critical-infrastructure", "ttps": "ransomware,double-extortion,data-theft"},
-		},
+		"kev_catalog":          kevCatalog,
+		"active_exploitation":  activeExploitation,
+		"exploit_availability": exploitAvailability,
+		"threat_actors":        threatActors,
 	})
 }
 
@@ -523,7 +708,9 @@ func GetVMPatches(c *gin.Context) {
 			}
 		}
 	}
-	if list == nil { list = []Patch{} }
+	if list == nil {
+		list = []Patch{}
+	}
 	c.JSON(http.StatusOK, list)
 }
 
@@ -551,47 +738,108 @@ func PostVMPatchAction(c *gin.Context) {
 }
 
 // GetVMCompliance — GET /api/vm/compliance
+//
+// Backed by the shared fce_frameworks/fce_controls tables (the same real
+// compliance-assessment data the Dashboard/Container/Supply Chain/OT-ICS
+// pages already use) rather than a fixed 4-framework fake grid — the
+// established fix shape for this exact fabrication pattern this phase.
 func GetVMCompliance(c *gin.Context) {
+	createVMTables()
+	createFCETables()
+	tid := tenantIDFromContext(c)
+	db := database.DB
+
+	type ctrlRow struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		Status  string `json:"status"`
+		Finding string `json:"finding"`
+	}
+	type fwRow struct {
+		FrameworkID string    `json:"-"`
+		Name        string    `json:"name"`
+		Score       int       `json:"score"`
+		Status      string    `json:"status"`
+		Controls    []ctrlRow `json:"controls"`
+	}
+	// fce_controls/fce_frameworks use their own real vocabulary
+	// ('failed'/'passed' controls, 'compliant'/'partially_compliant'/
+	// 'not_assessed' frameworks) — this page's frontend expects
+	// 'failing'/'passing'/'partial', matching the vocabulary the old fake
+	// data happened to use. Translate rather than leaving every control
+	// silently uncounted as failing.
+	ctrlStatus := map[string]string{"failed": "failing", "passed": "passing"}
+	fwStatus := map[string]string{"compliant": "passing", "partially_compliant": "partial", "not_assessed": "not_assessed"}
+
+	frows, _ := db.Query(`SELECT framework_id, name, overall_score, compliance_status FROM fce_frameworks WHERE tenant_id=$1 AND is_active=true ORDER BY overall_score ASC`, tid)
+	frameworks := []fwRow{}
+	if frows != nil {
+		for frows.Next() {
+			var fw fwRow
+			var rawStatus string
+			if frows.Scan(&fw.FrameworkID, &fw.Name, &fw.Score, &rawStatus) == nil {
+				fw.Status = fwStatus[rawStatus]
+				if fw.Status == "" {
+					fw.Status = rawStatus
+				}
+				frameworks = append(frameworks, fw)
+			}
+		}
+		// Close before issuing the per-framework queries below rather than
+		// holding this cursor open with `defer` — nested Query calls on the
+		// same *sql.DB while an earlier Rows is still open silently
+		// returned zero controls for every framework (confirmed live: real
+		// fce_controls rows existed but every framework showed 0 until
+		// this was closed eagerly).
+		frows.Close()
+	}
+	failedControls := 0
+	for i := range frameworks {
+		// fce_controls.description is nullable with no DEFAULT — scanning
+		// NULL into a plain Go string silently failed rows.Scan() for
+		// every real control (confirmed live: 20 real rows existed per
+		// framework, all silently dropped) — the same NULL-scan bug class
+		// found on the Approval Queue page, this time on a shared table
+		// this handler doesn't own. COALESCE rather than altering a table
+		// other pages also depend on.
+		crows, _ := db.Query(`SELECT control_id, name, assessment_status, COALESCE(description,'') FROM fce_controls WHERE tenant_id=$1 AND framework_id=$2 ORDER BY CASE risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 20`, tid, frameworks[i].FrameworkID)
+		if crows == nil {
+			continue
+		}
+		for crows.Next() {
+			var ctrl ctrlRow
+			var rawStatus string
+			if crows.Scan(&ctrl.ID, &ctrl.Title, &rawStatus, &ctrl.Finding) == nil {
+				ctrl.Status = ctrlStatus[rawStatus]
+				if ctrl.Status == "" {
+					ctrl.Status = rawStatus
+				}
+				frameworks[i].Controls = append(frameworks[i].Controls, ctrl)
+				if ctrl.Status == "failing" {
+					failedControls++
+				}
+			}
+		}
+		crows.Close()
+	}
+
+	var overallScore float64
+	db.QueryRow(`SELECT COALESCE(AVG(overall_score),0) FROM fce_frameworks WHERE tenant_id=$1 AND is_active=true`, tid).Scan(&overallScore)
+
+	var missingPatches, slaViolations int
+	db.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND patch_available=true`, tid).Scan(&missingPatches)
+	db.QueryRow(`
+		SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND
+			((severity='critical' AND detected_at < NOW()-INTERVAL '7 days') OR
+			 (severity='high' AND detected_at < NOW()-INTERVAL '30 days') OR
+			 (severity='medium' AND detected_at < NOW()-INTERVAL '90 days'))`, tid).Scan(&slaViolations)
+
 	c.JSON(http.StatusOK, gin.H{
-		"overall_score": 71.4,
-		"frameworks": []interface{}{
-			map[string]interface{}{
-				"name": "PCI DSS 4.0", "score": 68.2, "status": "failing",
-				"controls": []interface{}{
-					map[string]interface{}{"id": "6.3.3", "title": "All software components protected from known vulnerabilities", "status": "failing", "finding": "14 critical/high CVEs unpatched beyond SLA", "severity": "critical"},
-					map[string]interface{}{"id": "11.3.1", "title": "External vulnerability scans performed quarterly", "status": "passing", "last_scan": "2026-07-10"},
-					map[string]interface{}{"id": "11.3.2", "title": "Internal vulnerability scans performed quarterly", "status": "passing", "last_scan": "2026-07-12"},
-					map[string]interface{}{"id": "6.2.4", "title": "Cardholder data environment free of critical vulnerabilities", "status": "failing", "finding": "CVE-2024-3400 present on VPN gateway in CDE boundary"},
-				},
-			},
-			map[string]interface{}{
-				"name": "CIS Controls v8", "score": 74.1, "status": "partial",
-				"controls": []interface{}{
-					map[string]interface{}{"id": "7.1", "title": "Establish and maintain a vulnerability management process", "status": "passing"},
-					map[string]interface{}{"id": "7.4", "title": "Perform automated application patch management", "status": "failing", "finding": "Automated patching not deployed on 4 critical assets"},
-					map[string]interface{}{"id": "7.5", "title": "Perform automated vulnerability scans of internal enterprise assets", "status": "passing"},
-					map[string]interface{}{"id": "7.6", "title": "Perform automated vulnerability scans of externally-exposed enterprise assets", "status": "passing"},
-				},
-			},
-			map[string]interface{}{
-				"name": "NIST CSF 2.0", "score": 76.8, "status": "partial",
-				"controls": []interface{}{
-					map[string]interface{}{"id": "ID.RA-1", "title": "Asset vulnerabilities are identified and documented", "status": "passing"},
-					map[string]interface{}{"id": "ID.RA-2", "title": "Threat intelligence is received and analyzed", "status": "passing"},
-					map[string]interface{}{"id": "RS.MI-3", "title": "Newly identified vulnerabilities are mitigated or documented as accepted risks", "status": "failing", "finding": "7 overdue findings with no exception documentation"},
-				},
-			},
-			map[string]interface{}{
-				"name": "ISO 27001:2022", "score": 69.3, "status": "failing",
-				"controls": []interface{}{
-					map[string]interface{}{"id": "A.8.8", "title": "Management of technical vulnerabilities", "status": "failing", "finding": "Missing patches on critical assets beyond 30-day SLA"},
-					map[string]interface{}{"id": "A.8.29", "title": "Security testing in development and acceptance", "status": "partial"},
-				},
-			},
-		},
-		"failed_controls": 7,
-		"missing_patches": 14,
-		"sla_violations": 7,
+		"overall_score":   overallScore,
+		"frameworks":      frameworks,
+		"failed_controls": failedControls,
+		"missing_patches": missingPatches,
+		"sla_violations":  slaViolations,
 	})
 }
 
@@ -600,41 +848,108 @@ func GetVMAnalytics(c *gin.Context) {
 	createVMTables()
 	tid := tenantIDFromContext(c)
 	var total, critical, high, patched, kev int
+	var mttr, patchSLA float64
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1`, tid).Scan(&total)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND severity='critical'`, tid).Scan(&critical)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND severity='high'`, tid).Scan(&high)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='patched'`, tid).Scan(&patched)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND kev_listed=true`, tid).Scan(&kev)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (patched_at-detected_at))/86400),0) FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at IS NOT NULL`, tid).Scan(&mttr)
+	database.DB.QueryRow(`
+		SELECT CASE WHEN COUNT(*) > 0 THEN 100.0 * COUNT(*) FILTER (WHERE
+			(severity='critical' AND patched_at <= detected_at+INTERVAL '7 days') OR
+			(severity='high' AND patched_at <= detected_at+INTERVAL '30 days') OR
+			(severity='medium' AND patched_at <= detected_at+INTERVAL '90 days') OR
+			(severity='low' AND patched_at <= detected_at+INTERVAL '180 days')
+		) / COUNT(*) ELSE 100.0 END
+		FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at IS NOT NULL`, tid).Scan(&patchSLA)
+
+	type assetRow struct {
+		Asset     string  `json:"asset"`
+		VulnCount int     `json:"vuln_count"`
+		Critical  int     `json:"critical"`
+		RiskScore float64 `json:"risk_score"`
+	}
+	topAssets := []assetRow{}
+	aRows, _ := database.DB.Query(`SELECT hostname, vuln_count, critical_count, risk_score FROM vm_assets WHERE tenant_id=$1 AND vuln_count>0 ORDER BY risk_score DESC LIMIT 5`, tid)
+	if aRows != nil {
+		defer aRows.Close()
+		for aRows.Next() {
+			var r assetRow
+			if aRows.Scan(&r.Asset, &r.VulnCount, &r.Critical, &r.RiskScore) == nil {
+				topAssets = append(topAssets, r)
+			}
+		}
+	}
+
+	type cveRow struct {
+		CVE            string  `json:"cve"`
+		CVSS           float64 `json:"cvss"`
+		EPSS           float64 `json:"epss"`
+		KEV            bool    `json:"kev"`
+		AffectedAssets int     `json:"affected_assets"`
+	}
+	topCVEs := []cveRow{}
+	cRows, _ := database.DB.Query(`
+		SELECT cve_id, MAX(cvss_score), MAX(epss_score), BOOL_OR(kev_listed), COUNT(DISTINCT asset_id)
+		FROM vm_findings WHERE tenant_id=$1 GROUP BY cve_id ORDER BY MAX(cvss_score) DESC LIMIT 5`, tid)
+	if cRows != nil {
+		defer cRows.Close()
+		for cRows.Next() {
+			var r cveRow
+			if cRows.Scan(&r.CVE, &r.CVSS, &r.EPSS, &r.KEV, &r.AffectedAssets) == nil {
+				topCVEs = append(topCVEs, r)
+			}
+		}
+	}
+
+	type trendRow struct {
+		Week     string `json:"week"`
+		Critical int    `json:"critical"`
+		High     int    `json:"high"`
+		Medium   int    `json:"medium"`
+	}
+	trend := []trendRow{}
+	for i := 3; i >= 0; i-- {
+		weekStart := time.Now().AddDate(0, 0, -7*(i+1))
+		weekEnd := time.Now().AddDate(0, 0, -7*i)
+		var r trendRow
+		r.Week = weekEnd.Format("01-02")
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND severity='critical' AND detected_at>=$2 AND detected_at<$3`, tid, weekStart, weekEnd).Scan(&r.Critical)
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND severity='high' AND detected_at>=$2 AND detected_at<$3`, tid, weekStart, weekEnd).Scan(&r.High)
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND severity='medium' AND detected_at>=$2 AND detected_at<$3`, tid, weekStart, weekEnd).Scan(&r.Medium)
+		trend = append(trend, r)
+	}
+
+	type slaRow struct {
+		Severity  string  `json:"severity"`
+		SLADays   int     `json:"sla_days"`
+		AvgDays   float64 `json:"avg_days"`
+		OnTimePct float64 `json:"on_time_pct"`
+	}
+	slaBreakdown := []slaRow{}
+	for _, sev := range []struct {
+		name string
+		days int
+	}{{"critical", 7}, {"high", 30}, {"medium", 90}, {"low", 180}} {
+		var r slaRow
+		r.Severity = sev.name
+		r.SLADays = sev.days
+		database.DB.QueryRow(`SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (patched_at-detected_at))/86400),0) FROM vm_findings WHERE tenant_id=$1 AND severity=$2 AND status='patched' AND patched_at IS NOT NULL`, tid, sev.name).Scan(&r.AvgDays)
+		database.DB.QueryRow(`
+			SELECT CASE WHEN COUNT(*) > 0 THEN 100.0 * COUNT(*) FILTER (WHERE patched_at <= detected_at+($3||' days')::interval) / COUNT(*) ELSE 100.0 END
+			FROM vm_findings WHERE tenant_id=$1 AND severity=$2 AND status='patched' AND patched_at IS NOT NULL`, tid, sev.name, sev.days).Scan(&r.OnTimePct)
+		slaBreakdown = append(slaBreakdown, r)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total": total, "critical": critical, "high": high, "patched": patched, "kev": kev,
-		"mttr_days":      14.2,
-		"patch_sla":      82.3,
-		"top_vulnerable_assets": []interface{}{
-			map[string]interface{}{"asset": "VPN-GW-01", "vuln_count": 3, "critical": 2, "risk_score": 98.4},
-			map[string]interface{}{"asset": "WEB-APP-01", "vuln_count": 7, "critical": 1, "risk_score": 84.2},
-			map[string]interface{}{"asset": "DB-PROD-01", "vuln_count": 5, "critical": 1, "risk_score": 79.1},
-			map[string]interface{}{"asset": "WIN-LAPTOP-042", "vuln_count": 12, "critical": 0, "risk_score": 61.3},
-			map[string]interface{}{"asset": "EKS-CLUSTER-01", "vuln_count": 4, "critical": 1, "risk_score": 76.8},
-		},
-		"top_cves": []interface{}{
-			map[string]interface{}{"cve": "CVE-2024-3400", "cvss": 10.0, "epss": 0.974, "kev": true, "affected_assets": 1},
-			map[string]interface{}{"cve": "CVE-2024-21887", "cvss": 9.1, "epss": 0.952, "kev": true, "affected_assets": 2},
-			map[string]interface{}{"cve": "CVE-2021-44228", "cvss": 10.0, "epss": 0.991, "kev": true, "affected_assets": 4},
-			map[string]interface{}{"cve": "CVE-2023-36025", "cvss": 8.8, "epss": 0.761, "kev": true, "affected_assets": 3},
-			map[string]interface{}{"cve": "CVE-2024-26198", "cvss": 8.8, "epss": 0.652, "kev": false, "affected_assets": 5},
-		},
-		"risk_trend": []interface{}{
-			map[string]interface{}{"week": "06-23", "critical": 8, "high": 22, "medium": 41},
-			map[string]interface{}{"week": "06-30", "critical": 9, "high": 24, "medium": 38},
-			map[string]interface{}{"week": "07-07", "critical": 7, "high": 21, "medium": 42},
-			map[string]interface{}{"week": "07-14", "critical": 6, "high": 19, "medium": 39},
-		},
-		"patch_sla_breakdown": []interface{}{
-			map[string]interface{}{"severity": "critical", "sla_days": 7, "avg_days": 9.2, "on_time_pct": 62},
-			map[string]interface{}{"severity": "high", "sla_days": 30, "avg_days": 22.4, "on_time_pct": 81},
-			map[string]interface{}{"severity": "medium", "sla_days": 90, "avg_days": 44.1, "on_time_pct": 94},
-			map[string]interface{}{"severity": "low", "sla_days": 180, "avg_days": 61.3, "on_time_pct": 98},
-		},
+		"mttr_days":             mttr,
+		"patch_sla":             patchSLA,
+		"top_vulnerable_assets": topAssets,
+		"top_cves":              topCVEs,
+		"risk_trend":            trend,
+		"patch_sla_breakdown":   slaBreakdown,
 	})
 }
 
@@ -667,7 +982,9 @@ func GetVMScans(c *gin.Context) {
 			}
 		}
 	}
-	if list == nil { list = []Scan{} }
+	if list == nil {
+		list = []Scan{}
+	}
 	c.JSON(http.StatusOK, list)
 }
 
@@ -684,7 +1001,9 @@ func PostVMScan(c *gin.Context) {
 	}
 	c.ShouldBindJSON(&body)
 	creator := usernameFromContext(c)
-	if body.Profile == "" { body.Profile = "full" }
+	if body.Profile == "" {
+		body.Profile = "full"
+	}
 	var id int
 	database.DB.QueryRow(`INSERT INTO vm_scans (tenant_id,name,scan_type,target,profile,schedule,status,created_by) VALUES($1,$2,$3,$4,$5,$6,'running',$7) RETURNING id`,
 		tid, body.Name, body.ScanType, body.Target, body.Profile, body.Schedule, creator).Scan(&id)
@@ -718,7 +1037,9 @@ func GetVMExceptions(c *gin.Context) {
 			}
 		}
 	}
-	if list == nil { list = []Exception{} }
+	if list == nil {
+		list = []Exception{}
+	}
 	c.JSON(http.StatusOK, list)
 }
 
@@ -737,9 +1058,15 @@ func PostVMException(c *gin.Context) {
 	}
 	c.ShouldBindJSON(&body)
 	creator := usernameFromContext(c)
-	if body.ExceptionType == "" { body.ExceptionType = "risk_acceptance" }
+	if body.ExceptionType == "" {
+		body.ExceptionType = "risk_acceptance"
+	}
 	var expiresAt interface{}
-	if body.ExpiresAt != "" { expiresAt = body.ExpiresAt } else { expiresAt = nil }
+	if body.ExpiresAt != "" {
+		expiresAt = body.ExpiresAt
+	} else {
+		expiresAt = nil
+	}
 	var id int
 	database.DB.QueryRow(`INSERT INTO vm_exceptions (tenant_id,cve_id,finding_id,asset_id,exception_type,reason,compensating_control,status,expires_at,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,'pending',$8,$9) RETURNING id`,
 		tid, body.CVEID, body.FindingID, body.AssetID, body.ExceptionType, body.Reason, body.CompensatingControl, expiresAt, creator).Scan(&id)
@@ -758,7 +1085,9 @@ func PatchVMException(c *gin.Context) {
 	i := 1
 	for _, k := range []string{"status", "approved_by", "reason", "compensating_control", "expires_at"} {
 		if v, ok := body[k]; ok {
-			fields = append(fields, fmt.Sprintf("%s=$%d", k, i)); vals = append(vals, v); i++
+			fields = append(fields, fmt.Sprintf("%s=$%d", k, i))
+			vals = append(vals, v)
+			i++
 		}
 	}
 	if len(fields) > 0 {
@@ -816,66 +1145,155 @@ Respond with JSON: {
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
 		epssContext := "low exploitation probability"
-		if body.EPSSScore > 0.5 { epssContext = "high exploitation probability (top 5% of all CVEs)" }
+		if body.EPSSScore > 0.5 {
+			epssContext = "high exploitation probability (top 5% of all CVEs)"
+		}
 		priority := "medium"
-		if body.KEVListed || (body.EPSSScore > 0.5 && body.InternetFacing) { priority = "immediate" }
+		if body.KEVListed || (body.EPSSScore > 0.5 && body.InternetFacing) {
+			priority = "immediate"
+		}
 		riskSummary := fmt.Sprintf("Although CVE %s has a CVSS score of %.1f, its EPSS score of %.3f indicates %s.", body.CVEID, body.CVSSScore, body.EPSSScore, epssContext)
 		if body.KEVListed && body.InternetFacing {
 			riskSummary = fmt.Sprintf("%s is listed in the CISA KEV catalog and is present on an internet-facing asset (%s), making it an immediate remediation priority regardless of CVSS score.", body.CVEID, body.AssetName)
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"risk_summary": riskSummary,
-			"priority": priority,
-			"priority_reason": "CISA KEV listing + internet-facing asset + high EPSS score indicate immediate exploitation risk",
-			"business_impact": fmt.Sprintf("Compromise of %s could lead to unauthorized access to internal network segments and lateral movement opportunities", body.AssetName),
+			"risk_summary":       riskSummary,
+			"priority":           priority,
+			"priority_reason":    "CISA KEV listing + internet-facing asset + high EPSS score indicate immediate exploitation risk",
+			"business_impact":    fmt.Sprintf("Compromise of %s could lead to unauthorized access to internal network segments and lateral movement opportunities", body.AssetName),
 			"recommended_action": "Apply vendor patch immediately. If patch not available, implement network-level compensating controls and increase monitoring.",
-			"estimated_effort": "2-4 hours for patch deployment with 30-min maintenance window",
-			"attack_scenario": fmt.Sprintf("Attacker scans for %s from public internet, exploits unauthenticated RCE vulnerability, establishes persistence on %s, uses as pivot to internal network", body.CVEID, body.AssetName),
+			"estimated_effort":   "2-4 hours for patch deployment with 30-min maintenance window",
+			"attack_scenario":    fmt.Sprintf("Attacker scans for %s from public internet, exploits unauthenticated RCE vulnerability, establishes persistence on %s, uses as pivot to internal network", body.CVEID, body.AssetName),
 			"risk_factors":       []interface{}{"Internet-facing asset", "CISA KEV listed — confirmed active exploitation", "High EPSS score — high probability of exploitation attempts", "Critical asset criticality"},
 			"mitigating_factors": []interface{}{"EDR agent deployed on host", "Network-level WAF/IPS in place", "Security monitoring active"},
 		})
 		return
 	}
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
 
 // PostVMReport — POST /api/vm/report
 func PostVMReport(c *gin.Context) {
+	createVMTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		ReportType string `json:"report_type"`
 		Period     string `json:"period"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.ReportType == "" { body.ReportType = "executive" }
+	if body.ReportType == "" {
+		body.ReportType = "executive"
+	}
+
+	var total, critical, high, patchedThisPeriod, kevFindings, overdue, assetsAffected int
+	var slaCompliance, mttr float64
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open'`, tid).Scan(&total)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND severity='critical'`, tid).Scan(&critical)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND severity='high'`, tid).Scan(&high)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at > NOW()-INTERVAL '30 days'`, tid).Scan(&patchedThisPeriod)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND kev_listed=true`, tid).Scan(&kevFindings)
+	database.DB.QueryRow(`SELECT COUNT(DISTINCT asset_id) FROM vm_findings WHERE tenant_id=$1 AND status='open'`, tid).Scan(&assetsAffected)
+	database.DB.QueryRow(`
+		SELECT COUNT(*) FROM vm_findings WHERE tenant_id=$1 AND status='open' AND
+			((severity='critical' AND detected_at < NOW()-INTERVAL '7 days') OR
+			 (severity='high' AND detected_at < NOW()-INTERVAL '30 days') OR
+			 (severity='medium' AND detected_at < NOW()-INTERVAL '90 days'))`, tid).Scan(&overdue)
+	database.DB.QueryRow(`
+		SELECT CASE WHEN COUNT(*) > 0 THEN 100.0 * COUNT(*) FILTER (WHERE
+			(severity='critical' AND patched_at <= detected_at+INTERVAL '7 days') OR
+			(severity='high' AND patched_at <= detected_at+INTERVAL '30 days') OR
+			(severity='medium' AND patched_at <= detected_at+INTERVAL '90 days') OR
+			(severity='low' AND patched_at <= detected_at+INTERVAL '180 days')
+		) / COUNT(*) ELSE 100.0 END
+		FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at IS NOT NULL`, tid).Scan(&slaCompliance)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (patched_at-detected_at))/86400),0) FROM vm_findings WHERE tenant_id=$1 AND status='patched' AND patched_at IS NOT NULL`, tid).Scan(&mttr)
+
+	type riskRow struct {
+		Rank     int     `json:"rank"`
+		CVE      string  `json:"cve"`
+		Asset    string  `json:"asset"`
+		CVSS     float64 `json:"cvss"`
+		KEV      bool    `json:"kev"`
+		Status   string  `json:"status"`
+		DaysOpen int     `json:"days_open"`
+	}
+	topRisks := []riskRow{}
+	rRows, _ := database.DB.Query(`
+		SELECT cve_id, asset_name, cvss_score, kev_listed, status, EXTRACT(EPOCH FROM (NOW()-detected_at))/86400
+		FROM vm_findings WHERE tenant_id=$1 AND status='open' ORDER BY kev_listed DESC, cvss_score DESC LIMIT 5`, tid)
+	if rRows != nil {
+		defer rRows.Close()
+		rank := 1
+		for rRows.Next() {
+			var r riskRow
+			var daysOpen float64
+			if rRows.Scan(&r.CVE, &r.Asset, &r.CVSS, &r.KEV, &r.Status, &daysOpen) == nil {
+				r.Rank = rank
+				r.DaysOpen = int(daysOpen)
+				topRisks = append(topRisks, r)
+				rank++
+			}
+		}
+	}
+
+	prompt := fmt.Sprintf(`You are a vulnerability management reporting assistant. Write a %s report based on these REAL metrics: %d open findings (%d critical, %d high), %d assets affected, %d KEV-listed findings, %d overdue past SLA, %.1f%% patch SLA compliance, %.1f-day average time to patch, %d findings patched in the last 30 days. Top open risks: %v. Respond as a JSON object with fields: executive_summary (2-3 sentences grounded only in these numbers, no invented CVEs or incidents), recommendations (a JSON array of up to 5 short actionable strings based only on the real data given).`,
+		body.ReportType, total, critical, high, assetsAffected, kevFindings, overdue, slaCompliance, mttr, patchedThisPeriod, topRisks)
+	var summary string
+	var recommendations []string
+	raw, err := services.CallLLM(prompt)
+	if err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		if total == 0 {
+			summary = "No open vulnerability findings have been recorded for this tenant."
+		} else {
+			summary = fmt.Sprintf("The organization has %d open vulnerabilities across %d assets, including %d critical findings. Patch SLA compliance is %.1f%%.", total, assetsAffected, critical, slaCompliance)
+		}
+		recommendations = []string{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"title":          fmt.Sprintf("Vulnerability Management %s Report — July 2026", strings.Title(strings.ReplaceAll(body.ReportType, "_", " "))),
-		"generated_at":   time.Now().Format(time.RFC3339),
-		"report_type":    body.ReportType,
-		"classification": "CONFIDENTIAL — INTERNAL",
-		"executive_summary": "The organization has 31 open vulnerabilities across 12 assets. 3 critical findings require immediate remediation: CVE-2024-3400 on internet-facing VPN gateway (CISA KEV, actively exploited), and 2 additional KEV-listed vulnerabilities. Patch SLA compliance is 82.3%.",
-		"key_metrics": map[string]interface{}{
-			"total_findings":     31,
-			"critical":           6,
-			"high":               12,
-			"patched_this_period": 24,
-			"sla_compliance":     82.3,
-			"mttr_days":          14.2,
-			"kev_findings":       3,
-			"overdue":            7,
+		"title":             fmt.Sprintf("Vulnerability Management %s Report — %s", strings.Title(strings.ReplaceAll(body.ReportType, "_", " ")), time.Now().Format("Jan 2006")),
+		"generated_at":      time.Now().Format(time.RFC3339),
+		"report_type":       body.ReportType,
+		"classification":    "CONFIDENTIAL — INTERNAL",
+		"executive_summary": summary,
+		"key_metrics": gin.H{
+			"total_findings":      total,
+			"critical":            critical,
+			"high":                high,
+			"patched_this_period": patchedThisPeriod,
+			"sla_compliance":      slaCompliance,
+			"mttr_days":           mttr,
+			"kev_findings":        kevFindings,
+			"overdue":             overdue,
 		},
-		"top_risks": []interface{}{
-			map[string]interface{}{"rank": 1, "cve": "CVE-2024-3400", "asset": "VPN-GW-01", "cvss": 10.0, "kev": true, "status": "open", "days_open": 5},
-			map[string]interface{}{"rank": 2, "cve": "CVE-2024-21887", "asset": "VPN-GW-01", "cvss": 9.1, "kev": true, "status": "open", "days_open": 14},
-			map[string]interface{}{"rank": 3, "cve": "CVE-2021-44228", "asset": "WEB-APP-01,APP-SRV-01", "cvss": 10.0, "kev": true, "status": "open", "days_open": 180},
-		},
-		"recommendations": []interface{}{
-			"Immediately patch CVE-2024-3400 on VPN-GW-01 — CISA KEV, CVSS 10.0, internet-facing",
-			"Initiate emergency change to isolate SMB port 445 from internet — critical firewall misconfiguration",
-			"Renew portal.corp.local certificate — expired 3 days ago",
-			"Deploy automated patching for critical assets to improve SLA compliance from 62% to >90%",
-			"Schedule Log4j (CVE-2021-44228) remediation sprint — 4 affected assets, 180 days open",
-		},
+		"top_risks":       topRisks,
+		"recommendations": recommendations,
 	})
 }

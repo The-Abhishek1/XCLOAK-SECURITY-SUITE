@@ -179,6 +179,8 @@ func main() {
 	seedPBWorkflows(db)
 	log.Println("Seeding approval queue (aq_*)…")
 	seedApprovalQueue(db)
+	log.Println("Seeding vulnerability management (vm_*)…")
+	seedVulnerabilityManagement(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -8137,4 +8139,188 @@ func seedApprovalQueue(db *sql.DB) {
 	}
 
 	log.Printf("Approval queue seed: %d policies, %d requests with decisions/audit trail", len(policies), len(reqs))
+}
+
+// seedVulnerabilityManagement seeds api/vulnerabilities_enterprise.go's
+// vm_* tables, plus 2 real "wide open" firewall_rules rows so the
+// Attack Surface tab's real firewall_rules-derived exposure query has
+// something genuine to find (every existing seeded 0.0.0.0/0 rule this
+// tenant has is a real `drop`/`deny` rule, not an exposure).
+func seedVulnerabilityManagement(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vm_findings (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, cve_id TEXT NOT NULL,
+		cvss_score FLOAT DEFAULT 0, cvss_vector TEXT DEFAULT '', epss_score FLOAT DEFAULT 0,
+		epss_percentile FLOAT DEFAULT 0, kev_listed BOOLEAN DEFAULT false, kev_date_added TEXT DEFAULT '',
+		severity TEXT DEFAULT 'medium', description TEXT DEFAULT '', vendor TEXT DEFAULT '',
+		product TEXT DEFAULT '', affected_versions TEXT DEFAULT '', fixed_version TEXT DEFAULT '',
+		patch_available BOOLEAN DEFAULT false, patch_url TEXT DEFAULT '', actively_exploited BOOLEAN DEFAULT false,
+		exploit_available BOOLEAN DEFAULT false, exploit_maturity TEXT DEFAULT 'none',
+		malware_families TEXT DEFAULT '', threat_actors TEXT DEFAULT '', cisa_advisory TEXT DEFAULT '',
+		status TEXT DEFAULT 'open', asset_id INTEGER, asset_name TEXT DEFAULT '', asset_ip TEXT DEFAULT '',
+		internet_facing BOOLEAN DEFAULT false, asset_criticality TEXT DEFAULT 'medium', risk_score FLOAT DEFAULT 0,
+		scan_id INTEGER, scan_type TEXT DEFAULT 'agent', detected_at TIMESTAMPTZ DEFAULT NOW(),
+		published_at TIMESTAMPTZ, patch_released_at TIMESTAMPTZ, patched_at TIMESTAMPTZ, verified_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vm_assets (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, hostname TEXT NOT NULL, ip_address TEXT DEFAULT '',
+		os TEXT DEFAULT '', os_version TEXT DEFAULT '', owner TEXT DEFAULT '', business_unit TEXT DEFAULT '',
+		internet_facing BOOLEAN DEFAULT false, risk_score FLOAT DEFAULT 0, criticality TEXT DEFAULT 'medium',
+		asset_value TEXT DEFAULT 'medium', network_zone TEXT DEFAULT 'internal', installed_software TEXT DEFAULT '',
+		running_services TEXT DEFAULT '', open_ports TEXT DEFAULT '', business_application TEXT DEFAULT '',
+		vuln_count INTEGER DEFAULT 0, critical_count INTEGER DEFAULT 0, high_count INTEGER DEFAULT 0,
+		last_scanned_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vm_scans (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT DEFAULT '', scan_type TEXT NOT NULL,
+		target TEXT DEFAULT '', profile TEXT DEFAULT 'full', status TEXT DEFAULT 'pending', credential_id INTEGER,
+		schedule TEXT DEFAULT '', started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ, findings_count INTEGER DEFAULT 0,
+		created_by TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vm_exceptions (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, finding_id INTEGER, cve_id TEXT DEFAULT '',
+		asset_id INTEGER, exception_type TEXT DEFAULT 'risk_acceptance', reason TEXT DEFAULT '',
+		compensating_control TEXT DEFAULT '', approved_by TEXT DEFAULT '', status TEXT DEFAULT 'pending',
+		expires_at TIMESTAMPTZ, created_by TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vm_patches (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, finding_id INTEGER, cve_id TEXT DEFAULT '',
+		asset_id INTEGER, asset_name TEXT DEFAULT '', patch_status TEXT DEFAULT 'pending', patch_version TEXT DEFAULT '',
+		patch_url TEXT DEFAULT '', restart_required BOOLEAN DEFAULT false, estimated_downtime INTEGER DEFAULT 0,
+		assigned_to TEXT DEFAULT '', scheduled_at TIMESTAMPTZ, installed_at TIMESTAMPTZ, failed_at TIMESTAMPTZ,
+		failure_reason TEXT DEFAULT '', rollback_available BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM vm_findings WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	now := time.Now()
+
+	assets := []struct {
+		hostname, ip, os, owner, criticality string
+		internetFacing                       bool
+		openPorts                            string
+	}{
+		{"vpn-gw-01", "203.0.113.42", "PAN-OS 9.1.3", "network-team", "critical", true, "443,4443"},
+		{"web-app-01", "203.0.113.55", "Ubuntu 22.04", "app-team", "high", true, "443,22,3389,445"},
+		{"db-prod-01", "10.0.5.20", "RHEL 8.6", "data-team", "critical", false, ""},
+		{"win-laptop-042", "10.0.9.12", "Windows 11", "jsmith", "low", false, ""},
+	}
+	assetIDs := map[string]int{}
+	for _, a := range assets {
+		var id int
+		err := db.QueryRow(`
+			INSERT INTO vm_assets (tenant_id,hostname,ip_address,os,owner,internet_facing,criticality,open_ports,vuln_count,critical_count,high_count,risk_score,last_scanned_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,0,0,0,0,$8) RETURNING id`,
+			a.hostname, a.ip, a.os, a.owner, a.internetFacing, a.criticality, a.openPorts, now.Add(-2*time.Hour),
+		).Scan(&id)
+		if err != nil {
+			log.Printf("vm_assets: %v", err)
+			continue
+		}
+		assetIDs[a.hostname] = id
+	}
+
+	findings := []struct {
+		cve, severity, vendor, product, desc, malware, actor, maturity string
+		cvss, epss                                                     float64
+		kev, exploitAvail, activelyExploited, patchAvailable           bool
+		asset                                                          string
+		status                                                         string
+		detectedDaysAgo                                                int
+		patchedDaysAgo                                                 int // 0 = not patched
+	}{
+		{"CVE-2024-3400", "critical", "Palo Alto Networks", "PAN-OS", "OS command injection in GlobalProtect — unauthenticated RCE", "UPSTYLE", "UTA0218", "weaponized", 10.0, 0.974, true, true, true, true, "vpn-gw-01", "open", 5, 0},
+		{"CVE-2024-21887", "critical", "Ivanti", "Connect Secure", "Command injection — exploited since Jan 2024", "LITTLELAMB.WOOLTEA", "UNC5325", "weaponized", 9.1, 0.952, true, true, true, true, "web-app-01", "open", 14, 0},
+		{"CVE-2021-44228", "critical", "Apache", "Log4j", "Log4Shell — still actively exploited", "", "", "weaponized", 10.0, 0.991, true, true, false, true, "web-app-01", "open", 180, 0},
+		{"CVE-2023-36025", "high", "Microsoft", "Windows SmartScreen", "Security feature bypass", "", "", "weaponized", 8.8, 0.761, true, true, false, true, "win-laptop-042", "open", 40, 0},
+		{"CVE-2024-26198", "high", "Microsoft", "Exchange Server", "RCE via untrusted DLL search path", "", "", "proof_of_concept", 8.8, 0.652, false, true, false, true, "db-prod-01", "open", 10, 0},
+		{"CVE-2023-4863", "high", "Google", "libwebp", "Heap buffer overflow", "", "", "none", 8.8, 0.21, false, false, false, true, "web-app-01", "patched", 60, 5},
+		{"CVE-2022-1234", "medium", "OpenSSL", "OpenSSL", "Denial of service", "", "", "none", 5.3, 0.05, false, false, false, true, "db-prod-01", "patched", 100, 40},
+		{"CVE-2023-9999", "low", "Adobe", "Acrobat Reader", "Local privilege escalation", "", "", "none", 3.1, 0.02, false, false, false, false, "win-laptop-042", "open", 20, 0},
+	}
+	for _, f := range findings {
+		assetID, ok := assetIDs[f.asset]
+		if !ok {
+			continue
+		}
+		detectedAt := now.AddDate(0, 0, -f.detectedDaysAgo)
+		var patchedAt interface{}
+		if f.patchedDaysAgo > 0 {
+			patchedAt = now.AddDate(0, 0, -f.patchedDaysAgo)
+		}
+		var assetHostname, assetIP string
+		var assetInternetFacing bool
+		var assetCriticality string
+		for _, a := range assets {
+			if a.hostname == f.asset {
+				assetHostname, assetIP, assetInternetFacing, assetCriticality = a.hostname, a.ip, a.internetFacing, a.criticality
+			}
+		}
+		db.Exec(`
+			INSERT INTO vm_findings (
+				tenant_id, cve_id, cvss_score, epss_score, kev_listed, kev_date_added, severity, description,
+				vendor, product, patch_available, actively_exploited, exploit_available, exploit_maturity,
+				malware_families, threat_actors, status, asset_id, asset_name, asset_ip, internet_facing,
+				asset_criticality, risk_score, scan_type, detected_at, patched_at
+			) VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'agent',$23,$24)`,
+			f.cve, f.cvss, f.epss, f.kev, ifThen(f.kev, detectedAt.Format("2006-01-02"), ""), f.severity, f.desc,
+			f.vendor, f.product, f.patchAvailable, f.activelyExploited, f.exploitAvail, f.maturity,
+			f.malware, f.actor, f.status, assetID, assetHostname, assetIP, assetInternetFacing,
+			assetCriticality, f.cvss*10, detectedAt, patchedAt,
+		)
+	}
+	// Keep vm_assets.vuln_count/critical_count/risk_score consistent with
+	// the findings just inserted, matching what a real scanner integration
+	// would maintain.
+	mustExec(db, `
+		UPDATE vm_assets a SET
+			vuln_count = (SELECT COUNT(*) FROM vm_findings f WHERE f.asset_id=a.id AND f.status='open'),
+			critical_count = (SELECT COUNT(*) FROM vm_findings f WHERE f.asset_id=a.id AND f.status='open' AND f.severity='critical'),
+			high_count = (SELECT COUNT(*) FROM vm_findings f WHERE f.asset_id=a.id AND f.status='open' AND f.severity='high'),
+			risk_score = (SELECT COALESCE(MAX(risk_score),0) FROM vm_findings f WHERE f.asset_id=a.id AND f.status='open')
+		WHERE tenant_id=9999`)
+
+	scans := []struct {
+		name, scanType, target, status string
+		hoursAgo                       int
+		findingsCount                  int
+	}{
+		{"Weekly external scan", "network", "203.0.113.0/24", "completed", 20, 3},
+		{"Agent-based full scan", "agent", "all agents", "completed", 5, 5},
+		{"Ad-hoc cloud scan", "cloud", "aws-account-primary", "running", 0, 0},
+	}
+	for _, s := range scans {
+		mustExec(db, `INSERT INTO vm_scans (tenant_id,name,scan_type,target,status,created_by,findings_count,started_at,finished_at) VALUES (9999,$1,$2,$3,$4,'admin',$5,$6,$7)`,
+			s.name, s.scanType, s.target, s.status, s.findingsCount, now.Add(-time.Duration(s.hoursAgo)*time.Hour), now.Add(-time.Duration(s.hoursAgo-1)*time.Hour))
+	}
+
+	mustExec(db, `INSERT INTO vm_exceptions (tenant_id,cve_id,exception_type,reason,compensating_control,status,created_by,expires_at) VALUES (9999,'CVE-2023-9999','risk_acceptance','Low severity, no known exploitation, patch requires a maintenance window','EDR monitoring in place','pending','admin',$1)`,
+		now.AddDate(0, 3, 0))
+
+	patches := []struct {
+		cve, asset, status string
+		restartRequired    bool
+	}{
+		{"CVE-2024-3400", "vpn-gw-01", "pending", true},
+		{"CVE-2024-21887", "web-app-01", "pending", false},
+		{"CVE-2023-4863", "web-app-01", "installed", false},
+	}
+	for _, p := range patches {
+		mustExec(db, `INSERT INTO vm_patches (tenant_id,cve_id,asset_name,patch_status,restart_required,assigned_to,rollback_available) VALUES (9999,$1,$2,$3,$4,'admin',true)`,
+			p.cve, p.asset, p.status, p.restartRequired)
+	}
+
+	// Real "wide open" firewall rules — every pre-existing 0.0.0.0/0 rule
+	// this tenant has is a real drop/deny rule, so the Attack Surface
+	// page's real firewall_rules-derived exposure query needs its own
+	// fixture to have something genuine to find.
+	mustExec(db, `INSERT INTO firewall_rules (tenant_id,name,source_ip,destination_ip,protocol,port,action,enabled) VALUES (9999,'Legacy RDP allow','0.0.0.0/0','10.0.5.20','tcp',3389,'allow',true)`)
+	mustExec(db, `INSERT INTO firewall_rules (tenant_id,name,source_ip,destination_ip,protocol,port,action,enabled) VALUES (9999,'Web app HTTPS','0.0.0.0/0','203.0.113.55','tcp',443,'allow',true)`)
+
+	log.Printf("VM seed: %d assets, %d findings, %d scans, 1 exception, %d patches", len(assetIDs), len(findings), len(scans), len(patches))
+}
+
+func ifThen(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
 }

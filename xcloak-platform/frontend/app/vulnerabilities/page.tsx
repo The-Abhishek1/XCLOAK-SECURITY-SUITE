@@ -544,7 +544,6 @@ function SurfaceTab({ surface }: { surface: any }) {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <MetricCard label="Internet Exposed" value={surface.internet_exposed_assets} color="#ef4444" sub="assets" />
         <MetricCard label="Open Ports" value={surface.open_ports_total} />
-        <MetricCard label="Expired Certs" value={surface.certificates?.filter((c: any) => c.expired).length || 0} color="#ef4444" />
         <MetricCard label="Critical FW Rules" value={surface.firewall_exposure?.filter((r: any) => r.risk === 'critical').length || 0} color="#ef4444" />
       </div>
 
@@ -567,32 +566,19 @@ function SurfaceTab({ surface }: { surface: any }) {
         />
       </SectionCard>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <SectionCard title="TLS Certificates">
-          {surface.certificates?.map((cert: any, i: number) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: i < surface.certificates.length - 1 ? '1px solid var(--border)' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, fontFamily: 'monospace', flex: 1 }}>{cert.domain}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: cert.expired ? '#ef4444' : cert.days_remaining < 30 ? '#f97316' : '#22c55e' }}>
-                  {cert.expired ? `EXPIRED ${Math.abs(cert.days_remaining)}d ago` : `${cert.days_remaining}d left`}
-                </span>
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{cert.issuer} · {cert.strength}</div>
+      <SectionCard title="Firewall Exposure">
+        {(surface.firewall_exposure || []).length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No internet-facing allow rules found.</div>
+        ) : surface.firewall_exposure.map((r: any, i: number) => (
+          <div key={i} style={{ padding: '8px 0', borderBottom: i < surface.firewall_exposure.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <span style={{ fontSize: 10, fontFamily: 'monospace', flex: 1, color: 'var(--text-2)' }}>{r.rule}</span>
+              <SevBadge sev={r.risk} />
             </div>
-          ))}
-        </SectionCard>
-        <SectionCard title="Firewall Exposure">
-          {surface.firewall_exposure?.map((r: any, i: number) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: i < surface.firewall_exposure.length - 1 ? '1px solid var(--border)' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', flex: 1, color: 'var(--text-2)' }}>{r.rule}</span>
-                <SevBadge sev={r.risk} />
-              </div>
-              <div style={{ fontSize: 11, color: '#22c55e' }}>→ {r.recommendation}</div>
-            </div>
-          ))}
-        </SectionCard>
-      </div>
+            <div style={{ fontSize: 11, color: '#22c55e' }}>→ {r.recommendation}</div>
+          </div>
+        ))}
+      </SectionCard>
     </div>
   );
 }
@@ -651,55 +637,55 @@ function ThreatIntelTab({ ti }: { ti: any }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SectionCard title="CISA KEV Catalog — Matched Findings">
-        {ti.kev_catalog?.map((k: any) => (
+        {(ti.kev_catalog || []).length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No KEV-listed findings for this tenant.</div>
+        ) : ti.kev_catalog.map((k: any) => (
           <div key={k.cve} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#ef4444' }}>{k.cve}</span>
               <KEVBadge />
               <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{k.vendor} · {k.product}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>Added {k.date_added} · Due {k.due_date}</span>
+              {k.date_added && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>Added {k.date_added}</span>}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{k.notes}</div>
+            {k.notes && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{k.notes}</div>}
           </div>
         ))}
       </SectionCard>
-      <SectionCard title="Active Exploitation — Confirmed Threat Actor Activity">
-        {ti.active_exploitation?.map((e: any) => (
+      <SectionCard title="Active Exploitation — Findings With Known Threat Attribution">
+        {(ti.active_exploitation || []).length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No actively-exploited findings with threat-actor/malware attribution for this tenant.</div>
+        ) : ti.active_exploitation.map((e: any) => (
           <div key={e.cve} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#ef4444' }}>{e.cve}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Threat Actor: <strong>{e.threat_actor}</strong></span>
-              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Malware: <strong style={{ color: '#ef4444' }}>{e.malware}</strong></span>
+              {e.threat_actor && <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Threat Actor: <strong>{e.threat_actor}</strong></span>}
+              {e.malware && <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Malware: <strong style={{ color: '#ef4444' }}>{e.malware}</strong></span>}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Campaign: {e.campaign} · First observed: {e.first_observed}</div>
           </div>
         ))}
       </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <SectionCard title="Exploit Availability">
-          {ti.exploit_availability?.map((e: any) => (
+          {(ti.exploit_availability || []).length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No findings with a known exploit maturity.</div>
+          ) : ti.exploit_availability.map((e: any) => (
             <div key={e.cve} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent)' }}>{e.cve}</span>
                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: e.maturity === 'weaponized' ? '#ef444422' : '#f9731622', color: e.maturity === 'weaponized' ? '#ef4444' : '#f97316', fontWeight: 600, textTransform: 'capitalize' }}>{e.maturity}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {e.public_poc && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#22c55e' }}><Check style={{ width: 9, height: 9 }} /> Public PoC</span>}
-                {e.metasploit && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#ef4444' }}><Check style={{ width: 9, height: 9 }} /> Metasploit</span>}
-                {e.exploit_db && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#f97316' }}><Check style={{ width: 9, height: 9 }} /> Exploit-DB</span>}
               </div>
             </div>
           ))}
         </SectionCard>
-        <SectionCard title="Threat Actors">
-          {ti.threat_actors?.map((a: any) => (
+        <SectionCard title="Threat Actors Observed in Findings">
+          {(ti.threat_actors || []).length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No findings attributed to a threat actor.</div>
+          ) : ti.threat_actors.map((a: any) => (
             <div key={a.name} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>{a.name}</span>
-                {a.aliases && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>({a.aliases})</span>}
-                <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{a.country} · {a.motivation}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{a.count} finding{a.count !== 1 ? 's' : ''}</span>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)' }}>Targets: {a.target_sectors}</div>
             </div>
           ))}
         </SectionCard>
