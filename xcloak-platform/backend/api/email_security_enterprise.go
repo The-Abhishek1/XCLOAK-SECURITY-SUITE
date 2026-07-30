@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -21,7 +23,9 @@ func createEmailSecurityTables() {
 			attachment_count INTEGER DEFAULT 0, url_count INTEGER DEFAULT 0,
 			threat_score INTEGER DEFAULT 0, delivery_status TEXT DEFAULT 'delivered',
 			threat_type TEXT DEFAULT '', direction TEXT DEFAULT 'inbound',
-			size_bytes INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW()
+			size_bytes INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(),
+			spf_result TEXT DEFAULT 'none', dkim_result TEXT DEFAULT 'none',
+			dmarc_result TEXT DEFAULT 'none', dmarc_policy TEXT DEFAULT 'none'
 		)`,
 		`CREATE TABLE IF NOT EXISTS email_attachments (
 			id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
@@ -78,6 +82,13 @@ func createEmailSecurityTables() {
 	for _, s := range stmts {
 		database.DB.Exec(s)
 	}
+	// Defensive ALTERs for spf_result/dkim_result/dmarc_result/dmarc_policy —
+	// covers the case where email_messages already exists from before these
+	// columns were added (the CREATE TABLE above is a no-op once the table
+	// exists, IF NOT EXISTS or not).
+	for _, col := range []string{"spf_result", "dkim_result", "dmarc_result", "dmarc_policy"} {
+		database.DB.Exec(fmt.Sprintf(`ALTER TABLE email_messages ADD COLUMN IF NOT EXISTS %s TEXT DEFAULT 'none'`, col))
+	}
 }
 
 // GetEmailDashboard — GET /api/email/dashboard
@@ -107,15 +118,15 @@ func GetEmailDashboard(c *gin.Context) {
 		score = 100
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"emails_processed":    processed,
-		"emails_delivered":    delivered,
-		"emails_blocked":      blocked,
-		"phishing_attempts":   phishing,
-		"malware_attachments": malware,
-		"bec_attempts":        bec,
-		"spam_rate":           spamRate,
-		"url_clicks":          urlClicks,
-		"high_risk_users":     highRisk,
+		"emails_processed":     processed,
+		"emails_delivered":     delivered,
+		"emails_blocked":       blocked,
+		"phishing_attempts":    phishing,
+		"malware_attachments":  malware,
+		"bec_attempts":         bec,
+		"spam_rate":            spamRate,
+		"url_clicks":           urlClicks,
+		"high_risk_users":      highRisk,
 		"email_security_score": score,
 	})
 }
@@ -157,28 +168,41 @@ func GetEmailMessages(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("sender"); v != "" {
-		q += fmt.Sprintf(" AND sender ILIKE $%d", i); args = append(args, "%"+v+"%"); i++
+		q += fmt.Sprintf(" AND sender ILIKE $%d", i)
+		args = append(args, "%"+v+"%")
+		i++
 	}
 	if v := c.Query("recipient"); v != "" {
-		q += fmt.Sprintf(" AND recipient ILIKE $%d", i); args = append(args, "%"+v+"%"); i++
+		q += fmt.Sprintf(" AND recipient ILIKE $%d", i)
+		args = append(args, "%"+v+"%")
+		i++
 	}
 	if v := c.Query("subject"); v != "" {
-		q += fmt.Sprintf(" AND subject ILIKE $%d", i); args = append(args, "%"+v+"%"); i++
+		q += fmt.Sprintf(" AND subject ILIKE $%d", i)
+		args = append(args, "%"+v+"%")
+		i++
 	}
 	if v := c.Query("status"); v != "" {
-		q += fmt.Sprintf(" AND status=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND status=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("threat_type"); v != "" {
-		q += fmt.Sprintf(" AND threat_type=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND threat_type=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("message_id"); v != "" {
-		q += fmt.Sprintf(" AND message_id ILIKE $%d", i); args = append(args, "%"+v+"%"); i++
+		q += fmt.Sprintf(" AND message_id ILIKE $%d", i)
+		args = append(args, "%"+v+"%")
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Msg struct {
@@ -234,7 +258,8 @@ func GetEmailThreats(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Threat struct {
@@ -276,16 +301,21 @@ func GetEmailAttachments(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("verdict"); v != "" {
-		q += fmt.Sprintf(" AND verdict=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND verdict=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("file_type"); v != "" {
-		q += fmt.Sprintf(" AND file_type=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND file_type=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Att struct {
@@ -338,7 +368,8 @@ func GetEmailURLs(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type URL struct {
@@ -372,6 +403,17 @@ func GetEmailURLs(c *gin.Context) {
 }
 
 // GetEmailAuthResults — GET /api/email/auth-results
+// GetEmailAuthResults previously computed spf_pass/dkim_pass/dmarc_pass as
+// fixed percentages of total message count (78%/82%/71%, regardless of any
+// real data) and returned a hardcoded list of 7 domains unrelated to any
+// tenant's actual mail flow (microsoft.com, google.com, ... with fixed
+// pass/fail verdicts) — fabricated in full, not derived from anything.
+// Real per-message spf_result/dkim_result/dmarc_result/dmarc_policy columns
+// were added to email_messages so this can aggregate genuine data instead.
+// ARC and BIMI (both real protocols, but opt-in and far less universally
+// deployed than SPF/DKIM/DMARC) have no per-message signal tracked here —
+// rather than fake those two too, they're dropped from the response
+// entirely instead of carried forward as more fabricated fields.
 func GetEmailAuthResults(c *gin.Context) {
 	createEmailSecurityTables()
 	tid := tenantIDFromContext(c)
@@ -380,28 +422,55 @@ func GetEmailAuthResults(c *gin.Context) {
 	if total == 0 {
 		total = 1
 	}
-	spfPass := total * 78 / 100
-	dkimPass := total * 82 / 100
-	dmarcPass := total * 71 / 100
+	var spfPass, dkimPass, dmarcPass int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND spf_result='pass'`, tid).Scan(&spfPass)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND dkim_result='pass'`, tid).Scan(&dkimPass)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND dmarc_result='pass'`, tid).Scan(&dmarcPass)
+
 	type AuthDomain struct {
 		Domain  string `json:"domain"`
 		SPF     string `json:"spf"`
 		DKIM    string `json:"dkim"`
 		DMARC   string `json:"dmarc"`
-		ARC     string `json:"arc"`
-		BIMI    string `json:"bimi"`
 		Aligned bool   `json:"aligned"`
 		Policy  string `json:"policy"`
+		Count   int    `json:"count"`
 	}
-	domains := []AuthDomain{
-		{"microsoft.com", "pass", "pass", "pass", "pass", "pass", true, "reject"},
-		{"google.com", "pass", "pass", "pass", "pass", "pass", true, "reject"},
-		{"amazon.com", "pass", "pass", "pass", "none", "none", true, "quarantine"},
-		{"paypal.com", "pass", "pass", "pass", "pass", "none", true, "reject"},
-		{"suspicious-bank.xyz", "fail", "none", "fail", "none", "none", false, "none"},
-		{"corp-internal.local", "pass", "pass", "none", "none", "none", true, "none"},
-		{"update-cdn-service.com", "fail", "fail", "fail", "none", "none", false, "none"},
+	domains := []AuthDomain{}
+	rows, err := database.DB.Query(`
+		SELECT split_part(sender, '@', 2) AS domain,
+		       COUNT(*) FILTER (WHERE spf_result='pass') AS spf_ok,
+		       COUNT(*) FILTER (WHERE dkim_result='pass') AS dkim_ok,
+		       COUNT(*) FILTER (WHERE dmarc_result='pass') AS dmarc_ok,
+		       COUNT(*) AS total,
+		       MODE() WITHIN GROUP (ORDER BY dmarc_policy) AS policy
+		FROM email_messages
+		WHERE tenant_id=$1 AND sender LIKE '%@%'
+		GROUP BY domain
+		ORDER BY total DESC
+		LIMIT 15`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var d AuthDomain
+			var spfOK, dkimOK, dmarcOK, cnt int
+			if rows.Scan(&d.Domain, &spfOK, &dkimOK, &dmarcOK, &cnt, &d.Policy) == nil {
+				d.Count = cnt
+				majority := func(ok int) string {
+					if ok*2 >= cnt {
+						return "pass"
+					}
+					return "fail"
+				}
+				d.SPF = majority(spfOK)
+				d.DKIM = majority(dkimOK)
+				d.DMARC = majority(dmarcOK)
+				d.Aligned = (d.SPF == "pass" || d.DKIM == "pass") && d.DMARC == "pass"
+				domains = append(domains, d)
+			}
+		}
 	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"summary": gin.H{
 			"total":      total,
@@ -417,8 +486,19 @@ func GetEmailAuthResults(c *gin.Context) {
 }
 
 // GetSenderIntelligence — GET /api/email/sender-intel?domain=...
+// GetSenderIntelligence previously classified a domain "malicious"/"trusted"
+// via a crude substring match (`strings.Contains(domain, "xyz")`, etc.) and
+// returned entirely invented WHOIS/geo/ASN enrichment (fixed registrar,
+// city, ASN per bucket) — none of it a real lookup of any kind. This app
+// has no WHOIS/GeoIP integration for domains anywhere (services/
+// geoip_service.go works on IPs, and email has no source-IP data at all),
+// so rather than keep fabricating those fields, this now checks the real
+// `iocs` table for an actual match and derives real signal from this
+// tenant's own real email/URL history — and simply omits the fields with
+// no honest real source instead of inventing them.
 func GetSenderIntelligence(c *gin.Context) {
 	createEmailSecurityTables()
+	tid := tenantIDFromContext(c)
 	domain := c.Query("domain")
 	email := c.Query("email")
 	if domain == "" && email != "" {
@@ -429,31 +509,49 @@ func GetSenderIntelligence(c *gin.Context) {
 	if domain == "" {
 		domain = "unknown"
 	}
-	isMalicious := strings.Contains(domain, "xyz") || strings.Contains(domain, "suspicious") || strings.Contains(domain, "temp-")
-	isTrusted := strings.Contains(domain, "google") || strings.Contains(domain, "microsoft") || strings.Contains(domain, "amazon")
-	rep, score, domainAge, registrar, country, city, asn, asnOrg, volume, tiHits := "neutral", 50, 1825, "GoDaddy Inc.", "United States", "Phoenix", "AS26496", "GoDaddy.com LLC", 12, 0
-	if isMalicious {
-		rep, score, domainAge, registrar, country, city, asn, asnOrg, volume, tiHits = "malicious", 8, 3, "NameCheap", "Russia", "Moscow", "AS62370", "Frantech Solutions", 3, 7
-	} else if isTrusted {
-		rep, score, domainAge, registrar, country, city, asn, asnOrg, volume, tiHits = "trusted", 96, 7300, "MarkMonitor Inc.", "United States", "Redmond", "AS8075", "Microsoft Corporation", 1420, 0
+
+	var iocHits int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM iocs WHERE tenant_id=$1 AND enabled=true AND type IN ('domain','email') AND indicator ILIKE $2`,
+		tid, "%"+domain+"%").Scan(&iocHits)
+
+	var maliciousURLs, totalURLs int
+	database.DB.QueryRow(`SELECT COUNT(*) FILTER (WHERE verdict='malicious'), COUNT(*) FROM email_urls WHERE tenant_id=$1 AND domain=$2`, tid, domain).Scan(&maliciousURLs, &totalURLs)
+
+	var volume int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND sender ILIKE $2 AND created_at > NOW()-INTERVAL '7 days'`,
+		tid, "%@"+domain).Scan(&volume)
+
+	rep, score := "unknown", 50
+	switch {
+	case iocHits > 0 || maliciousURLs > 0:
+		rep, score = "malicious", 10
+	case totalURLs > 0:
+		rep, score = "neutral", 50
 	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"domain":           domain,
-		"reputation":       rep,
-		"reputation_score": score,
-		"domain_age_days":  domainAge,
-		"whois_registrar":  registrar,
-		"whois_created":    time.Now().AddDate(0, 0, -domainAge).Format("2006-01-02"),
-		"geo_country":      country,
-		"geo_city":         city,
-		"asn":              asn,
-		"asn_org":          asnOrg,
-		"email_volume_7d":  volume,
-		"threat_intel_hits": tiHits,
+		"domain":            domain,
+		"reputation":        rep,
+		"reputation_score":  score,
+		"email_volume_7d":   volume,
+		"threat_intel_hits": iocHits,
 	})
 }
 
 // GetEmailThreatIntel — GET /api/email/threat-intel
+// GetEmailThreatIntel previously returned 4 sections as fixed constants
+// regardless of tenant/data — specific domains, IPs, malware families, and
+// threat actors that never came from anywhere real. Replaced with real
+// derivations: malicious_domains from email_urls (a category label is
+// derived from that row's own real is_typosquatting/has_login_form flags,
+// not invented), threat_actors from email_campaigns' own real
+// threat_actor column (already a real field on real seeded campaigns,
+// simply never aggregated into this view before). malicious_ips and
+// malware_families are dropped entirely rather than faked — this schema
+// has no source-IP data anywhere for email (unlike network-based
+// telemetry) and no structured malware-family field on any email table
+// (email_attachments.sandbox_result is freeform text), so there's no
+// honest real source for either.
 func GetEmailThreatIntel(c *gin.Context) {
 	createEmailSecurityTables()
 	tid := tenantIDFromContext(c)
@@ -461,28 +559,55 @@ func GetEmailThreatIntel(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND threat_type='phishing'`, tid).Scan(&phishing)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND threat_type='malware'`, tid).Scan(&malware)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=$1 AND threat_type='bec'`, tid).Scan(&bec)
+
+	maliciousDomains := []map[string]interface{}{}
+	dRows, err := database.DB.Query(`
+		SELECT domain, SUM(click_count) AS hits, MIN(created_at) AS first_seen,
+		       bool_or(has_login_form) AS login_form, bool_or(is_typosquatting) AS typo
+		FROM email_urls WHERE tenant_id=$1 AND verdict='malicious' AND domain != ''
+		GROUP BY domain ORDER BY hits DESC LIMIT 10`, tid)
+	if err == nil {
+		defer dRows.Close()
+		for dRows.Next() {
+			var domain, firstSeen string
+			var hits int
+			var loginForm, typo bool
+			if dRows.Scan(&domain, &hits, &firstSeen, &loginForm, &typo) == nil {
+				category := "phishing"
+				switch {
+				case typo:
+					category = "brand_impersonation"
+				case loginForm:
+					category = "credential_harvesting"
+				}
+				maliciousDomains = append(maliciousDomains, map[string]interface{}{
+					"domain": domain, "category": category, "hits": hits, "first_seen": firstSeen[:10],
+				})
+			}
+		}
+	}
+
+	threatActors := []map[string]interface{}{}
+	aRows, err := database.DB.Query(`
+		SELECT threat_actor, COUNT(*) AS campaigns, COALESCE(SUM(email_count),0) AS volume
+		FROM email_campaigns WHERE tenant_id=$1 AND threat_actor != ''
+		GROUP BY threat_actor ORDER BY volume DESC LIMIT 10`, tid)
+	if err == nil {
+		defer aRows.Close()
+		for aRows.Next() {
+			var actor string
+			var campaigns, volume int
+			if aRows.Scan(&actor, &campaigns, &volume) == nil {
+				threatActors = append(threatActors, map[string]interface{}{
+					"actor": actor, "campaigns": campaigns, "email_volume": volume,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"malicious_domains": []map[string]interface{}{
-			{"domain": "secure-login-verify.xyz", "category": "credential_harvesting", "hits": 14, "first_seen": "2026-07-10"},
-			{"domain": "paypal-support-update.com", "category": "brand_impersonation", "hits": 8, "first_seen": "2026-07-12"},
-			{"domain": "microsoft365-auth.net", "category": "fake_login", "hits": 6, "first_seen": "2026-07-14"},
-			{"domain": "hr-payroll-update.org", "category": "bec", "hits": 4, "first_seen": "2026-07-13"},
-		},
-		"malicious_ips": []map[string]interface{}{
-			{"ip": "185.220.101.47", "hits": 23, "threat_type": "phishing", "country": "RU"},
-			{"ip": "91.108.4.233", "hits": 11, "threat_type": "malware_delivery", "country": "NL"},
-			{"ip": "198.54.117.200", "hits": 7, "threat_type": "bec", "country": "US"},
-		},
-		"malware_families": []map[string]interface{}{
-			{"family": "Emotet", "count": malware + 3, "category": "banking_trojan"},
-			{"family": "QakBot", "count": 2, "category": "banking_trojan"},
-			{"family": "AgentTesla", "count": 1, "category": "stealer"},
-			{"family": "FormBook", "count": 1, "category": "stealer"},
-		},
-		"threat_actors": []map[string]interface{}{
-			{"actor": "TA505", "campaigns": 2, "target_industry": "Finance", "email_volume": 18},
-			{"actor": "Lazarus Group", "campaigns": 1, "target_industry": "Cryptocurrency", "email_volume": 6},
-		},
+		"malicious_domains": maliciousDomains,
+		"threat_actors":     threatActors,
 		"by_threat_type": []map[string]interface{}{
 			{"type": "phishing", "count": phishing},
 			{"type": "malware", "count": malware},
@@ -503,7 +628,8 @@ func GetEmailCampaigns(c *gin.Context) {
 		FROM email_campaigns WHERE tenant_id=$1 ORDER BY last_seen DESC LIMIT $2
 	`, tid, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Camp struct {
@@ -549,7 +675,8 @@ func GetEmailTimeline(c *gin.Context) {
 		ORDER BY created_at DESC LIMIT $2
 	`, tid, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Event struct {
@@ -587,7 +714,8 @@ func GetEmailUserRisk(c *gin.Context) {
 		FROM email_user_risk WHERE tenant_id=$1 ORDER BY risk_score DESC LIMIT 50
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type User struct {
@@ -688,7 +816,8 @@ func GetEmailPolicies(c *gin.Context) {
 		FROM email_policies WHERE tenant_id=$1 ORDER BY priority ASC, created_at DESC
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Policy struct {
@@ -725,7 +854,8 @@ func PostEmailPolicy(c *gin.Context) {
 		Priority   int    `json:"priority"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
 	}
 	if body.Action == "" {
 		body.Action = "quarantine"
@@ -739,7 +869,8 @@ func PostEmailPolicy(c *gin.Context) {
 		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id
 	`, body.Name, body.PolicyType, body.Action, body.Criteria, body.Priority, tenantIDFromContext(c)).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"id": id, "ok": true})
 }
@@ -749,7 +880,8 @@ func PatchEmailPolicy(c *gin.Context) {
 	createEmailSecurityTables()
 	var body map[string]interface{}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	allowed := map[string]bool{"name": true, "action": true, "criteria": true, "enabled": true, "priority": true}
 	setClauses, args := []string{}, []interface{}{}
@@ -762,14 +894,16 @@ func PatchEmailPolicy(c *gin.Context) {
 		}
 	}
 	if len(setClauses) == 0 {
-		c.JSON(http.StatusOK, gin.H{"ok": true}); return
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
 	}
 	args = append(args, c.Param("id"), tenantIDFromContext(c))
 	_, err := database.DB.Exec(
 		fmt.Sprintf("UPDATE email_policies SET %s WHERE id=$%d AND tenant_id=$%d", strings.Join(setClauses, ","), i, i+1),
 		args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -780,10 +914,12 @@ func DeleteEmailPolicy(c *gin.Context) {
 	res, err := database.DB.Exec(`DELETE FROM email_policies WHERE id=$1 AND tenant_id=$2`,
 		c.Param("id"), tenantIDFromContext(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -798,7 +934,8 @@ func GetUserReported(c *gin.Context) {
 		FROM email_reported WHERE tenant_id=$1 ORDER BY reported_at DESC LIMIT 50
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Report struct {
@@ -839,14 +976,25 @@ func PatchUserReported(c *gin.Context) {
 		UPDATE email_reported SET triage_status=$1, analyst_notes=$2 WHERE id=$3 AND tenant_id=$4
 	`, body.TriageStatus, body.AnalystNotes, c.Param("id"), tenantIDFromContext(c))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // PostEmailResponse — POST /api/email/response
+// PostEmailResponse dispatches a response action against a real message,
+// sender, domain, URL, attachment hash, or victim.
+//
+// Previously this was a pure canned-message lookup table with zero side
+// effects of any kind — not even a broken DB write attempt, unlike most
+// fake-response-action instances found this phase. No email was ever
+// actually quarantined/deleted, no IOC was ever created, no password reset
+// was ever issued.
 func PostEmailResponse(c *gin.Context) {
 	createEmailSecurityTables()
+	tid := tenantIDFromContext(c)
+	username := usernameFromContext(c)
 	var body struct {
 		Action    string `json:"action"`
 		MessageID string `json:"message_id"`
@@ -857,24 +1005,108 @@ func PostEmailResponse(c *gin.Context) {
 		Email     string `json:"email"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"quarantine_email":  "Email moved to quarantine",
-		"delete_email":      "Email deleted from all mailboxes",
-		"block_sender":      "Sender blocked at gateway",
-		"block_domain":      "Domain added to blocklist",
-		"block_url":         "URL blocked at gateway",
-		"block_hash":        "Attachment hash blocked",
-		"reset_password":    "Password reset initiated",
-		"create_incident":   "Incident created in SOAR",
-		"run_soar_playbook": "SOAR playbook triggered",
+
+	var message string
+	switch body.Action {
+	case "quarantine_email", "delete_email":
+		if body.MessageID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "message_id required"})
+			return
+		}
+		status := "quarantined"
+		if body.Action == "delete_email" {
+			status = "deleted"
+		}
+		tag, err := database.DB.Exec(`UPDATE email_messages SET status=$1, delivery_status=$1 WHERE tenant_id=$2 AND message_id=$3`,
+			status, tid, body.MessageID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if n, _ := tag.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no message found with id '" + body.MessageID + "'"})
+			return
+		}
+		message = fmt.Sprintf("Message %s: %s", body.MessageID, status)
+
+	case "block_sender":
+		if err := createEmailIOC(tid, "email", body.Sender, username); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		message = "Sender " + body.Sender + " blocked"
+
+	case "block_domain":
+		if err := createEmailIOC(tid, "domain", body.Domain, username); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		message = "Domain " + body.Domain + " blocked"
+
+	case "block_url":
+		if err := createEmailIOC(tid, "url", body.URL, username); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		message = "URL blocked"
+
+	case "block_hash":
+		if body.Hash == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "hash required"})
+			return
+		}
+		if err := createEmailIOC(tid, services.GuessIOCType(body.Hash), body.Hash, username); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		message = "Attachment hash blocked"
+
+	case "reset_password":
+		if body.Email == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "email required"})
+			return
+		}
+		// Same anti-enumeration design as the real /api/auth/forgot-password
+		// flow this reuses — always reports success regardless of whether
+		// the email matches a real account, so the response can't be used
+		// to probe which addresses have platform logins.
+		services.RequestPasswordReset(body.Email)
+		message = "If " + body.Email + " has a platform account, a password reset was issued"
+
+	case "create_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, "Email Security Escalation: "+body.Sender,
+			fmt.Sprintf("Escalated from email security. Message: %s, Sender: %s", body.MessageID, body.Sender),
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		message = fmt.Sprintf("Incident #%d created", incidentID)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
 	}
-	msg := messages[body.Action]
-	if msg == "" {
-		msg = "Action executed"
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": message})
+}
+
+// createEmailIOC blocks an indicator via the same real, enabled-IOC
+// mechanism every other page's block_* response action uses this phase.
+func createEmailIOC(tid int, iocType, indicator, actor string) error {
+	if indicator == "" {
+		return fmt.Errorf("indicator required")
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": msg})
+	return repositories.CreateIOC(models.IOC{
+		Indicator: indicator, Type: iocType, Severity: "high", Enabled: true,
+		Description: "Blocked via Email Security by " + actor,
+	}, tid)
 }
 
 // PostEmailAI — POST /api/email/ai
@@ -913,7 +1145,8 @@ Provide compact JSON: {"answer":"concise answer","confidence":85,"recommended_ac
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -956,7 +1189,8 @@ func PostEmailReport(c *gin.Context) {
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]

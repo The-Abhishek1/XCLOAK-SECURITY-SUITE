@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { emailSecurityAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { MetricCard, SectionCard, DataTable, TabBar, ActionButton } from '@/components/design-system';
-import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, BarChart2, Brain, CheckCircle, ChevronRight, DollarSign, ExternalLink, Eye, FileText, GitBranch, Link2, Mail, Paperclip, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from 'lucide-react';
 
 const TABS = [
   { id: 'dashboard',    label: 'Dashboard',    icon: Activity },
@@ -379,12 +379,15 @@ function AuthTab() {
   if (loading) return <div className="text-[var(--text-3)] text-sm p-4">Loading...</div>;
 
   const s = data?.summary ?? {};
-  const PROTOCOLS = ['SPF', 'DKIM', 'DMARC', 'ARC', 'BIMI'];
-  const rates: Record<string, number> = { SPF: s.spf_rate ?? 0, DKIM: s.dkim_rate ?? 0, DMARC: s.dmarc_rate ?? 0, ARC: 42, BIMI: 31 };
+  // ARC and BIMI dropped: no per-message signal is tracked for either
+  // (both are opt-in protocols with much lower real-world deployment than
+  // SPF/DKIM/DMARC) — showing them would mean fabricating numbers again.
+  const PROTOCOLS = ['SPF', 'DKIM', 'DMARC'];
+  const rates: Record<string, number> = { SPF: s.spf_rate ?? 0, DKIM: s.dkim_rate ?? 0, DMARC: s.dmarc_rate ?? 0 };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {PROTOCOLS.map(proto => (
           <div key={proto} className="g-card p-4 text-center space-y-2">
             <div className="text-sm font-bold text-[var(--text-1)]">{proto}</div>
@@ -407,19 +410,18 @@ function AuthTab() {
               { key: 'spf', header: 'SPF', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.spf] ?? { color: 'var(--text-3)' }}>{d.spf}</span> },
               { key: 'dkim', header: 'DKIM', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.dkim] ?? { color: 'var(--text-3)' }}>{d.dkim}</span> },
               { key: 'dmarc', header: 'DMARC', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.dmarc] ?? { color: 'var(--text-3)' }}>{d.dmarc}</span> },
-              { key: 'arc', header: 'ARC', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.arc] ?? { color: 'var(--text-3)' }}>{d.arc}</span> },
-              { key: 'bimi', header: 'BIMI', render: (d: any) => <span className="text-xs font-bold" style={AUTH_COLOR[d.bimi] ?? { color: 'var(--text-3)' }}>{d.bimi}</span> },
               { key: 'aligned', header: 'Aligned', render: (d: any) => d.aligned ? <CheckCircle className="h-3.5 w-3.5" style={{ color: 'var(--green)' }} /> : <XCircle className="h-3.5 w-3.5" style={{ color: 'var(--red)' }} /> },
               { key: 'policy', header: 'Policy', render: (d: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={d.policy === 'reject' ? { background: 'var(--green-bg)', border: '1px solid var(--green-border)', color: 'var(--green)' } : d.policy === 'quarantine' ? { background: 'var(--yellow-bg)', border: '1px solid var(--yellow-border)', color: 'var(--yellow)' } : { background: 'var(--glass-bg)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>{d.policy}</span> },
+              { key: 'count', header: 'Messages', render: (d: any) => <span className="text-xs text-[var(--text-3)]">{d.count}</span> },
             ]}
           />
-          <div className="g-card p-3 text-xs text-[var(--text-2)] space-y-1">
-            <div className="font-medium text-[var(--text-1)]">Recommendations</div>
-            <div>• Set DMARC policy to <span className="font-bold" style={{ color: 'var(--green)' }}>reject</span> on all owned domains to prevent spoofing</div>
-            <div>• 29% of inbound emails fail DMARC — consider enforcing strict alignment</div>
-            <div>• Implement BIMI with VMC to enable brand logo display in supported email clients</div>
-            <div>• Enable ARC sealing on your outbound email gateway</div>
-          </div>
+          {s.dmarc_rate !== undefined && (
+            <div className="g-card p-3 text-xs text-[var(--text-2)] space-y-1">
+              <div className="font-medium text-[var(--text-1)]">Recommendations</div>
+              <div>• Set DMARC policy to <span className="font-bold" style={{ color: 'var(--green)' }}>reject</span> on all owned domains to prevent spoofing</div>
+              <div>• {100 - s.dmarc_rate}% of inbound email fails DMARC — consider enforcing strict alignment</div>
+            </div>
+          )}
         </div>
       </SectionCard>
     </div>
@@ -583,36 +585,19 @@ function IntelligenceTab() {
                   </div>
                 </div>
               ))}
-              <div className="pt-2 border-t border-[var(--border)] space-y-2">
-                <div className="text-xs font-medium text-[var(--text-1)]">Malware Families</div>
-                {(intel.malware_families ?? []).map((m: any) => (
-                  <div key={m.family} className="flex justify-between text-xs">
-                    <span style={{ color: 'var(--blue)' }}>{m.family}</span>
-                    <span className="text-[var(--text-3)]">{m.category} · {m.count}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </SectionCard>
 
           <SectionCard title="Threat Actors">
             <div className="space-y-3">
+              {(intel.threat_actors ?? []).length === 0 && <div className="text-xs text-[var(--text-3)]">No campaigns attributed to a known actor yet.</div>}
               {(intel.threat_actors ?? []).map((a: any) => (
                 <div key={a.actor} className="space-y-0.5">
                   <div className="text-xs font-medium" style={{ color: 'var(--orange)' }}>{a.actor}</div>
-                  <div className="text-[10px] text-[var(--text-3)]">{a.campaigns} campaigns · targeting {a.target_industry}</div>
+                  <div className="text-[10px] text-[var(--text-3)]">{a.campaigns} campaign{a.campaigns === 1 ? '' : 's'}</div>
                   <div className="text-[10px] text-[var(--text-3)]">{a.email_volume} emails</div>
                 </div>
               ))}
-              <div className="pt-2 border-t border-[var(--border)] space-y-2">
-                <div className="text-xs font-medium text-[var(--text-1)]">Malicious IPs</div>
-                {(intel.malicious_ips ?? []).map((ip: any) => (
-                  <div key={ip.ip} className="flex justify-between text-xs">
-                    <span className="font-mono" style={{ color: 'var(--red)' }}>{ip.ip}</span>
-                    <span className="text-[var(--text-3)]">{ip.country} · {ip.hits}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </SectionCard>
         </div>
@@ -625,30 +610,18 @@ function IntelligenceTab() {
             <ActionButton variant="primary" className="text-xs" onClick={lookupSender} loading={loadingSender}>Look Up</ActionButton>
           </div>
           {senderData && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="g-card p-3 text-center">
                 <div className="text-xs text-[var(--text-3)]">Reputation</div>
-                <div className="text-sm font-bold" style={{ color: senderData.reputation === 'malicious' ? 'var(--red)' : senderData.reputation === 'trusted' ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation}</div>
-              </div>
-              <div className="g-card p-3 text-center">
-                <div className="text-xs text-[var(--text-3)]">Score</div>
-                <div className="text-sm font-bold" style={{ color: senderData.reputation_score < 30 ? 'var(--red)' : senderData.reputation_score > 70 ? 'var(--green)' : 'var(--yellow)' }}>{senderData.reputation_score}/100</div>
-              </div>
-              <div className="g-card p-3 text-center">
-                <div className="text-xs text-[var(--text-3)]">Domain Age</div>
-                <div className="text-sm font-bold" style={{ color: senderData.domain_age_days < 30 ? 'var(--red)' : 'var(--text-1)' }}>{senderData.domain_age_days}d</div>
+                <div className="text-sm font-bold capitalize" style={{ color: senderData.reputation === 'malicious' ? 'var(--red)' : senderData.reputation === 'neutral' ? 'var(--yellow)' : 'var(--text-3)' }}>{senderData.reputation}</div>
               </div>
               <div className="g-card p-3 text-center">
                 <div className="text-xs text-[var(--text-3)]">Threat Intel Hits</div>
                 <div className="text-sm font-bold" style={{ color: senderData.threat_intel_hits > 0 ? 'var(--red)' : 'var(--green)' }}>{senderData.threat_intel_hits}</div>
               </div>
-              <div className="g-card p-3 col-span-2">
-                <div className="text-xs text-[var(--text-3)]">WHOIS</div>
-                <div className="text-xs text-[var(--text-1)]">{senderData.whois_registrar} · created {senderData.whois_created}</div>
-              </div>
-              <div className="g-card p-3 col-span-2">
-                <div className="text-xs text-[var(--text-3)]">GeoIP / ASN</div>
-                <div className="text-xs text-[var(--text-1)]">{senderData.geo_city}, {senderData.geo_country} · {senderData.asn} ({senderData.asn_org})</div>
+              <div className="g-card p-3 text-center">
+                <div className="text-xs text-[var(--text-3)]">Volume (7d)</div>
+                <div className="text-sm font-bold text-[var(--text-1)]">{senderData.email_volume_7d}</div>
               </div>
             </div>
           )}
@@ -937,7 +910,7 @@ function ResponseTab() {
   const doAction = async () => {
     if (!actionTarget.action) return;
     setActioning(true);
-    const r = await emailSecurityAPI.respond({ action: actionTarget.action, sender: actionTarget.value, domain: actionTarget.value, url: actionTarget.value, hash: actionTarget.value });
+    const r = await emailSecurityAPI.respond({ action: actionTarget.action, message_id: actionTarget.value, sender: actionTarget.value, domain: actionTarget.value, url: actionTarget.value, hash: actionTarget.value, email: actionTarget.value });
     setActionResult(r.data?.message ?? 'Done');
     setActioning(false);
   };
@@ -958,7 +931,6 @@ function ResponseTab() {
     ['block_hash',       'Block Attachment Hash', 'sha256'],
     ['reset_password',   'Reset User Password', 'email'],
     ['create_incident',  'Create Incident', ''],
-    ['run_soar_playbook','Run SOAR Playbook', 'playbook name'],
   ] as [string, string, string][];
 
   const POLICY_TYPES = ['attachment', 'url', 'spam', 'bec', 'allowlist', 'blocklist', 'size_limit', 'file_type'];
@@ -988,6 +960,9 @@ function ResponseTab() {
                   )}
                 </div>
               ))}
+              <a href="/playbooks" className="g-btn g-btn-ghost text-xs whitespace-nowrap flex items-center justify-center gap-1 py-1.5">
+                <ExternalLink className="h-3 w-3" />Run SOAR Playbook
+              </a>
             </div>
             {actionResult && <div className="g-card p-2 text-xs" style={{ color: 'var(--green)' }}>{actionResult}</div>}
           </div>

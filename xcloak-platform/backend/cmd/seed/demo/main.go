@@ -160,6 +160,8 @@ func main() {
 	seedSettingsEnterprise(db)
 	log.Println("Seeding tenants enterprise…")
 	seedTenantsEnterprise(db)
+	log.Println("Seeding email security…")
+	seedEmailSecurity(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -2614,6 +2616,247 @@ func seedCloudSecurity(db *sql.DB) {
 				finding_count = (SELECT COUNT(*) FROM cloud_findings f JOIN cloud_assets a ON a.id=f.asset_id WHERE a.account_id=$1 AND f.status='open'),
 				risk_score = COALESCE((SELECT AVG(risk_score)::int FROM cloud_assets WHERE account_id=$1), 0)
 			WHERE id=$1`, acctID)
+	}
+}
+
+func seedEmailSecurity(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_messages (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		message_id TEXT DEFAULT '', sender TEXT DEFAULT '', recipient TEXT DEFAULT '',
+		subject TEXT DEFAULT '', timestamp TIMESTAMPTZ DEFAULT NOW(),
+		status TEXT DEFAULT 'delivered', has_attachment BOOLEAN DEFAULT false,
+		attachment_count INTEGER DEFAULT 0, url_count INTEGER DEFAULT 0,
+		threat_score INTEGER DEFAULT 0, delivery_status TEXT DEFAULT 'delivered',
+		threat_type TEXT DEFAULT '', direction TEXT DEFAULT 'inbound',
+		size_bytes INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(),
+		spf_result TEXT DEFAULT 'none', dkim_result TEXT DEFAULT 'none',
+		dmarc_result TEXT DEFAULT 'none', dmarc_policy TEXT DEFAULT 'none')`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_attachments (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		message_id INTEGER DEFAULT 0, filename TEXT DEFAULT '',
+		file_type TEXT DEFAULT '', file_size INTEGER DEFAULT 0,
+		sha256 TEXT DEFAULT '', md5 TEXT DEFAULT '',
+		verdict TEXT DEFAULT 'clean', has_macros BOOLEAN DEFAULT false,
+		has_embedded BOOLEAN DEFAULT false, has_signature BOOLEAN DEFAULT false,
+		sandbox_result TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_urls (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		message_id INTEGER DEFAULT 0, url TEXT DEFAULT '',
+		domain TEXT DEFAULT '', reputation TEXT DEFAULT 'neutral',
+		redirect_count INTEGER DEFAULT 0, is_shortened BOOLEAN DEFAULT false,
+		is_newly_registered BOOLEAN DEFAULT false, has_login_form BOOLEAN DEFAULT false,
+		is_typosquatting BOOLEAN DEFAULT false, verdict TEXT DEFAULT 'clean',
+		click_count INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_campaigns (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', campaign_type TEXT DEFAULT 'phishing',
+		threat_actor TEXT DEFAULT '', email_count INTEGER DEFAULT 0,
+		victim_count INTEGER DEFAULT 0, first_seen TIMESTAMPTZ DEFAULT NOW(),
+		last_seen TIMESTAMPTZ DEFAULT NOW(), status TEXT DEFAULT 'active',
+		common_subject TEXT DEFAULT '', common_sender TEXT DEFAULT '',
+		common_domain TEXT DEFAULT '', malware_family TEXT DEFAULT '',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_user_risk (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		email TEXT DEFAULT '', display_name TEXT DEFAULT '',
+		department TEXT DEFAULT '', click_count INTEGER DEFAULT 0,
+		phishing_failures INTEGER DEFAULT 0, is_repeated_victim BOOLEAN DEFAULT false,
+		training_status TEXT DEFAULT 'pending', risk_score INTEGER DEFAULT 0,
+		last_click_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_reported (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		reporter_email TEXT DEFAULT '', message_id TEXT DEFAULT '',
+		subject TEXT DEFAULT '', original_sender TEXT DEFAULT '',
+		reported_at TIMESTAMPTZ DEFAULT NOW(), triage_status TEXT DEFAULT 'pending',
+		analyst_notes TEXT DEFAULT '', campaign_id INTEGER DEFAULT 0,
+		auto_verdict TEXT DEFAULT '')`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS email_policies (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', policy_type TEXT DEFAULT 'attachment',
+		action TEXT DEFAULT 'quarantine', criteria TEXT DEFAULT '',
+		enabled BOOLEAN DEFAULT true, priority INTEGER DEFAULT 100,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	// None of these tables have a natural unique key, so — matching every
+	// other table-without-a-key this phase — guard re-runs with an
+	// existence check instead of an ON CONFLICT clause.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM email_messages WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+
+	messages := []struct {
+		sender, recipient, subject                    string
+		hoursAgo                                      int
+		status, deliveryStatus, threatType, direction string
+		hasAttachment                                 bool
+		attachCount, urlCount, threatScore, sizeBytes int
+		spf, dkim, dmarc, dmarcPolicy                 string
+	}{
+		{"notifications@microsoft.com", "it@xcloak-corp.com", "Your Microsoft 365 security report", 340, "delivered", "delivered", "", "inbound", false, 0, 1, 5, 42000, "pass", "pass", "pass", "reject"},
+		{"billing@paypal-secure-verify.xyz", "finance@xcloak-corp.com", "Urgent: Your PayPal account has been limited", 20, "quarantined", "quarantined", "phishing", "inbound", false, 0, 2, 92, 18000, "fail", "fail", "fail", "none"},
+		{"ceo@xcloak-corp.co", "assistant@xcloak-corp.com", "Wire transfer needed today - confidential", 5, "delivered", "delivered", "bec", "inbound", false, 0, 0, 88, 3100, "fail", "none", "fail", "none"},
+		{"invoice@corp-accounting-update.com", "ap@xcloak-corp.com", "Overdue Invoice #4471 attached", 50, "quarantined", "quarantined", "malware", "inbound", true, 1, 0, 95, 220000, "fail", "fail", "fail", "quarantine"},
+		{"newsletter@amazon.com", "jdoe@xcloak-corp.com", "Your order has shipped", 100, "delivered", "delivered", "", "inbound", false, 0, 1, 2, 15000, "pass", "pass", "pass", "reject"},
+		{"support@update-cdn-service.com", "helpdesk@xcloak-corp.com", "Password expiring - verify your account", 8, "delivered", "delivered", "phishing", "inbound", false, 0, 1, 80, 9000, "fail", "fail", "fail", "none"},
+		{"jsmith@xcloak-corp.com", "external-partner@vendor.com", "Re: contract review", 200, "delivered", "delivered", "", "outbound", true, 1, 0, 0, 54000, "pass", "pass", "pass", "reject"},
+		{"security-alert@paypal-secure-verify.xyz", "finance@xcloak-corp.com", "Your account will be suspended", 2, "delivered", "delivered", "phishing", "inbound", false, 0, 1, 90, 11000, "fail", "fail", "fail", "none"},
+		{"hr@xcloak-corp.com", "allstaff@xcloak-corp.com", "Benefits enrollment reminder", 400, "delivered", "delivered", "", "outbound", false, 0, 0, 0, 8000, "pass", "pass", "pass", "reject"},
+		{"noreply@github.com", "dev@xcloak-corp.com", "Security alert: new SSH key added", 130, "delivered", "delivered", "", "inbound", false, 0, 1, 3, 7000, "pass", "pass", "pass", "none"},
+		{"attacker@evil-corp-update.xyz", "admin@xcloak-corp.com", "Re: Re: Fwd: Invoice", 15, "quarantined", "quarantined", "malware", "inbound", true, 1, 1, 97, 340000, "fail", "fail", "fail", "reject"},
+		{"noreply@salesforce.com", "sales@xcloak-corp.com", "Weekly pipeline report", 60, "delivered", "delivered", "", "inbound", false, 0, 0, 1, 25000, "pass", "pass", "pass", "none"},
+		{"ceo@xcloak-corp.co", "cfo@xcloak-corp.com", "Need this handled discreetly today", 30, "delivered", "delivered", "bec", "inbound", false, 0, 0, 85, 2800, "fail", "none", "fail", "none"},
+		{"billing@paypal-secure-verify.xyz", "support@xcloak-corp.com", "Confirm your payment method", 70, "quarantined", "quarantined", "phishing", "inbound", false, 0, 1, 89, 10500, "fail", "fail", "fail", "none"},
+		{"promo@dealsblast-market.info", "jdoe@xcloak-corp.com", "70% off everything this week only", 250, "delivered", "delivered", "spam", "inbound", false, 0, 3, 35, 6000, "none", "none", "none", "none"},
+		{"no-reply@docusign.net", "legal@xcloak-corp.com", "Please DocuSign: NDA Agreement", 90, "delivered", "delivered", "", "inbound", false, 0, 1, 4, 12000, "pass", "pass", "pass", "reject"},
+		{"it-support@xcloak-corp.com", "allstaff@xcloak-corp.com", "Scheduled maintenance this weekend", 500, "delivered", "delivered", "", "outbound", false, 0, 0, 0, 4000, "pass", "pass", "pass", "reject"},
+		{"support@update-cdn-service.com", "engineering@xcloak-corp.com", "Action required: verify your credentials", 1, "delivered", "delivered", "phishing", "inbound", false, 0, 1, 83, 8800, "fail", "fail", "fail", "none"},
+	}
+	msgIDs := make([]int, len(messages))
+	for i, m := range messages {
+		db.QueryRow(`
+			INSERT INTO email_messages (tenant_id, message_id, sender, recipient, subject, timestamp, status, has_attachment, attachment_count, url_count, threat_score, delivery_status, threat_type, direction, size_bytes, created_at, spf_result, dkim_result, dmarc_result, dmarc_policy)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$5,$15,$16,$17,$18) RETURNING id`,
+			fmt.Sprintf("<demo-%d@xcloak-corp.com>", i), m.sender, m.recipient, m.subject,
+			now.Add(-time.Duration(m.hoursAgo)*time.Hour), m.status, m.hasAttachment, m.attachCount, m.urlCount,
+			m.threatScore, m.deliveryStatus, m.threatType, m.direction, m.sizeBytes,
+			m.spf, m.dkim, m.dmarc, m.dmarcPolicy,
+		).Scan(&msgIDs[i])
+	}
+
+	attachments := []struct {
+		msgIdx                                int
+		filename, ftype, sha256, md5, verdict string
+		fileSize                              int
+		macros, embedded, signature           bool
+		sandbox                               string
+	}{
+		{3, "Invoice_4471.xlsm", "xlsm", "a3f5c9e21b7d4680f9e2c1a8b5d3e7f6091a2b3c4d5e6f708192a3b4c5d6e7f", "9e107d9d372bb6826bd81d3542a419d6", "malicious", 220000, true, false, false,
+			"Detonation triggered a macro that executed a PowerShell downloader connecting to 91.243.44.12."},
+		{6, "Contract_Review_v3.pdf", "pdf", "7d4c2f8a1e6b9053c8d7e4f2a1b6c9d8e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0", "b1946ac92492d2347c6235b4d2611184", "clean", 54000, false, false, true, ""},
+		{10, "Invoice_Payment_Details.doc", "doc", "5e8d1c4b7a2f9036e1d8c5b2a9f6e3d0c7b4a1f8e5d2c9b6a3f0e7d4c1b8a5f2", "6cd3556deb0da54bca060b4c39479839", "malicious", 340000, true, true, false,
+			"Dropped and executed a secondary payload identified as an Emotet loader; established C2 beacon."},
+	}
+	for _, a := range attachments {
+		db.Exec(`
+			INSERT INTO email_attachments (tenant_id, message_id, filename, file_type, file_size, sha256, md5, verdict, has_macros, has_embedded, has_signature, sandbox_result, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			msgIDs[a.msgIdx], a.filename, a.ftype, a.fileSize, a.sha256, a.md5, a.verdict, a.macros, a.embedded, a.signature, a.sandbox,
+			now.Add(-time.Duration(messages[a.msgIdx].hoursAgo)*time.Hour),
+		)
+	}
+
+	urls := []struct {
+		msgIdx                               int
+		url, domain, reputation, verdict     string
+		shortened, newlyReg, loginForm, typo bool
+		clickCount                           int
+	}{
+		{0, "https://security.microsoft.com/securityreport", "microsoft.com", "trusted", "clean", false, false, false, false, 3},
+		{1, "https://paypal-secure-verify.xyz/login/confirm", "paypal-secure-verify.xyz", "malicious", "malicious", false, true, true, true, 2},
+		{1, "https://paypal-secure-verify.xyz/track", "paypal-secure-verify.xyz", "malicious", "malicious", true, true, false, true, 0},
+		{4, "https://www.amazon.com/orders/track", "amazon.com", "trusted", "clean", false, false, false, false, 1},
+		{5, "https://update-cdn-service.com/account/verify", "update-cdn-service.com", "malicious", "malicious", false, true, true, false, 1},
+		{7, "https://paypal-secure-verify.xyz/account/restore", "paypal-secure-verify.xyz", "malicious", "malicious", false, true, true, true, 4},
+		{9, "https://github.com/settings/security", "github.com", "trusted", "clean", false, false, false, false, 1},
+		{10, "https://evil-corp-update.xyz/invoice/download", "evil-corp-update.xyz", "malicious", "malicious", true, true, false, true, 0},
+		{13, "https://paypal-secure-verify.xyz/payment/confirm", "paypal-secure-verify.xyz", "malicious", "malicious", false, true, true, true, 1},
+		{14, "https://dealsblast-market.info/shop/deals", "dealsblast-market.info", "suspicious", "clean", true, true, false, false, 0},
+		{14, "https://dealsblast-market.info/unsubscribe", "dealsblast-market.info", "suspicious", "clean", false, true, false, false, 0},
+		{14, "https://dealsblast-market.info/shop/clearance", "dealsblast-market.info", "suspicious", "clean", false, true, false, false, 0},
+		{15, "https://na3.docusign.net/signing/documents", "docusign.net", "trusted", "clean", false, false, true, false, 1},
+		{17, "https://update-cdn-service.com/sso/reverify", "update-cdn-service.com", "malicious", "malicious", false, true, true, false, 2},
+	}
+	for _, u := range urls {
+		db.Exec(`
+			INSERT INTO email_urls (tenant_id, message_id, url, domain, reputation, redirect_count, is_shortened, is_newly_registered, has_login_form, is_typosquatting, verdict, click_count, created_at)
+			VALUES (9999,$1,$2,$3,$4,0,$5,$6,$7,$8,$9,$10,$11)`,
+			msgIDs[u.msgIdx], u.url, u.domain, u.reputation, u.shortened, u.newlyReg, u.loginForm, u.typo, u.verdict, u.clickCount,
+			now.Add(-time.Duration(messages[u.msgIdx].hoursAgo)*time.Hour),
+		)
+	}
+
+	campaigns := []struct {
+		name, ctype, actor, subject, sender, domain, family, status  string
+		emailCount, victimCount, firstSeenHoursAgo, lastSeenHoursAgo int
+	}{
+		{"PayPal Account Limited Wave", "phishing", "TA-Scattered-Spider", "Urgent: Your PayPal account has been limited", "billing@paypal-secure-verify.xyz", "paypal-secure-verify.xyz", "", "active", 7, 3, 70, 2},
+		{"CDN Credential Harvest", "phishing", "TA-Scattered-Spider", "Password expiring - verify your account", "support@update-cdn-service.com", "update-cdn-service.com", "", "active", 4, 1, 8, 1},
+		{"Emotet Invoice Lure", "malware", "TA-Wizard-Spider", "Overdue Invoice #4471 attached", "invoice@corp-accounting-update.com", "corp-accounting-update.com", "Emotet", "contained", 3, 1, 50, 15},
+		{"CEO Wire Transfer BEC", "bec", "", "Wire transfer needed today - confidential", "ceo@xcloak-corp.co", "xcloak-corp.co", "", "active", 2, 0, 30, 5},
+	}
+	for _, cmp := range campaigns {
+		db.Exec(`
+			INSERT INTO email_campaigns (tenant_id, name, campaign_type, threat_actor, email_count, victim_count, first_seen, last_seen, status, common_subject, common_sender, common_domain, malware_family, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$6)`,
+			cmp.name, cmp.ctype, cmp.actor, cmp.emailCount, cmp.victimCount,
+			now.Add(-time.Duration(cmp.firstSeenHoursAgo)*time.Hour), now.Add(-time.Duration(cmp.lastSeenHoursAgo)*time.Hour),
+			cmp.status, cmp.subject, cmp.sender, cmp.domain, cmp.family,
+		)
+	}
+
+	userRisk := []struct {
+		email, name, dept, training               string
+		clickCount, failures, riskScore, hoursAgo int
+		repeatVictim                              bool
+	}{
+		{"finance@xcloak-corp.com", "Finance Team Alias", "Finance", "completed", 2, 2, 78, 20, true},
+		{"jdoe@xcloak-corp.com", "Jane Doe", "Sales", "completed", 1, 1, 45, 250, false},
+		{"helpdesk@xcloak-corp.com", "IT Helpdesk", "IT", "in_progress", 1, 1, 55, 8, false},
+		{"support@xcloak-corp.com", "Support Team Alias", "Support", "completed", 1, 1, 60, 70, false},
+		{"assistant@xcloak-corp.com", "Executive Assistant", "Executive", "pending", 0, 1, 65, 5, false},
+		{"dev@xcloak-corp.com", "Dev Team Alias", "Engineering", "completed", 0, 0, 10, 130, false},
+		{"legal@xcloak-corp.com", "Legal Team Alias", "Legal", "completed", 0, 0, 5, 90, false},
+	}
+	for _, u := range userRisk {
+		var lastClick any
+		if u.clickCount > 0 {
+			lastClick = now.Add(-time.Duration(u.hoursAgo) * time.Hour)
+		}
+		db.Exec(`
+			INSERT INTO email_user_risk (tenant_id, email, display_name, department, click_count, phishing_failures, is_repeated_victim, training_status, risk_score, last_click_at, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			u.email, u.name, u.dept, u.clickCount, u.failures, u.repeatVictim, u.training, u.riskScore, lastClick,
+			now.Add(-time.Duration(u.hoursAgo+24)*time.Hour),
+		)
+	}
+
+	reported := []struct {
+		msgIdx                           int
+		reporter, notes, triage, verdict string
+	}{
+		{5, "helpdesk@xcloak-corp.com", "User reported via Outlook plugin; matches known CDN credential-harvest campaign.", "confirmed", "phishing"},
+		{1, "finance@xcloak-corp.com", "Reported before quarantine action completed.", "confirmed", "phishing"},
+		{9, "dev@xcloak-corp.com", "Reported as suspicious; reviewed and confirmed legitimate GitHub notification.", "false_positive", "clean"},
+	}
+	for _, r := range reported {
+		m := messages[r.msgIdx]
+		db.Exec(`
+			INSERT INTO email_reported (tenant_id, reporter_email, message_id, subject, original_sender, reported_at, triage_status, analyst_notes, auto_verdict)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8)`,
+			r.reporter, fmt.Sprintf("<demo-%d@xcloak-corp.com>", r.msgIdx), m.subject, m.sender,
+			now.Add(-time.Duration(m.hoursAgo-1)*time.Hour), r.triage, r.notes, r.verdict,
+		)
+	}
+
+	policies := []struct {
+		name, ptype, action, criteria string
+		priority                      int
+	}{
+		{"Quarantine Macro-Enabled Office Docs", "attachment", "quarantine", "file_type IN (xlsm,docm,dotm)", 10},
+		{"Block Newly Registered Domains with Login Forms", "url", "block", "is_newly_registered=true AND has_login_form=true", 20},
+		{"Tag External Senders on Internal Threads", "spam", "tag", "direction=inbound AND subject LIKE 'Re:%'", 100},
+		{"Allowlist Verified Vendor Domains", "allowlist", "allow", "domain IN (microsoft.com,github.com,salesforce.com,docusign.net)", 5},
+	}
+	for _, p := range policies {
+		db.Exec(`
+			INSERT INTO email_policies (tenant_id, name, policy_type, action, criteria, enabled, priority)
+			VALUES (9999,$1,$2,$3,$4,true,$5)`,
+			p.name, p.ptype, p.action, p.criteria, p.priority,
+		)
 	}
 }
 
