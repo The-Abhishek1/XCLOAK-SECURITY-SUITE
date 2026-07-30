@@ -168,6 +168,8 @@ func main() {
 	seedADSecurity(db)
 	log.Println("Seeding supply chain security…")
 	seedSupplyChainSecurity(db)
+	log.Println("Seeding OT/ICS security…")
+	seedOTICSSecurity(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -3585,6 +3587,235 @@ func seedSupplyChainSecurity(db *sql.DB) {
 			INSERT INTO sc_policies (tenant_id, name, rule_type, action, is_enabled, description)
 			VALUES (9999,$1,$2,$3,$4,$5)`,
 			p.name, p.ruleType, p.action, p.enabled, p.desc,
+		)
+	}
+}
+
+func seedOTICSSecurity(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_assets (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', asset_type TEXT DEFAULT 'plc',
+		vendor TEXT DEFAULT '', model TEXT DEFAULT '',
+		firmware TEXT DEFAULT '', ip TEXT DEFAULT '',
+		mac TEXT DEFAULT '', zone TEXT DEFAULT '',
+		site TEXT DEFAULT '', purdue_level INTEGER DEFAULT 2,
+		criticality TEXT DEFAULT 'medium', risk_score INTEGER DEFAULT 0,
+		is_online BOOLEAN DEFAULT true, uptime_hours INTEGER DEFAULT 0,
+		last_seen TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_traffic (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		src_ip TEXT DEFAULT '', dst_ip TEXT DEFAULT '',
+		protocol TEXT DEFAULT '', function_code TEXT DEFAULT '',
+		operation TEXT DEFAULT '', register_addr TEXT DEFAULT '',
+		value TEXT DEFAULT '', is_authorized BOOLEAN DEFAULT true,
+		severity TEXT DEFAULT 'info', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_alerts (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		asset_id INTEGER DEFAULT 0, alert_type TEXT DEFAULT '',
+		title TEXT DEFAULT '', description TEXT DEFAULT '',
+		severity TEXT DEFAULT 'medium', protocol TEXT DEFAULT '',
+		src_ip TEXT DEFAULT '', status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_vulnerabilities (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		asset_id INTEGER DEFAULT 0, cve_id TEXT DEFAULT '',
+		cvss NUMERIC(4,1) DEFAULT 0, severity TEXT DEFAULT 'medium',
+		title TEXT DEFAULT '', vendor_advisory TEXT DEFAULT '',
+		patch_available BOOLEAN DEFAULT false, requires_maintenance_window BOOLEAN DEFAULT true,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_zones (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', purdue_level INTEGER DEFAULT 2,
+		asset_count INTEGER DEFAULT 0, allowed_protocols TEXT DEFAULT '',
+		firewall_policy TEXT DEFAULT '', risk_score INTEGER DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_baselines (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		baseline_type TEXT DEFAULT '', description TEXT DEFAULT '',
+		learned_at TIMESTAMPTZ DEFAULT NOW(), is_active BOOLEAN DEFAULT true,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_incidents (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		title TEXT DEFAULT '', description TEXT DEFAULT '',
+		severity TEXT DEFAULT 'medium', status TEXT DEFAULT 'open',
+		affected_assets TEXT DEFAULT '', response_mode TEXT DEFAULT 'alert_only',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ot_firmware (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		asset_id INTEGER DEFAULT 0, firmware_version TEXT DEFAULT '',
+		previous_version TEXT DEFAULT '', changed_at TIMESTAMPTZ DEFAULT NOW(),
+		changed_by TEXT DEFAULT '', is_authorized BOOLEAN DEFAULT false,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM ot_assets WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+
+	assets := []struct {
+		name, atype, vendor, model, firmware, ip, zone, site, criticality string
+		purdue, risk, uptimeHrs                                           int
+		online                                                            bool
+	}{
+		{"PLC-UNIT-01", "plc", "Siemens", "S7-1500", "2.9.1", "10.10.1.10", "control-net", "plant-a", "critical", 1, 78, 4200, true},
+		{"PLC-UNIT-02", "plc", "Rockwell", "ControlLogix 5580", "33.011", "10.10.1.11", "control-net", "plant-a", "high", 1, 45, 8600, true},
+		{"RTU-FIELD-03", "rtu", "Schneider", "SCADAPack 535", "1.2.4-eol", "10.10.1.33", "field-net", "plant-b", "high", 0, 71, 2100, true},
+		{"HMI-CONTROL-01", "hmi", "Wonderware", "InTouch 2020", "2020-eol", "10.10.1.20", "control-net", "plant-a", "high", 2, 66, 6100, true},
+		{"EWS-SIEMENS-01", "engineering_workstation", "Siemens", "SIMATIC Field PG", "Win10-2021", "10.10.0.5", "it-ot-bridge", "plant-a", "high", 3, 58, 900, true},
+		{"SCADA-SRV-01", "scada_server", "GE", "iFIX 6.5", "6.5.2", "10.10.2.10", "scada-net", "plant-a", "critical", 2, 52, 12000, true},
+		{"HIST-SERVER-01", "historian", "OSIsoft", "PI Server 2018", "2018 SP3-eol", "10.10.2.20", "scada-net", "plant-a", "medium", 3, 40, 15000, true},
+		{"PLC-UNIT-04", "plc", "Siemens", "S7-1200", "4.5.0", "10.10.1.12", "field-net", "plant-b", "medium", 1, 22, 5400, true},
+		{"HMI-FIELD-02", "hmi", "Wonderware", "InTouch 2023", "2023.1", "10.10.1.21", "field-net", "plant-b", "medium", 2, 18, 3000, true},
+		{"ENG-WS-EU-01", "engineering_workstation", "Rockwell", "Studio 5000", "Win11-2023", "10.20.0.5", "it-ot-bridge", "plant-c", "medium", 3, 30, 500, true},
+		{"RTU-DECOMM-01", "rtu", "GE", "D20MX", "3.1-eol", "10.10.1.40", "field-net", "plant-b", "low", 0, 68, 0, false},
+		{"SCADA-SRV-EU", "scada_server", "GE", "iFIX 6.5", "6.5.2", "10.20.2.10", "scada-net", "plant-c", "high", 2, 48, 9000, true},
+	}
+	assetIDs := make([]int, len(assets))
+	for i, a := range assets {
+		db.QueryRow(`
+			INSERT INTO ot_assets (tenant_id, name, asset_type, vendor, model, firmware, ip, zone, site, purdue_level, criticality, risk_score, is_online, uptime_hours, last_seen)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+			a.name, a.atype, a.vendor, a.model, a.firmware, a.ip, a.zone, a.site, a.purdue, a.criticality, a.risk, a.online, a.uptimeHrs, now.Add(-10*time.Minute),
+		).Scan(&assetIDs[i])
+	}
+
+	traffic := []struct {
+		srcIdx, dstIdx                                   int
+		protocol, functionCode, operation, register, val string
+		authorized                                       bool
+		hoursAgo                                         int
+	}{
+		{4, 0, "Modbus TCP", "write_register", "write", "40001", "1", true, 1},
+		{4, 0, "Modbus TCP", "write_register", "write", "40002", "0", true, 3},
+		{5, 0, "OPC UA", "read", "read", "ns=2;s=Temp1", "72.4", true, 1},
+		{5, 1, "EtherNet/IP", "read", "read", "N7:0", "1200", true, 2},
+		{4, 1, "EtherNet/IP", "write", "write", "N7:1", "0", true, 6},
+		{6, 5, "OPC UA", "read", "read", "ns=2;s=History", "batch-042", true, 1},
+		{9, 2, "DNP3", "read", "read", "AI:12", "58.2", true, 1},
+		{9, 2, "DNP3", "write", "write", "BO:3", "1", true, 12},
+		{4, 7, "Modbus TCP", "read", "read", "40010", "300", true, 2},
+		{4, 3, "EtherNet/IP", "read", "read", "N9:0", "1", true, 1},
+		{10, 0, "Modbus TCP", "write_register", "write", "40001", "0", false, 1},
+		{10, 1, "Modbus TCP", "read", "read", "40005", "5", false, 2},
+	}
+	for _, t := range traffic {
+		db.Exec(`
+			INSERT INTO ot_traffic (tenant_id, src_ip, dst_ip, protocol, function_code, operation, register_addr, value, is_authorized, severity, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			assets[t.srcIdx].ip, assets[t.dstIdx].ip, t.protocol, t.functionCode, t.operation, t.register, t.val, t.authorized,
+			map[bool]string{true: "info", false: "high"}[t.authorized],
+			now.Add(-time.Duration(t.hoursAgo)*time.Hour),
+		)
+	}
+
+	alerts := []struct {
+		assetIdx                               int
+		atype, title, desc, severity, protocol string
+		status                                 string
+		hoursAgo                               int
+	}{
+		{10, "unauthorized_write", "Unauthorized Modbus write from decommissioned RTU", "RTU-DECOMM-01 issued a write command despite being marked offline for decommissioning.", "critical", "Modbus TCP", "open", 1},
+		{4, "engineering_station_abuse", "EWS wrote to PLC outside maintenance window", "EWS-SIEMENS-01 issued a write command to PLC-UNIT-02 outside the approved maintenance window.", "high", "EtherNet/IP", "open", 6},
+		{2, "firmware_change", "RTU firmware unchanged since EOL notice", "RTU-FIELD-03 is running firmware 1.2.4, marked end-of-life by vendor.", "high", "", "open", 48},
+		{0, "new_device", "New device observed on control-net", "An unrecognized IP briefly appeared on the control-net segment.", "medium", "", "resolved", 200},
+		{5, "protocol_misuse", "OPC UA session from unexpected source", "SCADA-SRV-01 received an OPC UA session request from an unrecognized engineering workstation.", "medium", "OPC UA", "open", 20},
+		{6, "network_scanning", "Port scan detected against historian", "HIST-SERVER-01 received sequential connection attempts across a wide port range.", "high", "", "open", 8},
+		{3, "command_injection", "Suspicious HMI screen change sequence", "HMI-CONTROL-01 logged a rapid sequence of screen/setpoint changes inconsistent with operator behavior.", "critical", "", "open", 3},
+		{1, "unauthorized_write", "Write command outside allowed register range", "PLC-UNIT-02 received a write to a register outside its documented allowed range.", "medium", "EtherNet/IP", "resolved", 100},
+	}
+	for _, al := range alerts {
+		db.Exec(`
+			INSERT INTO ot_alerts (tenant_id, asset_id, alert_type, title, description, severity, protocol, src_ip, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			assetIDs[al.assetIdx], al.atype, al.title, al.desc, al.severity, al.protocol, assets[al.assetIdx].ip, al.status,
+			now.Add(-time.Duration(al.hoursAgo)*time.Hour),
+		)
+	}
+
+	vulns := []struct {
+		assetIdx                            int
+		cve                                 string
+		cvss                                float64
+		severity, title, advisory           string
+		patchAvailable, requiresMaintenance bool
+	}{
+		{2, "CVE-2023-29411", 8.6, "high", "SCADAPack authentication bypass via crafted DNP3 frame", "CISA-ICS-23-089", false, true},
+		{3, "CVE-2020-8004", 7.5, "high", "OSIsoft/Wonderware InTouch unauthenticated remote read", "CISA-ICS-20-051", true, true},
+		{6, "CVE-2020-8004", 7.5, "high", "OSIsoft PI Server unpatched remote read vulnerability", "CISA-ICS-20-051", true, true},
+		{0, "CVE-2022-38773", 9.8, "critical", "Siemens S7-1500 remote code execution via crafted TIA project file", "CISA-ICS-22-249", true, true},
+		{10, "CVE-2019-6538", 9.8, "critical", "GE D20MX unauthenticated remote configuration change", "CISA-ICS-19-113", false, true},
+		{4, "CVE-2021-33020", 6.5, "medium", "Siemens Field PG engineering software local privilege escalation", "CISA-ICS-21-133", true, false},
+	}
+	for _, v := range vulns {
+		db.Exec(`
+			INSERT INTO ot_vulnerabilities (tenant_id, asset_id, cve_id, cvss, severity, title, vendor_advisory, patch_available, requires_maintenance_window)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8)`,
+			assetIDs[v.assetIdx], v.cve, v.cvss, v.severity, v.title, v.advisory, v.patchAvailable, v.requiresMaintenance,
+		)
+	}
+
+	zones := []struct {
+		name                             string
+		purdue, assetCount, risk         int
+		allowedProtocols, firewallPolicy string
+	}{
+		{"control-net", 1, 5, 71, "Modbus TCP,EtherNet/IP", "deny-by-default"},
+		{"field-net", 1, 4, 55, "Modbus TCP,DNP3", ""},
+		{"scada-net", 2, 3, 50, "OPC UA,Historian replication", "deny-by-default"},
+		{"it-ot-bridge", 3, 2, 62, "HTTPS,RDP (managed)", "deny-by-default"},
+	}
+	for _, z := range zones {
+		db.Exec(`
+			INSERT INTO ot_zones (tenant_id, name, purdue_level, asset_count, allowed_protocols, firewall_policy, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6)`,
+			z.name, z.purdue, z.assetCount, z.allowedProtocols, z.firewallPolicy, z.risk,
+		)
+	}
+
+	baselines := []struct {
+		btype, desc string
+		active      bool
+		daysAgo     int
+	}{
+		{"normal_protocols", "Approved OT protocol usage per device pair — control-net", true, 90},
+		{"normal_protocols", "Approved OT protocol usage per device pair — field-net", true, 88},
+		{"normal_commands", "Expected Modbus/DNP3 function codes per PLC — PLC-UNIT-01", true, 90},
+		{"normal_commands", "Expected Modbus/DNP3 function codes per PLC — PLC-UNIT-02", true, 90},
+		{"normal_commands", "Expected Modbus/DNP3 function codes per PLC — RTU-FIELD-03", true, 85},
+		{"normal_devices", "All known devices in the OT network — plant-a", true, 90},
+		{"normal_devices", "All known devices in the OT network — plant-b", true, 90},
+		{"normal_devices", "All known devices in the OT network — plant-c", false, 5},
+		{"maintenance_windows", "Approved programming windows — plant-a Sat 02:00-04:00", true, 90},
+	}
+	for _, b := range baselines {
+		db.Exec(`
+			INSERT INTO ot_baselines (tenant_id, baseline_type, description, learned_at, is_active)
+			VALUES (9999,$1,$2,$3,$4)`,
+			b.btype, b.desc, now.Add(-time.Duration(b.daysAgo)*24*time.Hour), b.active,
+		)
+	}
+
+	firmware := []struct {
+		assetIdx                     int
+		version, previous, changedBy string
+		authorized                   bool
+		daysAgo                      int
+	}{
+		{0, "2.9.1", "2.8.4", "eng.siemens.svc", true, 2},
+		{1, "33.011", "33.010", "eng.rockwell.svc", true, 4},
+		{3, "2020-eol", "2019.2", "j.operator", false, 1},
+		{5, "6.5.2", "6.5.1", "eng.ge.svc", true, 6},
+		{8, "2023.1", "2022.3", "eng.wonderware.svc", true, 3},
+		{10, "3.1-eol", "3.0", "unknown", false, 5},
+	}
+	for _, f := range firmware {
+		db.Exec(`
+			INSERT INTO ot_firmware (tenant_id, asset_id, firmware_version, previous_version, changed_at, changed_by, is_authorized)
+			VALUES (9999,$1,$2,$3,$4,$5,$6)`,
+			assetIDs[f.assetIdx], f.version, f.previous, now.Add(-time.Duration(f.daysAgo)*24*time.Hour), f.changedBy, f.authorized,
 		)
 	}
 }

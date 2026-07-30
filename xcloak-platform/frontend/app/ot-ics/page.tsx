@@ -322,7 +322,6 @@ function ProtocolsTab() {
                 { key: 'dst', header: 'Destination', render: (s: any) => <code style={{ fontSize: 12 }}>{s.dst}</code> },
                 { key: 'protocol', header: 'Protocol', render: (s: any) => <Badge label={s.protocol} color="#3b82f6" /> },
                 { key: 'packets', header: 'Packets', render: (s: any) => <span>{s.packets.toLocaleString()}</span> },
-                { key: 'bytes', header: 'Bytes', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{(s.bytes / 1024).toFixed(1)} KB</span> },
                 { key: 'anomaly', header: 'Anomaly', render: (s: any) => s.anomaly ? <Badge label={s.anomaly.replace(/_/g, ' ')} color="#ef4444" /> : <span style={{ color: 'var(--text-3)' }}>—</span> },
                 { key: 'last_seen', header: 'Last Seen', render: (s: any) => <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{timeAgo(s.last_seen)}</span> },
               ]}
@@ -462,13 +461,13 @@ function MonitoringTab() {
                   </span>
                 </div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)' }}>{c.items}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{c.description}</div>
               </div>
             ))}
           </div>
           <SectionCard title={<span style={{ color: '#f97316' }}>Baseline Deviations Detected</span>}>
-            {(baseline.deviations ?? []).map((d: any) => (
-              <div key={d.id} style={{ padding: 12, background: 'var(--border)', borderRadius: 6, marginBottom: 8, borderLeft: `3px solid ${SEV_COLOR[d.severity] ?? '#64748b'}` }}>
+            {(baseline.deviations ?? []).length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No open deviations.</div>}
+            {(baseline.deviations ?? []).map((d: any, i: number) => (
+              <div key={i} style={{ padding: 12, background: 'var(--border)', borderRadius: 6, marginBottom: 8, borderLeft: `3px solid ${SEV_COLOR[d.severity] ?? '#64748b'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Badge label={d.type.replace(/_/g, ' ')} color={SEV_COLOR[d.severity]} />
                   <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(d.time)}</span>
@@ -586,8 +585,6 @@ function RiskTab() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             <MetricCard label="Internet Exposed" value={risk.internet_exposed} color="#ef4444" sub="Critical — direct internet path" />
             <MetricCard label="Unsupported Firmware" value={risk.unsupported_firmware} color="#f97316" sub="EOL / no security patches" />
-            <MetricCard label="Weak Authentication" value={risk.weak_auth} color="#f97316" sub="Default creds / no auth" />
-            <MetricCard label="Open Services" value={risk.open_services} color="#eab308" sub="Unnecessary exposed ports" />
             <MetricCard label="Missing Segmentation" value={risk.missing_segmentation} color="#f97316" sub="Zones without firewall" />
             <MetricCard label="Total OT Assets" value={risk.total_assets} />
           </div>
@@ -684,37 +681,34 @@ function RiskTab() {
 
       {sub === 'paths' && attackPaths && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {(attackPaths.paths ?? []).map((path: any) => (
-            <div key={path.id} className="g-card" style={{ padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{path.title}</div>
-                <Badge label={path.risk} color={SEV_COLOR[path.risk]} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {(path.steps ?? []).map((s: any, i: number) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{s.step}</div>
-                      {i < path.steps.length - 1 && <div style={{ width: 2, height: 28, background: 'var(--border)' }} />}
-                    </div>
-                    <div style={{ paddingTop: 4, paddingBottom: i < path.steps.length - 1 ? 0 : 0, flex: 1 }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-                        <Badge label={s.layer} color="#6366f1" />
-                        <code style={{ fontSize: 11, color: 'var(--accent)' }}>{s.mitre}</code>
-                      </div>
-                      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: i < path.steps.length - 1 ? 8 : 0 }}>{s.technique}</div>
-                    </div>
+          <SectionCard title="Highest-Risk OT Assets">
+            {(attackPaths.risk_assets ?? []).length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No high-risk assets found.</div>}
+            {(attackPaths.risk_assets ?? []).map((a: any, i: number) => (
+              <div key={i} style={{ padding: 12, background: 'var(--border)', borderRadius: 6, marginBottom: 8, borderLeft: `3px solid ${RISK_COLOR(a.risk_score)}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AssetIcon type={a.asset_type} />
+                    <span style={{ fontWeight: 700 }}>{a.name}</span>
+                    <code style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.ip}</code>
                   </div>
-                ))}
-              </div>
-              {path.exploited_assets && (
-                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Exploited assets:</span>
-                  {path.exploited_assets.map((a: string) => <Badge key={a} label={a} color="#ef4444" />)}
+                  <span style={{ color: RISK_COLOR(a.risk_score), fontWeight: 700 }}>{a.risk_score}</span>
                 </div>
-              )}
-            </div>
-          ))}
+                <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Zone: {a.zone} · Purdue L{a.purdue_level} · {a.criticality} criticality</div>
+              </div>
+            ))}
+          </SectionCard>
+          <SectionCard title="Exposed Control-Layer Vulnerabilities" subtitle="CVEs affecting assets at Purdue level 0–1">
+            {(attackPaths.exposed_control_vulns ?? []).length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>None found.</div>}
+            {(attackPaths.exposed_control_vulns ?? []).map((v: any, i: number) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <code style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>{v.cve_id}</code>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 8 }}>{v.asset}</span>
+                </div>
+                <Badge label={v.severity} color={SEV_COLOR[v.severity]} />
+              </div>
+            ))}
+          </SectionCard>
         </div>
       )}
     </div>
@@ -798,9 +792,7 @@ function IntelligenceTab() {
           columns={[
             { key: 'type', header: 'Type', render: (m: any) => <Badge label={m.type} color="#f97316" /> },
             { key: 'value', header: 'Value', render: (m: any) => <code style={{ fontSize: 12 }}>{m.value}</code> },
-            { key: 'category', header: 'Category', render: (m: any) => <Badge label={m.category.replace(/_/g, ' ')} color="#6366f1" /> },
             { key: 'hits', header: 'Hits', render: (m: any) => <span style={{ color: '#ef4444', fontWeight: 700 }}>{m.hits}</span> },
-            { key: 'threat_actor', header: 'Threat Actor', render: (m: any) => <span style={{ fontSize: 12 }}>{m.threat_actor}</span> },
           ]}
         />
       )}
@@ -937,7 +929,7 @@ function AnalyticsTab() {
             <div key={i} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontWeight: 600 }}>{p.name}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.commands_per_hour.toLocaleString()} cmd/h</span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.commands.toLocaleString()} commands</span>
               </div>
               <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-3)', alignItems: 'center' }}>
                 <span>Reads: {p.reads}</span>
@@ -963,18 +955,7 @@ function AnalyticsTab() {
           ))}
         </SectionCard>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <SectionCard title="Firmware Age Distribution">
-          {(analytics.firmware_age ?? []).map((f: any, i: number) => (
-            <div key={i} style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13 }}>{f.category}</span>
-                <span style={{ color: f.color, fontWeight: 700 }}>{f.count}</span>
-              </div>
-              <ScoreBar score={(f.count / 47) * 100} color={f.color} />
-            </div>
-          ))}
-        </SectionCard>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
         <SectionCard title="Config Changes (7 days)">
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
             {(analytics.config_changes_7d ?? []).map((d: any, i: number) => {
@@ -1022,7 +1003,6 @@ function ResponseTab() {
   const ACTIONS = [
     { value: 'notify_operators', label: 'Notify Operators', desc: 'Send alarm to control room and dashboard', safe: true },
     { value: 'create_incident', label: 'Create Incident', desc: 'Open incident in OT incident management', safe: true },
-    { value: 'run_soar_playbook', label: 'Run SOAR Playbook', desc: 'Execute OT-specific SOAR response', safe: true },
     { value: 'capture_traffic', label: 'Capture Traffic', desc: 'Passive PCAP capture on affected segment', safe: true },
     { value: 'block_network_path', label: 'Block Network Path', desc: 'Requires operator approval — affects network', safe: false },
     { value: 'escalate_emergency', label: 'Emergency Escalation', desc: 'Escalate to CISO and OT operations team', safe: true },
@@ -1038,7 +1018,7 @@ function ResponseTab() {
   const execute = async () => {
     setExecuting(true);
     try { const r = await otICSAPI.respond({ action, target, reason, response_mode: responseMode }); setResult(r.data); }
-    catch { setResult({ error: 'Action failed' }); }
+    catch (err: any) { setResult({ error: err?.response?.data?.error || 'Action failed' }); }
     finally { setExecuting(false); }
   };
 
@@ -1092,6 +1072,7 @@ function ResponseTab() {
               {executing ? 'Executing…' : 'Execute'}
             </ActionButton>
           </div>
+          <a href="/playbooks" className="g-btn g-btn-ghost" style={{ textAlign: 'center' as const }}>Run SOAR Playbook</a>
         </div>
         {result && (
           <div style={{ marginTop: 16 }}>

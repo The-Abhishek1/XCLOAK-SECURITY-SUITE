@@ -848,7 +848,7 @@ function ResponseTab() {
   const execute = async () => {
     setExecuting(true);
     try { const r = await supplyChainAPI.respond({ action, target, reason }); setResult(r.data); }
-    catch { setResult({ error: 'Action failed' }); }
+    catch (err: any) { setResult({ error: err?.response?.data?.error || 'Action failed' }); }
     finally { setExecuting(false); }
   };
 

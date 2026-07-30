@@ -100,20 +100,22 @@ func GetOTDashboard(c *gin.Context) {
 	var industrial_zones int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_zones WHERE tenant_id=$1`, tid).Scan(&industrial_zones)
 	networkHealth := 94
-	if criticalAlerts > 5 { networkHealth = 72 }
+	if criticalAlerts > 5 {
+		networkHealth = 72
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"sites":              sites,
-		"industrial_zones":   industrial_zones,
-		"plcs":               plcs,
-		"hmis":               hmis,
-		"rtus":               rtus,
+		"sites":                    sites,
+		"industrial_zones":         industrial_zones,
+		"plcs":                     plcs,
+		"hmis":                     hmis,
+		"rtus":                     rtus,
 		"engineering_workstations": ewss,
-		"scada_servers":      scadaServers,
-		"total_assets":       totalAssets,
-		"ot_risk_score":      int(riskScore),
-		"critical_alerts":    criticalAlerts,
-		"active_incidents":   activeIncidents,
-		"network_health":     networkHealth,
+		"scada_servers":            scadaServers,
+		"total_assets":             totalAssets,
+		"ot_risk_score":            int(riskScore),
+		"critical_alerts":          criticalAlerts,
+		"active_incidents":         activeIncidents,
+		"network_health":           networkHealth,
 	})
 }
 
@@ -128,13 +130,19 @@ func GetOTAssets(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("type"); v != "" {
-		q += fmt.Sprintf(" AND asset_type=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND asset_type=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("zone"); v != "" {
-		q += fmt.Sprintf(" AND zone=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND zone=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("site"); v != "" {
-		q += fmt.Sprintf(" AND site=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND site=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY risk_score DESC LIMIT $%d", i)
 	args = append(args, limit)
@@ -169,7 +177,9 @@ func GetOTAssets(c *gin.Context) {
 			}
 		}
 	}
-	if assets == nil { assets = []Asset{} }
+	if assets == nil {
+		assets = []Asset{}
+	}
 	c.JSON(http.StatusOK, assets)
 }
 
@@ -199,12 +209,29 @@ func GetOTTopology(c *gin.Context) {
 			}
 		}
 	}
-	if nodes == nil { nodes = []Node{} }
-	links := []map[string]interface{}{
-		{"src": "192.168.1.1", "dst": "10.10.1.10", "protocol": "Modbus TCP", "active": true},
-		{"src": "192.168.1.1", "dst": "10.10.1.11", "protocol": "EtherNet/IP", "active": true},
-		{"src": "10.10.1.10", "dst": "10.10.2.20", "protocol": "OPC UA", "active": true},
-		{"src": "10.10.2.20", "dst": "10.10.3.30", "protocol": "Historian", "active": false},
+	if nodes == nil {
+		nodes = []Node{}
+	}
+
+	type Link struct {
+		Src      string `json:"src"`
+		Dst      string `json:"dst"`
+		Protocol string `json:"protocol"`
+		Active   bool   `json:"active"`
+	}
+	links := []Link{}
+	linkRows, _ := database.DB.Query(`
+		SELECT src_ip, dst_ip, protocol, bool_or(created_at > NOW() - INTERVAL '1 hour') AS active
+		FROM ot_traffic WHERE tenant_id=$1
+		GROUP BY src_ip, dst_ip, protocol LIMIT 50`, tid)
+	if linkRows != nil {
+		defer linkRows.Close()
+		for linkRows.Next() {
+			var l Link
+			if linkRows.Scan(&l.Src, &l.Dst, &l.Protocol, &l.Active) == nil {
+				links = append(links, l)
+			}
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"nodes": nodes, "links": links})
 }
@@ -229,20 +256,44 @@ func GetOTProtocols(c *gin.Context) {
 			}
 		}
 	}
-	if stats == nil { stats = []ProtoStat{} }
+	if stats == nil {
+		stats = []ProtoStat{}
+	}
+
+	type Session struct {
+		Src      string `json:"src"`
+		Dst      string `json:"dst"`
+		Protocol string `json:"protocol"`
+		Packets  int    `json:"packets"`
+		LastSeen string `json:"last_seen"`
+		Anomaly  string `json:"anomaly,omitempty"`
+	}
+	sessions := []Session{}
+	sRows, _ := database.DB.Query(`
+		SELECT src_ip, dst_ip, protocol, COUNT(*) AS packets, MAX(created_at) AS last_seen, bool_or(is_authorized=false) AS unauthorized
+		FROM ot_traffic WHERE tenant_id=$1
+		GROUP BY src_ip, dst_ip, protocol ORDER BY packets DESC LIMIT 20`, tid)
+	if sRows != nil {
+		defer sRows.Close()
+		for sRows.Next() {
+			var s Session
+			var unauthorized bool
+			if sRows.Scan(&s.Src, &s.Dst, &s.Protocol, &s.Packets, &s.LastSeen, &unauthorized) == nil {
+				if unauthorized {
+					s.Anomaly = "unauthorized_source"
+				}
+				sessions = append(sessions, s)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"protocol_stats": stats,
 		"supported_protocols": []string{
 			"Modbus TCP", "DNP3", "OPC UA", "EtherNet/IP", "PROFINET",
 			"BACnet", "IEC 60870-5-104", "IEC 61850", "S7", "CIP", "MQTT",
 		},
-		"sessions": []map[string]interface{}{
-			{"src": "10.10.0.5", "dst": "10.10.1.10", "protocol": "Modbus TCP", "packets": 1240, "bytes": 88320, "last_seen": time.Now().Add(-5*time.Minute).Format(time.RFC3339)},
-			{"src": "10.10.0.6", "dst": "10.10.1.11", "protocol": "EtherNet/IP", "packets": 340, "bytes": 24880, "last_seen": time.Now().Add(-12*time.Minute).Format(time.RFC3339)},
-			{"src": "10.10.0.5", "dst": "10.10.1.12", "protocol": "DNP3", "packets": 88, "bytes": 5280, "last_seen": time.Now().Add(-2*time.Minute).Format(time.RFC3339)},
-			{"src": "10.10.2.20", "dst": "10.10.1.10", "protocol": "OPC UA", "packets": 210, "bytes": 18480, "last_seen": time.Now().Add(-1*time.Minute).Format(time.RFC3339)},
-			{"src": "10.10.0.99", "dst": "10.10.1.10", "protocol": "Modbus TCP", "packets": 8, "bytes": 480, "last_seen": time.Now().Add(-30*time.Second).Format(time.RFC3339), "anomaly": "unauthorized_source"},
-		},
+		"sessions": sessions,
 	})
 }
 
@@ -257,7 +308,9 @@ func GetOTTraffic(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("protocol"); v != "" {
-		q += fmt.Sprintf(" AND protocol=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND protocol=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if c.Query("unauthorized") == "true" {
 		q += " AND is_authorized=false"
@@ -289,7 +342,9 @@ func GetOTTraffic(c *gin.Context) {
 			}
 		}
 	}
-	if traffic == nil { traffic = []Traffic{} }
+	if traffic == nil {
+		traffic = []Traffic{}
+	}
 	c.JSON(http.StatusOK, traffic)
 }
 
@@ -303,7 +358,9 @@ func GetOTAlerts(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("severity"); v != "" {
-		q += fmt.Sprintf(" AND severity=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND severity=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
@@ -330,7 +387,9 @@ func GetOTAlerts(c *gin.Context) {
 			}
 		}
 	}
-	if alerts == nil { alerts = []Alert{} }
+	if alerts == nil {
+		alerts = []Alert{}
+	}
 	var total, open, critical int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_alerts WHERE tenant_id=$1`, tid).Scan(&total)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_alerts WHERE tenant_id=$1 AND status='open'`, tid).Scan(&open)
@@ -365,7 +424,9 @@ func GetOTDeviceStatus(c *gin.Context) {
 			}
 		}
 	}
-	if devices == nil { devices = []Device{} }
+	if devices == nil {
+		devices = []Device{}
+	}
 	fwRows, _ := database.DB.Query(`SELECT id, asset_id, firmware_version, previous_version, changed_at, changed_by, is_authorized
 		FROM ot_firmware WHERE tenant_id=$1 ORDER BY changed_at DESC LIMIT 20`, tid)
 	type FWChange struct {
@@ -387,7 +448,9 @@ func GetOTDeviceStatus(c *gin.Context) {
 			}
 		}
 	}
-	if fwChanges == nil { fwChanges = []FWChange{} }
+	if fwChanges == nil {
+		fwChanges = []FWChange{}
+	}
 	c.JSON(http.StatusOK, gin.H{"devices": devices, "firmware_changes": fwChanges})
 }
 
@@ -419,7 +482,9 @@ func GetOTThreatDetection(c *gin.Context) {
 			}
 		}
 	}
-	if threats == nil { threats = []Threat{} }
+	if threats == nil {
+		threats = []Threat{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"threats": threats,
 		"detection_categories": []string{
@@ -462,7 +527,9 @@ func GetOTDPI(c *gin.Context) {
 			}
 		}
 	}
-	if entries == nil { entries = []DPIEntry{} }
+	if entries == nil {
+		entries = []DPIEntry{}
+	}
 	c.JSON(http.StatusOK, gin.H{"decoded_frames": entries})
 }
 
@@ -470,31 +537,70 @@ func GetOTDPI(c *gin.Context) {
 func GetOTRiskAssessment(c *gin.Context) {
 	createOTICSTables()
 	tid := tenantIDFromContext(c)
-	var total, internetExposed, unsupportedFirmware, weakAuth, openServices, missingSegmentation int
+	var total, internetExposed, unsupportedFirmware, missingSegmentation int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_assets WHERE tenant_id=$1`, tid).Scan(&total)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_assets WHERE tenant_id=$1 AND purdue_level=0`, tid).Scan(&internetExposed)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_assets WHERE tenant_id=$1 AND firmware LIKE '%-eol'`, tid).Scan(&unsupportedFirmware)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_zones WHERE tenant_id=$1 AND (firewall_policy='' OR firewall_policy IS NULL)`, tid).Scan(&missingSegmentation)
+
+	criticalAssets := []map[string]interface{}{}
+	rows, err := database.DB.Query(`
+		SELECT name, asset_type, ip, purdue_level, firmware, criticality, risk_score
+		FROM ot_assets WHERE tenant_id=$1 AND risk_score>=60 ORDER BY risk_score DESC LIMIT 10`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name, atype, ip, firmware, criticality string
+			var purdue, risk int
+			if rows.Scan(&name, &atype, &ip, &purdue, &firmware, &criticality, &risk) == nil {
+				reasons := []string{}
+				if purdue == 0 {
+					reasons = append(reasons, "internet-reachable (Purdue level 0)")
+				}
+				if strings.HasSuffix(firmware, "-eol") {
+					reasons = append(reasons, "running end-of-life firmware ("+firmware+")")
+				}
+				if criticality == "critical" || criticality == "high" {
+					reasons = append(reasons, criticality+" criticality asset")
+				}
+				reason := strings.Join(reasons, "; ")
+				if reason == "" {
+					reason = "elevated risk score"
+				}
+				criticalAssets = append(criticalAssets, map[string]interface{}{
+					"name": name, "type": atype, "ip": ip, "risk": risk, "reason": reason,
+				})
+			}
+		}
+	}
+
+	findings := []map[string]interface{}{}
+	if internetExposed > 0 {
+		findings = append(findings, map[string]interface{}{
+			"category": "Internet Exposure", "count": internetExposed, "severity": "critical",
+			"detail": fmt.Sprintf("%d OT assets are at Purdue level 0 (internet-reachable)", internetExposed),
+		})
+	}
+	if unsupportedFirmware > 0 {
+		findings = append(findings, map[string]interface{}{
+			"category": "Unsupported Firmware", "count": unsupportedFirmware, "severity": "high",
+			"detail": fmt.Sprintf("%d devices running firmware versions no longer receiving security updates", unsupportedFirmware),
+		})
+	}
+	if missingSegmentation > 0 {
+		findings = append(findings, map[string]interface{}{
+			"category": "Missing Segmentation", "count": missingSegmentation, "severity": "high",
+			"detail": fmt.Sprintf("%d zones have no firewall policy configured", missingSegmentation),
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"total_assets":          total,
-		"internet_exposed":      internetExposed,
-		"unsupported_firmware":  unsupportedFirmware,
-		"weak_auth":             weakAuth,
-		"open_services":         openServices,
-		"missing_segmentation":  missingSegmentation,
-		"critical_assets": []map[string]interface{}{
-			{"name": "PLC-UNIT-01", "type": "plc", "ip": "10.10.1.10", "risk": 88, "reason": "Internet-reachable via SCADA DMZ; no authentication required on Modbus port"},
-			{"name": "HMI-CONTROL-01", "type": "hmi", "ip": "10.10.1.20", "risk": 82, "reason": "Running Windows 7 EOL; remote desktop exposed to IT network"},
-			{"name": "EWS-SIEMENS-01", "type": "engineering_workstation", "ip": "10.10.0.5", "risk": 76, "reason": "Connected to both IT and OT networks; recent unauthorised PLC access"},
-			{"name": "RTU-FIELD-03", "type": "rtu", "ip": "10.10.1.33", "risk": 71, "reason": "DNP3 without authentication; firmware version 1.2.4 (EOL)"},
-			{"name": "HIST-SERVER-01", "type": "historian", "ip": "10.10.2.20", "risk": 64, "reason": "OSIsoft PI 2012; unpatched CVE-2020-8004"},
-		},
-		"findings": []map[string]interface{}{
-			{"category": "Internet Exposure", "count": 2, "severity": "critical", "detail": "2 OT assets reachable from internet via misconfigured firewall rules"},
-			{"category": "Unsupported Firmware", "count": 4, "severity": "high", "detail": "4 devices running firmware versions no longer receiving security updates"},
-			{"category": "Weak Authentication", "count": 6, "severity": "high", "detail": "6 PLCs and RTUs using default credentials or no authentication"},
-			{"category": "Open Services", "count": 8, "severity": "medium", "detail": "8 devices with unnecessary services (FTP, Telnet, HTTP) running"},
-			{"category": "Missing Segmentation", "count": 3, "severity": "high", "detail": "3 zones lack firewall enforcement between Purdue levels"},
-		},
+		"total_assets":         total,
+		"internet_exposed":     internetExposed,
+		"unsupported_firmware": unsupportedFirmware,
+		"missing_segmentation": missingSegmentation,
+		"critical_assets":      criticalAssets,
+		"findings":             findings,
 	})
 }
 
@@ -507,16 +613,16 @@ func GetOTVulnerabilities(c *gin.Context) {
 		vendor_advisory, patch_available, requires_maintenance_window, created_at
 		FROM ot_vulnerabilities WHERE tenant_id=$1 ORDER BY cvss DESC LIMIT $2`, tid, limit)
 	type Vuln struct {
-		ID                       int     `json:"id"`
-		AssetID                  int     `json:"asset_id"`
-		CVEID                    string  `json:"cve_id"`
-		CVSS                     float64 `json:"cvss"`
-		Severity                 string  `json:"severity"`
-		Title                    string  `json:"title"`
-		VendorAdvisory           string  `json:"vendor_advisory"`
-		PatchAvailable           bool    `json:"patch_available"`
-		RequiresMaintenanceWindow bool   `json:"requires_maintenance_window"`
-		CreatedAt                string  `json:"created_at"`
+		ID                        int     `json:"id"`
+		AssetID                   int     `json:"asset_id"`
+		CVEID                     string  `json:"cve_id"`
+		CVSS                      float64 `json:"cvss"`
+		Severity                  string  `json:"severity"`
+		Title                     string  `json:"title"`
+		VendorAdvisory            string  `json:"vendor_advisory"`
+		PatchAvailable            bool    `json:"patch_available"`
+		RequiresMaintenanceWindow bool    `json:"requires_maintenance_window"`
+		CreatedAt                 string  `json:"created_at"`
 	}
 	vulns := []Vuln{}
 	if rows != nil {
@@ -529,7 +635,9 @@ func GetOTVulnerabilities(c *gin.Context) {
 			}
 		}
 	}
-	if vulns == nil { vulns = []Vuln{} }
+	if vulns == nil {
+		vulns = []Vuln{}
+	}
 	var critical, high, patchable int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_vulnerabilities WHERE tenant_id=$1 AND severity='critical'`, tid).Scan(&critical)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_vulnerabilities WHERE tenant_id=$1 AND severity='high'`, tid).Scan(&high)
@@ -562,7 +670,9 @@ func GetOTZones(c *gin.Context) {
 			}
 		}
 	}
-	if zones == nil { zones = []Zone{} }
+	if zones == nil {
+		zones = []Zone{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"zones": zones,
 		"purdue_model": []map[string]interface{}{
@@ -590,11 +700,11 @@ func GetOTBaseline(c *gin.Context) {
 	rows, _ := database.DB.Query(`SELECT id, baseline_type, description, learned_at, is_active
 		FROM ot_baselines WHERE tenant_id=$1 ORDER BY learned_at DESC LIMIT 50`, tid)
 	type Baseline struct {
-		ID            int    `json:"id"`
-		BaselineType  string `json:"baseline_type"`
-		Description   string `json:"description"`
-		LearnedAt     string `json:"learned_at"`
-		IsActive      bool   `json:"is_active"`
+		ID           int    `json:"id"`
+		BaselineType string `json:"baseline_type"`
+		Description  string `json:"description"`
+		LearnedAt    string `json:"learned_at"`
+		IsActive     bool   `json:"is_active"`
 	}
 	baselines := []Baseline{}
 	if rows != nil {
@@ -606,29 +716,85 @@ func GetOTBaseline(c *gin.Context) {
 			}
 		}
 	}
-	if baselines == nil { baselines = []Baseline{} }
+	if baselines == nil {
+		baselines = []Baseline{}
+	}
+
+	type catRow struct {
+		Type    string `json:"type"`
+		Learned bool   `json:"learned"`
+		Items   int    `json:"items"`
+	}
+	categories := []catRow{}
+	catRows, _ := database.DB.Query(`
+		SELECT baseline_type, bool_or(is_active), COUNT(*)
+		FROM ot_baselines WHERE tenant_id=$1 GROUP BY baseline_type ORDER BY baseline_type`, tid)
+	if catRows != nil {
+		defer catRows.Close()
+		for catRows.Next() {
+			var r catRow
+			if catRows.Scan(&r.Type, &r.Learned, &r.Items) == nil {
+				categories = append(categories, r)
+			}
+		}
+	}
+
+	deviations := []map[string]interface{}{}
+	devRows, _ := database.DB.Query(`
+		SELECT alert_type, title, severity, created_at FROM ot_alerts
+		WHERE tenant_id=$1 AND status='open' ORDER BY created_at DESC LIMIT 10`, tid)
+	if devRows != nil {
+		defer devRows.Close()
+		for devRows.Next() {
+			var atype, title, severity, createdAt string
+			if devRows.Scan(&atype, &title, &severity, &createdAt) == nil {
+				deviations = append(deviations, map[string]interface{}{
+					"type": atype, "detail": title, "severity": severity, "time": createdAt,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"baselines": baselines,
-		"categories": []map[string]interface{}{
-			{"type": "normal_protocols", "learned": true, "items": 8, "description": "Approved OT protocol usage per device pair"},
-			{"type": "normal_commands", "learned": true, "items": 124, "description": "Expected Modbus/DNP3 function codes per PLC"},
-			{"type": "normal_devices", "learned": true, "items": 47, "description": "All known devices in the OT network"},
-			{"type": "normal_traffic", "learned": true, "items": 312, "description": "Expected communication flows and bandwidths"},
-			{"type": "maintenance_windows", "learned": true, "items": 6, "description": "Approved programming windows per site schedule"},
-		},
-		"deviations": []map[string]interface{}{
-			{"id": 1, "type": "new_device", "detail": "Unknown IP 10.10.1.99 appeared on PLC subnet", "severity": "high", "time": time.Now().Add(-2*time.Hour).Format(time.RFC3339)},
-			{"id": 2, "type": "protocol_deviation", "detail": "Modbus write commands from EWS-01 outside maintenance window", "severity": "critical", "time": time.Now().Add(-4*time.Hour).Format(time.RFC3339)},
-			{"id": 3, "type": "traffic_spike", "detail": "Network scan detected — 240 probe packets from 10.10.0.99", "severity": "high", "time": time.Now().Add(-8*time.Hour).Format(time.RFC3339)},
-			{"id": 4, "type": "new_protocol", "detail": "FTP traffic observed from PLC-UNIT-01 — not in baseline", "severity": "medium", "time": time.Now().Add(-24*time.Hour).Format(time.RFC3339)},
-		},
+		"baselines":  baselines,
+		"categories": categories,
+		"deviations": deviations,
 	})
 }
 
 // GetOTThreatIntel — GET /api/ot/threat-intel
 func GetOTThreatIntel(c *gin.Context) {
 	createOTICSTables()
+	tid := tenantIDFromContext(c)
+
+	// Real per-tenant IOC matching: check this tenant's actual iocs table
+	// against IPs seen in real OT traffic/assets. Only emit a match when a
+	// real row exists — no placeholder rows.
+	iocMatches := []map[string]interface{}{}
+	rows, err := database.DB.Query(`
+		SELECT DISTINCT i.type, i.indicator, i.hit_count
+		FROM iocs i
+		WHERE i.tenant_id=$1 AND i.enabled=true AND i.type='ip'
+		AND (
+			EXISTS (SELECT 1 FROM ot_assets a WHERE a.tenant_id=$1 AND a.ip=i.indicator)
+			OR EXISTS (SELECT 1 FROM ot_traffic t WHERE t.tenant_id=$1 AND (t.src_ip=i.indicator OR t.dst_ip=i.indicator))
+		)
+		ORDER BY i.hit_count DESC LIMIT 10`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var itype, indicator string
+			var hits int
+			if rows.Scan(&itype, &indicator, &hits) == nil {
+				iocMatches = append(iocMatches, map[string]interface{}{
+					"type": itype, "value": indicator, "hits": hits,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
+		"ioc_matches": iocMatches,
 		"ot_threat_actors": []map[string]interface{}{
 			{"name": "Sandworm", "nation": "Russia", "targets": "Energy, Water, Critical Infrastructure", "malware": "BlackEnergy, Industroyer, CaddyWiper", "active": true, "risk": "critical"},
 			{"name": "XENOTIME", "nation": "Russia", "targets": "Oil & Gas, Safety Systems (SIS)", "malware": "TRITON/TRISIS", "active": true, "risk": "critical"},
@@ -642,10 +808,6 @@ func GetOTThreatIntel(c *gin.Context) {
 			{"name": "Stuxnet", "type": "PLC Worm", "target": "Siemens S7-315/S7-417 + Step 7", "year": 2010, "capability": "Physical destruction of centrifuges via PLC logic manipulation"},
 			{"name": "BlackEnergy", "type": "ICS Recon Malware", "target": "HMI systems, GE Cimplicity, Siemens WinCC", "year": 2015, "capability": "Credential theft, file destruction, ICS plugin framework"},
 			{"name": "FrostyGoop", "type": "Modbus Attack", "target": "Lviv District Heating", "year": 2024, "capability": "Direct Modbus TCP commands caused heating outage in winter"},
-		},
-		"ioc_matches": []map[string]interface{}{
-			{"type": "ip", "value": "185.220.101.47", "category": "known_ot_scanner", "hits": 3, "threat_actor": "Unknown"},
-			{"type": "domain", "value": "scada-update.ru", "category": "c2_domain", "hits": 1, "threat_actor": "Sandworm"},
 		},
 		"sector_advisories": []map[string]interface{}{
 			{"id": "CISA-ICS-24-001", "title": "Rockwell Automation PLC RCE Vulnerability", "severity": "critical", "date": "2024-01-15", "affected": "ControlLogix, CompactLogix"},
@@ -682,60 +844,115 @@ func GetOTTimeline(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []TLEvent{} }
+	if events == nil {
+		events = []TLEvent{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
 // GetOTCompliance — GET /api/ot/compliance
 func GetOTCompliance(c *gin.Context) {
 	createOTICSTables()
+	createFCETables()
+	tid := tenantIDFromContext(c)
+	db := database.DB
+
+	type fwRow struct {
+		Name   string `json:"name"`
+		Score  int    `json:"score"`
+		Passed int    `json:"passed"`
+		Failed int    `json:"failed"`
+		Total  int    `json:"total"`
+		Status string `json:"status"`
+	}
+	frows, _ := db.Query(`SELECT name, overall_score, passed_controls, failed_controls, total_controls, compliance_status
+		FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC`, tid)
+	frameworks := []fwRow{}
+	if frows != nil {
+		defer frows.Close()
+		for frows.Next() {
+			var r fwRow
+			if frows.Scan(&r.Name, &r.Score, &r.Passed, &r.Failed, &r.Total, &r.Status) == nil {
+				frameworks = append(frameworks, r)
+			}
+		}
+	}
+
+	var overallScore float64
+	db.QueryRow(`SELECT COALESCE(AVG(overall_score),0) FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE`, tid).Scan(&overallScore)
+
+	type ctrlRow struct {
+		Control   string `json:"control"`
+		Title     string `json:"title"`
+		Severity  string `json:"severity"`
+		Framework string `json:"framework"`
+	}
+	crows, _ := db.Query(`SELECT c.control_id, c.name, c.risk_level, f.name
+		FROM fce_controls c JOIN fce_frameworks f ON f.id=c.framework_id
+		WHERE c.tenant_id=$1 AND c.assessment_status='failed'
+		ORDER BY CASE c.risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 20`, tid)
+	failedControls := []ctrlRow{}
+	if crows != nil {
+		defer crows.Close()
+		for crows.Next() {
+			var r ctrlRow
+			if crows.Scan(&r.Control, &r.Title, &r.Severity, &r.Framework) == nil {
+				failedControls = append(failedControls, r)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"overall_score": 61,
-		"frameworks": []map[string]interface{}{
-			{"name": "IEC 62443", "score": 58, "passed": 34, "failed": 25, "total": 59, "version": "2018"},
-			{"name": "NIST SP 800-82", "score": 67, "passed": 28, "failed": 14, "total": 42, "version": "Rev.3"},
-			{"name": "NERC CIP", "score": 72, "passed": 23, "failed": 9, "total": 32, "version": "v7"},
-			{"name": "ISA/IEC 62443-3-3", "score": 54, "passed": 19, "failed": 16, "total": 35},
-			{"name": "ISO 27019", "score": 63, "passed": 26, "failed": 15, "total": 41},
-		},
-		"failed_controls": []map[string]interface{}{
-			{"control": "IEC62443-SR1.1", "title": "Human user identification and authentication", "severity": "critical", "framework": "IEC 62443"},
-			{"control": "IEC62443-SR2.1", "title": "Authorization enforcement", "severity": "high", "framework": "IEC 62443"},
-			{"control": "NERC-CIP-007-R1", "title": "Ports and services — disable unnecessary", "severity": "high", "framework": "NERC CIP"},
-			{"control": "NERC-CIP-010-R1", "title": "Baseline configuration management", "severity": "high", "framework": "NERC CIP"},
-			{"control": "SP800-82-3.3", "title": "Network segmentation between IT and OT", "severity": "critical", "framework": "NIST SP 800-82"},
-			{"control": "SP800-82-4.1", "title": "Patch and vulnerability management for ICS", "severity": "high", "framework": "NIST SP 800-82"},
-		},
+		"overall_score":   int(overallScore),
+		"frameworks":      frameworks,
+		"failed_controls": failedControls,
 	})
 }
 
 // GetOTAttackPaths — GET /api/ot/attack-paths
 func GetOTAttackPaths(c *gin.Context) {
 	createOTICSTables()
+	tid := tenantIDFromContext(c)
+
+	riskAssets := []map[string]interface{}{}
+	rows, err := database.DB.Query(`
+		SELECT name, asset_type, ip, zone, purdue_level, criticality, risk_score
+		FROM ot_assets WHERE tenant_id=$1 ORDER BY risk_score DESC LIMIT 5`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name, atype, ip, zone, criticality string
+			var purdue, risk int
+			if rows.Scan(&name, &atype, &ip, &zone, &purdue, &criticality, &risk) == nil {
+				riskAssets = append(riskAssets, map[string]interface{}{
+					"name": name, "asset_type": atype, "ip": ip, "zone": zone,
+					"purdue_level": purdue, "criticality": criticality, "risk_score": risk,
+				})
+			}
+		}
+	}
+
+	exposedVulns := []map[string]interface{}{}
+	vRows, err := database.DB.Query(`
+		SELECT v.cve_id, v.cvss, v.severity, a.name
+		FROM ot_vulnerabilities v JOIN ot_assets a ON a.id=v.asset_id AND a.tenant_id=v.tenant_id
+		WHERE v.tenant_id=$1 AND a.purdue_level<=1 ORDER BY v.cvss DESC LIMIT 5`, tid)
+	if err == nil {
+		defer vRows.Close()
+		for vRows.Next() {
+			var cve, severity, assetName string
+			var cvss float64
+			if vRows.Scan(&cve, &cvss, &severity, &assetName) == nil {
+				exposedVulns = append(exposedVulns, map[string]interface{}{
+					"cve_id": cve, "cvss": cvss, "severity": severity, "asset": assetName,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"paths": []map[string]interface{}{
-			{
-				"id": 1, "risk": "critical", "title": "Internet → SCADA → PLC → Production Line",
-				"steps": []map[string]interface{}{
-					{"step": 1, "layer": "Internet", "technique": "Spearphishing / Watering Hole", "mitre": "T1566"},
-					{"step": 2, "layer": "IT Network", "technique": "Lateral movement via compromised workstation", "mitre": "T1021"},
-					{"step": 3, "layer": "DMZ", "technique": "Jump server pivot via weak credentials", "mitre": "T1078"},
-					{"step": 4, "layer": "SCADA", "technique": "HMI takeover — SCADA historian credentials reused", "mitre": "T1078"},
-					{"step": 5, "layer": "PLC", "technique": "Unauthorized Modbus write commands to PLC registers", "mitre": "T0836"},
-					{"step": 6, "layer": "Production Line", "technique": "Physical process manipulation — shutdown or damage", "mitre": "T0831"},
-				},
-				"exploited_assets": []interface{}{"EWS-SIEMENS-01", "HMI-CONTROL-01", "PLC-UNIT-01"},
-			},
-			{
-				"id": 2, "risk": "high", "title": "USB Drop → Engineering Workstation → PLC",
-				"steps": []map[string]interface{}{
-					{"step": 1, "layer": "Physical", "technique": "USB malware drop by insider / supply chain", "mitre": "T1091"},
-					{"step": 2, "layer": "Engineering Workstation", "technique": "Autorun malware execution, credential harvest", "mitre": "T1204"},
-					{"step": 3, "layer": "PLC", "technique": "PLC programming via Step7/TIA Portal — Stuxnet-style logic injection", "mitre": "T0873"},
-				},
-				"exploited_assets": []interface{}{"EWS-SIEMENS-01", "PLC-UNIT-01"},
-			},
-		},
+		"risk_assets":           riskAssets,
+		"exposed_control_vulns": exposedVulns,
 	})
 }
 
@@ -754,36 +971,73 @@ func GetOTAnalytics(c *gin.Context) {
 		database.DB.QueryRow(`SELECT COUNT(*) FROM ot_alerts WHERE tenant_id=$1 AND DATE(created_at)<=$2`, tid, d).Scan(&cnt)
 		trend = append(trend, TrendPoint{Date: d, Count: cnt})
 	}
+	type plcRow struct {
+		Name      string `json:"name"`
+		Commands  int    `json:"commands"`
+		Writes    int    `json:"writes"`
+		Reads     int    `json:"reads"`
+		Anomalies int    `json:"anomalies"`
+	}
+	mostActivePLCs := []plcRow{}
+	plcRows, _ := database.DB.Query(`
+		SELECT a.name,
+			COUNT(*) AS commands,
+			COUNT(*) FILTER (WHERE t.operation='write') AS writes,
+			COUNT(*) FILTER (WHERE t.operation='read') AS reads,
+			COUNT(*) FILTER (WHERE t.is_authorized=false) AS anomalies
+		FROM ot_traffic t JOIN ot_assets a ON a.ip=t.dst_ip AND a.tenant_id=t.tenant_id
+		WHERE t.tenant_id=$1 AND a.asset_type IN ('plc','rtu')
+		GROUP BY a.name ORDER BY commands DESC LIMIT 5`, tid)
+	if plcRows != nil {
+		defer plcRows.Close()
+		for plcRows.Next() {
+			var r plcRow
+			if plcRows.Scan(&r.Name, &r.Commands, &r.Writes, &r.Reads, &r.Anomalies) == nil {
+				mostActivePLCs = append(mostActivePLCs, r)
+			}
+		}
+	}
+
+	type protoRow struct {
+		Protocol string `json:"protocol"`
+		Percent  int    `json:"percent"`
+	}
+	protocolDistribution := []protoRow{}
+	var totalTraffic int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM ot_traffic WHERE tenant_id=$1`, tid).Scan(&totalTraffic)
+	if totalTraffic > 0 {
+		protoRows, _ := database.DB.Query(`
+			SELECT protocol, COUNT(*) FROM ot_traffic WHERE tenant_id=$1
+			GROUP BY protocol ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+		if protoRows != nil {
+			defer protoRows.Close()
+			for protoRows.Next() {
+				var proto string
+				var cnt int
+				if protoRows.Scan(&proto, &cnt) == nil {
+					protocolDistribution = append(protocolDistribution, protoRow{Protocol: proto, Percent: cnt * 100 / totalTraffic})
+				}
+			}
+		}
+	}
+
+	type dayRow struct {
+		Day   string `json:"day"`
+		Count int    `json:"count"`
+	}
+	configChanges := []dayRow{}
+	for i := 6; i >= 0; i-- {
+		d := time.Now().AddDate(0, 0, -i)
+		var cnt int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM ot_firmware WHERE tenant_id=$1 AND DATE(changed_at)=$2`, tid, d.Format("2006-01-02")).Scan(&cnt)
+		configChanges = append(configChanges, dayRow{Day: d.Format("Mon"), Count: cnt})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"alert_trend": trend,
-		"most_active_plcs": []map[string]interface{}{
-			{"name": "PLC-UNIT-01", "commands_per_hour": 1240, "writes": 84, "reads": 1156, "anomalies": 3},
-			{"name": "PLC-UNIT-02", "commands_per_hour": 880, "writes": 44, "reads": 836, "anomalies": 0},
-			{"name": "PLC-UNIT-03", "commands_per_hour": 640, "writes": 28, "reads": 612, "anomalies": 1},
-		},
-		"protocol_distribution": []map[string]interface{}{
-			{"protocol": "Modbus TCP", "percent": 42},
-			{"protocol": "EtherNet/IP", "percent": 28},
-			{"protocol": "OPC UA", "percent": 14},
-			{"protocol": "DNP3", "percent": 9},
-			{"protocol": "IEC 60870-5-104", "percent": 4},
-			{"protocol": "Other", "percent": 3},
-		},
-		"firmware_age": []map[string]interface{}{
-			{"category": "< 1 year", "count": 12, "color": "#22c55e"},
-			{"category": "1–3 years", "count": 18, "color": "#eab308"},
-			{"category": "3–5 years", "count": 9, "color": "#f97316"},
-			{"category": "> 5 years (EOL risk)", "count": 8, "color": "#ef4444"},
-		},
-		"config_changes_7d": []map[string]interface{}{
-			{"day": time.Now().AddDate(0, 0, -6).Format("Mon"), "count": 2},
-			{"day": time.Now().AddDate(0, 0, -5).Format("Mon"), "count": 0},
-			{"day": time.Now().AddDate(0, 0, -4).Format("Mon"), "count": 1},
-			{"day": time.Now().AddDate(0, 0, -3).Format("Mon"), "count": 4},
-			{"day": time.Now().AddDate(0, 0, -2).Format("Mon"), "count": 1},
-			{"day": time.Now().AddDate(0, 0, -1).Format("Mon"), "count": 0},
-			{"day": time.Now().Format("Mon"), "count": 2},
-		},
+		"alert_trend":           trend,
+		"most_active_plcs":      mostActivePLCs,
+		"protocol_distribution": protocolDistribution,
+		"config_changes_7d":     configChanges,
 	})
 }
 
@@ -808,7 +1062,8 @@ Provide compact JSON: {"answer":"concise expert answer","confidence":88,"ot_cont
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -824,6 +1079,8 @@ Provide compact JSON: {"answer":"concise expert answer","confidence":88,"ot_cont
 // PostOTResponse — POST /api/ot/response
 func PostOTResponse(c *gin.Context) {
 	createOTICSTables()
+	createAQTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		Action       string `json:"action"`
 		Target       string `json:"target"`
@@ -831,28 +1088,53 @@ func PostOTResponse(c *gin.Context) {
 		ResponseMode string `json:"response_mode"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"notify_operators":     "Operators notified via alarm system and dashboard alert",
-		"create_incident":      "Incident created in OT incident management system",
-		"run_soar_playbook":    "SOAR playbook triggered for OT response",
-		"block_network_path":   "Network path block request submitted for operator approval",
-		"capture_traffic":      "Passive traffic capture started on affected segment",
-		"escalate_emergency":   "Emergency escalation sent to CISO and OT operations team",
+	safetyNote := "All actions that may affect physical operations require explicit operator approval before execution."
+
+	switch body.Action {
+	case "create_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO ot_incidents (tenant_id, title, description, severity, status, affected_assets, response_mode)
+			VALUES ($1,$2,$3,'high','open',$4,$5) RETURNING id`,
+			tid, "OT Security Escalation: "+body.Target, body.Reason, body.Target, body.ResponseMode,
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": fmt.Sprintf("OT incident #%d created", incidentID), "safety_note": safetyNote})
+	case "block_network_path", "escalate_emergency":
+		requester := usernameFromContext(c)
+		isEmergency := body.Action == "escalate_emergency"
+		severity := "high"
+		policy := "manager_approval"
+		if isEmergency {
+			severity = "critical"
+			policy = "emergency"
+		}
+		approvalID := fmt.Sprintf("AQ-%d-%06d", time.Now().Year(), time.Now().UnixNano()%1000000)
+		var reqID int
+		database.DB.QueryRow(`
+			INSERT INTO aq_requests (tenant_id, approval_id, request_type, action_category, severity, description, requested_action, target_asset, requester, is_emergency, policy, risk_level, due_at)
+			VALUES ($1,$2,'ot_response','ot_network',$3,$4,$5,$6,$7,$8,$9,$3,NOW()+INTERVAL '30 minutes') RETURNING id`,
+			tid, approvalID, severity, body.Reason, body.Action, body.Target, requester, isEmergency, policy,
+		).Scan(&reqID)
+		database.DB.Exec(`INSERT INTO aq_audit (tenant_id,request_id,approval_id,actor,action,details) VALUES($1,$2,$3,$4,'created','Submitted from OT/ICS response panel')`, tid, reqID, approvalID, requester)
+		msg := "Network path block request submitted for operator approval"
+		if isEmergency {
+			msg = "Emergency escalation submitted to the approval queue"
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"ok": true, "action": body.Action, "target": body.Target, "message": msg,
+			"requires_approval": true, "approval_id": approvalID, "safety_note": safetyNote,
+		})
+	case "notify_operators", "capture_traffic":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "no real operator-alarm/PCAP-capture integration configured for this action"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
 	}
-	msg := messages[body.Action]
-	if msg == "" { msg = "Action submitted for operator review" }
-	requiresApproval := body.Action == "block_network_path"
-	c.JSON(http.StatusOK, gin.H{
-		"ok":                true,
-		"action":            body.Action,
-		"target":            body.Target,
-		"message":           msg,
-		"requires_approval": requiresApproval,
-		"response_mode":     body.ResponseMode,
-		"safety_note":       "All actions that may affect physical operations require explicit operator approval before execution.",
-	})
 }
 
 // PostOTReport — POST /api/ot/report
@@ -876,7 +1158,8 @@ Provide compact JSON: {"title":"...","executive_summary":"3 sentences","key_find
 		totalAssets, criticalAlerts, openVulns, activeIncidents)
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
