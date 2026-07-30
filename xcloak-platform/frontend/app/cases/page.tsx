@@ -7,7 +7,7 @@ import { MetricCard, DataTable, SectionCard, TabBar, ActionButton } from '@/comp
 import {
   LayoutDashboard, Briefcase, CheckSquare, Fingerprint, StickyNote, History, BarChart3, Sparkles,
   HardDrive, ScrollText, Network, FileText, KeyRound, Image as ImageIcon, Calendar, FolderOpen,
-  Check, AlertTriangle, Zap, Lock, Hourglass, Square, X,
+  Check, AlertTriangle, Zap, Hourglass, Square, X,
 } from 'lucide-react';
 
 type Tab = 'overview' | 'cases' | 'tasks' | 'evidence' | 'notebook' | 'timeline' | 'analytics' | 'response';
@@ -31,12 +31,12 @@ const SEV_COLOR: Record<string, string> = {
   critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e',
 };
 const STATUS_COLOR: Record<string, string> = {
-  open: '#3b82f6', in_progress: '#f97316', waiting_approval: '#a855f7',
-  escalated: '#ef4444', closed: '#22c55e',
+  open: '#3b82f6', investigating: '#3b82f6', in_progress: '#f97316', waiting_approval: '#a855f7',
+  escalated: '#ef4444', resolved: '#22c55e', closed: '#22c55e',
 };
 const STATUS_LABEL: Record<string, string> = {
-  open: 'Open', in_progress: 'In Progress', waiting_approval: 'Awaiting Approval',
-  escalated: 'Escalated', closed: 'Closed',
+  open: 'Open', investigating: 'Investigating', in_progress: 'In Progress', waiting_approval: 'Awaiting Approval',
+  escalated: 'Escalated', resolved: 'Resolved', closed: 'Closed',
 };
 const TASK_STATUS_COLOR: Record<string, string> = {
   pending: '#6b7280', in_progress: '#f97316', done: '#22c55e', blocked: '#ef4444',
@@ -110,7 +110,7 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
   const [sevFilter, setSevFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', severity: 'high', priority: 'high', owner: '', team: '', tags: '', template: '' });
+  const [form, setForm] = useState({ title: '', description: '', severity: 'high', owner: '', tags: '', template: '' });
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
@@ -126,8 +126,12 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
   const create = async () => {
     if (!form.title) return;
     setCreating(true);
-    const r = await casesAPI.createCase(form);
-    if (r.data?.ok) { setShowCreate(false); setForm({ title: '', description: '', severity: 'high', priority: 'high', owner: '', team: '', tags: '', template: '' }); load(); onRefresh(); }
+    try {
+      const r = await casesAPI.createCase(form);
+      if (r.data?.ok) { setShowCreate(false); setForm({ title: '', description: '', severity: 'high', owner: '', tags: '', template: '' }); load(); onRefresh(); }
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create case');
+    }
     setCreating(false);
   };
 
@@ -137,7 +141,7 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
     setShowCreate(true);
   };
 
-  const STATUSES = ['', 'open', 'in_progress', 'waiting_approval', 'escalated', 'closed'];
+  const STATUSES = ['', 'open', 'investigating', 'in_progress', 'waiting_approval', 'escalated', 'resolved', 'closed'];
   const SEVS = ['', 'critical', 'high', 'medium', 'low'];
 
   return (
@@ -189,11 +193,7 @@ function CasesTab({ selectedId, onSelect, onRefresh }: { selectedId: number | nu
             <select className="g-select" value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
               {['critical','high','medium','low'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
             </select>
-            <select className="g-select" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-              {['critical','high','medium','low'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
-            </select>
             <input className="g-input" placeholder="Owner" value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} />
-            <input className="g-input" placeholder="Team" value={form.team} onChange={e => setForm(f => ({ ...f, team: e.target.value }))} />
             <div style={{ gridColumn: '1/-1' }}>
               <input className="g-input" style={{ width: '100%' }} placeholder="Tags (comma-separated)" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} />
             </div>
@@ -261,16 +261,22 @@ function TasksTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: str
 
   const addTask = async () => {
     if (!caseId || !newTask.title) return;
-    await casesAPI.createTask(caseId, newTask);
-    setNewTask({ title: '', priority: 'medium', assignee: '' });
-    setShowAdd(false);
-    load();
+    try {
+      await casesAPI.createTask(caseId, newTask);
+      setNewTask({ title: '', priority: 'medium', assignee: '' });
+      setShowAdd(false);
+      load();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to add task');
+    }
   };
 
   const toggleStatus = async (task: any) => {
     if (!caseId) return;
     const next = task.status === 'done' ? 'pending' : task.status === 'pending' ? 'in_progress' : 'done';
-    await casesAPI.updateTask(caseId, task.id, { status: next });
+    try {
+      await casesAPI.updateTask(caseId, task.id, { status: next });
+    } catch { /* keep prior state on failure */ }
     load();
   };
 
@@ -384,10 +390,14 @@ function EvidenceTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
 
   const add = async () => {
     if (!caseId || !form.title) return;
-    await casesAPI.addEvidence(caseId, form);
-    setShowAdd(false);
-    setForm({ title: '', evidence_type: 'log', file_hash: '', collector: '', notes: '' });
-    load();
+    try {
+      await casesAPI.addEvidence(caseId, form);
+      setShowAdd(false);
+      setForm({ title: '', evidence_type: 'log', file_hash: '', collector: '', notes: '' });
+      load();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to add evidence');
+    }
   };
 
   const EV_TYPES = ['log', 'memory_dump', 'pcap', 'file', 'registry', 'screenshot', 'timeline'];
@@ -516,9 +526,13 @@ function NotebookTab({ caseId, caseTitle }: { caseId: number | null; caseTitle: 
   const save = async () => {
     if (!caseId || !draft.trim()) return;
     setSaving(true);
-    await casesAPI.addNote(caseId, { content: draft, author: 'analyst', note_type: 'markdown' });
-    setDraft('');
-    load();
+    try {
+      await casesAPI.addNote(caseId, { content: draft, author: 'analyst', note_type: 'markdown' });
+      setDraft('');
+      load();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to save note');
+    }
     setSaving(false);
   };
 
@@ -700,9 +714,6 @@ function AnalyticsTab() {
               <div style={{ width: `${data.sla_compliance}%`, height: '100%', borderRadius: '4px', background: data.sla_compliance >= 80 ? '#22c55e' : '#eab308' }} />
             </div>
           </div>
-          <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--text-3)', textAlign: 'center' }}>
-            Recurring cases: <strong style={{ color: '#f97316' }}>{data.recurring_case_count}</strong>
-          </div>
         </SectionCard>
       </div>
     </div>
@@ -730,9 +741,13 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
 
   const addComment = async () => {
     if (!caseId || !comment.trim()) return;
-    await casesAPI.addComment(caseId, { content: comment, author: 'analyst', is_internal: true });
-    setComment('');
-    casesAPI.getComments(caseId).then(r => setComments(r.data || []));
+    try {
+      await casesAPI.addComment(caseId, { content: comment });
+      setComment('');
+      casesAPI.getComments(caseId).then(r => setComments(r.data || []));
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to add comment');
+    }
   };
 
   const runAI = async () => {
@@ -924,11 +939,6 @@ function ResponseTab({ selectedCase }: { selectedCase: any }) {
                       <span style={{ color: 'var(--text-3)' }}>{timeAgo(cm.created_at)}</span>
                     </div>
                     <div style={{ fontSize: '0.83rem', color: 'var(--text-2)', lineHeight: 1.5 }}>{cm.content}</div>
-                    {cm.is_internal && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.68rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>
-                        <Lock style={{ width: 9, height: 9 }} /> Internal
-                      </span>
-                    )}
                   </div>
                 ))}
               </div>

@@ -1369,33 +1369,44 @@ func seedAssets(db *sql.DB, agentIDs []int) {
 }
 
 func seedCases(db *sql.DB, alertIDs, incidentIDs []int) {
+	var existing int
+	db.QueryRow(`SELECT count(*) FROM cases WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	mustExec(db, `ALTER TABLE cases ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT ''`)
+	mustExec(db, `ALTER TABLE cases ADD COLUMN IF NOT EXISTS template TEXT DEFAULT ''`)
 	now := time.Now()
 	cases := []struct {
-		title, desc, severity, status, phase, mitreTactic, mitreTechnique string
-		slaHours                                                          int
-		hoursAgo                                                          int
+		title, desc, severity, status, phase, mitreTactic, mitreTechnique, owner, tags, template string
+		slaHours                                                                                 int
+		hoursAgo                                                                                 int
+		slaBreachHoursFromNow                                                                    float64 // negative = already breached, small positive = warning window, large positive = fine
+		slaBreached                                                                              bool
 	}{
 		{
 			"C2 Implant Investigation — web-prod-01", "Active Cobalt Strike beacon detected on web-prod-01. Memory acquisition triggered. Isolating host and hunting for lateral movement.",
-			"critical", "open", "containment", "Command and Control", "T1071.001", 4, 1,
+			"critical", "open", "containment", "Command and Control", "T1071.001", "admin", "c2,malware,lateral-movement", "malware", 4, 1, -2, true,
 		},
 		{
 			"Credential Theft + Lateral Movement", "mimikatz run on win-workstation-05 extracted NTLM hashes. Pass-the-hash attempt to dc-01 confirmed. AD accounts locked.",
-			"high", "investigating", "eradication", "Credential Access", "T1003.001", 8, 3,
+			"high", "investigating", "eradication", "Credential Access", "T1003.001", "admin", "credential-theft,ad", "ad_attack", 8, 3, 1, false,
 		},
 		{
 			"Ransomware Post-Incident Review", "BlackCat/ALPHV contained. 847 files encrypted on db-server-02. Restoring from backup. CVE-2024-1086 patched.",
-			"critical", "resolved", "lessons_learned", "Impact", "T1486", 24, 10,
+			"critical", "resolved", "lessons_learned", "Impact", "T1486", "", "ransomware,post-incident", "ransomware", 24, 10, 48, false,
 		},
 	}
 	for i, c := range cases {
 		var caseID int
+		slaBreachAt := now.Add(time.Duration(c.slaBreachHoursFromNow * float64(time.Hour)))
 		err := db.QueryRow(`
 			INSERT INTO cases
-				(title, description, severity, status, phase, mitre_tactic, mitre_technique, sla_hours, created_at, tenant_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,9999)
+				(title, description, severity, status, phase, mitre_tactic, mitre_technique, sla_hours, sla_breach_at, sla_breached, assigned_to_name, tags, template, created_at, tenant_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,9999)
 			RETURNING id`,
 			c.title, c.desc, c.severity, c.status, c.phase, c.mitreTactic, c.mitreTechnique, c.slaHours,
+			slaBreachAt, c.slaBreached, c.owner, c.tags, c.template,
 			now.Add(-time.Duration(c.hoursAgo)*time.Hour),
 		).Scan(&caseID)
 		if err != nil {
