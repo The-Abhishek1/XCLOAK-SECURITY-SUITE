@@ -89,7 +89,7 @@ func syncFlatFileFeed(feed models.ThreatFeed) (int, error) {
 		}
 		indicator := fields[0]
 
-		iocType := guessIOCType(indicator)
+		iocType := GuessIOCType(indicator)
 
 		err := repositories.CreateIOC(models.IOC{
 			Indicator:   indicator,
@@ -113,9 +113,9 @@ func syncFlatFileFeed(feed models.ThreatFeed) (int, error) {
 	return imported, nil
 }
 
-// guessIOCType makes a best-effort guess at the indicator type based on its
+// GuessIOCType makes a best-effort guess at the indicator type based on its
 // shape — IPv4/CIDR, SHA256/MD5 hash length, or domain (fallback).
-func guessIOCType(indicator string) string {
+func GuessIOCType(indicator string) string {
 
 	// CIDR or plain IPv4: digits, dots, optional /prefix
 	isIP := true

@@ -13,17 +13,23 @@ from ⬜ to ✅ with a one-line summary + spec file name). Full detail for each
 page lives in memory (`project_page_testing_phase.md`), not here — this file
 is just the index/checklist.
 
-Full suite status as of last page (JA3 Fingerprints): a third consecutive
-broad high-load failure spread (17 failures across many unrelated
-already-completed pages, swap 2.0Gi / load average 9-12) — same root cause
-pattern as the Sigma Rules and YARA Rules runs before it. None of the
-failures touched anything this page's fixes changed (`api/ja3_enterprise.go`
-only), and this page's own spec (`ja3-fingerprints.spec.ts`, 6 tests, 1
-correctly skipped for missing seed data) passed cleanly. **Incidents did
-NOT appear in this run's failure list** — so the "3-for-3 identical
-Incidents failure" streak flagged after the YARA Rules pass broke here,
-reinforcing that it really was contention-driven rather than a standing
-regression (a genuine bug would have failed a 4th time too).
+Full suite status as of last page (Threat Hunt): **not run this pass** —
+this page's own investigation started from a live memory-leak incident (see
+`project_page_testing_phase.md`'s Hunt Workbench entry) that already
+consumed a full-suite run's worth of backend restarts, so only a targeted
+subset was re-verified after the Threat Hunt fixes landed: this page's own
+`hunt.spec.ts` (9/9 passed, 2 reruns needed to fix test-idempotency issues
+in the tests themselves, not product bugs), plus `hunt-workbench.spec.ts`
+and `threat-actors.spec.ts` since shared code (`api/mitre_matrix.go`,
+the `audit_logs` fix) touched both. 20/21 passed; `hunt-workbench.spec.ts`'s
+"AI Explain" test failed on both a fresh run and an isolated rerun with a
+plain timeout (`getByText(/hits found/)` never appeared) — checked live via
+psql that the underlying seed data it depends on still exists, and neither
+of this pass's backend changes touch that code path (`ExecuteHunt`/
+`runKQLHunt`), so treated as the same known high-load flakiness class
+documented below rather than chased further. **A full accumulated-suite run
+across all 27 pages is now overdue** — worth doing at the start of the next
+page's pass rather than deferring further.
 **Growing self-inflicted flake class — escalating, worth addressing soon**:
 this phase now has **5** CPU-bound local-LLM tests spread across 4 spec
 files (`elastic-query.spec.ts` ×2, `log-sources.spec.ts` ×1,
@@ -51,7 +57,7 @@ features on a future page seem broken, check `ollama list` /
 
 ---
 
-## ✅ Completed (26)
+## ✅ Completed (27)
 
 1. **Dashboard** (`/dashboard`) — `dashboard.spec.ts`. Fabricated compliance %, broken SQL (nonexistent `compliance_reports.framework`/`.details` columns).
 2. **Agents** (`/agents`) — `agents.spec.ts`. Dead `is_isolated`/`tamper_protection` fields fixed; removed a duplicate in-page "Enroll Agent" onboarding modal in favor of the more complete `/agents/onwards` wizard. **Agent Detail (`/agents/:id`) has 2 known deferred bugs** — start there when it comes up (see memory).
@@ -82,10 +88,11 @@ features on a future page seem broken, check `ollama list` /
 25. **JA3 Fingerprints** (`/ja3-fingerprints`) — `ja3-fingerprints.spec.ts`. Better-defended data model than Sigma/YARA: `ja3_fingerprints` has a real `UNIQUE (hash, COALESCE(tenant_id,0))` index with a genuinely working `ON CONFLICT ... DO UPDATE` upsert, so no duplicate-creation bug here; detection (`services/ja3_detector.go`) always does a fresh DB query rather than caching, so the missing-cache-invalidation class doesn't apply either; and the Relationships tab (real `RelGraph` + real `GetJA3Relationships`) was already correctly wired into `TABS` and the render section, unlike the identical-looking gap just fixed on both Sigma Rules and YARA Rules. Real bugs found, all in `api/ja3_enterprise.go`: `GetJA3Relationships`'s IP-node/IP-edge queries and `GetJA3FingerprintDetail`'s connections query all referenced a column `remote_addr` that has never existed on `endpoint_connections` (the real column is `remote_address`) — confirmed live via psql reproducing the exact error — both silently empty forever since the query error was discarded. The FingerprintDetail query also independently referenced `ec.created_at`, which doesn't exist either (real column: `collected_at`) — a second wrong-column bug compounding the first. Beyond the column names, that query also had no correlation to the specific fingerprint being viewed at all — fixed by scoping it to the agent IDs that actually appear in this fingerprint's own alert list, verified live end-to-end with a synthetic alert + real seeded connections. Also found `analyticsData`/`timelineData` — both fetched from real, working backend endpoints (`GetJA3Analytics`/`GetJA3Timeline`) on tab switches — were never rendered anywhere in the component; wired both in with compact new panels (Library tab's "Match Trend / Most Recently Active", AI tab's "Top Matched Fingerprints"), reusing the existing `SparkTrend` component already used on the Dashboard tab. Confirmed, not fixed: the demo tenant's seeded `endpoint_logs.parsed_fields` is empty for every row (the same cross-page gap flagged during Live Logs), so the real JA3 detector has no live traffic to match against for this tenant currently — a demo-data completeness issue, not a page-specific code bug.
 26. **Hunt Workbench** (`/hunt-workbench`) — `hunt-workbench.spec.ts`. Response actions (isolate_host/kill_process/quarantine_file/block_ip/create_incident) were the same 100%-fake-button pattern as UEBA/Insider Threat/Network Map/Attack Paths — now dispatch real agent tasks through the shared pending_approval gate, or create real IOC/incident rows. IOC hunt for IP/domain types silently returned nothing (the recurring `endpoint_connections` wrong-column bug — `remote_addr`/`created_at` instead of `remote_address`/`collected_at` — already fixed on JA3 Fingerprints 3 times this phase). KQL hunt findings always showed a blank hostname (`models.Log` has no `Hostname` field) — resolved via a batched agent lookup. **Found the phase's most severe bug while testing this page, unrelated to the page's own fixes**: `singleRow.Next()` in `hunt_workbench_service.go` was hardcoded `return true`, so `scanHuntRuns`'s loop never terminated when scanning a single-row result (used by `GetHuntRun`, called on every hunt-run status poll) — one request would spin forever appending empty structs, running backend RSS from ~50MB to multiple GB in under a minute. This was the actual cause of 3 separate kernel OOM kills that day, which had been taking down the whole VS Code session — not anything Docker/Ollama-related as first suspected. Reproduced live with pprof (`scanHuntRuns` was 92% of allocated heap), fixed, verified the exact test that previously crashed the backend now passes in <1s with flat memory. **Also added lasting infra hardening as a result**: `debug.SetMemoryLimit()` + opt-in pprof in `main.go`, hard-cgroup-capped dev wrapper scripts for both backend and frontend dev servers, and migrated Kafka off Zookeeper to KRaft mode (removes a whole JVM per environment, ~380MB saved) after confirming production's `docker-compose.yml` was already properly memory-capped on every service.
 
+27. **Threat Hunt** (`/hunt`) — `hunt.spec.ts`. A separate, structured hunt-library feature distinct from Hunt Workbench (different data model — `threat_hunts`/`threat_hunt_findings` vs. `hunt_templates`/`hunt_runs`). The MITRE tab called Hunt Workbench's own `mitreCoverage()` endpoint — scoped entirely to Hunt Workbench's tables — so a user's own threat hunts here never affected what this tab showed (confirmed live: `threat_hunts` didn't even exist yet for this tenant, lazily created on first write, while `hunt_templates` already had 20 rows); added a real `GetThreatHuntMITRECoverage` scoped to this page's own tables, extracting the shared MITRE matrix into `api/mitre_matrix.go` so both endpoints render against the same tactic set without duplicating it. `PostThreatHuntResponse` was the same 100%-fake-button pattern found repeatedly this phase — fixed `isolate_host`/`block_ip`/`block_ioc`/`open_incident`/`open_case` with real dispatch; `run_soar`/`hunt_similar` didn't fit the modal's single-target shape at all, replaced with real distinct capability instead (a client-side "Hunt Similar" that reruns an ad-hoc search on the finding's own IOC value, and a real link to Playbooks). The Workspace tab's "Respond" button conflated the *hunt's* ID into `finding_id`, while the Findings tab's own Respond button never sent `hunt_id` at all — both fixed by tracking them as separate state. **Found a bug identical in shape on Hunt Workbench too, predating this phase's Hunt Workbench pass**: both pages' response-action audit-log INSERTs referenced `user_id`/`resource_type`/`resource_id` — none of which exist on `audit_logs` (real columns: `tenant_id`/`action`/`details`/`created_at`/`username`/`ip_address`) — so every response action's audit trail silently failed to write, forever, on both pages; fixed both to use the already-correct `repositories.CreateAuditLog` helper every other real audit write in the codebase already uses. The entire "Automation" tab was fabricated — 8 hardcoded "trigger → action" rules with fake active/inactive badges and zero backend backing anywhere — removed entirely, same as Log Sources' fake Alerts tab earlier this phase. Also fixed: executing a hunt (Library's inline Play button or Workspace's Execute Now) never refreshed the Library list/dashboard cache, so hit_count/last_run_at/success_rate went stale until an unrelated filter change; and `addComment` appended a fake `Date.now()` client-side id instead of the real one the backend already returns.
+
 ---
 
-## ⬜ Remaining (29), in sidebar order
-- [ ] Threat Hunt (`/hunt`)
+## ⬜ Remaining (28), in sidebar order
 - [ ] DFIR (`/dfir`)
 - [ ] Deception (`/deception`)
 - [ ] Cloud Security (`/cloud-security`)

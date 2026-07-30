@@ -165,9 +165,9 @@ func GetHuntAnalytics(c *gin.Context) {
 	}
 
 	type tplStat struct {
-		Name  string `json:"name"`
-		Runs  int    `json:"runs"`
-		Hits  int    `json:"hits"`
+		Name string `json:"name"`
+		Runs int    `json:"runs"`
+		Hits int    `json:"hits"`
 	}
 	tRows, _ := database.DB.Query(`
 		SELECT ht.name, COUNT(hr.id), COALESCE(SUM(hr.hit_count),0)
@@ -266,113 +266,13 @@ func GetHuntMITRECoverage(c *gin.Context) {
 		}
 	}
 
-	type Technique struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Status   string `json:"status"` // covered | frequently_hunted | untested
-		RunCount int    `json:"run_count"`
-	}
-	type Tactic struct {
-		ID         string      `json:"id"`
-		Name       string      `json:"name"`
-		Techniques []Technique `json:"techniques"`
-		Coverage   int         `json:"coverage"` // percentage
-	}
-
-	matrix := []struct {
-		ID         string
-		Name       string
-		Techniques []struct{ ID, Name string }
-	}{
-		{"TA0001", "Initial Access", []struct{ ID, Name string }{
-			{"T1566", "Phishing"}, {"T1190", "Exploit Public-Facing App"}, {"T1195", "Supply Chain Compromise"},
-			{"T1078", "Valid Accounts"}, {"T1199", "Trusted Relationship"},
-		}},
-		{"TA0002", "Execution", []struct{ ID, Name string }{
-			{"T1059", "Command & Scripting Interpreter"}, {"T1059.001", "PowerShell"}, {"T1204", "User Execution"},
-			{"T1053", "Scheduled Task/Job"}, {"T1569", "System Services"},
-		}},
-		{"TA0003", "Persistence", []struct{ ID, Name string }{
-			{"T1547", "Boot/Logon Autostart"}, {"T1098", "Account Manipulation"}, {"T1136", "Create Account"},
-			{"T1505", "Server Software Component"}, {"T1053", "Scheduled Task/Job"},
-		}},
-		{"TA0004", "Privilege Escalation", []struct{ ID, Name string }{
-			{"T1548", "Abuse Elevation Control"}, {"T1134", "Access Token Manipulation"}, {"T1068", "Exploit Vuln"},
-			{"T1055", "Process Injection"}, {"T1078", "Valid Accounts"},
-		}},
-		{"TA0005", "Defense Evasion", []struct{ ID, Name string }{
-			{"T1027", "Obfuscated Files/Info"}, {"T1055", "Process Injection"}, {"T1036", "Masquerading"},
-			{"T1070", "Indicator Removal"}, {"T1562", "Impair Defenses"},
-		}},
-		{"TA0006", "Credential Access", []struct{ ID, Name string }{
-			{"T1003", "OS Credential Dumping"}, {"T1003.001", "LSASS Memory"}, {"T1110", "Brute Force"},
-			{"T1552", "Unsecured Credentials"}, {"T1558", "Steal/Forge Kerberos Tickets"},
-		}},
-		{"TA0007", "Discovery", []struct{ ID, Name string }{
-			{"T1046", "Network Service Discovery"}, {"T1082", "System Info Discovery"}, {"T1083", "File Discovery"},
-			{"T1057", "Process Discovery"}, {"T1016", "System Network Config"},
-		}},
-		{"TA0008", "Lateral Movement", []struct{ ID, Name string }{
-			{"T1021", "Remote Services"}, {"T1021.001", "RDP"}, {"T1021.002", "SMB/Admin Shares"},
-			{"T1550", "Use Alternate Auth"}, {"T1570", "Lateral Tool Transfer"},
-		}},
-		{"TA0009", "Collection", []struct{ ID, Name string }{
-			{"T1560", "Archive Collected Data"}, {"T1115", "Clipboard Data"}, {"T1056", "Input Capture"},
-			{"T1213", "Data from Info Repositories"}, {"T1039", "Data from Network Drive"},
-		}},
-		{"TA0011", "Command & Control", []struct{ ID, Name string }{
-			{"T1071", "App Layer Protocol"}, {"T1071.001", "Web Protocols"}, {"T1573", "Encrypted Channel"},
-			{"T1008", "Fallback Channels"}, {"T1095", "Non-App Layer Protocol"},
-		}},
-		{"TA0010", "Exfiltration", []struct{ ID, Name string }{
-			{"T1048", "Exfiltration Over Alt Protocol"}, {"T1041", "Exfil Over C2"}, {"T1052", "Exfil Over Physical Medium"},
-			{"T1011", "Exfil Over Other Network"}, {"T1030", "Data Transfer Size Limits"},
-		}},
-		{"TA0040", "Impact", []struct{ ID, Name string }{
-			{"T1485", "Data Destruction"}, {"T1489", "Service Stop"}, {"T1486", "Data Encrypted for Impact"},
-			{"T1490", "Inhibit System Recovery"}, {"T1495", "Firmware Corruption"},
-		}},
-	}
-
-	tactics := make([]Tactic, 0, len(matrix))
-	for _, tac := range matrix {
-		techs := make([]Technique, 0, len(tac.Techniques))
-		covered := 0
-		for _, tech := range tac.Techniques {
-			cnt := coveredSet[tech.ID]
-			status := "untested"
-			if cnt >= 5 {
-				status = "frequently_hunted"
-				covered++
-			} else if cnt > 0 {
-				status = "covered"
-				covered++
-			}
-			techs = append(techs, Technique{ID: tech.ID, Name: tech.Name, Status: status, RunCount: cnt})
-		}
-		coverage := 0
-		if len(tac.Techniques) > 0 {
-			coverage = covered * 100 / len(tac.Techniques)
-		}
-		tactics = append(tactics, Tactic{ID: tac.ID, Name: tac.Name, Techniques: techs, Coverage: coverage})
-	}
-
-	total := len(matrix) * 5
-	totalCovered := 0
-	for _, id := range coveredSet {
-		_ = id
-		totalCovered++
-	}
-	overallPct := 0
-	if total > 0 {
-		overallPct = totalCovered * 100 / total
-	}
+	tactics, overallPct, coveredCount, totalCount := buildMITRECoverage(coveredSet)
 
 	c.JSON(http.StatusOK, gin.H{
 		"tactics":          tactics,
 		"overall_coverage": overallPct,
-		"covered_count":    totalCovered,
-		"total_count":      total,
+		"covered_count":    coveredCount,
+		"total_count":      totalCount,
 	})
 }
 
@@ -436,7 +336,7 @@ func PostHuntAI(c *gin.Context) {
 func PostHuntIOC(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	var body struct {
-		IOCType   string `json:"ioc_type"`  // ip, domain, sha256, md5, ja3, email, url, cve
+		IOCType   string `json:"ioc_type"` // ip, domain, sha256, md5, ja3, email, url, cve
 		Value     string `json:"value"`
 		TimeRange string `json:"time_range"` // 24h, 7d, 30d
 	}
@@ -546,13 +446,13 @@ func PostHuntIOC(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"ioc_type":    body.IOCType,
-		"value":       body.Value,
-		"time_range":  body.TimeRange,
-		"log_hits":    logHits,
-		"alert_hits":  alertHits,
-		"conn_hits":   connHits,
-		"total_hits":  len(logHits) + len(alertHits) + len(connHits),
+		"ioc_type":   body.IOCType,
+		"value":      body.Value,
+		"time_range": body.TimeRange,
+		"log_hits":   logHits,
+		"alert_hits": alertHits,
+		"conn_hits":  connHits,
+		"total_hits": len(logHits) + len(alertHits) + len(connHits),
 	})
 }
 
@@ -697,14 +597,14 @@ func PostHuntTTP(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"ttp":         body.TTP,
-		"name":        def.Name,
-		"mitre":       def.Mitre,
-		"tactic":      def.Tactic,
-		"log_hits":    logHits,
-		"alert_hits":  alertHits,
-		"total_hits":  len(logHits) + len(alertHits),
-		"time_range":  body.TimeRange,
+		"ttp":        body.TTP,
+		"name":       def.Name,
+		"mitre":      def.Mitre,
+		"tactic":     def.Tactic,
+		"log_hits":   logHits,
+		"alert_hits": alertHits,
+		"total_hits": len(logHits) + len(alertHits),
+		"time_range": body.TimeRange,
 	})
 }
 
@@ -712,7 +612,7 @@ func PostHuntTTP(c *gin.Context) {
 func PostHuntActor(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	var body struct {
-		Actor     string `json:"actor"`      // e.g. "APT29", "Lazarus Group"
+		Actor     string `json:"actor"` // e.g. "APT29", "Lazarus Group"
 		TimeRange string `json:"time_range"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -781,11 +681,11 @@ func PostHuntActor(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"actor":       body.Actor,
-		"ioc_hits":    iocHits,
-		"alert_hits":  alertHits,
-		"total_hits":  len(iocHits) + len(alertHits),
-		"time_range":  body.TimeRange,
+		"actor":      body.Actor,
+		"ioc_hits":   iocHits,
+		"alert_hits": alertHits,
+		"total_hits": len(iocHits) + len(alertHits),
+		"time_range": body.TimeRange,
 	})
 }
 
@@ -863,7 +763,11 @@ func GetHuntNotebook(c *gin.Context) {
 		)`)
 
 	runIDFilter := c.Query("run_id")
-	var rows interface{ Next() bool; Scan(...interface{}) error; Close() error }
+	var rows interface {
+		Next() bool
+		Scan(...interface{}) error
+		Close() error
+	}
 	if runIDFilter != "" {
 		rid, _ := strconv.Atoi(runIDFilter)
 		rows, _ = database.DB.Query(`
@@ -1070,16 +974,19 @@ func PostHuntResponse(c *gin.Context) {
 		return
 	}
 
-	// Log the response action as an audit event
-	database.DB.Exec(`
-		INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, resource_id, details, created_at)
-		VALUES ($1, 0, $2, 'hunt_response', $3, $4, NOW())
-		ON CONFLICT DO NOTHING`,
-		tid,
+	// Log the response action as an audit event. Was previously a hand-rolled
+	// INSERT referencing user_id/resource_type/resource_id — none of which
+	// exist on audit_logs (real columns: tenant_id, action, details,
+	// created_at, username, ip_address) — so this silently failed on every
+	// single call since this handler was written (confirmed live: reproduced
+	// the exact "column does not exist" error). repositories.CreateAuditLog
+	// is the already-correct helper every other real audit write in this
+	// codebase uses.
+	repositories.CreateAuditLog(
 		fmt.Sprintf("hunt.response.%s", body.Action),
-		strconv.Itoa(body.RunID),
-		fmt.Sprintf(`{"action":"%s","target":"%s","agent_id":%d,"analyst":"%s","reason":"%s"}`,
-			body.Action, body.Target, body.AgentID, user, body.Reason),
+		fmt.Sprintf(`{"run_id":%d,"action":"%s","target":"%s","agent_id":%d,"analyst":"%s","reason":"%s"}`,
+			body.RunID, body.Action, body.Target, body.AgentID, user, body.Reason),
+		user,
 	)
 
 	c.JSON(http.StatusOK, gin.H{

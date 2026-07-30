@@ -987,6 +987,7 @@ export const threatHuntAPI = {
   findings:    (params?: { hunt_id?: number; severity?: string; status?: string }) =>
     api.get('/threat-hunt/findings', { params }).catch(() => ({ data: [] })),
   metrics:     ()            => api.get('/threat-hunt/metrics').catch(() => ({ data: null })),
+  mitreCoverage: ()          => api.get('/threat-hunt/mitre-coverage').catch(() => ({ data: null })),
   get:         (id: number)  => api.get(`/threat-hunt/${id}`).catch(() => ({ data: null })),
   comments:    (id: number)  => api.get(`/threat-hunt/${id}/comments`).catch(() => ({ data: [] })),
   // Mutate

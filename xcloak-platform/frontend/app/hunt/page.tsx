@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { threatHuntAPI, huntAPI, agentsAPI, huntWorkbenchAPI } from '@/lib/api';
+import { threatHuntAPI, huntAPI, agentsAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { MetricCard } from '@/components/design-system';
 import { Activity, AlertTriangle, BookOpen, Brain, CheckCircle, ExternalLink, Eye, FileText, Grid3X3, Play, Plus, RefreshCw, Save, Search, Shield, Target, TrendingUp, Zap } from 'lucide-react';
@@ -65,7 +65,6 @@ const TABS = [
   { key: 'findings',   label: 'Findings',     icon: AlertTriangle },
   { key: 'mitre',      label: 'MITRE',        icon: Shield },
   { key: 'analytics',  label: 'Analytics',    icon: TrendingUp },
-  { key: 'automation', label: 'Automation',   icon: Zap },
   { key: 'templates',  label: 'Templates',    icon: FileText },
 ] as const;
 type TabKey = typeof TABS[number]['key'];
@@ -139,6 +138,7 @@ export default function ThreatHuntPage() {
   // Response modal
   const [responseTarget, setResponseTarget] = useState('');
   const [responseAction, setResponseAction] = useState('open_incident');
+  const [responseHuntId, setResponseHuntId] = useState(0);
   const [responseFindingId, setResponseFindingId] = useState(0);
   const [showResponseModal, setShowResponseModal] = useState(false);
 
@@ -170,7 +170,7 @@ export default function ThreatHuntPage() {
       case 'categories':  threatHuntAPI.categories().then(r => setCategories(r.data)); break;
       case 'findings':    threatHuntAPI.findings().then(r => setFindings(r.data || [])); break;
       case 'analytics':   threatHuntAPI.metrics().then(r => setMetrics(r.data)); break;
-      case 'mitre':       huntWorkbenchAPI.mitreCoverage().then(r => setMitre(r.data)); break;
+      case 'mitre':       threatHuntAPI.mitreCoverage().then(r => setMitre(r.data)); break;
     }
   }, [tab]);
 
@@ -214,6 +214,8 @@ export default function ThreatHuntPage() {
       const r = await threatHuntAPI.execute(form.id);
       setExecuteResult(r.data);
       loaded.current['findings'] = false;
+      loaded.current['dashboard'] = false;
+      loadLibrary();
       notify(`Hunt executed — ${r.data?.hits ?? 0} hits`);
     } catch { notify('Execution failed'); }
     setExecuting(false);
@@ -267,15 +269,37 @@ export default function ThreatHuntPage() {
   };
 
   const submitResponse = async () => {
-    await threatHuntAPI.response({ action: responseAction, finding_id: responseFindingId, target: responseTarget });
-    notify(`${responseAction} queued for ${responseTarget}`);
-    setShowResponseModal(false);
+    try {
+      const r = await threatHuntAPI.response({ action: responseAction, hunt_id: responseHuntId, finding_id: responseFindingId, target: responseTarget });
+      notify(r.data?.message || `${responseAction} queued for ${responseTarget}`);
+      setShowResponseModal(false);
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Response action failed');
+    }
+  };
+
+  // Reruns an ad-hoc search on this finding's own IOC value — the closest
+  // real "find more like this" available (huntAPI.run is a generic
+  // keyword search, not a similarity search), switching to Workspace so
+  // the analyst sees results immediately rather than a background fetch.
+  const huntSimilar = async (f: Finding) => {
+    if (!f.ioc_value) { notify('No IOC value on this finding to hunt from'); return; }
+    setAdHocType('log');
+    setAdHocText(f.ioc_value);
+    setTab('workspace');
+    setAdHocRunning(true);
+    setAdHocResult(null);
+    try {
+      const r = await huntAPI.run({ query_type: 'log', query_text: f.ioc_value });
+      setAdHocResult(r.data);
+    } catch { notify('Query failed'); }
+    setAdHocRunning(false);
   };
 
   const addComment = async () => {
     if (!newComment || !form.id) return;
-    await threatHuntAPI.comment(form.id, newComment);
-    setComments(prev => [...prev, { id: Date.now(), author: 'you', content: newComment, created_at: new Date().toISOString() }]);
+    const r = await threatHuntAPI.comment(form.id, newComment);
+    setComments(prev => [...prev, { id: r.data?.id, author: 'you', content: newComment, created_at: new Date().toISOString() }]);
     setNewComment('');
   };
 
@@ -330,8 +354,6 @@ export default function ThreatHuntPage() {
               <option value="isolate_host">Isolate Host</option>
               <option value="block_ip">Block IP</option>
               <option value="block_ioc">Block IOC</option>
-              <option value="run_soar">Run SOAR Playbook</option>
-              <option value="hunt_similar">Hunt Similar</option>
             </select>
             <input value={responseTarget} onChange={e => setResponseTarget(e.target.value)} className="g-input w-full text-sm" placeholder="Target (host, IP, IOC value…)" />
             <div className="flex gap-2 justify-end">
@@ -482,7 +504,7 @@ export default function ThreatHuntPage() {
                     <td className="g-tr">
                       <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
                         <button onClick={() => openHuntInWorkspace(h)} className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5"><Eye className="h-3 w-3" /></button>
-                        <button onClick={async () => { await threatHuntAPI.execute(h.id); notify('Hunt executed'); }} className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5"><Play className="h-3 w-3" /></button>
+                        <button onClick={async () => { const r = await threatHuntAPI.execute(h.id); loaded.current['dashboard'] = false; loadLibrary(); notify(`Hunt executed — ${r.data?.hits ?? 0} hits`); }} className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5"><Play className="h-3 w-3" /></button>
                       </div>
                     </td>
                   </tr>
@@ -548,7 +570,7 @@ export default function ThreatHuntPage() {
               </button>
             )}
             {isEdit && form.id && (
-              <button onClick={() => { setResponseFindingId(form.id!); setResponseTarget(form.name || ''); setShowResponseModal(true); }}
+              <button onClick={() => { setResponseHuntId(form.id!); setResponseFindingId(0); setResponseTarget(form.name || ''); setShowResponseModal(true); }}
                 className="g-btn g-btn-ghost text-xs flex items-center gap-1.5">
                 <Zap className="h-3 w-3" /> Respond
               </button>
@@ -843,7 +865,13 @@ export default function ThreatHuntPage() {
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={() => ackFinding(f.id, 'acknowledged')} className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5">Ack</button>
                     <button onClick={() => ackFinding(f.id, 'false_positive')} className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5">FP</button>
-                    <button onClick={() => { setResponseFindingId(f.id); setResponseTarget(f.affected_host); setShowResponseModal(true); }}
+                    {f.ioc_value && (
+                      <button onClick={() => huntSimilar(f)} className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5">Hunt Similar</button>
+                    )}
+                    <a href="/playbooks" className="g-btn g-btn-ghost text-[10px] px-1.5 py-0.5 flex items-center gap-1 justify-center">
+                      <ExternalLink className="h-2.5 w-2.5" />Run Playbook
+                    </a>
+                    <button onClick={() => { setResponseHuntId(f.hunt_id); setResponseFindingId(f.id); setResponseTarget(f.affected_host); setShowResponseModal(true); }}
                       className="g-btn text-[10px] px-1.5 py-0.5" style={{ background: 'rgba(248,81,73,0.1)', color: '#f85149', border: '1px solid rgba(248,81,73,0.3)' }}>
                       Respond
                     </button>
@@ -933,42 +961,6 @@ export default function ThreatHuntPage() {
           <div className="g-card p-4">
             <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-2)' }}>14-Day Finding Trend</p>
             <SparkTrend data={metrics?.daily || []} key1="findings" />
-          </div>
-        </div>
-      )}
-
-      {/* ── Automation ────────────────────────────────────────────────────────── */}
-      {tab === 'automation' && (
-        <div className="space-y-4">
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>Configure automatic actions when hunt findings are created.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              { trigger: 'Finding created (Critical)', action: 'Create Alert', status: 'active', desc: 'Automatically creates a critical alert in the alerts dashboard' },
-              { trigger: 'Finding created (High/Critical)', action: 'Create Incident', status: 'active', desc: 'Opens an incident for analyst triage' },
-              { trigger: 'IOC match found', action: 'Block IOC', status: 'active', desc: 'Adds the IOC to all active blocklists' },
-              { trigger: '3+ findings same host', action: 'Isolate Host', status: 'inactive', desc: 'Sends isolation command to agent via SOAR' },
-              { trigger: 'Hunt completed (any result)', action: 'Notify Team', status: 'active', desc: 'Sends Slack/email notification to the hunt team' },
-              { trigger: 'Continuous hunt hit', action: 'Run SOAR Playbook', status: 'inactive', desc: 'Triggers the configured SOAR playbook for automated response' },
-              { trigger: 'Finding confirmed', action: 'Create Case', status: 'inactive', desc: 'Creates a case in the case management system' },
-              { trigger: 'Actor IOC found', action: 'Enrich Threat Intel', status: 'active', desc: 'Queries threat intel feeds for related IOCs and campaigns' },
-            ].map(rule => (
-              <div key={rule.trigger} className="g-card p-4 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--glass-bg-2)', color: 'var(--text-3)' }}>IF</span>
-                    <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{rule.trigger}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>THEN</span>
-                    <span className="text-xs font-semibold" style={{ color: 'var(--text-1)' }}>{rule.action}</span>
-                  </div>
-                  <p className="text-[10px]" style={{ color: 'var(--text-3)' }}>{rule.desc}</p>
-                </div>
-                <div className="shrink-0">
-                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: rule.status === 'active' ? 'rgba(34,197,94,0.15)' : 'var(--glass-bg-2)', color: rule.status === 'active' ? '#22c55e' : 'var(--text-3)' }}>{rule.status}</span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       )}

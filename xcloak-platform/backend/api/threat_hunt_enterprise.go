@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -230,28 +232,28 @@ func GetThreatHuntLibrary(c *gin.Context) {
 		FROM threat_hunts `+where+` ORDER BY updated_at DESC`, args...)
 
 	type huntRow struct {
-		ID               int     `json:"id"`
-		Name             string  `json:"name"`
-		Description      string  `json:"description"`
-		Category         string  `json:"category"`
-		SubCategory      string  `json:"sub_category"`
-		Author           string  `json:"author"`
-		Priority         string  `json:"priority"`
-		Status           string  `json:"status"`
-		RiskLevel        string  `json:"risk_level"`
-		MitreTechniques  string  `json:"mitre_techniques"`
-		HitCount         int     `json:"hit_count"`
-		RunCount         int     `json:"run_count"`
-		SuccessCount     int     `json:"success_count"`
-		FPCount          int     `json:"false_positive_count"`
-		IsContinuous     bool    `json:"is_continuous"`
-		ScheduleType     string  `json:"schedule_type"`
-		AssignedAnalyst  string  `json:"assigned_analyst"`
-		ReviewStatus     string  `json:"review_status"`
-		Version          int     `json:"version"`
-		LastRunAt        string  `json:"last_run_at"`
-		SuccessRate      float64 `json:"success_rate"`
-		CreatedAt        string  `json:"created_at"`
+		ID              int     `json:"id"`
+		Name            string  `json:"name"`
+		Description     string  `json:"description"`
+		Category        string  `json:"category"`
+		SubCategory     string  `json:"sub_category"`
+		Author          string  `json:"author"`
+		Priority        string  `json:"priority"`
+		Status          string  `json:"status"`
+		RiskLevel       string  `json:"risk_level"`
+		MitreTechniques string  `json:"mitre_techniques"`
+		HitCount        int     `json:"hit_count"`
+		RunCount        int     `json:"run_count"`
+		SuccessCount    int     `json:"success_count"`
+		FPCount         int     `json:"false_positive_count"`
+		IsContinuous    bool    `json:"is_continuous"`
+		ScheduleType    string  `json:"schedule_type"`
+		AssignedAnalyst string  `json:"assigned_analyst"`
+		ReviewStatus    string  `json:"review_status"`
+		Version         int     `json:"version"`
+		LastRunAt       string  `json:"last_run_at"`
+		SuccessRate     float64 `json:"success_rate"`
+		CreatedAt       string  `json:"created_at"`
 	}
 	hunts := []huntRow{}
 	if rows != nil {
@@ -284,26 +286,26 @@ func PostThreatHunt(c *gin.Context) {
 	createThreatHuntTables()
 
 	var body struct {
-		Name              string `json:"name"`
-		Description       string `json:"description"`
-		Category          string `json:"category"`
-		SubCategory       string `json:"sub_category"`
-		Priority          string `json:"priority"`
-		Status            string `json:"status"`
-		RiskLevel         string `json:"risk_level"`
-		MitreTechniques   string `json:"mitre_techniques"`
-		Hypothesis        string `json:"hypothesis"`
-		Objective         string `json:"objective"`
-		ExpectedFindings  string `json:"expected_findings"`
-		SuccessCriteria   string `json:"success_criteria"`
-		Scope             string `json:"scope"`
-		QueryType         string `json:"query_type"`
-		QueryText         string `json:"query_text"`
-		ScheduleType      string `json:"schedule_type"`
-		CronSchedule      string `json:"cron_schedule"`
-		IsContinuous      bool   `json:"is_continuous"`
+		Name               string `json:"name"`
+		Description        string `json:"description"`
+		Category           string `json:"category"`
+		SubCategory        string `json:"sub_category"`
+		Priority           string `json:"priority"`
+		Status             string `json:"status"`
+		RiskLevel          string `json:"risk_level"`
+		MitreTechniques    string `json:"mitre_techniques"`
+		Hypothesis         string `json:"hypothesis"`
+		Objective          string `json:"objective"`
+		ExpectedFindings   string `json:"expected_findings"`
+		SuccessCriteria    string `json:"success_criteria"`
+		Scope              string `json:"scope"`
+		QueryType          string `json:"query_type"`
+		QueryText          string `json:"query_text"`
+		ScheduleType       string `json:"schedule_type"`
+		CronSchedule       string `json:"cron_schedule"`
+		IsContinuous       bool   `json:"is_continuous"`
 		ContinuousInterval string `json:"continuous_interval"`
-		AssignedAnalyst   string `json:"assigned_analyst"`
+		AssignedAnalyst    string `json:"assigned_analyst"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -363,38 +365,38 @@ func GetThreatHunt(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
 	var h struct {
-		ID               int     `json:"id"`
-		Name             string  `json:"name"`
-		Description      string  `json:"description"`
-		Category         string  `json:"category"`
-		SubCategory      string  `json:"sub_category"`
-		Author           string  `json:"author"`
-		Priority         string  `json:"priority"`
-		Status           string  `json:"status"`
-		RiskLevel        string  `json:"risk_level"`
-		MitreTechniques  string  `json:"mitre_techniques"`
-		Hypothesis       string  `json:"hypothesis"`
-		Objective        string  `json:"objective"`
-		ExpectedFindings string  `json:"expected_findings"`
-		SuccessCriteria  string  `json:"success_criteria"`
-		Scope            string  `json:"scope"`
-		QueryType        string  `json:"query_type"`
-		QueryText        string  `json:"query_text"`
-		ScheduleType     string  `json:"schedule_type"`
-		CronSchedule     string  `json:"cron_schedule"`
-		IsContinuous     bool    `json:"is_continuous"`
-		ContinuousInterval string `json:"continuous_interval"`
-		AssignedAnalyst  string  `json:"assigned_analyst"`
-		ReviewStatus     string  `json:"review_status"`
-		HitCount         int     `json:"hit_count"`
-		RunCount         int     `json:"run_count"`
-		SuccessCount     int     `json:"success_count"`
-		FPCount          int     `json:"false_positive_count"`
-		Version          int     `json:"version"`
-		SuccessRate      float64 `json:"success_rate"`
-		LastRunAt        string  `json:"last_run_at"`
-		CreatedAt        string  `json:"created_at"`
-		UpdatedAt        string  `json:"updated_at"`
+		ID                 int     `json:"id"`
+		Name               string  `json:"name"`
+		Description        string  `json:"description"`
+		Category           string  `json:"category"`
+		SubCategory        string  `json:"sub_category"`
+		Author             string  `json:"author"`
+		Priority           string  `json:"priority"`
+		Status             string  `json:"status"`
+		RiskLevel          string  `json:"risk_level"`
+		MitreTechniques    string  `json:"mitre_techniques"`
+		Hypothesis         string  `json:"hypothesis"`
+		Objective          string  `json:"objective"`
+		ExpectedFindings   string  `json:"expected_findings"`
+		SuccessCriteria    string  `json:"success_criteria"`
+		Scope              string  `json:"scope"`
+		QueryType          string  `json:"query_type"`
+		QueryText          string  `json:"query_text"`
+		ScheduleType       string  `json:"schedule_type"`
+		CronSchedule       string  `json:"cron_schedule"`
+		IsContinuous       bool    `json:"is_continuous"`
+		ContinuousInterval string  `json:"continuous_interval"`
+		AssignedAnalyst    string  `json:"assigned_analyst"`
+		ReviewStatus       string  `json:"review_status"`
+		HitCount           int     `json:"hit_count"`
+		RunCount           int     `json:"run_count"`
+		SuccessCount       int     `json:"success_count"`
+		FPCount            int     `json:"false_positive_count"`
+		Version            int     `json:"version"`
+		SuccessRate        float64 `json:"success_rate"`
+		LastRunAt          string  `json:"last_run_at"`
+		CreatedAt          string  `json:"created_at"`
+		UpdatedAt          string  `json:"updated_at"`
 	}
 	var createdAt, updatedAt time.Time
 	err := database.DB.QueryRow(`
@@ -825,7 +827,10 @@ func GetThreatHuntCategories(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 
 	// Count existing hunts per category + sub_category
-	type subCount struct{ sub string; cnt int }
+	type subCount struct {
+		sub string
+		cnt int
+	}
 	countMap := map[string]map[string]int{}
 	rows, _ := database.DB.Query(`
 		SELECT category, COALESCE(NULLIF(sub_category,''), 'other'), COUNT(*)
@@ -899,6 +904,64 @@ func GetThreatHuntCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"categories": cats})
 }
 
+// GetThreatHuntMITRECoverage reports MITRE coverage from this page's own
+// threat_hunts/threat_hunt_findings — NOT Hunt Workbench's hunt_templates/
+// hunt_runs (a separate feature/data model the MITRE tab was previously,
+// incorrectly, pointed at: a user's own threat hunts, tagged via
+// threat_hunts.mitre_techniques, never affected what this tab showed).
+func GetThreatHuntMITRECoverage(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	createThreatHuntTables()
+
+	coveredSet := map[string]int{}
+
+	// threat_hunts.mitre_techniques is a comma-separated string, not a
+	// column SQL can GROUP BY directly — split in Go and weight by run_count
+	// (mirrors Hunt Workbench's "count of runs against this technique").
+	rows, _ := database.DB.Query(`
+		SELECT mitre_techniques, run_count FROM threat_hunts
+		WHERE tenant_id = $1 AND mitre_techniques != ''`, tid)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var techs string
+			var runCount int
+			if rows.Scan(&techs, &runCount) == nil {
+				for _, t := range strings.Split(techs, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						coveredSet[t] += runCount
+					}
+				}
+			}
+		}
+	}
+
+	// Each finding is direct evidence of a hit against its technique.
+	fRows, _ := database.DB.Query(`
+		SELECT mitre_technique, COUNT(*) FROM threat_hunt_findings
+		WHERE tenant_id = $1 AND mitre_technique != '' GROUP BY mitre_technique`, tid)
+	if fRows != nil {
+		defer fRows.Close()
+		for fRows.Next() {
+			var tech string
+			var cnt int
+			if fRows.Scan(&tech, &cnt) == nil {
+				coveredSet[tech] += cnt
+			}
+		}
+	}
+
+	tactics, overallPct, coveredCount, totalCount := buildMITRECoverage(coveredSet)
+
+	c.JSON(http.StatusOK, gin.H{
+		"tactics":          tactics,
+		"overall_coverage": overallPct,
+		"covered_count":    coveredCount,
+		"total_count":      totalCount,
+	})
+}
+
 // PostThreatHuntSchedule configures scheduling for a threat hunt.
 func PostThreatHuntSchedule(c *gin.Context) {
 	tid := tenantIDFromContext(c)
@@ -968,11 +1031,18 @@ func PostThreatHuntExport(c *gin.Context) {
 }
 
 // PostThreatHuntResponse dispatches a response action from a hunt finding.
+//
+// Previously this only wrote an audit_logs row and returned a canned
+// "queued: true" regardless of action — the same 100%-fake-button pattern
+// found and fixed on UEBA/Insider Threat/Network Map/Attack Paths/Hunt
+// Workbench this phase. No agent_tasks row, no incident, no case, no IOC
+// was ever actually created.
 func PostThreatHuntResponse(c *gin.Context) {
 	tid := tenantIDFromContext(c)
+	uid := userIDFromContext(c)
 	user := usernameFromContext(c)
 	var body struct {
-		Action    string `json:"action"` // open_incident, open_case, isolate_host, block_ip, block_ioc, run_soar, hunt_similar
+		Action    string `json:"action"` // open_incident, open_case, isolate_host, block_ip, block_ioc
 		HuntID    int    `json:"hunt_id"`
 		FindingID int    `json:"finding_id"`
 		Target    string `json:"target"`
@@ -982,22 +1052,92 @@ func PostThreatHuntResponse(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if body.Target == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target is required"})
+		return
+	}
 
-	database.DB.Exec(`
-		INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, resource_id, details, created_at)
-		VALUES ($1, 0, $2, 'threat_hunt_response', $3, $4, NOW()) ON CONFLICT DO NOTHING`,
-		tid,
+	var result string
+	switch body.Action {
+	case "isolate_host":
+		var agentID int
+		err := database.DB.QueryRow(`SELECT id FROM agents WHERE hostname = $1 AND tenant_id = $2`, body.Target, tid).Scan(&agentID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no agent found with hostname '" + body.Target + "'"})
+			return
+		}
+		payload, _ := json.Marshal(map[string]any{"reason": body.Reason, "source": "threat_hunt", "hunt_id": body.HuntID, "finding_id": body.FindingID})
+		task := models.AgentTask{AgentID: agentID, TaskType: "isolate_host", Payload: payload}
+		if err := repositories.CreateTaskPendingApproval(task); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("isolate_host queued for agent %d (%s), pending approval", agentID, body.Target)
+
+	case "block_ip":
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Target, Type: "ip", Severity: "high", Enabled: true,
+			Description: "Blocked via Threat Hunt: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ip: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("IP %s blocked via IOC", body.Target)
+
+	case "block_ioc":
+		iocType := services.GuessIOCType(body.Target)
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Target, Type: iocType, Severity: "high", Enabled: true,
+			Description: "Blocked via Threat Hunt: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ioc: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("IOC %s (%s) blocked", body.Target, iocType)
+
+	case "open_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, fmt.Sprintf("Threat Hunt Finding: %s", body.Target),
+			fmt.Sprintf("Escalated from threat hunt #%d, finding #%d. %s", body.HuntID, body.FindingID, body.Reason),
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create incident: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Incident #%d created", incidentID)
+
+	case "open_case":
+		cas, err := services.CreateCase(models.Case{
+			TenantID:    tid,
+			Title:       fmt.Sprintf("Threat Hunt Finding: %s", body.Target),
+			Description: fmt.Sprintf("Escalated from threat hunt #%d, finding #%d. %s", body.HuntID, body.FindingID, body.Reason),
+			Severity:    "high",
+		}, uid, user)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open case: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Case #%d opened", cas.ID)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
+	}
+
+	repositories.CreateAuditLog(
 		fmt.Sprintf("threat_hunt.response.%s", body.Action),
-		strconv.Itoa(body.HuntID),
-		fmt.Sprintf(`{"action":"%s","target":"%s","finding_id":%d,"analyst":"%s","reason":"%s"}`,
-			body.Action, body.Target, body.FindingID, user, body.Reason),
+		fmt.Sprintf(`{"hunt_id":%d,"action":"%s","target":"%s","finding_id":%d,"analyst":"%s","reason":"%s"}`,
+			body.HuntID, body.Action, body.Target, body.FindingID, user, body.Reason),
+		user,
 	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"queued":  true,
 		"action":  body.Action,
 		"target":  body.Target,
-		"message": fmt.Sprintf("Response action '%s' queued for target '%s'", body.Action, body.Target),
+		"message": result,
 	})
 }
 
