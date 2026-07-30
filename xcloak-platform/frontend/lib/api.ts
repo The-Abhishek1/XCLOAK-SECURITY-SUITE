@@ -1118,6 +1118,22 @@ export const deceptionAPI = {
   getTemplates:       ()                   => api.get('/deception/templates').catch(() => ({ data: [] })),
 };
 
+// Canary tokens + honeyports — a separate, real detection backend
+// (public trip-tracking endpoint, tested) that had zero frontend caller
+// anywhere in the app before this pass; the Deception page's own
+// getDecoys/getHoneytokens/getTriggers calls above are a parallel data
+// model with no real detection pipeline behind it.
+export const canaryAPI = {
+  getTokens:        ()                     => api.get('/canary/tokens').catch(() => ({ data: [] })),
+  createToken:      (data: any)            => api.post('/canary/tokens', data),
+  deleteToken:      (id: number)           => api.delete(`/canary/tokens/${id}`),
+  toggleToken:      (id: number, is_active: boolean) => api.patch(`/canary/tokens/${id}/toggle`, { is_active }),
+  getTrips:         (params?: { token_id?: number; limit?: number }) => api.get('/canary/trips', { params }).catch(() => ({ data: [] })),
+  getHoneyports:    ()                     => api.get('/honeyports').catch(() => ({ data: [] })),
+  createHoneyport:  (data: any)            => api.post('/honeyports', data),
+  deleteHoneyport:  (id: number)           => api.delete(`/honeyports/${id}`),
+};
+
 export const cloudSecurityAPI = {
   getDashboard:      ()                   => api.get('/cloud/dashboard').catch(() => ({ data: null })),
   getAccounts:       ()                   => api.get('/cloud/accounts').catch(() => ({ data: [] })),

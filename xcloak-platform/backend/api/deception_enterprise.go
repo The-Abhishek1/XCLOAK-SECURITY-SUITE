@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 
 	"github.com/gin-gonic/gin"
@@ -142,14 +145,14 @@ func GetDeceptionDashboard(c *gin.Context) {
 		ORDER BY t.created_at DESC LIMIT 10`, tid)
 	defer rows.Close()
 	type TR struct {
-		ID          int    `json:"id"`
-		EventType   string `json:"event_type"`
-		AttackerIP  string `json:"attacker_ip"`
+		ID           int    `json:"id"`
+		EventType    string `json:"event_type"`
+		AttackerIP   string `json:"attacker_ip"`
 		AttackerUser string `json:"attacker_user"`
-		Severity    string `json:"severity"`
-		CreatedAt   string `json:"created_at"`
-		DecoyName   string `json:"decoy_name"`
-		TokenName   string `json:"token_name"`
+		Severity     string `json:"severity"`
+		CreatedAt    string `json:"created_at"`
+		DecoyName    string `json:"decoy_name"`
+		TokenName    string `json:"token_name"`
 	}
 	recent := []TR{}
 	for rows.Next() {
@@ -166,22 +169,23 @@ func GetDeceptionDashboard(c *gin.Context) {
 		GROUP BY DATE(created_at) ORDER BY 1`, tid)
 	defer trows.Close()
 	for trows.Next() {
-		var d string; var cnt int
+		var d string
+		var cnt int
 		trows.Scan(&d, &cnt)
 		trend = append(trend, map[string]interface{}{"date": d, "count": cnt})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"active_decoys":        activeDecoys,
-		"triggered_decoys":     triggeredDecoys,
-		"total_triggers":       totalTriggers,
-		"active_campaigns":     activeCampaigns,
-		"high_risk_24h":        highRisk,
-		"offline_decoys":       offlineDecoys,
+		"active_decoys":         activeDecoys,
+		"triggered_decoys":      triggeredDecoys,
+		"total_triggers":        totalTriggers,
+		"active_campaigns":      activeCampaigns,
+		"high_risk_24h":         highRisk,
+		"offline_decoys":        offlineDecoys,
 		"honeytokens_triggered": honeytokensTriggered,
-		"active_honeytokens":   activeHoneytokens,
-		"recent_triggers":      recent,
-		"trend":                trend,
+		"active_honeytokens":    activeHoneytokens,
+		"recent_triggers":       recent,
+		"trend":                 trend,
 	})
 }
 
@@ -198,10 +202,14 @@ func GetDeceptionDecoys(c *gin.Context) {
 	args := []interface{}{tid}
 	n := 2
 	if dtype != "" {
-		where += fmt.Sprintf(" AND type=$%d", n); args = append(args, dtype); n++
+		where += fmt.Sprintf(" AND type=$%d", n)
+		args = append(args, dtype)
+		n++
 	}
 	if status != "" {
-		where += fmt.Sprintf(" AND status=$%d", n); args = append(args, status); n++
+		where += fmt.Sprintf(" AND status=$%d", n)
+		args = append(args, status)
+		n++
 	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
@@ -212,25 +220,25 @@ func GetDeceptionDecoys(c *gin.Context) {
 	defer rows.Close()
 
 	type Decoy struct {
-		ID           int     `json:"id"`
-		Name         string  `json:"name"`
-		Type         string  `json:"type"`
-		Subtype      string  `json:"subtype"`
-		Protocol     string  `json:"protocol"`
-		Platform     string  `json:"platform"`
-		IP           string  `json:"ip"`
-		Port         int     `json:"port"`
-		Location     string  `json:"location"`
-		Template     string  `json:"template"`
-		Status       string  `json:"status"`
-		Health       string  `json:"health"`
-		TriggerCount int     `json:"trigger_count"`
+		ID            int     `json:"id"`
+		Name          string  `json:"name"`
+		Type          string  `json:"type"`
+		Subtype       string  `json:"subtype"`
+		Protocol      string  `json:"protocol"`
+		Platform      string  `json:"platform"`
+		IP            string  `json:"ip"`
+		Port          int     `json:"port"`
+		Location      string  `json:"location"`
+		Template      string  `json:"template"`
+		Status        string  `json:"status"`
+		Health        string  `json:"health"`
+		TriggerCount  int     `json:"trigger_count"`
 		LastTriggered *string `json:"last_triggered"`
 		LastHeartbeat *string `json:"last_heartbeat"`
-		Version      string  `json:"version"`
-		IntegrityOK  bool    `json:"integrity_ok"`
-		Tags         string  `json:"tags"`
-		CreatedAt    string  `json:"created_at"`
+		Version       string  `json:"version"`
+		IntegrityOK   bool    `json:"integrity_ok"`
+		Tags          string  `json:"tags"`
+		CreatedAt     string  `json:"created_at"`
 	}
 	out := []Decoy{}
 	for rows.Next() {
@@ -275,17 +283,23 @@ func PatchDeceptionDecoy(c *gin.Context) {
 	did, _ := strconv.Atoi(c.Param("id"))
 	var body map[string]interface{}
 	c.ShouldBindJSON(&body)
-	allowed := map[string]bool{"name":true,"status":true,"health":true,"ip":true,"port":true,"location":true,"tags":true,"notes":true,"platform":true}
+	allowed := map[string]bool{"name": true, "status": true, "health": true, "ip": true, "port": true, "location": true, "tags": true, "notes": true, "platform": true}
 	setClauses, args := []string{}, []interface{}{}
 	n := 1
 	for k, v := range body {
 		if allowed[k] {
 			setClauses = append(setClauses, fmt.Sprintf("%s=$%d", k, n))
-			args = append(args, v); n++
+			args = append(args, v)
+			n++
 		}
 	}
-	if len(setClauses) == 0 { c.JSON(http.StatusOK, gin.H{"ok": true}); return }
-	setClauses = append(setClauses, fmt.Sprintf("updated_at=$%d", n)); args = append(args, time.Now()); n++
+	if len(setClauses) == 0 {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+	setClauses = append(setClauses, fmt.Sprintf("updated_at=$%d", n))
+	args = append(args, time.Now())
+	n++
 	args = append(args, tid, did)
 	database.DB.Exec(fmt.Sprintf("UPDATE deception_decoys SET %s WHERE tenant_id=$%d AND id=$%d",
 		strings.Join(setClauses, ","), n, n+1), args...)
@@ -310,7 +324,9 @@ func PostDeceptionDeploy(c *gin.Context) {
 		Platform  string   `json:"platform"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.Count == 0 { body.Count = 1 }
+	if body.Count == 0 {
+		body.Count = 1
+	}
 	created := 0
 	for i := 0; i < body.Count && i < len(body.Locations); i++ {
 		loc := body.Locations[i]
@@ -334,7 +350,10 @@ func GetDeceptionHoneytokens(c *gin.Context) {
 
 	where := "WHERE tenant_id=$1"
 	args := []interface{}{tid}
-	if htype != "" { where += " AND type=$2"; args = append(args, htype) }
+	if htype != "" {
+		where += " AND type=$2"
+		args = append(args, htype)
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT id,name,type,subtype,value,location,owner,watchlist_category,
@@ -408,8 +427,16 @@ func GetDeceptionTriggers(c *gin.Context) {
 	where := "WHERE t.tenant_id=$1"
 	args := []interface{}{tid}
 	n := 2
-	if etype != "" { where += fmt.Sprintf(" AND t.event_type=$%d", n); args = append(args, etype); n++ }
-	if severity != "" { where += fmt.Sprintf(" AND t.severity=$%d", n); args = append(args, severity); n++ }
+	if etype != "" {
+		where += fmt.Sprintf(" AND t.event_type=$%d", n)
+		args = append(args, etype)
+		n++
+	}
+	if severity != "" {
+		where += fmt.Sprintf(" AND t.severity=$%d", n)
+		args = append(args, severity)
+		n++
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT t.id, t.event_type, t.attacker_ip, t.attacker_user, t.source_host,
@@ -424,19 +451,19 @@ func GetDeceptionTriggers(c *gin.Context) {
 	defer rows.Close()
 
 	type Trig struct {
-		ID          int     `json:"id"`
-		EventType   string  `json:"event_type"`
-		AttackerIP  string  `json:"attacker_ip"`
+		ID           int    `json:"id"`
+		EventType    string `json:"event_type"`
+		AttackerIP   string `json:"attacker_ip"`
 		AttackerUser string `json:"attacker_user"`
-		SourceHost  string  `json:"source_host"`
-		Severity    string  `json:"severity"`
-		Responded   bool    `json:"responded"`
-		CampaignID  *int    `json:"campaign_id"`
-		CreatedAt   string  `json:"created_at"`
-		DecoyName   string  `json:"decoy_name"`
-		DecoyType   string  `json:"decoy_type"`
-		TokenName   string  `json:"token_name"`
-		TokenType   string  `json:"token_type"`
+		SourceHost   string `json:"source_host"`
+		Severity     string `json:"severity"`
+		Responded    bool   `json:"responded"`
+		CampaignID   *int   `json:"campaign_id"`
+		CreatedAt    string `json:"created_at"`
+		DecoyName    string `json:"decoy_name"`
+		DecoyType    string `json:"decoy_type"`
+		TokenName    string `json:"token_name"`
+		TokenType    string `json:"token_type"`
 	}
 	out := []Trig{}
 	for rows.Next() {
@@ -494,7 +521,10 @@ func GetDeceptionTimeline(c *gin.Context) {
 
 	where := "WHERE t.tenant_id=$1"
 	args := []interface{}{tid}
-	if campaignID != "" { where += " AND t.campaign_id=$2"; args = append(args, campaignID) }
+	if campaignID != "" {
+		where += " AND t.campaign_id=$2"
+		args = append(args, campaignID)
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT t.id, t.event_type, t.attacker_ip, t.attacker_user, t.source_host,
@@ -546,7 +576,8 @@ func GetDeceptionGraph(c *gin.Context) {
 	defer ipRows.Close()
 	attackerIDs := map[string]string{}
 	for ipRows.Next() {
-		var ip string; var hits int
+		var ip string
+		var hits int
 		ipRows.Scan(&ip, &hits)
 		nodeID := "atk-" + ip
 		attackerIDs[ip] = nodeID
@@ -559,7 +590,9 @@ func GetDeceptionGraph(c *gin.Context) {
 		WHERE tenant_id=$1 AND trigger_count>0 LIMIT 30`, tid)
 	defer drows.Close()
 	for drows.Next() {
-		var id int; var name, dtype string; var tc int
+		var id int
+		var name, dtype string
+		var tc int
 		drows.Scan(&id, &name, &dtype, &tc)
 		nodes = append(nodes, map[string]interface{}{"id": fmt.Sprintf("dec-%d", id), "label": name, "type": "decoy", "subtype": dtype, "trigger_count": tc})
 	}
@@ -570,7 +603,8 @@ func GetDeceptionGraph(c *gin.Context) {
 		WHERE tenant_id=$1 AND triggered=true LIMIT 20`, tid)
 	defer trows2.Close()
 	for trows2.Next() {
-		var id int; var name, htype string
+		var id int
+		var name, htype string
 		trows2.Scan(&id, &name, &htype)
 		nodes = append(nodes, map[string]interface{}{"id": fmt.Sprintf("tok-%d", id), "label": name, "type": "honeytoken", "subtype": htype})
 	}
@@ -581,10 +615,14 @@ func GetDeceptionGraph(c *gin.Context) {
 		FROM deception_triggers WHERE tenant_id=$1 LIMIT 50`, tid)
 	defer erows.Close()
 	for erows.Next() {
-		var ip string; var decoyID, tokenID *int; var etype, sev string
+		var ip string
+		var decoyID, tokenID *int
+		var etype, sev string
 		erows.Scan(&ip, &decoyID, &tokenID, &etype, &sev)
 		src := attackerIDs[ip]
-		if src == "" { continue }
+		if src == "" {
+			continue
+		}
 		if decoyID != nil {
 			edges = append(edges, map[string]interface{}{"source": src, "target": fmt.Sprintf("dec-%d", *decoyID), "label": etype, "severity": sev})
 		}
@@ -616,8 +654,14 @@ Provide threat intelligence enrichment in JSON with: ip_reputation (clean/suspic
 		c.JSON(http.StatusOK, gin.H{"ip": ip, "error": "intel unavailable"})
 		return
 	}
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
 
@@ -658,9 +702,18 @@ func PostDeceptionAI(c *gin.Context) {
 	}
 
 	raw, err := services.CallLLM(prompt)
-	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return }
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
 
@@ -699,9 +752,12 @@ func GetDeceptionHealth(c *gin.Context) {
 	var online, offline, degraded int
 	for _, h := range out {
 		switch h.Health {
-		case "online": online++
-		case "offline": offline++
-		default: degraded++
+		case "online":
+			online++
+		case "offline":
+			offline++
+		default:
+			degraded++
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"decoys": out, "online": online, "offline": offline, "degraded": degraded})
@@ -709,6 +765,26 @@ func GetDeceptionHealth(c *gin.Context) {
 
 // ── Response Actions ──────────────────────────────────────────────────────────
 
+// PostDeceptionResponse dispatches a response action from a deception
+// trigger (a decoy or honeytoken an attacker interacted with).
+//
+// Unlike most fake-response-action instances found this phase, this one
+// genuinely attempted real writes for every action — but every single one
+// referenced a table or column that doesn't exist, so all five silently
+// failed forever, confirmed live via psql: playbook_tasks doesn't exist
+// anywhere in this schema (the real per-agent task table, used everywhere
+// else in this codebase, is agent_tasks); firewall_rules has no src_ip
+// column (real: source_ip — the third occurrence of an
+// alerts.title/description wrong-column bug this phase, also found and
+// fixed in cloud_security_enterprise.go's identical pattern); alerts has
+// no title or description column (real: rule_name, log_message). On top of
+// that, isolate_endpoint/collect_memory both gated on body.AgentID > 0, but
+// the frontend never sent agent_id at all (deception_triggers has no
+// agent_id column — only source_host, since an attacker triggering a
+// honeypot isn't necessarily one of our own monitored agents), so those
+// branches never even reached the broken INSERT. collect_memory has no
+// real backing at all — the agent executor has no memory-collection task
+// type anywhere — removed rather than wired to a task the agent can't run.
 func PostDeceptionResponse(c *gin.Context) {
 	createDeceptionTables()
 	tid := tenantIDFromContext(c)
@@ -716,39 +792,79 @@ func PostDeceptionResponse(c *gin.Context) {
 		TriggerID  int    `json:"trigger_id"`
 		Action     string `json:"action"`
 		AttackerIP string `json:"attacker_ip"`
-		UserID     string `json:"user_id"`
-		AgentID    int    `json:"agent_id"`
+		Username   string `json:"username"`
+		SourceHost string `json:"source_host"`
 	}
 	c.ShouldBindJSON(&body)
-	username := usernameFromContext(c)
 
+	var result string
 	switch body.Action {
 	case "isolate_endpoint":
-		if body.AgentID > 0 {
-			database.DB.Exec(`INSERT INTO playbook_tasks (tenant_id,playbook_id,agent_id,action,status,requested_by,expires_at)
-				VALUES ($1,0,$2,'isolate','pending',$3,NOW()+INTERVAL '15 min')`, tid, body.AgentID, username)
+		if body.SourceHost == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source_host required"})
+			return
 		}
+		var agentID int
+		if err := database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND hostname ILIKE $2 LIMIT 1`,
+			tid, body.SourceHost).Scan(&agentID); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no monitored agent found for source host '" + body.SourceHost + "' — may be an external attacker"})
+			return
+		}
+		payload, _ := json.Marshal(map[string]any{"reason": "deception trigger", "source": "deception", "trigger_id": body.TriggerID})
+		task := models.AgentTask{AgentID: agentID, TaskType: "isolate_host", Payload: payload}
+		if err := repositories.CreateTaskPendingApproval(task); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("isolate_host queued for agent %d (%s), pending approval", agentID, body.SourceHost)
+
 	case "block_ip":
-		database.DB.Exec(`INSERT INTO firewall_rules (tenant_id,name,direction,action,src_ip,enabled)
-			VALUES ($1,$2,'in','drop',$3,true)`, tid, "deception-block-"+body.AttackerIP, body.AttackerIP)
-	case "disable_user":
-		database.DB.Exec(`UPDATE users SET is_active=false WHERE tenant_id=$1 AND username=$2`, tid, body.UserID)
-	case "create_alert":
-		database.DB.Exec(`INSERT INTO alerts (tenant_id,title,severity,status,description,mitre_technique)
-			VALUES ($1,'Deception Asset Triggered','high','open',$2,'T1078')`,
-			tid, fmt.Sprintf("Attacker %s triggered deception asset", body.AttackerIP))
-	case "collect_memory":
-		if body.AgentID > 0 {
-			database.DB.Exec(`INSERT INTO playbook_tasks (tenant_id,playbook_id,agent_id,action,status,requested_by,expires_at)
-				VALUES ($1,0,$2,'collect_memory','pending',$3,NOW()+INTERVAL '15 min')`, tid, body.AgentID, username)
+		if body.AttackerIP == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "attacker_ip required"})
+			return
 		}
+		if _, err := database.DB.Exec(`INSERT INTO firewall_rules (tenant_id,name,direction,action,source_ip,enabled)
+			VALUES ($1,$2,'in','drop',$3,true)`, tid, "deception-block-"+body.AttackerIP, body.AttackerIP); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ip: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("IP %s blocked via firewall rule", body.AttackerIP)
+
+	case "disable_user":
+		if body.Username == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "username required"})
+			return
+		}
+		tag, err := database.DB.Exec(`UPDATE users SET is_active=false WHERE tenant_id=$1 AND username=$2`, tid, body.Username)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disable user: " + err.Error()})
+			return
+		}
+		if n, _ := tag.RowsAffected(); n == 0 {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": fmt.Sprintf("no real account named '%s' — likely a fake credential the attacker used", body.Username)})
+			return
+		}
+		result = fmt.Sprintf("account '%s' disabled", body.Username)
+
+	case "create_alert":
+		if _, err := database.DB.Exec(`INSERT INTO alerts (tenant_id,rule_name,severity,status,log_message,mitre_technique)
+			VALUES ($1,'Deception Asset Triggered','high','open',$2,'T1078')`,
+			tid, fmt.Sprintf("Attacker %s triggered deception asset", body.AttackerIP)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create alert: " + err.Error()})
+			return
+		}
+		result = "Alert created"
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
 	}
 
 	if body.TriggerID > 0 {
 		database.DB.Exec(`UPDATE deception_triggers SET responded=true, response_actions=$1 WHERE tenant_id=$2 AND id=$3`,
 			body.Action, tid, body.TriggerID)
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": result})
 }
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
@@ -762,7 +878,8 @@ func GetDeceptionAnalytics(c *gin.Context) {
 	dr, _ := database.DB.Query(`SELECT name,type,trigger_count FROM deception_decoys WHERE tenant_id=$1 ORDER BY trigger_count DESC LIMIT 10`, tid)
 	defer dr.Close()
 	for dr.Next() {
-		var name, dtype string; var tc int
+		var name, dtype string
+		var tc int
 		dr.Scan(&name, &dtype, &tc)
 		topDecoys = append(topDecoys, map[string]interface{}{"name": name, "type": dtype, "trigger_count": tc})
 	}
@@ -772,7 +889,8 @@ func GetDeceptionAnalytics(c *gin.Context) {
 	tr, _ := database.DB.Query(`SELECT name,type,trigger_count FROM deception_honeytokens WHERE tenant_id=$1 ORDER BY trigger_count DESC LIMIT 10`, tid)
 	defer tr.Close()
 	for tr.Next() {
-		var name, htype string; var tc int
+		var name, htype string
+		var tc int
 		tr.Scan(&name, &htype, &tc)
 		topTokens = append(topTokens, map[string]interface{}{"name": name, "type": htype, "trigger_count": tc})
 	}
@@ -782,7 +900,8 @@ func GetDeceptionAnalytics(c *gin.Context) {
 	sr, _ := database.DB.Query(`SELECT attacker_ip, COUNT(*) as hits FROM deception_triggers WHERE tenant_id=$1 AND attacker_ip!='' GROUP BY attacker_ip ORDER BY hits DESC LIMIT 10`, tid)
 	defer sr.Close()
 	for sr.Next() {
-		var ip string; var hits int
+		var ip string
+		var hits int
 		sr.Scan(&ip, &hits)
 		topSources = append(topSources, map[string]interface{}{"ip": ip, "hits": hits})
 	}
@@ -792,7 +911,8 @@ func GetDeceptionAnalytics(c *gin.Context) {
 	etr, _ := database.DB.Query(`SELECT event_type, COUNT(*) FROM deception_triggers WHERE tenant_id=$1 GROUP BY event_type ORDER BY COUNT(*) DESC`, tid)
 	defer etr.Close()
 	for etr.Next() {
-		var etype string; var cnt int
+		var etype string
+		var cnt int
 		etr.Scan(&etype, &cnt)
 		byType = append(byType, map[string]interface{}{"event_type": etype, "count": cnt})
 	}
@@ -802,17 +922,18 @@ func GetDeceptionAnalytics(c *gin.Context) {
 	dailyr, _ := database.DB.Query(`SELECT DATE(created_at), COUNT(*) FROM deception_triggers WHERE tenant_id=$1 AND created_at>NOW()-INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY 1`, tid)
 	defer dailyr.Close()
 	for dailyr.Next() {
-		var d string; var cnt int
+		var d string
+		var cnt int
 		dailyr.Scan(&d, &cnt)
 		daily = append(daily, map[string]interface{}{"date": d, "count": cnt})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"top_decoys":   topDecoys,
-		"top_tokens":   topTokens,
-		"top_sources":  topSources,
+		"top_decoys":    topDecoys,
+		"top_tokens":    topTokens,
+		"top_sources":   topSources,
 		"by_event_type": byType,
-		"daily":        daily,
+		"daily":         daily,
 	})
 }
 
@@ -825,12 +946,12 @@ func GetDeceptionWatchlists(c *gin.Context) {
 	defer rows.Close()
 
 	type WL struct {
-		ID       int    `json:"id"`
-		Category string `json:"category"`
-		Item     string `json:"item"`
-		ItemType string `json:"item_type"`
-		Priority string `json:"priority"`
-		Notes    string `json:"notes"`
+		ID        int    `json:"id"`
+		Category  string `json:"category"`
+		Item      string `json:"item"`
+		ItemType  string `json:"item_type"`
+		Priority  string `json:"priority"`
+		Notes     string `json:"notes"`
 		CreatedAt string `json:"created_at"`
 	}
 	out := []WL{}
@@ -853,7 +974,9 @@ func PostDeceptionWatchlist(c *gin.Context) {
 		Notes    string `json:"notes"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.Priority == "" { body.Priority = "high" }
+	if body.Priority == "" {
+		body.Priority = "high"
+	}
 	var id int
 	database.DB.QueryRow(`INSERT INTO deception_watchlists (tenant_id,category,item,item_type,priority,notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
 		tid, body.Category, body.Item, body.ItemType, body.Priority, body.Notes).Scan(&id)
@@ -909,9 +1032,15 @@ func PostDeceptionPolicy(c *gin.Context) {
 		AutoCleanup    bool   `json:"auto_cleanup"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.LifetimeDays == 0 { body.LifetimeDays = 30 }
-	if body.RotationDays == 0 { body.RotationDays = 7 }
-	if body.AlertThreshold == 0 { body.AlertThreshold = 1 }
+	if body.LifetimeDays == 0 {
+		body.LifetimeDays = 30
+	}
+	if body.RotationDays == 0 {
+		body.RotationDays = 7
+	}
+	if body.AlertThreshold == 0 {
+		body.AlertThreshold = 1
+	}
 	var id int
 	database.DB.QueryRow(`INSERT INTO deception_policies (tenant_id,name,decoy_types,locations,lifetime_days,rotation_days,alert_threshold,auto_cleanup) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
 		tid, body.Name, body.DecoyTypes, body.Locations, body.LifetimeDays, body.RotationDays, body.AlertThreshold, body.AutoCleanup).Scan(&id)
@@ -948,9 +1077,18 @@ Return JSON: {title, executive_summary, key_findings (array), attack_timeline (a
 		body.ReportType, totalTriggers, campaigns, decoysDeployed)
 
 	raw, err := services.CallLLM(prompt)
-	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return }
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
 
@@ -958,14 +1096,14 @@ Return JSON: {title, executive_summary, key_findings (array), attack_timeline (a
 
 func GetDeceptionTemplates(c *gin.Context) {
 	templates := []map[string]interface{}{
-		{"id": "windows-file-server",   "name": "Windows File Server",   "type": "server",      "protocol": "smb",            "platform": "windows", "description": "Mimics a Windows file server with enticing shares and documents"},
-		{"id": "linux-ssh",             "name": "Linux SSH Server",       "type": "server",      "protocol": "ssh",            "platform": "linux",   "description": "Low-interaction SSH honeypot that logs all authentication attempts"},
-		{"id": "ad-domain-controller",  "name": "Active Directory DC",    "type": "ad_object",   "protocol": "ldap",           "platform": "windows", "description": "Fake Domain Controller with enticing privileged accounts"},
-		{"id": "sql-database",          "name": "SQL Database",           "type": "database",    "protocol": "sql",            "platform": "windows", "description": "Fake SQL server with realistic-looking database credentials"},
-		{"id": "web-application",       "name": "Web Application",        "type": "application", "protocol": "http",           "platform": "linux",   "description": "Fake web application with enticing admin panels and API endpoints"},
-		{"id": "kubernetes-cluster",    "name": "Kubernetes Cluster",     "type": "container",   "protocol": "kubernetes_api", "platform": "linux",   "description": "Fake Kubernetes API server to catch cloud-native attackers"},
-		{"id": "aws-environment",       "name": "AWS Environment",        "type": "cloud",       "protocol": "api",            "platform": "cloud",   "description": "Fake AWS environment with enticing S3 buckets and IAM credentials"},
-		{"id": "azure-environment",     "name": "Azure Environment",      "type": "cloud",       "protocol": "api",            "platform": "cloud",   "description": "Fake Azure environment with enticing storage accounts and secrets"},
+		{"id": "windows-file-server", "name": "Windows File Server", "type": "server", "protocol": "smb", "platform": "windows", "description": "Mimics a Windows file server with enticing shares and documents"},
+		{"id": "linux-ssh", "name": "Linux SSH Server", "type": "server", "protocol": "ssh", "platform": "linux", "description": "Low-interaction SSH honeypot that logs all authentication attempts"},
+		{"id": "ad-domain-controller", "name": "Active Directory DC", "type": "ad_object", "protocol": "ldap", "platform": "windows", "description": "Fake Domain Controller with enticing privileged accounts"},
+		{"id": "sql-database", "name": "SQL Database", "type": "database", "protocol": "sql", "platform": "windows", "description": "Fake SQL server with realistic-looking database credentials"},
+		{"id": "web-application", "name": "Web Application", "type": "application", "protocol": "http", "platform": "linux", "description": "Fake web application with enticing admin panels and API endpoints"},
+		{"id": "kubernetes-cluster", "name": "Kubernetes Cluster", "type": "container", "protocol": "kubernetes_api", "platform": "linux", "description": "Fake Kubernetes API server to catch cloud-native attackers"},
+		{"id": "aws-environment", "name": "AWS Environment", "type": "cloud", "protocol": "api", "platform": "cloud", "description": "Fake AWS environment with enticing S3 buckets and IAM credentials"},
+		{"id": "azure-environment", "name": "Azure Environment", "type": "cloud", "protocol": "api", "platform": "cloud", "description": "Fake Azure environment with enticing storage accounts and secrets"},
 	}
 	c.JSON(http.StatusOK, templates)
 }

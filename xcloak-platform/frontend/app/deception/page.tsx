@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { deceptionAPI } from '@/lib/api';
+import { deceptionAPI, canaryAPI, agentsAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { MetricCard, SectionCard, DataTable, TabBar, ActionButton } from '@/components/design-system';
-import { Activity, AlertTriangle, BarChart2, Brain, Bug, CheckCircle, ChevronRight, Cloud, Database, FileText, GitBranch, Globe, Key, Play, Plus, RefreshCw, Server, Shield, Trash2, XCircle, Zap, Lock } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart2, Brain, Bug, CheckCircle, ChevronRight, Cloud, Crosshair, Database, FileText, GitBranch, Globe, Key, Play, Plus, RefreshCw, Server, Shield, Trash2, XCircle, Zap, Lock, Copy } from 'lucide-react';
 
 const TABS = [
   { id: 'dashboard',    label: 'Dashboard',    icon: Activity },
@@ -13,6 +13,7 @@ const TABS = [
   { id: 'honeytokens',  label: 'Honeytokens',  icon: Key },
   { id: 'honeypots',    label: 'Honeypots',    icon: Bug },
   { id: 'triggers',     label: 'Triggers',     icon: Zap },
+  { id: 'canary',       label: 'Canary Tokens', icon: Crosshair },
   { id: 'campaigns',    label: 'Campaigns',    icon: Globe },
   { id: 'graph',        label: 'Graph',        icon: GitBranch },
   { id: 'intelligence', label: 'Intelligence', icon: Brain },
@@ -422,6 +423,217 @@ function HoneypotsTab() {
   );
 }
 
+// ── Canary Tokens Tab ────────────────────────────────────────────────────────
+// Wires up a real, previously-orphaned detection backend (api/deception.go +
+// services/deception_service.go): TripCanaryToken is a public endpoint
+// (GET /api/canary/trip/:value, no auth) that records a real trip — source
+// IP, user agent, method, referer — when someone opens a bait URL/file, and
+// fires a real critical alert via the correct alerts.rule_name/log_message
+// columns. CheckHoneyportTrip is called from the real agent connect-event
+// pipeline when a monitored agent sees a connection to a configured
+// honeyport. Neither had any frontend caller anywhere in this codebase
+// before this pass — this tab is the only UI for either.
+function CanaryTokensTab() {
+  const [tokens, setTokens] = useState<any[]>([]);
+  const [trips, setTrips] = useState<any[]>([]);
+  const [selectedToken, setSelectedToken] = useState<any>(null);
+  const [honeyports, setHoneyports] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateToken, setShowCreateToken] = useState(false);
+  const [showCreatePort, setShowCreatePort] = useState(false);
+  const [tokenForm, setTokenForm] = useState({ name: '', token_type: 'file', description: '', deployed_to: '' });
+  const [portForm, setPortForm] = useState({ agent_id: 0, port: 8443, protocol: 'tcp', description: '', alert_severity: 'high' });
+  const [toast, setToast] = useState<string | null>(null);
+  const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
+
+  const reload = () => {
+    setLoading(true);
+    Promise.all([canaryAPI.getTokens(), canaryAPI.getHoneyports(), agentsAPI.getAll().catch(() => ({ data: [] }))])
+      .then(([tr, hr, ar]) => {
+        setTokens(tr.data ?? []);
+        setHoneyports(hr.data ?? []);
+        setAgents(ar.data ?? []);
+        setLoading(false);
+      });
+  };
+  useEffect(() => { reload(); }, []);
+
+  const viewTrips = (token: any) => {
+    setSelectedToken(token);
+    canaryAPI.getTrips({ token_id: token.id, limit: 50 }).then(r => setTrips(r.data ?? []));
+  };
+
+  const doCreateToken = async () => {
+    if (!tokenForm.name) return;
+    await canaryAPI.createToken(tokenForm);
+    setShowCreateToken(false);
+    setTokenForm({ name: '', token_type: 'file', description: '', deployed_to: '' });
+    reload();
+  };
+
+  const copyTripURL = (tokenValue: string) => {
+    const url = `${window.location.origin}/api/canary/trip/${tokenValue}`;
+    navigator.clipboard?.writeText(url);
+    notify('Trip URL copied — embed it in a bait document, link, or file');
+  };
+
+  const doCreatePort = async () => {
+    if (!portForm.agent_id || !portForm.port) { notify('Agent and port are required'); return; }
+    await canaryAPI.createHoneyport(portForm);
+    setShowCreatePort(false);
+    setPortForm({ agent_id: 0, port: 8443, protocol: 'tcp', description: '', alert_severity: 'high' });
+    reload();
+  };
+
+  return (
+    <div className="space-y-4">
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
+
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-[var(--text-3)]">Real trip tracking — a canary token's URL fires a genuine detection event when accessed.</div>
+        <div className="flex gap-2">
+          <ActionButton variant="ghost" icon={RefreshCw} onClick={reload} className="text-xs" title="Refresh" />
+          <ActionButton variant="primary" icon={Plus} onClick={() => setShowCreateToken(true)} className="text-xs">Create Token</ActionButton>
+        </div>
+      </div>
+
+      {showCreateToken && (
+        <SectionCard title="New Canary Token" className="border border-[var(--accent-border)]">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Name</label>
+                <input className="g-input text-xs w-full" placeholder="finance-q3-report" value={tokenForm.name} onChange={e => setTokenForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Type</label>
+                <select className="g-select text-xs w-full" value={tokenForm.token_type} onChange={e => setTokenForm(f => ({ ...f, token_type: e.target.value }))}>
+                  {['file', 'url', 'document', 'email', 'dns'].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Deployed To</label>
+                <input className="g-input text-xs w-full" placeholder="\\FILESVR\shares\finance" value={tokenForm.deployed_to} onChange={e => setTokenForm(f => ({ ...f, deployed_to: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Description</label>
+                <input className="g-input text-xs w-full" placeholder="Bait doc for insider-threat hunt" value={tokenForm.description} onChange={e => setTokenForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <ActionButton variant="primary" onClick={doCreateToken} className="text-xs">Create</ActionButton>
+              <ActionButton variant="ghost" onClick={() => setShowCreateToken(false)} className="text-xs">Cancel</ActionButton>
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
+      <DataTable<any>
+        loading={loading}
+        rows={tokens}
+        rowKey={(t: any) => t.id}
+        onRowClick={(t: any) => viewTrips(t)}
+        rowStyle={(t: any) => selectedToken?.id === t.id ? { background: 'var(--accent-glow)' } : undefined}
+        columns={[
+          { key: 'name', header: 'Name', render: (t: any) => <span className="font-medium text-[var(--text-1)]">{t.name}</span> },
+          { key: 'type', header: 'Type', render: (t: any) => <span className="text-xs text-[var(--text-2)] capitalize">{t.token_type}</span> },
+          { key: 'deployed_to', header: 'Deployed To', render: (t: any) => <span className="text-xs text-[var(--text-3)] font-mono truncate max-w-[180px] block">{t.deployed_to || '—'}</span> },
+          { key: 'trips', header: 'Trips', render: (t: any) => t.trip_count > 0
+            ? <span className="text-xs font-medium" style={{ color: 'var(--red)' }}>{t.trip_count}x</span>
+            : <span className="text-xs" style={{ color: 'var(--green)' }}>Clean</span> },
+          { key: 'last_tripped', header: 'Last Trip', render: (t: any) => <span className="text-xs text-[var(--text-3)]">{t.last_tripped_at ? timeAgo(t.last_tripped_at) : 'Never'}</span> },
+          { key: 'active', header: 'Active', render: (t: any) => (
+            <label className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+              <input type="checkbox" checked={t.is_active} onChange={e => canaryAPI.toggleToken(t.id, e.target.checked).then(reload)} />
+            </label>
+          ) },
+          { key: 'actions', header: '', render: (t: any) => (
+            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+              <ActionButton variant="ghost" icon={Copy} onClick={() => copyTripURL(t.token_value)} className="text-xs" title="Copy trip URL" />
+              <DeleteButton onClick={() => canaryAPI.deleteToken(t.id).then(reload)} />
+            </div>
+          ) },
+        ]}
+      />
+
+      {selectedToken && (
+        <SectionCard title={`Trips — ${selectedToken.name}`}>
+          {trips.length === 0
+            ? <p className="text-xs text-[var(--text-3)]">No trips recorded yet — this token hasn't been accessed.</p>
+            : (
+              <DataTable<any>
+                rows={trips}
+                rowKey={(tr: any) => tr.id}
+                columns={[
+                  { key: 'source_ip', header: 'Source IP', render: (tr: any) => <span className="text-xs font-mono text-[var(--text-1)]">{tr.source_ip}</span> },
+                  { key: 'method', header: 'Method', render: (tr: any) => <span className="text-xs font-mono text-[var(--text-2)]">{tr.method}</span> },
+                  { key: 'user_agent', header: 'User Agent', render: (tr: any) => <span className="text-xs text-[var(--text-3)] truncate max-w-[240px] block">{tr.user_agent || '—'}</span> },
+                  { key: 'tripped_at', header: 'When', render: (tr: any) => <span className="text-xs text-[var(--text-3)]">{timeAgo(tr.tripped_at)}</span> },
+                ]}
+              />
+            )}
+        </SectionCard>
+      )}
+
+      <div className="flex items-center justify-between pt-2">
+        <div className="text-sm font-semibold text-[var(--text-1)]">Honeyports</div>
+        <ActionButton variant="primary" icon={Plus} onClick={() => setShowCreatePort(true)} className="text-xs">Add Honeyport</ActionButton>
+      </div>
+      <p className="text-xs text-[var(--text-3)]">A monitored agent alerts if anything connects to this port — real ports are never actually opened, detection runs off the agent's own connection telemetry.</p>
+
+      {showCreatePort && (
+        <SectionCard title="New Honeyport" className="border border-[var(--accent-border)]">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Agent</label>
+                <select className="g-select text-xs w-full" value={portForm.agent_id} onChange={e => setPortForm(f => ({ ...f, agent_id: +e.target.value }))}>
+                  <option value={0}>Select agent…</option>
+                  {agents.map((a: any) => <option key={a.id} value={a.id}>{a.hostname}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Port</label>
+                <input type="number" className="g-input text-xs w-full" value={portForm.port} onChange={e => setPortForm(f => ({ ...f, port: +e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Protocol</label>
+                <select className="g-select text-xs w-full" value={portForm.protocol} onChange={e => setPortForm(f => ({ ...f, protocol: e.target.value }))}>
+                  {['tcp', 'udp'].map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-3)] mb-1 block">Severity</label>
+                <select className="g-select text-xs w-full" value={portForm.alert_severity} onChange={e => setPortForm(f => ({ ...f, alert_severity: e.target.value }))}>
+                  {['critical', 'high', 'medium', 'low'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <input className="g-input text-xs w-full" placeholder="Description (e.g. fake RDP tripwire)" value={portForm.description} onChange={e => setPortForm(f => ({ ...f, description: e.target.value }))} />
+            <div className="flex gap-2">
+              <ActionButton variant="primary" onClick={doCreatePort} className="text-xs">Create</ActionButton>
+              <ActionButton variant="ghost" onClick={() => setShowCreatePort(false)} className="text-xs">Cancel</ActionButton>
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
+      <DataTable<any>
+        rows={honeyports}
+        rowKey={(h: any) => h.id}
+        columns={[
+          { key: 'hostname', header: 'Agent', render: (h: any) => <span className="font-medium text-[var(--text-1)]">{h.hostname || `#${h.agent_id}`}</span> },
+          { key: 'port', header: 'Port', render: (h: any) => <span className="text-xs font-mono text-[var(--accent)]">{h.port}/{h.protocol}</span> },
+          { key: 'description', header: 'Description', render: (h: any) => <span className="text-xs text-[var(--text-3)]">{h.description || '—'}</span> },
+          { key: 'severity', header: 'Severity', render: (h: any) => <span className="text-[10px] px-1.5 py-0.5 rounded" style={SEV_STYLE[h.alert_severity] ?? SEV_STYLE.medium}>{h.alert_severity}</span> },
+          { key: 'actions', header: '', render: (h: any) => <DeleteButton onClick={() => canaryAPI.deleteHoneyport(h.id).then(reload)} /> },
+        ]}
+      />
+    </div>
+  );
+}
+
 // ── Triggers Tab ──────────────────────────────────────────────────────────────
 
 function TriggersTab() {
@@ -430,6 +642,8 @@ function TriggersTab() {
   const [selected, setSelected] = useState<any>(null);
   const [responding, setResponding] = useState(false);
   const [filterSev, setFilterSev] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
+  const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
 
   const reload = () => {
     setLoading(true);
@@ -441,15 +655,30 @@ function TriggersTab() {
   const doRespond = async (action: string) => {
     if (!selected) return;
     setResponding(true);
-    await deceptionAPI.respond({ trigger_id: selected.id, action, attacker_ip: selected.attacker_ip });
+    try {
+      const r = await deceptionAPI.respond({
+        trigger_id: selected.id, action,
+        attacker_ip: selected.attacker_ip,
+        source_host: selected.source_host,
+        username: selected.attacker_user,
+      });
+      notify(r.data?.message || `${action} done`);
+    } catch (e: any) {
+      notify(e?.response?.data?.error || 'Response action failed');
+    }
     setResponding(false);
     reload();
   };
 
-  const RESPONSE_ACTIONS = ['block_ip', 'isolate_endpoint', 'create_alert', 'collect_memory', 'disable_user'];
+  // collect_memory removed: no real agent capability exists for it anywhere
+  // in this codebase (confirmed via the executor's task-type list) — it was
+  // previously wired to a nonexistent "playbook_tasks" table/action, so it
+  // never did anything real either way.
+  const RESPONSE_ACTIONS = ['block_ip', 'isolate_endpoint', 'create_alert', 'disable_user'];
 
   return (
     <div className="space-y-4">
+      {toast && <div className="fixed bottom-5 right-5 z-50 g-panel px-4 py-3 text-sm" style={{ color: 'var(--text-1)' }}>{toast}</div>}
       <div className="flex items-center gap-2">
         <select className="g-select text-xs" value={filterSev} onChange={e => setFilterSev(e.target.value)}>
           <option value="">All Severities</option>
@@ -1028,6 +1257,7 @@ export default function DeceptionPage() {
     honeytokens:  <HoneytokensTab />,
     honeypots:    <HoneypotsTab />,
     triggers:     <TriggersTab />,
+    canary:       <CanaryTokensTab />,
     campaigns:    <CampaignsTab />,
     graph:        <GraphTab />,
     intelligence: <IntelligenceTab />,

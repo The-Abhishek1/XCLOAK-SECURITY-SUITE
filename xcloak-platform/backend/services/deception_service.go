@@ -87,8 +87,19 @@ func TripCanaryToken(tokenValue, sourceIP, userAgent, method string, extraData m
 
 	if alertOnTrip {
 		logMsg := fmt.Sprintf("CANARY TOKEN TRIPPED: %s (%s) accessed from %s method=%s", name, tokenType, sourceIP, method)
-		var agentID int
-		database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND status='online' LIMIT 1`, tenantID).Scan(&agentID)
+		// agent_id has a foreign key to agents(id) — a canary token exists to
+		// catch attackers who, by definition, usually aren't running our
+		// agent, so "no online agent for this tenant" is the common case,
+		// not an edge case. Defaulting to 0 here previously violated that FK
+		// on every trip with no online agent, silently discarding the error
+		// and never creating the alert at all (confirmed live: agent_id=0
+		// insert fails, tenant 9999 has zero online agents, zero alerts
+		// created for a real, successfully-recorded trip). NULL is valid.
+		var agentID *int
+		var resolved int
+		if err := database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND status='online' LIMIT 1`, tenantID).Scan(&resolved); err == nil {
+			agentID = &resolved
+		}
 		database.DB.Exec(`
 			INSERT INTO alerts (tenant_id, agent_id, rule_name, severity, status, log_message,
 			                    mitre_tactic, mitre_technique, fingerprint)

@@ -137,7 +137,9 @@ func GetCloudDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM cloud_findings WHERE tenant_id=$1`, tid).Scan(&totalFindings)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM cloud_findings WHERE tenant_id=$1 AND status='open'`, tid).Scan(&openFindings)
 	complianceScore := 100
-	if totalFindings > 0 { complianceScore = 100 - int(float64(openFindings)/float64(totalFindings)*100) }
+	if totalFindings > 0 {
+		complianceScore = 100 - int(float64(openFindings)/float64(totalFindings)*100)
+	}
 
 	// Inventory by provider
 	type ProvCount struct {
@@ -148,40 +150,43 @@ func GetCloudDashboard(c *gin.Context) {
 	invRows, _ := database.DB.Query(`SELECT provider, COUNT(*) FROM cloud_assets WHERE tenant_id=$1 GROUP BY provider`, tid)
 	defer invRows.Close()
 	for invRows.Next() {
-		var pc ProvCount; invRows.Scan(&pc.Provider, &pc.Count); inventory = append(inventory, pc)
+		var pc ProvCount
+		invRows.Scan(&pc.Provider, &pc.Count)
+		inventory = append(inventory, pc)
 	}
 
 	// Recent threats
 	type RecentThreat struct {
-		ID          int    `json:"id"`
-		ThreatType  string `json:"threat_type"`
-		Provider    string `json:"provider"`
-		ResourceID  string `json:"resource_id"`
-		Severity    string `json:"severity"`
-		SourceIP    string `json:"source_ip"`
-		CreatedAt   string `json:"created_at"`
+		ID         int    `json:"id"`
+		ThreatType string `json:"threat_type"`
+		Provider   string `json:"provider"`
+		ResourceID string `json:"resource_id"`
+		Severity   string `json:"severity"`
+		SourceIP   string `json:"source_ip"`
+		CreatedAt  string `json:"created_at"`
 	}
 	recentThreats := []RecentThreat{}
 	trows, _ := database.DB.Query(`SELECT id,threat_type,provider,resource_id,severity,source_ip,created_at FROM cloud_threats WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 8`, tid)
 	defer trows.Close()
 	for trows.Next() {
-		var r RecentThreat; trows.Scan(&r.ID, &r.ThreatType, &r.Provider, &r.ResourceID, &r.Severity, &r.SourceIP, &r.CreatedAt)
+		var r RecentThreat
+		trows.Scan(&r.ID, &r.ThreatType, &r.Provider, &r.ResourceID, &r.Severity, &r.SourceIP, &r.CreatedAt)
 		recentThreats = append(recentThreats, r)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"aws_accounts":     awsAccounts,
-		"azure_subs":       azureSubs,
-		"gcp_projects":     gcpProjects,
-		"total_assets":     totalAssets,
-		"public_assets":    publicAssets,
+		"aws_accounts":      awsAccounts,
+		"azure_subs":        azureSubs,
+		"gcp_projects":      gcpProjects,
+		"total_assets":      totalAssets,
+		"public_assets":     publicAssets,
 		"critical_findings": criticalFindings,
-		"iam_risks":        iamRisks,
-		"active_threats":   activeThreats,
-		"multi_cloud_risk": int(avgRisk),
-		"compliance_score": complianceScore,
-		"inventory":        inventory,
-		"recent_threats":   recentThreats,
+		"iam_risks":         iamRisks,
+		"active_threats":    activeThreats,
+		"multi_cloud_risk":  int(avgRisk),
+		"compliance_score":  complianceScore,
+		"inventory":         inventory,
+		"recent_threats":    recentThreats,
 	})
 }
 
@@ -207,7 +212,8 @@ func GetCloudAccounts(c *gin.Context) {
 	}
 	out := []Acct{}
 	for rows.Next() {
-		var a Acct; rows.Scan(&a.ID, &a.Name, &a.Provider, &a.AccountID, &a.Region, &a.Status, &a.AssetCount, &a.FindingCount, &a.RiskScore, &a.LastScan, &a.CreatedAt)
+		var a Acct
+		rows.Scan(&a.ID, &a.Name, &a.Provider, &a.AccountID, &a.Region, &a.Status, &a.AssetCount, &a.FindingCount, &a.RiskScore, &a.LastScan, &a.CreatedAt)
 		out = append(out, a)
 	}
 	c.JSON(http.StatusOK, out)
@@ -248,8 +254,16 @@ func GetCloudInventory(c *gin.Context) {
 	where := "WHERE tenant_id=$1"
 	args := []interface{}{tid}
 	n := 2
-	if provider != "" { where += fmt.Sprintf(" AND provider=$%d", n); args = append(args, provider); n++ }
-	if rtype != "" { where += fmt.Sprintf(" AND resource_type=$%d", n); args = append(args, rtype); n++ }
+	if provider != "" {
+		where += fmt.Sprintf(" AND provider=$%d", n)
+		args = append(args, provider)
+		n++
+	}
+	if rtype != "" {
+		where += fmt.Sprintf(" AND resource_type=$%d", n)
+		args = append(args, rtype)
+		n++
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT id,name,resource_type,provider,region,owner,tags,risk_score,internet_exposed,status,last_activity,created_at
@@ -258,18 +272,18 @@ func GetCloudInventory(c *gin.Context) {
 	defer rows.Close()
 
 	type Asset struct {
-		ID             int     `json:"id"`
-		Name           string  `json:"name"`
-		ResourceType   string  `json:"resource_type"`
-		Provider       string  `json:"provider"`
-		Region         string  `json:"region"`
-		Owner          string  `json:"owner"`
-		Tags           string  `json:"tags"`
-		RiskScore      int     `json:"risk_score"`
-		InternetExposed bool   `json:"internet_exposed"`
-		Status         string  `json:"status"`
-		LastActivity   *string `json:"last_activity"`
-		CreatedAt      string  `json:"created_at"`
+		ID              int     `json:"id"`
+		Name            string  `json:"name"`
+		ResourceType    string  `json:"resource_type"`
+		Provider        string  `json:"provider"`
+		Region          string  `json:"region"`
+		Owner           string  `json:"owner"`
+		Tags            string  `json:"tags"`
+		RiskScore       int     `json:"risk_score"`
+		InternetExposed bool    `json:"internet_exposed"`
+		Status          string  `json:"status"`
+		LastActivity    *string `json:"last_activity"`
+		CreatedAt       string  `json:"created_at"`
 	}
 	out := []Asset{}
 	for rows.Next() {
@@ -293,9 +307,21 @@ func GetCSPMFindings(c *gin.Context) {
 	where := "WHERE tenant_id=$1 AND status='open'"
 	args := []interface{}{tid}
 	n := 2
-	if category != "" { where += fmt.Sprintf(" AND category=$%d", n); args = append(args, category); n++ }
-	if severity != "" { where += fmt.Sprintf(" AND severity=$%d", n); args = append(args, severity); n++ }
-	if provider != "" { where += fmt.Sprintf(" AND provider=$%d", n); args = append(args, provider); n++ }
+	if category != "" {
+		where += fmt.Sprintf(" AND category=$%d", n)
+		args = append(args, category)
+		n++
+	}
+	if severity != "" {
+		where += fmt.Sprintf(" AND severity=$%d", n)
+		args = append(args, severity)
+		n++
+	}
+	if provider != "" {
+		where += fmt.Sprintf(" AND provider=$%d", n)
+		args = append(args, provider)
+		n++
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT id,category,title,description,severity,provider,region,resource_type,resource_id,remediation,framework,control_id,created_at
@@ -350,7 +376,8 @@ func GetCSPMSummary(c *gin.Context) {
 		GROUP BY category ORDER BY total DESC`, tid)
 	defer rows.Close()
 	for rows.Next() {
-		var cc CatCount; rows.Scan(&cc.Category, &cc.Critical, &cc.High, &cc.Medium, &cc.Total)
+		var cc CatCount
+		rows.Scan(&cc.Category, &cc.Critical, &cc.High, &cc.Medium, &cc.Total)
 		out = append(out, cc)
 	}
 	c.JSON(http.StatusOK, out)
@@ -359,7 +386,9 @@ func GetCSPMSummary(c *gin.Context) {
 func PatchCloudFinding(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	fid, _ := strconv.Atoi(c.Param("id"))
-	var body struct { Status string `json:"status"` }
+	var body struct {
+		Status string `json:"status"`
+	}
 	c.ShouldBindJSON(&body)
 	database.DB.Exec(`UPDATE cloud_findings SET status=$1 WHERE tenant_id=$2 AND id=$3`, body.Status, tid, fid)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -377,8 +406,16 @@ func GetCIEMIdentities(c *gin.Context) {
 	where := "WHERE tenant_id=$1"
 	args := []interface{}{tid}
 	n := 2
-	if itype != "" { where += fmt.Sprintf(" AND identity_type=$%d", n); args = append(args, itype); n++ }
-	if risk != "" { where += fmt.Sprintf(" AND risk_level=$%d", n); args = append(args, risk); n++ }
+	if itype != "" {
+		where += fmt.Sprintf(" AND identity_type=$%d", n)
+		args = append(args, itype)
+		n++
+	}
+	if risk != "" {
+		where += fmt.Sprintf(" AND risk_level=$%d", n)
+		args = append(args, risk)
+		n++
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT id,name,identity_type,provider,account_id,permissions,last_used,is_dormant,mfa_enabled,access_key_age_days,risk_level,created_at
@@ -388,18 +425,18 @@ func GetCIEMIdentities(c *gin.Context) {
 	defer rows.Close()
 
 	type Identity struct {
-		ID              int     `json:"id"`
-		Name            string  `json:"name"`
-		IdentityType    string  `json:"identity_type"`
-		Provider        string  `json:"provider"`
-		AccountID       string  `json:"account_id"`
-		Permissions     string  `json:"permissions"`
-		LastUsed        *string `json:"last_used"`
-		IsDormant       bool    `json:"is_dormant"`
-		MFAEnabled      bool    `json:"mfa_enabled"`
-		AccessKeyAgeDays int    `json:"access_key_age_days"`
-		RiskLevel       string  `json:"risk_level"`
-		CreatedAt       string  `json:"created_at"`
+		ID               int     `json:"id"`
+		Name             string  `json:"name"`
+		IdentityType     string  `json:"identity_type"`
+		Provider         string  `json:"provider"`
+		AccountID        string  `json:"account_id"`
+		Permissions      string  `json:"permissions"`
+		LastUsed         *string `json:"last_used"`
+		IsDormant        bool    `json:"is_dormant"`
+		MFAEnabled       bool    `json:"mfa_enabled"`
+		AccessKeyAgeDays int     `json:"access_key_age_days"`
+		RiskLevel        string  `json:"risk_level"`
+		CreatedAt        string  `json:"created_at"`
 	}
 	out := []Identity{}
 	for rows.Next() {
@@ -442,8 +479,16 @@ func GetCloudThreats(c *gin.Context) {
 	where := "WHERE tenant_id=$1"
 	args := []interface{}{tid}
 	n := 2
-	if ttype != "" { where += fmt.Sprintf(" AND threat_type=$%d", n); args = append(args, ttype); n++ }
-	if provider != "" { where += fmt.Sprintf(" AND provider=$%d", n); args = append(args, provider); n++ }
+	if ttype != "" {
+		where += fmt.Sprintf(" AND threat_type=$%d", n)
+		args = append(args, ttype)
+		n++
+	}
+	if provider != "" {
+		where += fmt.Sprintf(" AND provider=$%d", n)
+		args = append(args, provider)
+		n++
+	}
 
 	rows, _ := database.DB.Query(fmt.Sprintf(`
 		SELECT id,threat_type,provider,region,source_ip,source_user,resource_id,resource_type,severity,mitre_technique,status,created_at
@@ -490,17 +535,18 @@ func GetCloudExposure(c *gin.Context) {
 	rows, _ := database.DB.Query(`SELECT name,resource_type,provider,region,risk_score FROM cloud_assets WHERE tenant_id=$1 AND internet_exposed=true ORDER BY risk_score DESC LIMIT 20`, tid)
 	defer rows.Close()
 	for rows.Next() {
-		var name, rtype, provider, region string; var risk int
+		var name, rtype, provider, region string
+		var risk int
 		rows.Scan(&name, &rtype, &provider, &region, &risk)
 		exposedAssets = append(exposedAssets, map[string]interface{}{"name": name, "resource_type": rtype, "provider": provider, "region": region, "risk_score": risk})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"public_buckets":    publicBuckets,
-		"open_databases":    openDBs,
-		"public_apis":       publicAPIs,
+		"public_buckets":       publicBuckets,
+		"open_databases":       openDBs,
+		"public_apis":          publicAPIs,
 		"weak_security_groups": weakSGs,
-		"exposed_assets":    exposedAssets,
+		"exposed_assets":       exposedAssets,
 	})
 }
 
@@ -513,14 +559,17 @@ func GetCloudCompliance(c *gin.Context) {
 
 	where := "WHERE tenant_id=$1 AND framework != ''"
 	args := []interface{}{tid}
-	if framework != "" { where += " AND framework=$2"; args = append(args, framework) }
+	if framework != "" {
+		where += " AND framework=$2"
+		args = append(args, framework)
+	}
 
 	type FW struct {
-		Framework  string  `json:"framework"`
-		Total      int     `json:"total"`
-		Passed     int     `json:"passed"`
-		Failed     int     `json:"failed"`
-		Score      float64 `json:"score"`
+		Framework string  `json:"framework"`
+		Total     int     `json:"total"`
+		Passed    int     `json:"passed"`
+		Failed    int     `json:"failed"`
+		Score     float64 `json:"score"`
 	}
 	out := []FW{}
 	rows, _ := database.DB.Query(fmt.Sprintf(`
@@ -532,8 +581,11 @@ func GetCloudCompliance(c *gin.Context) {
 		GROUP BY framework ORDER BY framework`, where), args...)
 	defer rows.Close()
 	for rows.Next() {
-		var fw FW; rows.Scan(&fw.Framework, &fw.Total, &fw.Passed, &fw.Failed)
-		if fw.Total > 0 { fw.Score = float64(fw.Passed) / float64(fw.Total) * 100 }
+		var fw FW
+		rows.Scan(&fw.Framework, &fw.Total, &fw.Passed, &fw.Failed)
+		if fw.Total > 0 {
+			fw.Score = float64(fw.Passed) / float64(fw.Total) * 100
+		}
 		out = append(out, fw)
 	}
 	c.JSON(http.StatusOK, out)
@@ -566,7 +618,8 @@ func GetCloudTimeline(c *gin.Context) {
 	}
 	out := []TLEvent{}
 	for rows.Next() {
-		var e TLEvent; rows.Scan(&e.EventType, &e.Title, &e.Provider, &e.Region, &e.Severity, &e.CreatedAt)
+		var e TLEvent
+		rows.Scan(&e.EventType, &e.Title, &e.Provider, &e.Region, &e.Severity, &e.CreatedAt)
 		out = append(out, e)
 	}
 	c.JSON(http.StatusOK, out)
@@ -587,7 +640,9 @@ func GetCloudAttackPaths(c *gin.Context) {
 	exposedRows, _ := database.DB.Query(`SELECT id,name,resource_type,provider,risk_score FROM cloud_assets WHERE tenant_id=$1 AND internet_exposed=true LIMIT 5`, tid)
 	defer exposedRows.Close()
 	for exposedRows.Next() {
-		var id int; var name, rtype, provider string; var risk int
+		var id int
+		var name, rtype, provider string
+		var risk int
 		exposedRows.Scan(&id, &name, &rtype, &provider, &risk)
 		nodeID := fmt.Sprintf("asset-%d", id)
 		nodes = append(nodes, map[string]interface{}{"id": nodeID, "label": name, "type": rtype, "provider": provider, "risk": risk})
@@ -596,12 +651,20 @@ func GetCloudAttackPaths(c *gin.Context) {
 		// Link to IAM roles
 		iamRows, _ := database.DB.Query(`SELECT id,name,permissions FROM cloud_identities WHERE tenant_id=$1 AND permissions LIKE '%AdministratorAccess%' LIMIT 2`, tid)
 		for iamRows.Next() {
-			var iid int; var iname, perms string
+			var iid int
+			var iname, perms string
 			iamRows.Scan(&iid, &iname, &perms)
 			iamNodeID := fmt.Sprintf("iam-%d", iid)
 			exists := false
-			for _, n := range nodes { if n["id"] == iamNodeID { exists = true; break } }
-			if !exists { nodes = append(nodes, map[string]interface{}{"id": iamNodeID, "label": iname, "type": "iam_role", "permissions": perms}) }
+			for _, n := range nodes {
+				if n["id"] == iamNodeID {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				nodes = append(nodes, map[string]interface{}{"id": iamNodeID, "label": iname, "type": "iam_role", "permissions": perms})
+			}
 			edges = append(edges, map[string]interface{}{"source": nodeID, "target": iamNodeID, "label": "assumes role", "risk": "critical"})
 		}
 		iamRows.Close()
@@ -611,7 +674,8 @@ func GetCloudAttackPaths(c *gin.Context) {
 	dbRows, _ := database.DB.Query(`SELECT id,name,resource_type,provider FROM cloud_assets WHERE tenant_id=$1 AND resource_type IN ('rds','s3','storage_account','cloud_storage','bigquery') LIMIT 4`, tid)
 	defer dbRows.Close()
 	for dbRows.Next() {
-		var id int; var name, rtype, provider string
+		var id int
+		var name, rtype, provider string
 		dbRows.Scan(&id, &name, &rtype, &provider)
 		nodeID := fmt.Sprintf("data-%d", id)
 		nodes = append(nodes, map[string]interface{}{"id": nodeID, "label": name, "type": rtype, "provider": provider, "sensitive": true})
@@ -652,7 +716,8 @@ func GetCloudDrift(c *gin.Context) {
 	}
 	out := []Drift{}
 	for rows.Next() {
-		var d Drift; rows.Scan(&d.ID, &d.ResourceID, &d.ResourceType, &d.ChangeType, &d.PreviousState, &d.NewState, &d.ChangedBy, &d.Provider, &d.Region, &d.Severity, &d.Acknowledged, &d.CreatedAt)
+		var d Drift
+		rows.Scan(&d.ID, &d.ResourceID, &d.ResourceType, &d.ChangeType, &d.PreviousState, &d.NewState, &d.ChangedBy, &d.Provider, &d.Region, &d.Severity, &d.Acknowledged, &d.CreatedAt)
 		out = append(out, d)
 	}
 	c.JSON(http.StatusOK, out)
@@ -690,7 +755,8 @@ func GetCloudVulnerabilities(c *gin.Context) {
 	}
 	out := []Vuln{}
 	for rows.Next() {
-		var v Vuln; rows.Scan(&v.ID, &v.Category, &v.Title, &v.Description, &v.Severity, &v.Provider, &v.Region, &v.ResourceType, &v.ResourceID, &v.Framework, &v.CreatedAt)
+		var v Vuln
+		rows.Scan(&v.ID, &v.Category, &v.Title, &v.Description, &v.Severity, &v.Provider, &v.Region, &v.ResourceType, &v.ResourceID, &v.Framework, &v.CreatedAt)
 		out = append(out, v)
 	}
 	c.JSON(http.StatusOK, out)
@@ -707,7 +773,8 @@ func GetCloudThreatIntel(c *gin.Context) {
 	ipRows, _ := database.DB.Query(`SELECT source_ip, COUNT(*) hits, STRING_AGG(DISTINCT threat_type,', ') types FROM cloud_threats WHERE tenant_id=$1 AND source_ip!='' GROUP BY source_ip ORDER BY hits DESC LIMIT 10`, tid)
 	defer ipRows.Close()
 	for ipRows.Next() {
-		var ip, types string; var hits int
+		var ip, types string
+		var hits int
 		ipRows.Scan(&ip, &hits, &types)
 		topIPs = append(topIPs, map[string]interface{}{"ip": ip, "hits": hits, "threat_types": types})
 	}
@@ -717,7 +784,8 @@ func GetCloudThreatIntel(c *gin.Context) {
 	typeRows, _ := database.DB.Query(`SELECT threat_type, COUNT(*), COUNT(*) FILTER (WHERE severity='critical') FROM cloud_threats WHERE tenant_id=$1 GROUP BY threat_type ORDER BY COUNT(*) DESC`, tid)
 	defer typeRows.Close()
 	for typeRows.Next() {
-		var ttype string; var cnt, crit int
+		var ttype string
+		var cnt, crit int
 		typeRows.Scan(&ttype, &cnt, &crit)
 		byType = append(byType, map[string]interface{}{"threat_type": ttype, "count": cnt, "critical": crit})
 	}
@@ -727,7 +795,8 @@ func GetCloudThreatIntel(c *gin.Context) {
 	prvRows, _ := database.DB.Query(`SELECT provider, COUNT(*) FROM cloud_threats WHERE tenant_id=$1 GROUP BY provider ORDER BY COUNT(*) DESC`, tid)
 	defer prvRows.Close()
 	for prvRows.Next() {
-		var prov string; var cnt int
+		var prov string
+		var cnt int
 		prvRows.Scan(&prov, &cnt)
 		byProvider = append(byProvider, map[string]interface{}{"provider": prov, "count": cnt})
 	}
@@ -770,9 +839,18 @@ func PostCloudAI(c *gin.Context) {
 	}
 
 	raw, err := services.CallLLM(prompt)
-	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return }
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
 
@@ -787,7 +865,8 @@ func GetCloudAnalytics(c *gin.Context) {
 	expRows, _ := database.DB.Query(`SELECT name,resource_type,provider,risk_score FROM cloud_assets WHERE tenant_id=$1 AND internet_exposed=true ORDER BY risk_score DESC LIMIT 10`, tid)
 	defer expRows.Close()
 	for expRows.Next() {
-		var name, rtype, prov string; var risk int
+		var name, rtype, prov string
+		var risk int
 		expRows.Scan(&name, &rtype, &prov, &risk)
 		topExposed = append(topExposed, map[string]interface{}{"name": name, "resource_type": rtype, "provider": prov, "risk_score": risk})
 	}
@@ -797,7 +876,8 @@ func GetCloudAnalytics(c *gin.Context) {
 	mcRows, _ := database.DB.Query(`SELECT category, COUNT(*) total, COUNT(*) FILTER (WHERE severity='critical') crit FROM cloud_findings WHERE tenant_id=$1 AND status='open' GROUP BY category ORDER BY total DESC LIMIT 10`, tid)
 	defer mcRows.Close()
 	for mcRows.Next() {
-		var cat string; var total, crit int
+		var cat string
+		var total, crit int
 		mcRows.Scan(&cat, &total, &crit)
 		topMisconfig = append(topMisconfig, map[string]interface{}{"category": cat, "total": total, "critical": crit})
 	}
@@ -807,7 +887,9 @@ func GetCloudAnalytics(c *gin.Context) {
 	regRows, _ := database.DB.Query(`SELECT region, COUNT(*) assets, COALESCE(AVG(risk_score),0) avg_risk FROM cloud_assets WHERE tenant_id=$1 AND region!='' GROUP BY region ORDER BY avg_risk DESC LIMIT 10`, tid)
 	defer regRows.Close()
 	for regRows.Next() {
-		var region string; var assets int; var avgRisk float64
+		var region string
+		var assets int
+		var avgRisk float64
 		regRows.Scan(&region, &assets, &avgRisk)
 		byRegion = append(byRegion, map[string]interface{}{"region": region, "assets": assets, "avg_risk": int(avgRisk)})
 	}
@@ -817,7 +899,9 @@ func GetCloudAnalytics(c *gin.Context) {
 	ttRows, _ := database.DB.Query(`SELECT DATE(created_at), COUNT(*) FROM cloud_threats WHERE tenant_id=$1 AND created_at > NOW()-INTERVAL '14 days' GROUP BY DATE(created_at) ORDER BY 1`, tid)
 	defer ttRows.Close()
 	for ttRows.Next() {
-		var d string; var cnt int; ttRows.Scan(&d, &cnt)
+		var d string
+		var cnt int
+		ttRows.Scan(&d, &cnt)
 		threatTrend = append(threatTrend, map[string]interface{}{"date": d, "count": cnt})
 	}
 
@@ -826,16 +910,18 @@ func GetCloudAnalytics(c *gin.Context) {
 	ctRows, _ := database.DB.Query(`SELECT DATE(created_at), COUNT(*) FROM cloud_findings WHERE tenant_id=$1 AND created_at > NOW()-INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY 1`, tid)
 	defer ctRows.Close()
 	for ctRows.Next() {
-		var d string; var cnt int; ctRows.Scan(&d, &cnt)
+		var d string
+		var cnt int
+		ctRows.Scan(&d, &cnt)
 		complianceTrend = append(complianceTrend, map[string]interface{}{"date": d, "count": cnt})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"top_exposed":       topExposed,
-		"top_misconfigs":    topMisconfig,
-		"by_region":         byRegion,
-		"threat_trend":      threatTrend,
-		"compliance_trend":  complianceTrend,
+		"top_exposed":      topExposed,
+		"top_misconfigs":   topMisconfig,
+		"by_region":        byRegion,
+		"threat_trend":     threatTrend,
+		"compliance_trend": complianceTrend,
 	})
 }
 
@@ -874,7 +960,9 @@ func PostCloudResponse(c *gin.Context) {
 		}
 	}
 
-	database.DB.Exec(`INSERT INTO alerts (tenant_id,title,severity,status,description) VALUES ($1,$2,'low','closed',$3)`,
+	// alerts has no title/description column (real: rule_name/log_message) —
+	// this INSERT silently failed on every response action, confirmed live.
+	database.DB.Exec(`INSERT INTO alerts (tenant_id,rule_name,severity,status,log_message) VALUES ($1,$2,'low','closed',$3)`,
 		tid, "Cloud Response: "+body.Action, message)
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": message})
@@ -885,7 +973,9 @@ func PostCloudResponse(c *gin.Context) {
 func PostCloudReport(c *gin.Context) {
 	createCloudSecurityTables()
 	tid := tenantIDFromContext(c)
-	var body struct { ReportType string `json:"report_type"` }
+	var body struct {
+		ReportType string `json:"report_type"`
+	}
 	c.ShouldBindJSON(&body)
 
 	var totalAssets, critFindings, publicAssets, iamRisks, activeThreats int
@@ -899,8 +989,17 @@ func PostCloudReport(c *gin.Context) {
 		body.ReportType, totalAssets, critFindings, publicAssets, iamRisks, activeThreats)
 
 	raw, err := services.CallLLM(prompt)
-	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return }
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
