@@ -50,39 +50,28 @@ services:
         limits:
           memory: 64m
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    container_name: xcloak-zookeeper
-    restart: unless-stopped
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_HEAP_OPTS: "-Xmx256m -Xms128m"
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_log:/var/lib/zookeeper/log
-    healthcheck:
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/2181 && exec 3>&-"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    deploy:
-      resources:
-        limits:
-          memory: 384m
-
+  # KRaft mode (no Zookeeper) — combined broker+controller, single node.
+  # Was a separate cp-zookeeper container + KAFKA_ZOOKEEPER_CONNECT; cp-kafka
+  # 7.6.0 (Kafka 3.6) supports KRaft natively, so removing Zookeeper drops a
+  # whole JVM (384m) with no functional change to the app, which only ever
+  # talks to the broker's PLAINTEXT listener, never Zookeeper directly.
+  # CLUSTER_ID is a fixed, arbitrary base64 UUID — required at first boot to
+  # format the metadata log, safe to hardcode since this is a single-node
+  # dev/prod-lite cluster, not something that ever merges with another.
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: xcloak-kafka
     restart: unless-stopped
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      CLUSTER_ID: "xcloak-kraft-cluster-1"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -113,7 +102,6 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: xcloak
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     deploy:
       resources:
         limits:
@@ -300,8 +288,6 @@ services:
 
 volumes:
   postgres_data:
-  zookeeper_data:
-  zookeeper_log:
   kafka_data:
   minio_data:
   prometheus_data:
