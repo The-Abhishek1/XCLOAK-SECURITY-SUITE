@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -102,16 +104,16 @@ func GetSCDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_secrets WHERE tenant_id=$1 AND status='open'`, tid).Scan(&secretFindings)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_artifacts WHERE tenant_id=$1`, tid).Scan(&totalArtifacts)
 	c.JSON(http.StatusOK, gin.H{
-		"repositories":      repos,
-		"dependencies":      deps,
-		"critical_cves":     criticalCVEs,
+		"repositories":       repos,
+		"dependencies":       deps,
+		"critical_cves":      criticalCVEs,
 		"high_risk_packages": highRiskPkgs,
-		"sboms":             sboms,
-		"build_pipelines":   pipelines,
-		"signed_artifacts":  signedArtifacts,
-		"total_artifacts":   totalArtifacts,
-		"risk_score":        int(riskScore),
-		"secret_findings":   secretFindings,
+		"sboms":              sboms,
+		"build_pipelines":    pipelines,
+		"signed_artifacts":   signedArtifacts,
+		"total_artifacts":    totalArtifacts,
+		"risk_score":         int(riskScore),
+		"secret_findings":    secretFindings,
 	})
 }
 
@@ -125,7 +127,8 @@ func GetSCRepositories(c *gin.Context) {
 		FROM sc_repositories WHERE tenant_id=$1 ORDER BY risk_score DESC LIMIT $2`
 	rows, err := database.DB.Query(q, tid, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Repo struct {
@@ -150,7 +153,9 @@ func GetSCRepositories(c *gin.Context) {
 			repos = append(repos, r)
 		}
 	}
-	if repos == nil { repos = []Repo{} }
+	if repos == nil {
+		repos = []Repo{}
+	}
 	c.JSON(http.StatusOK, repos)
 }
 
@@ -165,7 +170,9 @@ func GetSCDependencies(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("ecosystem"); v != "" {
-		q += fmt.Sprintf(" AND ecosystem=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND ecosystem=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("has_cves"); v == "true" {
 		q += " AND cve_count>0"
@@ -174,7 +181,8 @@ func GetSCDependencies(c *gin.Context) {
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Dep struct {
@@ -199,7 +207,9 @@ func GetSCDependencies(c *gin.Context) {
 			deps = append(deps, d)
 		}
 	}
-	if deps == nil { deps = []Dep{} }
+	if deps == nil {
+		deps = []Dep{}
+	}
 	c.JSON(http.StatusOK, deps)
 }
 
@@ -214,7 +224,9 @@ func GetSCVulnerabilities(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("severity"); v != "" {
-		q += fmt.Sprintf(" AND severity=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND severity=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if c.Query("kev") == "true" {
 		q += " AND is_kev=true"
@@ -223,7 +235,8 @@ func GetSCVulnerabilities(c *gin.Context) {
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Vuln struct {
@@ -248,7 +261,9 @@ func GetSCVulnerabilities(c *gin.Context) {
 			vulns = append(vulns, v)
 		}
 	}
-	if vulns == nil { vulns = []Vuln{} }
+	if vulns == nil {
+		vulns = []Vuln{}
+	}
 	var critical, high, kev, exploited int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_vulnerabilities WHERE tenant_id=$1 AND severity='critical'`, tid).Scan(&critical)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_vulnerabilities WHERE tenant_id=$1 AND severity='high'`, tid).Scan(&high)
@@ -287,7 +302,9 @@ func GetSCSBOMs(c *gin.Context) {
 			}
 		}
 	}
-	if sboms == nil { sboms = []SBOM{} }
+	if sboms == nil {
+		sboms = []SBOM{}
+	}
 	c.JSON(http.StatusOK, sboms)
 }
 
@@ -322,7 +339,9 @@ func GetSCBuildPipelines(c *gin.Context) {
 			}
 		}
 	}
-	if pipelines == nil { pipelines = []Pipeline{} }
+	if pipelines == nil {
+		pipelines = []Pipeline{}
+	}
 	c.JSON(http.StatusOK, pipelines)
 }
 
@@ -354,7 +373,9 @@ func GetSCSecretFindings(c *gin.Context) {
 			}
 		}
 	}
-	if secrets == nil { secrets = []Secret{} }
+	if secrets == nil {
+		secrets = []Secret{}
+	}
 	var total, open, aws, api int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_secrets WHERE tenant_id=$1`, tid).Scan(&total)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM sc_secrets WHERE tenant_id=$1 AND status='open'`, tid).Scan(&open)
@@ -413,7 +434,9 @@ func GetSCArtifacts(c *gin.Context) {
 			}
 		}
 	}
-	if artifacts == nil { artifacts = []Artifact{} }
+	if artifacts == nil {
+		artifacts = []Artifact{}
+	}
 	c.JSON(http.StatusOK, artifacts)
 }
 
@@ -581,7 +604,9 @@ func GetSCTimeline(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []TLEvent{} }
+	if events == nil {
+		events = []TLEvent{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
@@ -777,7 +802,9 @@ func GetSCPolicies(c *gin.Context) {
 			}
 		}
 	}
-	if policies == nil { policies = []Policy{} }
+	if policies == nil {
+		policies = []Policy{}
+	}
 	c.JSON(http.StatusOK, policies)
 }
 
@@ -792,7 +819,8 @@ func PostSCPolicy(c *gin.Context) {
 		Description string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
 	}
 	var id int
 	database.DB.QueryRow(`INSERT INTO sc_policies (tenant_id,name,rule_type,action,description,is_enabled)
@@ -808,7 +836,8 @@ func PatchSCPolicy(c *gin.Context) {
 	pid := c.Param("id")
 	var body map[string]interface{}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	allowed := map[string]bool{"name": true, "action": true, "is_enabled": true, "description": true}
 	i := 1
@@ -822,7 +851,8 @@ func PatchSCPolicy(c *gin.Context) {
 		}
 	}
 	if len(sets) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid fields"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid fields"})
+		return
 	}
 	args = append(args, pid, tid)
 	database.DB.Exec(fmt.Sprintf("UPDATE sc_policies SET %s WHERE id=$%d AND tenant_id=$%d",
@@ -863,7 +893,8 @@ Provide compact JSON: {"answer":"concise answer","confidence":85,"recommended_ac
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -879,25 +910,76 @@ Provide compact JSON: {"answer":"concise answer","confidence":85,"recommended_ac
 // PostSCResponse — POST /api/supply-chain/response
 func PostSCResponse(c *gin.Context) {
 	createSupplyChainTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
-		Action   string `json:"action"`
-		Target   string `json:"target"`
-		Reason   string `json:"reason"`
+		Action string `json:"action"`
+		Target string `json:"target"`
+		Reason string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"block_build":         "Build blocked — pipeline will not proceed until issue is resolved",
-		"quarantine_artifact": "Artifact quarantined — removed from distribution registries",
-		"disable_pipeline":    "Pipeline disabled — no further runs until re-enabled",
-		"create_issue":        "GitHub issue created and assigned to repository owner",
-		"create_incident":     "Security incident created in incident management platform",
-		"trigger_soar":        "SOAR playbook triggered for supply chain response",
+
+	switch body.Action {
+	case "block_build":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE sc_build_pipelines SET status='blocked' WHERE tenant_id=$1 AND name=$2`, tid, body.Target)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching pipeline found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "Build blocked — pipeline will not proceed until issue is resolved"})
+	case "disable_pipeline":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE sc_build_pipelines SET status='disabled' WHERE tenant_id=$1 AND name=$2`, tid, body.Target)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching pipeline found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "Pipeline disabled — no further runs until re-enabled"})
+	case "quarantine_artifact":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		var hash string
+		database.DB.QueryRow(`SELECT artifact_hash FROM sc_artifacts WHERE tenant_id=$1 AND name=$2 AND artifact_hash != ''`, tid, body.Target).Scan(&hash)
+		if hash == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching artifact with a known hash found"})
+			return
+		}
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: hash, Type: services.GuessIOCType(hash), Severity: "high", Enabled: true,
+			Description: "Quarantined via Supply Chain Security",
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "Artifact quarantined — hash blocked from distribution"})
+	case "create_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, "Supply Chain Escalation: "+body.Target,
+			fmt.Sprintf("Escalated from Supply Chain Security. Target: %s, Reason: %s", body.Target, body.Reason),
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": fmt.Sprintf("Security incident #%d created", incidentID)})
+	case "create_issue":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "no real GitHub/GitLab API integration configured for this action"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
 	}
-	msg := messages[body.Action]
-	if msg == "" { msg = "Action executed" }
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": msg})
 }
 
 // PostSCReport — POST /api/supply-chain/report
@@ -920,7 +1002,8 @@ Provide compact JSON: {"title":"...","executive_summary":"3 sentences","key_find
 		repos, deps, criticalCVEs, secrets, body.ReportType, repos, deps, criticalCVEs, secrets)
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]

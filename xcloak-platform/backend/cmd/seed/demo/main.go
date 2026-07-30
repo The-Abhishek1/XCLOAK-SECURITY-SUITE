@@ -166,6 +166,8 @@ func main() {
 	seedContainerSecurity(db)
 	log.Println("Seeding AD security…")
 	seedADSecurity(db)
+	log.Println("Seeding supply chain security…")
+	seedSupplyChainSecurity(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -3340,6 +3342,249 @@ func seedADSecurity(db *sql.DB) {
 			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 			a.atype, a.severity, a.sourceUser, a.sourceComputer, a.sourceIP, a.target, a.technique, a.desc, a.mitre, a.status,
 			now.Add(-time.Duration(a.hoursAgo)*time.Hour),
+		)
+	}
+}
+
+func seedSupplyChainSecurity(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_repositories (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', owner TEXT DEFAULT '',
+		platform TEXT DEFAULT 'github', language TEXT DEFAULT '',
+		default_branch TEXT DEFAULT 'main', last_commit TIMESTAMPTZ DEFAULT NOW(),
+		contributor_count INTEGER DEFAULT 0, is_private BOOLEAN DEFAULT true,
+		dep_count INTEGER DEFAULT 0, risk_score INTEGER DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_dependencies (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		repo_id INTEGER DEFAULT 0, package_name TEXT DEFAULT '',
+		version TEXT DEFAULT '', latest_version TEXT DEFAULT '',
+		ecosystem TEXT DEFAULT 'npm', license TEXT DEFAULT '',
+		cve_count INTEGER DEFAULT 0, is_direct BOOLEAN DEFAULT true,
+		is_outdated BOOLEAN DEFAULT false, risk_score INTEGER DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_vulnerabilities (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		dep_id INTEGER DEFAULT 0, cve_id TEXT DEFAULT '',
+		cvss NUMERIC(4,1) DEFAULT 0, epss NUMERIC(6,4) DEFAULT 0,
+		is_kev BOOLEAN DEFAULT false, fix_version TEXT DEFAULT '',
+		has_exploit BOOLEAN DEFAULT false, severity TEXT DEFAULT 'medium',
+		description TEXT DEFAULT '', affected_projects TEXT DEFAULT '',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_sboms (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		repo_id INTEGER DEFAULT 0, artifact_name TEXT DEFAULT '',
+		format TEXT DEFAULT 'cyclonedx', component_count INTEGER DEFAULT 0,
+		license_count INTEGER DEFAULT 0, supplier_count INTEGER DEFAULT 0,
+		has_vulnerabilities BOOLEAN DEFAULT false,
+		generated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_build_pipelines (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		repo_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		platform TEXT DEFAULT 'github_actions', status TEXT DEFAULT 'passing',
+		last_run TIMESTAMPTZ DEFAULT NOW(), has_secrets BOOLEAN DEFAULT false,
+		has_untrusted_actions BOOLEAN DEFAULT false,
+		has_pinned_versions BOOLEAN DEFAULT true, risk_score INTEGER DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_artifacts (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		pipeline_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		artifact_type TEXT DEFAULT 'container', version TEXT DEFAULT '',
+		is_signed BOOLEAN DEFAULT false, has_sbom BOOLEAN DEFAULT false,
+		artifact_hash TEXT DEFAULT '', provenance_available BOOLEAN DEFAULT false,
+		risk_score INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_secrets (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		repo_id INTEGER DEFAULT 0, secret_type TEXT DEFAULT '',
+		file_path TEXT DEFAULT '', commit_hash TEXT DEFAULT '',
+		severity TEXT DEFAULT 'high', status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sc_policies (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', rule_type TEXT DEFAULT '',
+		action TEXT DEFAULT 'block', is_enabled BOOLEAN DEFAULT true,
+		description TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM sc_repositories WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+
+	repos := []struct {
+		name, owner, platform, language, branch string
+		contributors, depCount, risk            int
+	}{
+		{"webapp", "xcloak-corp", "github", "TypeScript", "main", 14, 6, 58},
+		{"payments-api", "xcloak-corp", "github", "Go", "main", 6, 4, 44},
+		{"orders-worker", "xcloak-corp", "github", "Go", "main", 5, 3, 30},
+		{"legacy-billing", "xcloak-corp", "gitlab", "Python", "master", 3, 3, 76},
+		{"infra-terraform", "xcloak-corp", "github", "HCL", "main", 8, 1, 25},
+		{"mobile-app", "xcloak-corp", "github", "Kotlin", "main", 9, 2, 40},
+	}
+	repoIDs := make([]int, len(repos))
+	for i, r := range repos {
+		db.QueryRow(`
+			INSERT INTO sc_repositories (tenant_id, name, owner, platform, language, default_branch, last_commit, contributor_count, is_private, dep_count, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,true,$8,$9) RETURNING id`,
+			r.name, r.owner, r.platform, r.language, r.branch, now.Add(-time.Duration(i+1)*time.Hour), r.contributors, r.depCount, r.risk,
+		).Scan(&repoIDs[i])
+	}
+
+	deps := []struct {
+		repoIdx                                  int
+		pkg, version, latest, ecosystem, license string
+		cveCount                                 int
+		isDirect, isOutdated                     bool
+		risk                                     int
+	}{
+		{0, "event-stream", "3.3.6", "4.0.1", "npm", "MIT", 0, true, true, 88},
+		{0, "lodash", "4.17.15", "4.17.21", "npm", "MIT", 2, true, true, 62},
+		{0, "axios", "1.6.0", "1.6.0", "npm", "MIT", 0, true, false, 10},
+		{0, "react", "18.2.0", "18.2.0", "npm", "MIT", 0, true, false, 5},
+		{1, "golang.org/x/crypto", "0.14.0", "0.17.0", "go", "BSD-3-Clause", 1, true, true, 55},
+		{1, "github.com/gin-gonic/gin", "1.9.1", "1.9.1", "go", "MIT", 0, true, false, 8},
+		{2, "github.com/lib/pq", "1.10.9", "1.10.9", "go", "MIT", 0, true, false, 5},
+		{3, "django", "2.2.10", "4.2.7", "pip", "BSD-3-Clause", 4, true, true, 91},
+		{3, "pyyaml", "5.3.1", "6.0.1", "pip", "MIT", 1, true, true, 48},
+		{3, "requests", "2.31.0", "2.31.0", "pip", "Apache-2.0", 0, false, false, 6},
+		{4, "hashicorp/aws", "4.9.0", "5.31.0", "terraform", "MPL-2.0", 1, true, true, 42},
+		{5, "com.squareup.okhttp3:okhttp", "4.9.0", "4.12.0", "maven", "Apache-2.0", 1, true, true, 38},
+	}
+	depIDs := make([]int, len(deps))
+	for i, d := range deps {
+		db.QueryRow(`
+			INSERT INTO sc_dependencies (tenant_id, repo_id, package_name, version, latest_version, ecosystem, license, cve_count, is_direct, is_outdated, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+			repoIDs[d.repoIdx], d.pkg, d.version, d.latest, d.ecosystem, d.license, d.cveCount, d.isDirect, d.isOutdated, d.risk,
+		).Scan(&depIDs[i])
+	}
+
+	vulns := []struct {
+		depIdx                               int
+		cve                                  string
+		cvss, epss                           float64
+		isKEV, hasExploit                    bool
+		fixVersion, severity, desc, affected string
+	}{
+		{1, "CVE-2020-8203", 7.4, 0.03, false, false, "4.17.19", "high", "Prototype pollution in lodash allows denial of service or remote code execution.", "webapp"},
+		{1, "CVE-2021-23337", 7.2, 0.02, false, false, "4.17.21", "high", "Command injection via template function in lodash.", "webapp"},
+		{4, "CVE-2023-48795", 5.9, 0.05, false, false, "0.17.0", "medium", "SSH protocol Terrapin attack allows prefix truncation.", "payments-api"},
+		{7, "CVE-2022-28347", 9.8, 0.94, true, true, "4.2.0", "critical", "Django SQL injection via QuerySet.explain() JSON field.", "legacy-billing"},
+		{7, "CVE-2020-9402", 9.8, 0.87, true, true, "3.0.4", "critical", "Django GIS SQL injection in geographic model fields.", "legacy-billing"},
+		{7, "CVE-2019-19844", 9.8, 0.91, true, true, "3.0.1", "critical", "Django password reset token allows account takeover with crafted email.", "legacy-billing"},
+		{8, "CVE-2020-1747", 9.8, 0.75, true, true, "5.4", "critical", "PyYAML full_load allows arbitrary code execution via crafted YAML.", "legacy-billing"},
+		{10, "CVE-2023-25774", 6.5, 0.04, false, false, "5.0.0", "medium", "Terraform AWS provider credential leak in error logging.", "infra-terraform"},
+		{11, "CVE-2021-0341", 7.5, 0.06, false, false, "4.9.2", "high", "OkHttp certificate pinning bypass under specific redirect conditions.", "mobile-app"},
+	}
+	for _, v := range vulns {
+		db.Exec(`
+			INSERT INTO sc_vulnerabilities (tenant_id, dep_id, cve_id, cvss, epss, is_kev, fix_version, has_exploit, severity, description, affected_projects)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			depIDs[v.depIdx], v.cve, v.cvss, v.epss, v.isKEV, v.fixVersion, v.hasExploit, v.severity, v.desc, v.affected,
+		)
+	}
+
+	sboms := []struct {
+		repoIdx                         int
+		artifact, format                string
+		components, licenses, suppliers int
+		hasVulns                        bool
+	}{
+		{0, "webapp:1.2.3", "cyclonedx", 342, 28, 12, true},
+		{1, "payments-api:2.4.0", "cyclonedx", 118, 14, 6, true},
+		{3, "legacy-billing:0.9.1", "spdx", 89, 11, 5, true},
+		{5, "mobile-app:3.1.0", "cyclonedx", 205, 19, 9, true},
+	}
+	for _, s := range sboms {
+		db.Exec(`
+			INSERT INTO sc_sboms (tenant_id, repo_id, artifact_name, format, component_count, license_count, supplier_count, has_vulnerabilities, generated_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8)`,
+			repoIDs[s.repoIdx], s.artifact, s.format, s.components, s.licenses, s.suppliers, s.hasVulns, now.Add(-2*time.Hour),
+		)
+	}
+
+	pipelines := []struct {
+		repoIdx                                            int
+		name, platform, status                             string
+		hasSecrets, hasUntrustedActions, hasPinnedVersions bool
+		risk                                               int
+	}{
+		{0, "webapp-ci", "github_actions", "passing", false, true, false, 62},
+		{1, "payments-api-deploy", "github_actions", "passing", false, false, true, 20},
+		{2, "orders-worker-ci", "github_actions", "failing", false, false, true, 35},
+		{3, "legacy-billing-build", "gitlab_ci", "passing", true, true, false, 84},
+		{4, "infra-terraform-plan", "github_actions", "passing", false, false, true, 15},
+		{5, "mobile-app-release", "github_actions", "passing", false, true, false, 48},
+	}
+	pipelineIDs := make([]int, len(pipelines))
+	for i, p := range pipelines {
+		db.QueryRow(`
+			INSERT INTO sc_build_pipelines (tenant_id, repo_id, name, platform, status, last_run, has_secrets, has_untrusted_actions, has_pinned_versions, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+			repoIDs[p.repoIdx], p.name, p.platform, p.status, now.Add(-time.Duration(i+1)*30*time.Minute),
+			p.hasSecrets, p.hasUntrustedActions, p.hasPinnedVersions, p.risk,
+		).Scan(&pipelineIDs[i])
+	}
+
+	artifacts := []struct {
+		pipelineIdx                            int
+		name, atype, version, hash             string
+		isSigned, hasSBOM, provenanceAvailable bool
+		risk                                   int
+	}{
+		{0, "webapp", "container", "1.2.3", "sha256:3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1", false, true, false, 55},
+		{1, "payments-api", "container", "2.4.0", "sha256:8f14e45fceea167a5a36dedd4bea2543c8e2f3a1a2e5f8c9c1a2b3c4d5e6f70", true, true, true, 15},
+		{2, "orders-worker", "container", "1.0.5", "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85", false, false, false, 40},
+		{3, "legacy-billing", "container", "0.9.1", "sha256:5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d", false, true, false, 88},
+		{4, "infra-terraform-plan", "binary", "1.0.0", "sha256:6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4", true, false, true, 12},
+		{5, "mobile-app", "package", "3.1.0", "sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab3", true, true, true, 20},
+	}
+	for _, a := range artifacts {
+		db.Exec(`
+			INSERT INTO sc_artifacts (tenant_id, pipeline_id, name, artifact_type, version, is_signed, has_sbom, artifact_hash, provenance_available, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			pipelineIDs[a.pipelineIdx], a.name, a.atype, a.version, a.isSigned, a.hasSBOM, a.hash, a.provenanceAvailable, a.risk,
+		)
+	}
+
+	secrets := []struct {
+		repoIdx                                            int
+		secretType, filePath, commitHash, severity, status string
+		hoursAgo                                           int
+	}{
+		{3, "aws_access_key", "config/settings.py", "a1b2c3d4", "critical", "open", 20},
+		{3, "generic_api_key", "billing/stripe_client.py", "e5f6a7b8", "high", "open", 40},
+		{0, "generic_api_key", ".env.example", "c9d0e1f2", "medium", "resolved", 300},
+		{5, "private_key", "android/keystore.properties", "f3a4b5c6", "critical", "open", 90},
+		{1, "aws_secret_key", "deploy/terraform.tfvars", "b7c8d9e0", "critical", "resolved", 500},
+	}
+	for _, s := range secrets {
+		db.Exec(`
+			INSERT INTO sc_secrets (tenant_id, repo_id, secret_type, file_path, commit_hash, severity, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7)`,
+			repoIDs[s.repoIdx], s.secretType, s.filePath, s.commitHash, s.severity, s.status,
+			now.Add(-time.Duration(s.hoursAgo)*time.Hour),
+		)
+	}
+
+	policies := []struct {
+		name, ruleType, action string
+		enabled                bool
+		desc                   string
+	}{
+		{"Block Critical CVEs at Build Time", "vulnerability", "block", true, "Fail any build with a dependency carrying a critical, unfixed CVE."},
+		{"Require Signed Artifacts", "signing", "block", true, "Reject any release artifact that isn't cryptographically signed."},
+		{"Alert on Untrusted GitHub Actions", "pipeline", "alert", true, "Flag any workflow referencing an action outside the approved allowlist."},
+		{"Require SBOM for Production Images", "sbom", "block", false, "Reject container images with no attached SBOM (currently in monitor mode)."},
+	}
+	for _, p := range policies {
+		db.Exec(`
+			INSERT INTO sc_policies (tenant_id, name, rule_type, action, is_enabled, description)
+			VALUES (9999,$1,$2,$3,$4,$5)`,
+			p.name, p.ruleType, p.action, p.enabled, p.desc,
 		)
 	}
 }

@@ -843,7 +843,6 @@ function ResponseTab() {
     { value: 'disable_pipeline', label: 'Disable Pipeline', desc: 'Shut down CI/CD pipeline until issue is resolved' },
     { value: 'create_issue', label: 'Create Issue', desc: 'File GitHub/GitLab issue and assign to repo owner' },
     { value: 'create_incident', label: 'Create Incident', desc: 'Open incident in incident management platform' },
-    { value: 'trigger_soar', label: 'Trigger SOAR', desc: 'Execute supply chain SOAR playbook' },
   ];
 
   const execute = async () => {
@@ -881,6 +880,7 @@ function ResponseTab() {
               {executing ? 'Executing…' : 'Execute'}
             </ActionButton>
           </div>
+          <a href="/playbooks" className="g-btn g-btn-ghost" style={{ textAlign: 'center' as const }}>Run SOAR Playbook</a>
         </div>
         {result && (
           <div style={{ marginTop: 16, padding: 12, background: result.error ? '#ef444422' : '#22c55e22', borderRadius: 6, borderLeft: `3px solid ${result.error ? '#ef4444' : '#22c55e'}` }}>
