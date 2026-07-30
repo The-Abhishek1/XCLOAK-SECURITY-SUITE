@@ -403,61 +403,21 @@ function IntelligenceTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <SectionCard title={<span style={{ color: '#ef4444' }}>Malware Families — Evasion Matches</span>}>
-        {intel.malware_families?.map((m: any, i: number) => (
-          <div key={i} style={{ padding: '0.85rem', background: 'rgba(239,68,68,0.06)', borderRadius: '6px', marginBottom: '0.5rem', border: '1px solid rgba(239,68,68,0.18)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-              <span style={{ fontWeight: 600, color: '#ef4444' }}>{m.name}</span>
-              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.78rem' }}>
-                <span style={{ color: '#22c55e' }}>Confidence: {m.confidence}%</span>
-                <span style={{ color: 'var(--text-3)' }}>IOC matches: {m.ioc_matches}</span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-              {m.evasion_techniques?.map((t: string) => (
-                <span key={t} style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', padding: '1px 6px', borderRadius: '3px', fontSize: '0.72rem' }}>{t}</span>
-              ))}
+      <SectionCard title="Observed Evasion Techniques">
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>
+          No malware-family/threat-actor attribution or campaign-tracking data exists in this schema — this reflects real technique frequency observed in this tenant's own events instead.
+        </div>
+        {(intel.observed_techniques ?? []).length === 0 && <div style={{ fontSize: '0.85rem', color: 'var(--text-3)' }}>No evasion events observed yet.</div>}
+        {intel.observed_techniques?.map((t: any, i: number) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '0.85rem' }}>{t.technique}</span>
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.72rem', background: `${SEV_COLOR[t.severity] || '#666'}18`, color: SEV_COLOR[t.severity] || '#666', padding: '1px 6px', borderRadius: '3px' }}>{t.severity}</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t.count}</span>
             </div>
           </div>
         ))}
       </SectionCard>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <SectionCard title="Threat Actors">
-          {intel.threat_actors?.map((a: any, i: number) => (
-            <div key={i} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: 600, color: '#f97316', marginBottom: '0.25rem' }}>{a.name}</div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginBottom: '0.35rem' }}>Targets: {a.targets}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {a.known_techniques?.map((t: string) => (
-                  <code key={t} style={{ background: 'rgba(99,102,241,0.1)', color: '#818cf8', padding: '1px 5px', borderRadius: '3px', fontSize: '0.72rem' }}>{t}</code>
-                ))}
-              </div>
-            </div>
-          ))}
-        </SectionCard>
-        <SectionCard title="Active Campaigns">
-          {intel.campaigns?.map((c: any, i: number) => (
-            <div key={i} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.2rem' }}>{c.name}</div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>Actor: <span style={{ color: '#f97316' }}>{c.actor}</span></div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginTop: '0.15rem' }}>{c.technique}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>Detected {timeAgo(c.detected)}</div>
-            </div>
-          ))}
-          <div style={{ fontWeight: 600, marginTop: '0.75rem', marginBottom: '0.5rem' }}>IOC Matches</div>
-          {intel.ioc_matches?.map((ioc: any, i: number) => (
-            <div key={i} style={{ padding: '0.5rem', background: 'rgba(239,68,68,0.07)', borderRadius: '4px', marginBottom: '0.4rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                <span style={{ fontSize: '0.72rem', background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '1px 5px', borderRadius: '3px' }}>{ioc.type}</span>
-                <span style={{ fontSize: '0.72rem', color: '#22c55e' }}>{ioc.family}</span>
-              </div>
-              <code style={{ fontSize: '0.68rem', color: 'var(--text-3)', wordBreak: 'break-all', display: 'block' }}>{ioc.value}</code>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.15rem' }}>{ioc.context}</div>
-            </div>
-          ))}
-        </SectionCard>
-      </div>
     </div>
   );
 }
@@ -465,121 +425,72 @@ function IntelligenceTab() {
 // ── Analytics ─────────────────────────────────────────────────────────────────
 function AnalyticsTab() {
   const [analytics, setAnalytics] = useState<any>(null);
-  const [validation, setValidation] = useState<any>(null);
-  const [view, setView] = useState<'analytics' | 'validation'>('analytics');
 
   useEffect(() => {
     defenseEvasionAPI.getAnalytics().then(r => setAnalytics(r.data));
-    defenseEvasionAPI.getValidation().then(r => setValidation(r.data));
   }, []);
 
   if (!analytics) return <div style={{ color: 'var(--text-3)', padding: '2rem' }}>Loading…</div>;
 
   const maxTrend = Math.max(...(analytics.evasion_trend?.map((p: any) => p.count) || [1]), 1);
+  const maxTech = Math.max(...(analytics.top_techniques?.map((t: any) => t.count) || [1]), 1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div style={{ display: 'flex', gap: '0.75rem' }}>
-        {(['analytics', 'validation'] as const).map(v => (
-          <ActionButton key={v} variant={view === v ? 'primary' : 'ghost'} onClick={() => setView(v)}>
-            {v === 'analytics' ? 'Analytics' : 'Detection Validation'}
-          </ActionButton>
-        ))}
+      <SectionCard title="Evasion Trend (8d)">
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
+          {analytics.evasion_trend?.map((p: any, i: number) => (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{
+                width: '100%', background: p.count > 5 ? '#ef4444' : p.count > 2 ? '#f97316' : '#3b82f6',
+                height: `${Math.max((p.count / maxTrend) * 80, p.count > 0 ? 6 : 2)}px`,
+                borderRadius: '3px 3px 0 0',
+              }} title={`${p.date}: ${p.count}`} />
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-3)', transform: 'rotate(-25deg)', whiteSpace: 'nowrap' }}>{p.date.slice(5)}</div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        <SectionCard title="Top Evasion Techniques">
+          {analytics.top_techniques?.map((t: any) => (
+            <div key={t.technique} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <span style={{ minWidth: '160px', fontSize: '0.82rem' }}>{t.technique}</span>
+              <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
+                <div style={{ width: `${(t.count / maxTech) * 100}%`, height: '100%', borderRadius: '4px', background: SEV_COLOR[t.severity] || '#666' }} />
+              </div>
+              <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{t.count}</span>
+            </div>
+          ))}
+        </SectionCard>
+        <SectionCard title="Most Targeted Endpoints">
+          {analytics.most_targeted_endpoints?.map((e: any) => (
+            <div key={e.hostname} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <span style={{ minWidth: '130px', fontSize: '0.82rem', fontFamily: 'monospace' }}>{e.hostname}</span>
+              <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
+                <div style={{ width: `${e.risk}%`, height: '100%', borderRadius: '4px', background: e.risk >= 90 ? '#ef4444' : e.risk >= 70 ? '#f97316' : '#eab308' }} />
+              </div>
+              <span style={{ fontSize: '0.8rem', color: e.risk >= 90 ? '#ef4444' : 'var(--text-2)', minWidth: '25px', textAlign: 'right' }}>{e.risk}</span>
+            </div>
+          ))}
+        </SectionCard>
       </div>
 
-      {view === 'analytics' && (
-        <>
-          <SectionCard title="Evasion Trend (8d)">
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
-              {analytics.evasion_trend?.map((p: any, i: number) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <div style={{
-                    width: '100%', background: p.count > 5 ? '#ef4444' : p.count > 2 ? '#f97316' : '#3b82f6',
-                    height: `${Math.max((p.count / maxTrend) * 80, p.count > 0 ? 6 : 2)}px`,
-                    borderRadius: '3px 3px 0 0',
-                  }} title={`${p.date}: ${p.count}`} />
-                  <div style={{ fontSize: '0.6rem', color: 'var(--text-3)', transform: 'rotate(-25deg)', whiteSpace: 'nowrap' }}>{p.date.slice(5)}</div>
-                </div>
-              ))}
+      <SectionCard title="Security Control Coverage">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {analytics.control_status?.map((c: any) => (
+            <div key={c.control} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ minWidth: '160px', fontSize: '0.82rem' }}>{c.control}</span>
+              <span style={{ width: '80px', fontSize: '0.75rem', background: `${STATUS_COLOR[c.status] || '#666'}18`, color: STATUS_COLOR[c.status] || '#666', padding: '1px 6px', borderRadius: '3px', textAlign: 'center' }}>{c.status}</span>
+              <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
+                <div style={{ width: `${c.coverage}%`, height: '100%', borderRadius: '4px', background: c.coverage >= 80 ? '#22c55e' : c.coverage >= 50 ? '#eab308' : '#ef4444' }} />
+              </div>
+              <span style={{ fontSize: '0.8rem', minWidth: '35px', textAlign: 'right' }}>{c.coverage}%</span>
             </div>
-          </SectionCard>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <SectionCard title="Top Evasion Techniques">
-              {analytics.top_techniques?.map((t: any) => (
-                <div key={t.technique} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                  <span style={{ minWidth: '160px', fontSize: '0.82rem' }}>{t.technique}</span>
-                  <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                    <div style={{ width: `${(t.count / 9) * 100}%`, height: '100%', borderRadius: '4px', background: SEV_COLOR[t.severity] || '#666' }} />
-                  </div>
-                  <span style={{ fontSize: '0.8rem', minWidth: '20px', textAlign: 'right' }}>{t.count}</span>
-                </div>
-              ))}
-            </SectionCard>
-            <SectionCard title="Most Targeted Endpoints">
-              {analytics.most_targeted_endpoints?.map((e: any) => (
-                <div key={e.hostname} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                  <span style={{ minWidth: '130px', fontSize: '0.82rem', fontFamily: 'monospace' }}>{e.hostname}</span>
-                  <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                    <div style={{ width: `${e.risk}%`, height: '100%', borderRadius: '4px', background: e.risk >= 90 ? '#ef4444' : e.risk >= 70 ? '#f97316' : '#eab308' }} />
-                  </div>
-                  <span style={{ fontSize: '0.8rem', color: e.risk >= 90 ? '#ef4444' : 'var(--text-2)', minWidth: '25px', textAlign: 'right' }}>{e.risk}</span>
-                </div>
-              ))}
-            </SectionCard>
-          </div>
-
-          <SectionCard title="Security Control Coverage">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              {analytics.control_status?.map((c: any) => (
-                <div key={c.control} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ minWidth: '160px', fontSize: '0.82rem' }}>{c.control}</span>
-                  <span style={{ width: '80px', fontSize: '0.75rem', background: `${STATUS_COLOR[c.status] || '#666'}18`, color: STATUS_COLOR[c.status] || '#666', padding: '1px 6px', borderRadius: '3px', textAlign: 'center' }}>{c.status}</span>
-                  <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                    <div style={{ width: `${c.coverage}%`, height: '100%', borderRadius: '4px', background: c.coverage >= 80 ? '#22c55e' : c.coverage >= 50 ? '#eab308' : '#ef4444' }} />
-                  </div>
-                  <span style={{ fontSize: '0.8rem', minWidth: '35px', textAlign: 'right' }}>{c.coverage}%</span>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        </>
-      )}
-
-      {view === 'validation' && validation && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <MetricCard label="Detection Success Rate" value={`${validation.detection_success_rate}%`} color="#22c55e" />
-            <MetricCard label="Missed Attempts" value={validation.missed_attempts} color="#ef4444" />
-            <MetricCard label="False Positives" value={validation.false_positives} color="#eab308" />
-            <MetricCard label="Avg Time to Detect" value={`${validation.avg_time_to_detect_seconds}s`} color="#3b82f6" />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <SectionCard title="Coverage by Platform">
-              {validation.coverage_by_platform?.map((p: any) => (
-                <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                  <span style={{ minWidth: '80px', fontSize: '0.82rem' }}>{p.platform}</span>
-                  <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                    <div style={{ width: `${p.coverage}%`, height: '100%', borderRadius: '4px', background: p.coverage >= 80 ? '#22c55e' : p.coverage >= 60 ? '#eab308' : '#ef4444' }} />
-                  </div>
-                  <span style={{ fontSize: '0.8rem', minWidth: '35px', textAlign: 'right' }}>{p.coverage}%</span>
-                </div>
-              ))}
-            </SectionCard>
-            <SectionCard title="Coverage by Evasion Category">
-              {validation.technique_coverage?.map((t: any) => (
-                <div key={t.category} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                  <span style={{ minWidth: '120px', fontSize: '0.82rem' }}>{t.category}</span>
-                  <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
-                    <div style={{ width: `${(t.covered / t.total) * 100}%`, height: '100%', borderRadius: '4px', background: '#3b82f6' }} />
-                  </div>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', minWidth: '40px', textAlign: 'right' }}>{t.covered}/{t.total}</span>
-                </div>
-              ))}
-            </SectionCard>
-          </div>
+          ))}
         </div>
-      )}
+      </SectionCard>
     </div>
   );
 }
@@ -594,13 +505,19 @@ function ResponseTab() {
   const [aiQuery, setAiQuery] = useState('');
   const [aiResult, setAiResult] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [hostname, setHostname] = useState('');
+  const [target, setTarget] = useState('');
 
   useEffect(() => { defenseEvasionAPI.getTimeline().then(r => setTimeline(r.data || [])); }, []);
 
   const respond = async (action: string) => {
     setLoading(l => ({ ...l, [action]: true }));
-    const r = await defenseEvasionAPI.respond({ action, hostname: 'WS-ANALYST-01', target: 'Windows Defender', reason: 'Manual response' });
-    setResult(r.data);
+    try {
+      const r = await defenseEvasionAPI.respond({ action, hostname, target, reason: 'Manual response' });
+      setResult(r.data);
+    } catch (err: any) {
+      setResult({ action, error: err?.response?.data?.error || 'Action failed' });
+    }
     setLoading(l => ({ ...l, [action]: false }));
   };
 
@@ -614,8 +531,10 @@ function ResponseTab() {
   const runAI = async () => {
     if (!aiQuery.trim()) return;
     setAiLoading(true);
-    const r = await defenseEvasionAPI.analyzeAI({ content: aiQuery });
-    setAiResult(r.data);
+    try {
+      const r = await defenseEvasionAPI.analyzeAI({ content: aiQuery });
+      setAiResult(r.data);
+    } catch { setAiResult({ error: 'Analysis failed' }); }
     setAiLoading(false);
   };
 
@@ -627,18 +546,26 @@ function ResponseTab() {
     { id: 'kill_process',              label: 'Kill Process',               desc: 'Terminate evasion process',                   color: '#ef4444' },
     { id: 'collect_memory',            label: 'Collect Memory',             desc: 'Full memory dump for forensics',              color: '#f97316' },
     { id: 'create_incident',           label: 'Create Incident',            desc: 'Assign to SOC Tier 2',                        color: '#eab308' },
-    { id: 'run_soar',                  label: 'Run SOAR Playbook',          desc: 'Execute DE-RESPONSE-01',                      color: '#22c55e' },
   ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {result && (
-        <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '8px', padding: '1rem' }}>
-          <div style={{ fontWeight: 600, color: '#22c55e', marginBottom: '0.25rem' }}>Action Executed: {result.action}</div>
-          <div style={{ fontSize: '0.85rem' }}>{result.message}</div>
+        <div style={{ background: result.error ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', border: `1px solid ${result.error ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`, borderRadius: '8px', padding: '1rem' }}>
+          <div style={{ fontWeight: 600, color: result.error ? '#ef4444' : '#22c55e', marginBottom: '0.25rem' }}>
+            {result.error ? `Action Failed: ${result.action}` : `Action Executed: ${result.action}`}
+          </div>
+          <div style={{ fontSize: '0.85rem' }}>{result.error || result.message}</div>
           {result.hostname && <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', marginTop: '0.25rem' }}>Host: {result.hostname}</div>}
         </div>
       )}
+
+      <SectionCard title="Target">
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <input className="g-input" style={{ flex: 1 }} placeholder="Hostname" value={hostname} onChange={e => setHostname(e.target.value)} />
+          <input className="g-input" style={{ flex: 1 }} placeholder="Target (pid for Kill Process, otherwise ignored)" value={target} onChange={e => setTarget(e.target.value)} />
+        </div>
+      </SectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(270px,1fr))', gap: '0.75rem' }}>
         {ACTIONS.map(a => (
@@ -650,6 +577,7 @@ function ResponseTab() {
             </ActionButton>
           </div>
         ))}
+        <a href="/playbooks" className="g-btn g-btn-ghost" style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Run SOAR Playbook</a>
       </div>
 
       <SectionCard title="AI-Assisted Analysis">

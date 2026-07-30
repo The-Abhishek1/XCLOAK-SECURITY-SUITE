@@ -58,7 +58,7 @@ features on a future page seem broken, check `ollama list` /
 
 ---
 
-## ✅ Completed (36)
+## ✅ Completed (37)
 
 1. **Dashboard** (`/dashboard`) — `dashboard.spec.ts`. Fabricated compliance %, broken SQL (nonexistent `compliance_reports.framework`/`.details` columns).
 2. **Agents** (`/agents`) — `agents.spec.ts`. Dead `is_isolated`/`tamper_protection` fields fixed; removed a duplicate in-page "Enroll Agent" onboarding modal in favor of the more complete `/agents/onwards` wizard. **Agent Detail (`/agents/:id`) has 2 known deferred bugs** — start there when it comes up (see memory).
@@ -110,8 +110,11 @@ features on a future page seem broken, check `ollama list` /
 
 ---
 
-## ⬜ Remaining (18), in sidebar order
-- [ ] Defense Evasion (`/defense-evasion`)
+37. **Defense Evasion** (`/defense-evasion`) — `defense-evasion.spec.ts`. Confirmed one large judgment call with the user: a whole standalone "Detection Validation" tab (4 metric cards + 2 tables — detection success rate, missed attempts, false positives, avg time-to-detect, per-platform coverage, per-category technique coverage) was 100% hardcoded with genuinely zero possible real backing (no purple-team/atomic-red-team exercise tracking exists anywhere in this schema, and building one would be a new feature, not a bug fix) — removed the whole tab: `GetDEValidation` handler, its route, its API client method, and the tab/view. Everything else fixed directly as clear recurrences of patterns already established this phase: `GetDEBehavioral`'s 5 hardcoded detections (reusing fictional hostnames found elsewhere on this page) rewritten to derive from real `de_events` rows directly. `GetDEThreatIntel`'s `malware_families`/`ioc_matches` implied real per-tenant detections (specific confidence scores, a fake sha256, a fake registry key) rather than generic reference content; `threat_actors`/`campaigns` (the latter recomputing a fake timestamp on every request — the 4th occurrence of this bug class this session) had zero real backing anywhere — all four removed, replaced with a real technique-frequency breakdown from `de_events`. `GetDEMITRE`'s sub-technique `detected`/`count` wired to a real `GROUP BY mitre_id` count. `GetDEAnalytics`'s 4 hardcoded fields wired to real aggregations over `de_events`/`de_controls`. `PostDEResponse` was the familiar canned-message dispatcher (8 actions!) — rewritten: `restart_security_services`/`reenable_defender`/`restore_firewall` do real UPDATEs against `de_controls`; `isolate_endpoint`/`kill_process` resolve a real agent and dispatch a real pending-approval task; `create_incident` does a real `INSERT INTO incidents`; `collect_memory` now honestly 501 (no real agent capability, matching Process Injection's identical finding); `run_soar` removed, replaced with the real `/playbooks` link. Also found and fixed a more severe variant of a bug from this session's own earlier work: the Response tab's `respond()` call sent hardcoded fake identifiers for literally every action with zero target-selection UI at all — worse than Process Injection's version — fixed by adding real hostname/target inputs. Separately discovered the API client's `respond`/`analyzeAI`/`generateReport` methods on this page (and, found while fixing this, **Process Injection's identical methods from earlier in this same session**) had a `.catch(() => ({ data: null }))` wrapper silently swallowing real errors before they ever reached the component — meaning the component-level error handling added to Process Injection earlier was dead code. Fixed both pages' API client methods and added matching component-level `try/catch`. **Like every other page this phase**: none of this page's 4 own tables had any seed data anywhere in a fresh dev environment — added `seedDefenseEvasion` to the demo seeder, idempotency-guarded like every other keyless table this phase.
+
+---
+
+## ⬜ Remaining (17), in sidebar order
 - [ ] Cases (`/cases`)
 - [ ] Playbooks (`/playbooks`)
 - [ ] Approval Queue (`/soar-approvals`)

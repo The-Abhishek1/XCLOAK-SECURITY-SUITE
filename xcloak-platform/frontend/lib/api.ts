@@ -1350,10 +1350,9 @@ export const defenseEvasionAPI = {
   getThreatIntel:     ()             => api.get('/de/threat-intel').catch(() => ({ data: null })),
   getTimeline:        (params?: any) => api.get('/de/timeline', { params }).catch(() => ({ data: [] })),
   getAnalytics:       ()             => api.get('/de/analytics').catch(() => ({ data: null })),
-  getValidation:      ()             => api.get('/de/validation').catch(() => ({ data: null })),
-  analyzeAI:          (data: any)   => api.post('/de/ai', data).catch(() => ({ data: null })),
-  respond:            (data: any)   => api.post('/de/response', data).catch(() => ({ data: null })),
-  generateReport:     (data: any)   => api.post('/de/report', data).catch(() => ({ data: null })),
+  analyzeAI:          (data: any)   => api.post('/de/ai', data),
+  respond:            (data: any)   => api.post('/de/response', data),
+  generateReport:     (data: any)   => api.post('/de/report', data),
 };
 
 export const processInjectionAPI = {
@@ -1370,9 +1369,9 @@ export const processInjectionAPI = {
   getTimeline:     (params?: any) => api.get('/pi/timeline', { params }).catch(() => ({ data: [] })),
   getMITREMap:     ()             => api.get('/pi/mitre').catch(() => ({ data: null })),
   getAnalytics:    ()             => api.get('/pi/analytics').catch(() => ({ data: null })),
-  analyzeAI:       (data: any)   => api.post('/pi/ai', data).catch(() => ({ data: null })),
-  respond:         (data: any)   => api.post('/pi/response', data).catch(() => ({ data: null })),
-  generateReport:  (data: any)   => api.post('/pi/report', data).catch(() => ({ data: null })),
+  analyzeAI:       (data: any)   => api.post('/pi/ai', data),
+  respond:         (data: any)   => api.post('/pi/response', data),
+  generateReport:  (data: any)   => api.post('/pi/report', data),
 };
 
 export const otICSAPI = {

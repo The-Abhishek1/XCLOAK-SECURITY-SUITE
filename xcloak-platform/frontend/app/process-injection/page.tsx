@@ -579,8 +579,10 @@ function ResponseTab() {
   const runAI = async () => {
     if (!aiQuery.trim()) return;
     setAiLoading(true);
-    const r = await processInjectionAPI.analyzeAI({ content: aiQuery });
-    setAiResult(r.data);
+    try {
+      const r = await processInjectionAPI.analyzeAI({ content: aiQuery });
+      setAiResult(r.data);
+    } catch { setAiResult({ error: 'Analysis failed' }); }
     setAiLoading(false);
   };
 

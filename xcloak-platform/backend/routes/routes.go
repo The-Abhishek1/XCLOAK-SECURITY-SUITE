@@ -1112,7 +1112,6 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/de/threat-intel", middleware.RequireAuth(), api.GetDEThreatIntel)
 	router.GET("/api/de/timeline", middleware.RequireAuth(), api.GetDETimeline)
 	router.GET("/api/de/analytics", middleware.RequireAuth(), api.GetDEAnalytics)
-	router.GET("/api/de/validation", middleware.RequireAuth(), api.GetDEValidation)
 	router.POST("/api/de/ai", middleware.RequireAuth(), api.PostDEAI)
 	router.POST("/api/de/response", middleware.RequireAuth(), api.PostDEResponse)
 	router.POST("/api/de/report", middleware.RequireAuth(), api.PostDEReport)
