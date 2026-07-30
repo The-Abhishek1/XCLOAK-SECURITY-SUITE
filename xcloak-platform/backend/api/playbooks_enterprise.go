@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -64,6 +65,16 @@ func createPBTables() {
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		decided_at TIMESTAMPTZ
 	)`)
+	database.DB.Exec(`CREATE TABLE IF NOT EXISTS pb_playbook_versions (
+		id SERIAL PRIMARY KEY,
+		tenant_id INTEGER NOT NULL,
+		playbook_id INTEGER NOT NULL,
+		version TEXT,
+		author TEXT,
+		status TEXT DEFAULT 'archived',
+		changelog TEXT DEFAULT '',
+		published_at TIMESTAMPTZ DEFAULT NOW()
+	)`)
 	database.DB.Exec(`CREATE TABLE IF NOT EXISTS pb_schedules (
 		id SERIAL PRIMARY KEY,
 		tenant_id INTEGER NOT NULL,
@@ -122,10 +133,14 @@ func GetPBLibrary(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("status"); v != "" {
-		q += fmt.Sprintf(" AND status=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND status=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("category"); v != "" {
-		q += fmt.Sprintf(" AND category=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND category=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY updated_at DESC LIMIT $%d", i)
 	args = append(args, limit)
@@ -284,6 +299,10 @@ func PostPBPublish(c *gin.Context) {
 	}
 	newVer := fmt.Sprintf("%s.%d.0", parts[0], minor+1)
 	database.DB.Exec(`UPDATE pb_playbooks SET status='active', version=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, newVer, pid, tid)
+	database.DB.Exec(`UPDATE pb_playbook_versions SET status='archived' WHERE tenant_id=$1 AND playbook_id=$2`, tid, pid)
+	author := usernameFromContext(c)
+	database.DB.Exec(`INSERT INTO pb_playbook_versions (tenant_id,playbook_id,version,author,status,changelog) VALUES ($1,$2,$3,$4,'active','Published from workflow builder')`,
+		tid, pid, newVer, author)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "version": newVer})
 }
 
@@ -323,13 +342,31 @@ func PostPBExecute(c *gin.Context) {
 	if body.TriggerType == "" {
 		body.TriggerType = "manual"
 	}
+	var workflowJSON string
+	if err := database.DB.QueryRow(`SELECT workflow::text FROM pb_playbooks WHERE id=$1 AND tenant_id=$2`, pid, tid).Scan(&workflowJSON); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "playbook not found"})
+		return
+	}
 	analyst := usernameFromContext(c)
 	execID := fmt.Sprintf("EX-%d-%06d", time.Now().Year(), time.Now().UnixNano()%1000000)
 	var id int
 	database.DB.QueryRow(`INSERT INTO pb_executions (tenant_id,playbook_id,execution_id,status,trigger_type,analyst)
 		VALUES($1,$2,$3,'running',$4,$5) RETURNING id`, tid, pid, execID, body.TriggerType, analyst).Scan(&id)
 	database.DB.Exec(`UPDATE pb_playbooks SET execution_count=execution_count+1, updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, pid, tid)
-	c.JSON(http.StatusOK, gin.H{"id": id, "execution_id": execID, "ok": true})
+
+	status, steps, durationS, failedStep := runPBWorkflow(tid, pid, execID, workflowJSON, false)
+	stepLog, _ := json.Marshal(steps)
+	if status == "pending" {
+		database.DB.Exec(`UPDATE pb_executions SET status=$1, duration_s=$2, failed_step=$3, step_log=$4::jsonb WHERE id=$5 AND tenant_id=$6`,
+			status, durationS, failedStep, string(stepLog), id, tid)
+	} else {
+		database.DB.Exec(`UPDATE pb_executions SET status=$1, ended_at=NOW(), duration_s=$2, failed_step=$3, step_log=$4::jsonb WHERE id=$5 AND tenant_id=$6`,
+			status, durationS, failedStep, string(stepLog), id, tid)
+	}
+	if status == "success" {
+		database.DB.Exec(`UPDATE pb_playbooks SET avg_runtime_s=(avg_runtime_s*success_count+$1)/(success_count+1), success_count=success_count+1 WHERE id=$2 AND tenant_id=$3`, durationS, pid, tid)
+	}
+	c.JSON(http.StatusOK, gin.H{"id": id, "execution_id": execID, "ok": true, "status": status})
 }
 
 // PostPBDryRun — POST /api/pb/library/:id/dry-run
@@ -337,35 +374,63 @@ func PostPBDryRun(c *gin.Context) {
 	createPBTables()
 	tid := tenantIDFromContext(c)
 	pid, _ := strconv.Atoi(c.Param("id"))
-	_ = tid
-	_ = pid
+	var body struct {
+		Workflow json.RawMessage `json:"workflow"`
+	}
+	c.ShouldBindJSON(&body)
+	workflowJSON := string(body.Workflow)
+	if workflowJSON == "" || workflowJSON == "null" {
+		database.DB.QueryRow(`SELECT workflow::text FROM pb_playbooks WHERE id=$1 AND tenant_id=$2`, pid, tid).Scan(&workflowJSON)
+	}
+	status, steps, durationS, _ := runPBWorkflow(tid, pid, "", workflowJSON, true)
+	passed, failed := 0, 0
+	warnings := []string{}
+	for _, s := range steps {
+		if s.Status == "failed" {
+			failed++
+		} else {
+			passed++
+		}
+		if s.Status == "skipped" {
+			warnings = append(warnings, fmt.Sprintf("%s: %s", s.Step, s.Message))
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"ok":               true,
-		"steps_passed":     8,
-		"steps_failed":     0,
-		"estimated_time_s": 42,
-		"warnings":         []interface{}{},
-		"step_results": []interface{}{
-			map[string]interface{}{"step": "Trigger: Alert Created", "status": "ok", "duration_ms": 12},
-			map[string]interface{}{"step": "IF: severity == critical", "status": "ok", "duration_ms": 3},
-			map[string]interface{}{"step": "Approve Action", "status": "ok", "duration_ms": 1},
-			map[string]interface{}{"step": "Block IP", "status": "ok", "duration_ms": 850},
-			map[string]interface{}{"step": "Isolate Endpoint", "status": "ok", "duration_ms": 1200},
-			map[string]interface{}{"step": "Create Ticket", "status": "ok", "duration_ms": 320},
-			map[string]interface{}{"step": "Send Email", "status": "ok", "duration_ms": 180},
-			map[string]interface{}{"step": "Create Report", "status": "ok", "duration_ms": 95},
-		},
+		"ok":               status != "failed",
+		"steps_passed":     passed,
+		"steps_failed":     failed,
+		"estimated_time_s": durationS,
+		"warnings":         warnings,
+		"step_results":     steps,
 	})
 }
 
 // GetPBVersions — GET /api/pb/library/:id/versions
 func GetPBVersions(c *gin.Context) {
 	createPBTables()
-	c.JSON(http.StatusOK, []interface{}{
-		map[string]interface{}{"version": "1.2.0", "author": "analyst", "published_at": time.Now().Add(-24 * time.Hour).Format(time.RFC3339), "status": "active", "changelog": "Added parallel block IP and domain steps"},
-		map[string]interface{}{"version": "1.1.0", "author": "analyst", "published_at": time.Now().Add(-72 * time.Hour).Format(time.RFC3339), "status": "archived", "changelog": "Added approval gate before isolation"},
-		map[string]interface{}{"version": "1.0.0", "author": "system", "published_at": time.Now().Add(-168 * time.Hour).Format(time.RFC3339), "status": "archived", "changelog": "Initial version"},
-	})
+	tid := tenantIDFromContext(c)
+	pid, _ := strconv.Atoi(c.Param("id"))
+	rows, err := database.DB.Query(`SELECT version,author,published_at,status,changelog FROM pb_playbook_versions WHERE tenant_id=$1 AND playbook_id=$2 ORDER BY published_at DESC`, tid, pid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	type Ver struct {
+		Version     string    `json:"version"`
+		Author      string    `json:"author"`
+		PublishedAt time.Time `json:"published_at"`
+		Status      string    `json:"status"`
+		Changelog   string    `json:"changelog"`
+	}
+	list := []Ver{}
+	for rows.Next() {
+		var v Ver
+		if rows.Scan(&v.Version, &v.Author, &v.PublishedAt, &v.Status, &v.Changelog) == nil {
+			list = append(list, v)
+		}
+	}
+	c.JSON(http.StatusOK, list)
 }
 
 // GetPBExecutions — GET /api/pb/executions
@@ -437,9 +502,13 @@ func GetPBExecutionByID(c *gin.Context) {
 func GetPBApprovals(c *gin.Context) {
 	createPBTables()
 	tid := tenantIDFromContext(c)
-	rows, _ := database.DB.Query(`SELECT a.id,a.execution_id,a.action,a.policy,a.status,a.requestor,a.approver,a.notes,a.created_at,p.name
+	rows, err := database.DB.Query(`SELECT a.id,a.execution_id,a.action,a.policy,a.status,a.requestor,COALESCE(a.approver,''),COALESCE(a.notes,''),a.created_at,COALESCE(p.name,'')
 		FROM pb_approvals a LEFT JOIN pb_playbooks p ON a.playbook_id=p.id
 		WHERE a.tenant_id=$1 ORDER BY a.created_at DESC LIMIT 50`, tid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	type Approval struct {
 		ID           int    `json:"id"`
 		ExecutionID  string `json:"execution_id"`
@@ -489,47 +558,92 @@ func GetPBAnalytics(c *gin.Context) {
 	createPBTables()
 	tid := tenantIDFromContext(c)
 	var total, success, failed int
+	var avgRuntime float64
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1`, tid).Scan(&total)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND status='success'`, tid).Scan(&success)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND status='failed'`, tid).Scan(&failed)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(duration_s),0) FROM pb_executions WHERE tenant_id=$1 AND status IN ('success','failed')`, tid).Scan(&avgRuntime)
 	successRate := 0.0
 	if total > 0 {
 		successRate = float64(success) / float64(total) * 100
 	}
+	var totalPB, activePB int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_playbooks WHERE tenant_id=$1`, tid).Scan(&totalPB)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_playbooks WHERE tenant_id=$1 AND status='active'`, tid).Scan(&activePB)
+	automationCov := 0.0
+	if totalPB > 0 {
+		automationCov = float64(activePB) / float64(totalPB) * 100
+	}
+
+	type usageRow struct {
+		Name        string  `json:"name"`
+		Runs        int     `json:"runs"`
+		SuccessRate float64 `json:"success_rate"`
+	}
+	mostUsed := []usageRow{}
+	uRows, _ := database.DB.Query(`
+		SELECT name, execution_count, CASE WHEN execution_count>0 THEN success_count::float/execution_count*100 ELSE 0 END
+		FROM pb_playbooks WHERE tenant_id=$1 AND execution_count>0 ORDER BY execution_count DESC LIMIT 5`, tid)
+	if uRows != nil {
+		defer uRows.Close()
+		for uRows.Next() {
+			var r usageRow
+			if uRows.Scan(&r.Name, &r.Runs, &r.SuccessRate) == nil {
+				mostUsed = append(mostUsed, r)
+			}
+		}
+	}
+
+	var manualCount, automatedCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND trigger_type='manual'`, tid).Scan(&manualCount)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND trigger_type!='manual'`, tid).Scan(&automatedCount)
+
+	type failedStepRow struct {
+		Step  string `json:"step"`
+		Count int    `json:"count"`
+	}
+	failedSteps := []failedStepRow{}
+	fRows, _ := database.DB.Query(`
+		SELECT failed_step, COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND status='failed' AND failed_step != ''
+		GROUP BY failed_step ORDER BY COUNT(*) DESC LIMIT 5`, tid)
+	if fRows != nil {
+		defer fRows.Close()
+		for fRows.Next() {
+			var r failedStepRow
+			if fRows.Scan(&r.Step, &r.Count) == nil {
+				failedSteps = append(failedSteps, r)
+			}
+		}
+	}
+
+	type trendRow struct {
+		Date    string `json:"date"`
+		Runs    int    `json:"runs"`
+		Success int    `json:"success"`
+	}
+	trend := []trendRow{}
+	for i := 7; i >= 0; i-- {
+		d := time.Now().AddDate(0, 0, -i)
+		dayStr := d.Format("2006-01-02")
+		var runs, succ int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND DATE(created_at)=$2`, tid, dayStr).Scan(&runs)
+		database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND DATE(created_at)=$2 AND status='success'`, tid, dayStr).Scan(&succ)
+		trend = append(trend, trendRow{Date: d.Format("01-02"), Runs: runs, Success: succ})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"success_rate":    successRate,
-		"total_runs":      total,
-		"successful_runs": success,
-		"failed_runs":     failed,
-		"avg_runtime_s":   38.4,
-		"time_saved_h":    float64(success) * 0.75,
+		"success_rate":        successRate,
+		"total_runs":          total,
+		"successful_runs":     success,
+		"failed_runs":         failed,
+		"avg_runtime_s":       avgRuntime,
+		"time_saved_h":        float64(success) * 0.75,
 		"analyst_hours_saved": float64(success) * 0.5,
-		"automation_coverage": 78.5,
-		"most_used": []interface{}{
-			map[string]interface{}{"name": "Ransomware Response", "runs": 47, "success_rate": 94.5},
-			map[string]interface{}{"name": "Phishing Response", "runs": 31, "success_rate": 97.0},
-			map[string]interface{}{"name": "IOC Block", "runs": 128, "success_rate": 99.2},
-			map[string]interface{}{"name": "Malware Triage", "runs": 22, "success_rate": 86.4},
-			map[string]interface{}{"name": "Password Spray", "runs": 14, "success_rate": 92.9},
-		},
-		"manual_vs_automated": map[string]interface{}{
-			"manual": 22, "automated": 78,
-		},
-		"failed_steps": []interface{}{
-			map[string]interface{}{"step": "Isolate Endpoint", "count": 8, "reason": "Agent offline"},
-			map[string]interface{}{"step": "Block IP", "count": 5, "reason": "Firewall API timeout"},
-			map[string]interface{}{"step": "Create Ticket", "count": 3, "reason": "Jira rate limit"},
-		},
-		"trend": []interface{}{
-			map[string]interface{}{"date": "07-09", "runs": 12, "success": 11},
-			map[string]interface{}{"date": "07-10", "runs": 18, "success": 17},
-			map[string]interface{}{"date": "07-11", "runs": 24, "success": 22},
-			map[string]interface{}{"date": "07-12", "runs": 9, "success": 8},
-			map[string]interface{}{"date": "07-13", "runs": 31, "success": 29},
-			map[string]interface{}{"date": "07-14", "runs": 27, "success": 25},
-			map[string]interface{}{"date": "07-15", "runs": 19, "success": 18},
-			map[string]interface{}{"date": "07-16", "runs": 14, "success": 13},
-		},
+		"automation_coverage": automationCov,
+		"most_used":           mostUsed,
+		"manual_vs_automated": gin.H{"manual": manualCount, "automated": automatedCount},
+		"failed_steps":        failedSteps,
+		"trend":               trend,
 	})
 }
 
@@ -684,21 +798,29 @@ Keep response concise and actionable for a security analyst.`, body.Mode, body.C
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"summary":              "Recommended 3-stage playbook: Alert triage → Approval gate → Automated response",
-			"workflow_suggestion":  []interface{}{"Trigger: Alert Created", "IF: severity=critical", "Approve Action", "Block IP", "Isolate Endpoint", "Create Ticket", "Send Email"},
-			"optimizations":        []interface{}{"Add PARALLEL step to run Block IP and Send Email simultaneously", "Cache threat intel lookups to reduce API calls by 60%"},
-			"explanation":          "This workflow provides immediate containment with human approval gate to prevent false-positive isolation.",
-			"warnings":             []interface{}{"Ensure agent is online before Isolate Endpoint step", "Jira rate limits may delay ticket creation under load"},
+			"summary":             "Recommended 3-stage playbook: Alert triage → Approval gate → Automated response",
+			"workflow_suggestion": []interface{}{"Trigger: Alert Created", "IF: severity=critical", "Approve Action", "Block IP", "Isolate Endpoint", "Create Ticket", "Send Email"},
+			"optimizations":       []interface{}{"Add PARALLEL step to run Block IP and Send Email simultaneously", "Cache threat intel lookups to reduce API calls by 60%"},
+			"explanation":         "This workflow provides immediate containment with human approval gate to prevent false-positive isolation.",
+			"warnings":            []interface{}{"Ensure agent is online before Isolate Endpoint step", "Jira rate limits may delay ticket creation under load"},
 		})
 		return
 	}
-	if idx := strings.Index(raw, "```json"); idx != -1 { raw = raw[idx+7:] } else if idx := strings.Index(raw, "```"); idx != -1 { raw = raw[idx+3:] }
-	if idx := strings.LastIndex(raw, "```"); idx != -1 { raw = raw[:idx] }
+	if idx := strings.Index(raw, "```json"); idx != -1 {
+		raw = raw[idx+7:]
+	} else if idx := strings.Index(raw, "```"); idx != -1 {
+		raw = raw[idx+3:]
+	}
+	if idx := strings.LastIndex(raw, "```"); idx != -1 {
+		raw = raw[:idx]
+	}
 	c.Data(http.StatusOK, "application/json", []byte(strings.TrimSpace(raw)))
 }
 
 // PostPBReport — POST /api/pb/report
 func PostPBReport(c *gin.Context) {
+	createPBTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		ReportType string `json:"report_type"`
 		Period     string `json:"period"`
@@ -708,30 +830,83 @@ func PostPBReport(c *gin.Context) {
 	if body.ReportType == "" {
 		body.ReportType = "executive"
 	}
+
+	var total, success int
+	var avgRuntime float64
+	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1`, tid).Scan(&total)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM pb_executions WHERE tenant_id=$1 AND status='success'`, tid).Scan(&success)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(duration_s),0) FROM pb_executions WHERE tenant_id=$1 AND status IN ('success','failed')`, tid).Scan(&avgRuntime)
+	successRate := 0.0
+	if total > 0 {
+		successRate = float64(success) / float64(total) * 100
+	}
+	analystHoursSaved := float64(success) * 0.5
+
+	type topPB struct {
+		Name        string  `json:"name"`
+		Runs        int     `json:"runs"`
+		SuccessRate float64 `json:"success_rate"`
+	}
+	topPlaybooks := []topPB{}
+	tRows, _ := database.DB.Query(`
+		SELECT name, execution_count, CASE WHEN execution_count>0 THEN success_count::float/execution_count*100 ELSE 0 END
+		FROM pb_playbooks WHERE tenant_id=$1 AND execution_count>0 ORDER BY execution_count DESC LIMIT 5`, tid)
+	if tRows != nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var r topPB
+			if tRows.Scan(&r.Name, &r.Runs, &r.SuccessRate) == nil {
+				topPlaybooks = append(topPlaybooks, r)
+			}
+		}
+	}
+
+	prompt := fmt.Sprintf(`You are a SOAR platform reporting assistant. Write a %s report for a security team based on these REAL metrics for this period: %d total playbook executions, %d successful, %.1f%% success rate, %.1fs average execution time, %.1f estimated analyst hours saved. Top playbooks by run count: %v. Respond as a JSON object with fields: executive_summary (2-3 sentences, grounded only in the numbers given, no invented incidents or figures), recommendations (a JSON array of up to 3 short actionable strings based on the real data given — if there isn't enough data, say so instead of inventing findings).`,
+		body.ReportType, total, success, successRate, avgRuntime, analystHoursSaved, topPlaybooks)
+	var summary string
+	var recommendations []string
+	raw, err := services.CallLLM(prompt)
+	if err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		if total == 0 {
+			summary = "No playbook executions have been recorded for this tenant yet."
+		} else {
+			summary = fmt.Sprintf("The SOAR platform processed %d playbook executions this period, achieving a %.1f%% success rate and an estimated %.1f analyst hours saved.", total, successRate, analystHoursSaved)
+		}
+		recommendations = []string{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"title":         fmt.Sprintf("SOAR %s Report — %s", strings.Title(strings.ReplaceAll(body.ReportType, "_", " ")), time.Now().Format("Jan 2006")),
-		"generated_at":  time.Now().Format(time.RFC3339),
-		"report_type":   body.ReportType,
-		"classification": "CONFIDENTIAL",
-		"executive_summary": "The SOAR platform processed 247 automated responses this period, achieving 94.7% success rate and saving an estimated 68 analyst hours. Three critical incidents were fully contained without human intervention within SLA.",
-		"key_metrics": map[string]interface{}{
-			"total_executions":    247,
-			"success_rate":        94.7,
-			"analyst_hours_saved": 68,
-			"avg_response_time_s": 38,
-			"mttr_improvement":    "42%",
+		"title":             fmt.Sprintf("SOAR %s Report — %s", strings.Title(strings.ReplaceAll(body.ReportType, "_", " ")), time.Now().Format("Jan 2006")),
+		"generated_at":      time.Now().Format(time.RFC3339),
+		"report_type":       body.ReportType,
+		"classification":    "CONFIDENTIAL",
+		"executive_summary": summary,
+		"key_metrics": gin.H{
+			"total_executions":    total,
+			"success_rate":        successRate,
+			"analyst_hours_saved": analystHoursSaved,
+			"avg_response_time_s": avgRuntime,
 		},
-		"top_playbooks": []interface{}{
-			map[string]interface{}{"name": "IOC Block", "runs": 128, "success_rate": 99.2},
-			map[string]interface{}{"name": "Ransomware Response", "runs": 47, "success_rate": 94.5},
-			map[string]interface{}{"name": "Phishing Response", "runs": 31, "success_rate": 97.0},
-		},
-		"incidents_contained": 31,
-		"false_positive_rate": 5.3,
-		"recommendations": []interface{}{
-			"Automate password spray detection — currently 100% manual",
-			"Add approval bypass for low-risk IOC blocks to improve speed",
-			"Review 8 failed Isolate Endpoint steps — agent connectivity issue",
-		},
+		"top_playbooks":   topPlaybooks,
+		"recommendations": recommendations,
 	})
 }

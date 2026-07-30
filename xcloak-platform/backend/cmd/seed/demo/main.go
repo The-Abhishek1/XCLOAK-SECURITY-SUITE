@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -174,6 +175,8 @@ func main() {
 	seedProcessInjection(db)
 	log.Println("Seeding defense evasion…")
 	seedDefenseEvasion(db)
+	log.Println("Seeding SOAR workflow builder (pb_*)…")
+	seedPBWorkflows(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -7824,4 +7827,196 @@ func seedTenantsEnterprise(db *sql.DB) {
 	}
 
 	log.Printf("TNE seed: %d tenants with modules, resources, health, usage, billing, %d audit entries", len(tenants), len(audits))
+}
+
+// seedPBWorkflows seeds the visual SOAR workflow builder (pb_playbooks/
+// pb_executions/pb_approvals/pb_playbook_versions/pb_schedules) — a
+// separate table family from the simpler auto-triggered playbooks/
+// playbook_actions system seeded by seedPlaybooks above. Table shapes
+// mirror api/playbooks_enterprise.go's createPBTables() exactly, since this
+// standalone binary runs before any request ever hits those endpoints.
+func seedPBWorkflows(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pb_playbooks (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT NOT NULL, description TEXT, category TEXT DEFAULT 'custom',
+		trigger_type TEXT DEFAULT 'manual', status TEXT DEFAULT 'draft',
+		version TEXT DEFAULT '1.0.0', author TEXT,
+		workflow JSONB DEFAULT '{"nodes":[],"edges":[]}', variables JSONB DEFAULT '{}',
+		approval_policy TEXT DEFAULT 'automatic', execution_count INTEGER DEFAULT 0,
+		success_count INTEGER DEFAULT 0, avg_runtime_s FLOAT DEFAULT 0, tags TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pb_executions (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, playbook_id INTEGER NOT NULL,
+		execution_id TEXT NOT NULL, status TEXT DEFAULT 'running', trigger_type TEXT,
+		analyst TEXT, started_at TIMESTAMPTZ DEFAULT NOW(), ended_at TIMESTAMPTZ,
+		duration_s FLOAT, failed_step TEXT, result JSONB DEFAULT '{}',
+		step_log JSONB DEFAULT '[]', is_dry_run BOOLEAN DEFAULT false,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pb_approvals (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, playbook_id INTEGER NOT NULL,
+		execution_id TEXT, action TEXT, policy TEXT DEFAULT 'manager_approval',
+		status TEXT DEFAULT 'pending', requestor TEXT, approver TEXT, notes TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW(), decided_at TIMESTAMPTZ)`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pb_playbook_versions (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, playbook_id INTEGER NOT NULL,
+		version TEXT, author TEXT, status TEXT DEFAULT 'archived', changelog TEXT DEFAULT '',
+		published_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS pb_schedules (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, playbook_id INTEGER NOT NULL,
+		playbook_name TEXT, schedule_type TEXT DEFAULT 'daily', cron_expr TEXT,
+		enabled BOOLEAN DEFAULT true, last_run TIMESTAMPTZ, next_run TIMESTAMPTZ,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM pb_playbooks WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	now := time.Now()
+	const realAgentHost = "win-workstation-05"
+
+	nodeJSON := func(id, ntype, label string, x, y int, config string) string {
+		return fmt.Sprintf(`{"id":"%s","type":"%s","label":"%s","icon":"","x":%d,"y":%d,"config":%s}`, id, ntype, label, x, y, config)
+	}
+	edgeJSON := func(id, from, to string) string {
+		return fmt.Sprintf(`{"id":"%s","from":"%s","to":"%s"}`, id, from, to)
+	}
+
+	playbooks := []struct {
+		name, desc, category, triggerType, status, approvalPolicy, tags string
+		nodes, edges                                                    []string
+	}{
+		{
+			"Ransomware Containment", "Automated ransomware containment — block the C2 IP, isolate the endpoint, gate on manager approval, then log a report.",
+			"incident_response", "alert_critical", "active", "manager_approval", "ransomware,critical,containment",
+			[]string{
+				nodeJSON("n1", "trigger", "Alert Created", 40, 40, `{}`),
+				nodeJSON("n2", "action", "Block IP", 40, 140, `{"target":"185.220.101.45"}`),
+				nodeJSON("n3", "action", "Isolate Endpoint", 40, 240, fmt.Sprintf(`{"target":"%s"}`, realAgentHost)),
+				nodeJSON("n4", "human", "Approve Action", 40, 340, `{"policy":"manager_approval"}`),
+				nodeJSON("n5", "action", "Create Report", 40, 440, `{}`),
+			},
+			[]string{edgeJSON("e1", "n1", "n2"), edgeJSON("e2", "n2", "n3"), edgeJSON("e3", "n3", "n4"), edgeJSON("e4", "n4", "n5")},
+		},
+		{
+			"Phishing Response", "Phishing email triage — block the sender domain and force a password reset for the reporting user.",
+			"email_security", "manual", "active", "automatic", "phishing,email,awareness",
+			[]string{
+				nodeJSON("n1", "trigger", "Manual Start", 40, 40, `{}`),
+				nodeJSON("n2", "action", "Block Domain", 40, 140, `{"target":"phish-corp-mail.example"}`),
+				nodeJSON("n3", "action", "Reset Password", 40, 240, `{"target":"jsmith"}`),
+				nodeJSON("n4", "action", "Send Email", 40, 340, `{}`),
+			},
+			[]string{edgeJSON("e1", "n1", "n2"), edgeJSON("e2", "n2", "n3"), edgeJSON("e3", "n3", "n4")},
+		},
+		{
+			"Password Spray Response", "Password spray detection — lock the targeted account pending a dual approval.",
+			"identity", "alert_medium", "draft", "dual_approval", "identity,ad,brute-force",
+			[]string{
+				nodeJSON("n1", "trigger", "IOC Match", 40, 40, `{}`),
+				nodeJSON("n2", "human", "Approve Action", 40, 140, `{"policy":"dual_approval"}`),
+				nodeJSON("n3", "action", "Disable User", 40, 240, `{"target":"mchen"}`),
+			},
+			[]string{edgeJSON("e1", "n1", "n2"), edgeJSON("e2", "n2", "n3")},
+		},
+		{
+			"IOC Block", "Scheduled sweep — add a deny firewall rule for the latest flagged IP.",
+			"custom", "scheduled", "active", "automatic", "firewall,scheduled",
+			[]string{
+				nodeJSON("n1", "trigger", "Scheduled", 40, 40, `{}`),
+				nodeJSON("n2", "action", "Update Firewall", 40, 140, `{"target":"203.0.113.9"}`),
+			},
+			[]string{edgeJSON("e1", "n1", "n2")},
+		},
+	}
+
+	pbIDs := map[string]int{}
+	for _, p := range playbooks {
+		workflow := fmt.Sprintf(`{"nodes":[%s],"edges":[%s]}`, strings.Join(p.nodes, ","), strings.Join(p.edges, ","))
+		var id int
+		err := db.QueryRow(`
+			INSERT INTO pb_playbooks (tenant_id,name,description,category,trigger_type,status,version,author,workflow,approval_policy,tags)
+			VALUES (9999,$1,$2,$3,$4,$5,'1.1.0','analyst',$6::jsonb,$7,$8) RETURNING id`,
+			p.name, p.desc, p.category, p.triggerType, p.status, workflow, p.approvalPolicy, p.tags,
+		).Scan(&id)
+		if err != nil {
+			log.Printf("pb_playbooks: %v", err)
+			continue
+		}
+		pbIDs[p.name] = id
+		if p.status == "active" {
+			mustExec(db, `INSERT INTO pb_playbook_versions (tenant_id,playbook_id,version,author,status,changelog) VALUES (9999,$1,'1.1.0','analyst','active','Published from workflow builder')`, id)
+			mustExec(db, `INSERT INTO pb_playbook_versions (tenant_id,playbook_id,version,author,status,changelog) VALUES (9999,$1,'1.0.0','analyst','archived','Initial version')`, id)
+		}
+	}
+
+	// Executions — one real success per active playbook (matching each
+	// playbook's own real node graph), one failed run, one halted at the
+	// Ransomware Containment playbook's approval gate (with a matching
+	// pb_approvals row so the Approvals tab has something real to show).
+	type execRow struct {
+		playbook   string
+		status     string
+		hoursAgo   int
+		durationS  float64
+		failedStep string
+		stepLog    string
+		trigger    string
+	}
+	execs := []execRow{
+		{"Ransomware Containment", "pending", 1, 0.02, "",
+			`[{"step":"Alert Created","node_type":"trigger","status":"passed","message":"pass-through","duration_ms":0},
+			  {"step":"Block IP","node_type":"action","status":"ok","message":"blocked IP 185.220.101.45 (real IOC created)","duration_ms":4},
+			  {"step":"Isolate Endpoint","node_type":"action","status":"ok","message":"isolate_host queued for agent, pending approval","duration_ms":6},
+			  {"step":"Approve Action","node_type":"human","status":"pending","message":"halted at approval gate (manager_approval) — execution does not auto-resume once approved","duration_ms":1}]`,
+			"alert_critical"},
+		{"Phishing Response", "success", 5, 0.03, "",
+			`[{"step":"Manual Start","node_type":"trigger","status":"passed","message":"pass-through","duration_ms":0},
+			  {"step":"Block Domain","node_type":"action","status":"ok","message":"blocked domain phish-corp-mail.example (real IOC created)","duration_ms":5},
+			  {"step":"Reset Password","node_type":"action","status":"ok","message":"password reset requested for jsmith","duration_ms":8},
+			  {"step":"Send Email","node_type":"action","status":"skipped","message":"no real integration exists for this action in this codebase","duration_ms":0}]`,
+			"manual"},
+		{"IOC Block", "success", 20, 0.01, "",
+			`[{"step":"Scheduled","node_type":"trigger","status":"passed","message":"pass-through","duration_ms":0},
+			  {"step":"Update Firewall","node_type":"action","status":"ok","message":"added deny firewall rule for 203.0.113.9","duration_ms":3}]`,
+			"scheduled"},
+		{"Phishing Response", "failed", 30, 0.02, "Reset Password",
+			`[{"step":"Manual Start","node_type":"trigger","status":"passed","message":"pass-through","duration_ms":0},
+			  {"step":"Block Domain","node_type":"action","status":"ok","message":"blocked domain phish-corp-mail.example (real IOC created)","duration_ms":4},
+			  {"step":"Reset Password","node_type":"action","status":"failed","message":"smtp not configured","duration_ms":9}]`,
+			"manual"},
+	}
+	for i, e := range execs {
+		pid, ok := pbIDs[e.playbook]
+		if !ok {
+			continue
+		}
+		execID := fmt.Sprintf("EX-%d-%06d", now.Year(), 100000+i)
+		startedAt := now.Add(-time.Duration(e.hoursAgo) * time.Hour)
+		var endedAt interface{} = startedAt.Add(time.Duration(e.durationS * float64(time.Second)))
+		if e.status == "pending" {
+			endedAt = nil
+		}
+		var execRowID int
+		db.QueryRow(`
+			INSERT INTO pb_executions (tenant_id,playbook_id,execution_id,status,trigger_type,analyst,started_at,ended_at,duration_s,failed_step,step_log)
+			VALUES (9999,$1,$2,$3,$4,'analyst',$5,$6,$7,$8,$9::jsonb) RETURNING id`,
+			pid, execID, e.status, e.trigger, startedAt, endedAt, e.durationS, e.failedStep, e.stepLog,
+		).Scan(&execRowID)
+		mustExec(db, `UPDATE pb_playbooks SET execution_count=execution_count+1 WHERE id=$1`, pid)
+		if e.status == "success" {
+			mustExec(db, `UPDATE pb_playbooks SET success_count=success_count+1, avg_runtime_s=$1 WHERE id=$2`, e.durationS, pid)
+		}
+		if e.status == "pending" {
+			mustExec(db, `INSERT INTO pb_approvals (tenant_id,playbook_id,execution_id,action,policy,status,requestor) VALUES (9999,$1,$2,'Approve Action','manager_approval','pending','pb-engine')`, pid, execID)
+		}
+	}
+
+	if pid, ok := pbIDs["IOC Block"]; ok {
+		mustExec(db, `INSERT INTO pb_schedules (tenant_id,playbook_id,playbook_name,schedule_type,cron_expr,enabled,last_run,next_run)
+			VALUES (9999,$1,'IOC Block','daily','0 3 * * *',true,$2,$3)`,
+			pid, now.Add(-20*time.Hour), now.Add(4*time.Hour))
+	}
+
+	log.Printf("PB workflow seed: %d playbooks, %d executions, real approval/version/schedule rows", len(pbIDs), len(execs))
 }

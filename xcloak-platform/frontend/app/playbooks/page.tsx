@@ -6,7 +6,7 @@ import { pbAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { MetricCard, DataTable, SectionCard, TabBar, ActionButton, EmptyState } from '@/components/design-system';
 import {
-  LayoutDashboard, Library, Workflow, History as HistoryIcon, CheckCircle2, Braces, BarChart3, LayoutTemplate, Store, Sparkles, FileText,
+  LayoutDashboard, Library, Workflow, History as HistoryIcon, CheckCircle2, BarChart3, LayoutTemplate, Store, Sparkles, FileText,
   AlertTriangle, Flame, FolderOpen, Target, Radio, Unlock, Play, Clock, Webhook as WebhookIcon, Plug,
   GitBranch, CornerDownLeft, Shuffle, Repeat, ArrowLeftRight, Pause, Timer, RotateCw,
   ShieldBan, Ban, Package, Skull, Lock, UserX, KeyRound, Mail, Ticket, Terminal, Network, FileBarChart,
@@ -15,15 +15,15 @@ import {
 
 type IconComponent = ComponentType<{ className?: string; style?: CSSProperties }>;
 
-type Tab = 'overview' | 'library' | 'builder' | 'executions' | 'approvals' | 'variables' | 'analytics' | 'templates' | 'marketplace' | 'ai' | 'reports';
+type Tab = 'overview' | 'library' | 'builder' | 'executions' | 'approvals' | 'analytics' | 'templates' | 'marketplace' | 'ai' | 'reports';
 const TAB_LABELS: Record<Tab, string> = {
   overview: 'Dashboard', library: 'Library', builder: 'Builder', executions: 'Executions',
-  approvals: 'Approvals', variables: 'Variables', analytics: 'Analytics',
+  approvals: 'Approvals', analytics: 'Analytics',
   templates: 'Templates', marketplace: 'Marketplace', ai: 'AI Assistant', reports: 'Reports',
 };
 const TAB_ICONS: Record<Tab, IconComponent> = {
   overview: LayoutDashboard, library: Library, builder: Workflow, executions: HistoryIcon,
-  approvals: CheckCircle2, variables: Braces, analytics: BarChart3,
+  approvals: CheckCircle2, analytics: BarChart3,
   templates: LayoutTemplate, marketplace: Store, ai: Sparkles, reports: FileText,
 };
 
@@ -284,6 +284,12 @@ function WorkflowCanvas({ workflow, onChange }: { workflow: WFState; onChange: (
               </div>
             )}
             {selectedNode.type === 'action' && (<>
+              <div>
+                <div style={{ color: 'var(--text-3)', fontSize: '0.68rem', marginBottom: '2px' }}>Target (IP / hostname / username)</div>
+                <input className="g-input" style={{ width: '100%', fontSize: '0.76rem' }} placeholder="e.g. 10.0.0.5, win-workstation-05, jsmith"
+                  value={selectedNode.config.target || ''}
+                  onChange={e => updateNode(selectedNode.id, { config: { ...selectedNode.config, target: e.target.value } })} />
+              </div>
               <div>
                 <div style={{ color: 'var(--text-3)', fontSize: '0.68rem', marginBottom: '2px' }}>Timeout (s)</div>
                 <input className="g-input" style={{ width: '100%', fontSize: '0.76rem' }} type="number" value={selectedNode.config.timeout ?? 30}
@@ -561,11 +567,15 @@ function BuilderTab({ playbook, onSelectPlaybook }: { playbook: any; onSelectPla
             <span style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>Est. {dryResult.estimated_time_s}s</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-            {(dryResult.step_results || []).map((s: any, i: number) => (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', padding: '2px 7px', borderRadius: '3px', background: s.status === 'ok' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: s.status === 'ok' ? '#22c55e' : '#ef4444' }}>
-                {s.status === 'ok' ? <Check style={{ width: 10, height: 10 }} /> : <X style={{ width: 10, height: 10 }} />} {s.step} <span style={{ color: 'var(--text-3)' }}>({s.duration_ms}ms)</span>
-              </span>
-            ))}
+            {(dryResult.step_results || []).map((s: any, i: number) => {
+              const color = s.status === 'ok' ? '#22c55e' : s.status === 'failed' ? '#ef4444' : '#6b7280';
+              return (
+                <span key={i} title={s.message} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', padding: '2px 7px', borderRadius: '3px', background: `${color}18`, color }}>
+                  {s.status === 'ok' ? <Check style={{ width: 10, height: 10 }} /> : s.status === 'failed' ? <X style={{ width: 10, height: 10 }} /> : <span>—</span>}
+                  {' '}{s.step} <span style={{ color: 'var(--text-3)' }}>({s.status}{s.duration_ms ? `, ${s.duration_ms}ms` : ''})</span>
+                </span>
+              );
+            })}
           </div>
           <button onClick={() => setDryResult(null)} style={{ marginTop: '0.5rem', background: 'none', border: 'none', color: 'var(--text-3)', fontSize: '0.75rem', cursor: 'pointer' }}>dismiss</button>
         </div>
@@ -677,69 +687,6 @@ function ApprovalsTab() {
           <CheckCircle2 style={{ width: 15, height: 15 }} /> All pending approvals resolved
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Variables Tab ──────────────────────────────────────────────────────────────
-function VariablesTab() {
-  const [vars, setVars] = useState([
-    { key: 'FIREWALL_API_KEY', value: '***hidden***', type: 'secret', description: 'Perimeter firewall REST API key' },
-    { key: 'JIRA_PROJECT_KEY', value: 'SEC', type: 'string', description: 'Default Jira project for security tickets' },
-    { key: 'SLACK_WEBHOOK_URL', value: '***hidden***', type: 'secret', description: 'Slack #soc-alerts channel webhook' },
-    { key: 'DEFAULT_SEVERITY_THRESHOLD', value: 'high', type: 'string', description: 'Minimum severity to trigger auto-response' },
-    { key: 'ANALYST_EMAIL', value: 'soc@company.com', type: 'string', description: 'SOC team email for notifications' },
-    { key: 'APPROVAL_TIMEOUT_MINUTES', value: '30', type: 'number', description: 'Minutes before approval request expires' },
-    { key: 'EDR_TENANT_ID', value: '***hidden***', type: 'secret', description: 'CrowdStrike Falcon tenant ID' },
-    { key: 'AD_DOMAIN', value: 'corp.internal', type: 'string', description: 'Active Directory domain name' },
-  ]);
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ key: '', value: '', type: 'string', description: '' });
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>Global Variable Store</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>Shared across all playbooks. Secrets are encrypted at rest.</div>
-        </div>
-        <ActionButton variant="primary" onClick={() => setShowAdd(!showAdd)}>+ Add Variable</ActionButton>
-      </div>
-
-      {showAdd && (
-        <div className="g-card" style={{ padding: '1rem', border: '1px solid rgba(99,102,241,0.3)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <input className="g-input" style={{ fontFamily: 'monospace' }} placeholder="VARIABLE_NAME" value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value.toUpperCase().replace(/\s/g, '_') }))} />
-            <input className="g-input" type={form.type === 'secret' ? 'password' : 'text'} placeholder="Value" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} />
-            <select className="g-select" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-              {['string', 'number', 'boolean', 'secret', 'json'].map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input className="g-input" placeholder="Description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <ActionButton variant="primary" disabled={!form.key} onClick={() => { setVars(v => [{ ...form }, ...v]); setShowAdd(false); setForm({ key: '', value: '', type: 'string', description: '' }); }}>Save</ActionButton>
-            <ActionButton variant="ghost" onClick={() => setShowAdd(false)}>Cancel</ActionButton>
-          </div>
-        </div>
-      )}
-
-      <DataTable<any>
-        rows={vars}
-        rowKey={(v: any) => v.key}
-        columns={[
-          { key: 'key', header: 'Name', render: (v: any) => <code style={{ color: '#818cf8', fontSize: '0.8rem' }}>{v.key}</code> },
-          { key: 'type', header: 'Type', render: (v: any) => (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', background: v.type === 'secret' ? 'rgba(239,68,68,0.1)' : 'rgba(99,102,241,0.1)', color: v.type === 'secret' ? '#ef4444' : '#818cf8', padding: '1px 5px', borderRadius: '3px' }}>
-              {v.type === 'secret' && <Lock style={{ width: 9, height: 9 }} />}{v.type}
-            </span>
-          ) },
-          { key: 'value', header: 'Value', render: (v: any) => <code style={{ fontSize: '0.78rem', color: 'var(--text-2)' }}>{v.type === 'secret' ? '●●●●●●●' : v.value}</code> },
-          { key: 'description', header: 'Description', render: (v: any) => <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{v.description}</span> },
-          { key: 'actions', header: '', render: (v: any) => (
-            <ActionButton variant="ghost" icon={X} onClick={() => setVars(prev => prev.filter((p: any) => p.key !== v.key))} style={{ padding: '2px 4px', color: '#ef4444' }} />
-          ) },
-        ]}
-      />
     </div>
   );
 }
@@ -1079,7 +1026,11 @@ export default function PlaybooksPage() {
   const handleEdit = (pb: any) => { setSelectedPlaybook(pb); setTab('builder'); };
   const handleExecute = async (pb: any) => {
     const r = await pbAPI.executePlaybook(pb.id, { trigger_type: 'manual' });
-    if (r.data?.execution_id) { alert(`Execution started: ${r.data.execution_id}`); setTab('executions'); }
+    if (r.data?.execution_id) {
+      const statusMsg = r.data.status === 'pending' ? 'paused at an approval gate' : r.data.status === 'failed' ? 'failed' : 'succeeded';
+      alert(`Execution ${r.data.execution_id} ${statusMsg}`);
+      setTab('executions');
+    }
   };
   const handleInstall = (t: any) => { alert(`"${t.name}" installed. Go to Library to edit it.`); setTab('library'); };
 
@@ -1126,9 +1077,6 @@ export default function PlaybooksPage() {
         </div>
         <div style={{ display: loaded.current['approvals'] && tab === 'approvals' ? 'block' : 'none' }}>
           {loaded.current['approvals'] && <ApprovalsTab />}
-        </div>
-        <div style={{ display: loaded.current['variables'] && tab === 'variables' ? 'block' : 'none' }}>
-          {loaded.current['variables'] && <VariablesTab />}
         </div>
         <div style={{ display: loaded.current['analytics'] && tab === 'analytics' ? 'block' : 'none' }}>
           {loaded.current['analytics'] && <AnalyticsTab />}
