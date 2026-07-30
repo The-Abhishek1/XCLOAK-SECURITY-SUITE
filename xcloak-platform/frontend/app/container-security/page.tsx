@@ -393,9 +393,6 @@ function RBACTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <MetricCard label="Kubernetes Secrets" value={sc.total_secrets ?? '—'} color="var(--accent)" />
-            <MetricCard label="Plaintext Secrets" value={sc.plaintext ?? '—'} color={sc.plaintext > 0 ? '#ef4444' : undefined} />
-            <MetricCard label="Expired Secrets" value={sc.expired ?? '—'} color={sc.expired > 0 ? '#f97316' : undefined} />
-            <MetricCard label="Exposed Secrets" value={sc.exposed ?? '—'} color={sc.exposed > 0 ? '#ef4444' : undefined} />
           </div>
           <SectionCard title="Secrets Providers">
             <DataTable<any>
@@ -471,19 +468,20 @@ function IntelligenceTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <SectionCard title="Threat Actors" className="flex-1">
+        <SectionCard title="Malicious Images" className="flex-1">
           <div style={{ minWidth: 260 }}>
-            {(ti.threat_actors || []).map((a: any) => (
-              <div key={a.actor} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-                <div style={{ fontWeight: 600, color: '#ef4444' }}>{a.actor}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{a.target} · {a.campaigns} campaigns</div>
-                <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 3, display: 'inline-block', marginTop: 4 }}>{a.ttps}</code>
+            {(ti.malicious_images || []).map((img: any) => (
+              <div key={img.image + img.tag} style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <code style={{ fontSize: 11, fontWeight: 600, color: '#ef4444' }}>{img.image}:{img.tag}</code>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{img.registry}</div>
               </div>
             ))}
+            {(ti.malicious_images || []).length === 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>No images flagged as malware-containing.</div>}
           </div>
         </SectionCard>
-        <SectionCard title="Recent CVEs" className="flex-1">
+        <SectionCard title="K8s Ecosystem CVEs to Watch" className="flex-1">
           <div style={{ minWidth: 260 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>General advisory content — not a per-image scan result for this tenant.</div>
             {(ti.recent_cves || []).map((cv: any) => (
               <div key={cv.cve} style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
@@ -496,7 +494,7 @@ function IntelligenceTab() {
             ))}
           </div>
         </SectionCard>
-        <SectionCard title="IOC Matches" className="flex-1">
+        <SectionCard title="IOC Matches (Blocked Images)" className="flex-1">
           <div style={{ minWidth: 260 }}>
             {(ti.ioc_matches || []).map((ioc: any) => (
               <div key={ioc.value} style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
@@ -504,9 +502,10 @@ function IntelligenceTab() {
                   <code style={{ fontSize: 11 }}>{ioc.value}</code>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>{ioc.hits} hits</span>
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{ioc.type?.toUpperCase()} · {ioc.category?.replace(/_/g, ' ')}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{ioc.type?.toUpperCase()}</div>
               </div>
             ))}
+            {(ti.ioc_matches || []).length === 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>No blocked images yet.</div>}
           </div>
         </SectionCard>
       </div>
@@ -579,39 +578,41 @@ function ComplianceTab() {
   const [comp, setComp] = useState<any>(null);
   useEffect(() => { containerSecurityAPI.getCompliance().then(r => setComp(r.data)); }, []);
   const c = comp || {};
+  const bySeverity = c.by_severity || {};
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <MetricCard label="Overall Compliance Score" value={`${c.overall_score ?? '—'}%`} color={c.overall_score >= 80 ? '#22c55e' : c.overall_score >= 60 ? '#f97316' : '#ef4444'} />
+        <MetricCard label="Admission Violations" value={c.total_violations ?? '—'} color={c.total_violations > 0 ? '#f97316' : undefined} />
+        <MetricCard label="Denied" value={c.denied ?? '—'} color="#22c55e" />
+        <MetricCard label="Allowed" value={c.allowed ?? '—'} color={c.allowed > 0 ? '#ef4444' : undefined} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-        {(c.frameworks || []).map((fw: any) => (
-          <div key={fw.name} className="g-card" style={{ padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{fw.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>v{fw.version}</div>
-              </div>
-              <span style={{ fontSize: 22, fontWeight: 700, color: fw.score >= 80 ? '#22c55e' : fw.score >= 60 ? '#f97316' : '#ef4444' }}>{fw.score}%</span>
+      <SectionCard title="Violations by Severity">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Critical', val: bySeverity.critical ?? 0, color: '#ef4444' },
+            { label: 'High', val: bySeverity.high ?? 0, color: '#f97316' },
+            { label: 'Medium', val: bySeverity.medium ?? 0, color: '#eab308' },
+            { label: 'Low', val: bySeverity.low ?? 0, color: '#22c55e' },
+          ].map(row => (
+            <div key={row.label} style={{ textAlign: 'center' as const, minWidth: 80 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: row.color }}>{row.val}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{row.label}</div>
             </div>
-            <RiskBar score={fw.score} />
-            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-              <div style={{ textAlign: 'center' as const }}><div style={{ fontSize: 16, fontWeight: 700, color: '#22c55e' }}>{fw.passed}</div><div style={{ fontSize: 10, color: 'var(--text-3)' }}>Passed</div></div>
-              <div style={{ textAlign: 'center' as const }}><div style={{ fontSize: 16, fontWeight: 700, color: '#ef4444' }}>{fw.failed}</div><div style={{ fontSize: 10, color: 'var(--text-3)' }}>Failed</div></div>
-              <div style={{ textAlign: 'center' as const }}><div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-2)' }}>{fw.total}</div><div style={{ fontSize: 10, color: 'var(--text-3)' }}>Total</div></div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <SectionCard title="Failed Controls">
+          ))}
+        </div>
+      </SectionCard>
+      <SectionCard title="Recent Admission Violations">
         <DataTable<any>
-          rows={c.failed_controls || []}
-          rowKey={(fc: any, i: number) => i}
+          rows={c.recent_violations || []}
+          rowKey={(v: any, i: number) => i}
           columns={[
-            { key: 'control', header: 'Control', render: (fc: any) => <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{fc.control}</span> },
-            { key: 'title', header: 'Title', render: (fc: any) => <span style={{ fontSize: 12 }}>{fc.title}</span> },
-            { key: 'framework', header: 'Framework', render: (fc: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fc.framework}</span> },
-            { key: 'severity', header: 'Severity', render: (fc: any) => <SevBadge v={fc.severity} /> },
+            { key: 'workload', header: 'Workload', render: (v: any) => <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600 }}>{v.workload}</span> },
+            { key: 'kind', header: 'Kind', render: (v: any) => <span style={{ fontSize: 11 }}>{v.kind}</span> },
+            { key: 'violation_type', header: 'Violation', render: (v: any) => <span style={{ fontSize: 11 }}>{v.violation_type?.replace(/_/g, ' ')}</span> },
+            { key: 'severity', header: 'Severity', render: (v: any) => <SevBadge v={v.severity} /> },
+            { key: 'action', header: 'Action', render: (v: any) => <SevBadge v={v.action === 'denied' ? 'clean' : v.action === 'allowed' ? 'high' : 'medium'} /> },
+            { key: 'time', header: 'Time', render: (v: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{v.created_at ? timeAgo(v.created_at) : '—'}</span> },
           ]}
         />
       </SectionCard>
@@ -698,6 +699,7 @@ function ResponseTab() {
   const [target, setTarget] = useState('');
   const [ns, setNs] = useState('');
   const [msg, setMsg] = useState('');
+  const [msgErr, setMsgErr] = useState(false);
   const [reportType, setReportType] = useState('executive');
   const [reportResult, setReportResult] = useState<any>(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -707,17 +709,27 @@ function ResponseTab() {
   }, []);
   const ap = attackPaths || {};
   const ACTIONS = [
-    { id: 'kill_container', label: 'Kill Container', desc: 'Send SIGKILL to container process', color: '#ef4444' },
-    { id: 'delete_pod', label: 'Delete Pod', desc: 'Delete pod (replacement will be scheduled)', color: '#f97316' },
-    { id: 'scale_deployment', label: 'Scale to Zero', desc: 'Scale deployment to 0 replicas', color: '#f97316' },
-    { id: 'quarantine_node', label: 'Quarantine Node', desc: 'Cordon node and evict all pods', color: '#ef4444' },
-    { id: 'block_image', label: 'Block Image', desc: 'Add to admission controller blocklist', color: '#a855f7' },
-    { id: 'revoke_service_account', label: 'Revoke SA Token', desc: 'Revoke service account token', color: '#3b82f6' },
-    { id: 'run_soar_playbook', label: 'Run SOAR Playbook', desc: 'Trigger automated response playbook', color: '#22c55e' },
-  ];
+    { id: 'kill_container', label: 'Kill Container', desc: 'Send SIGKILL to container process', color: '#ef4444', target: 'pod' },
+    { id: 'delete_pod', label: 'Delete Pod', desc: 'Delete pod (replacement will be scheduled)', color: '#f97316', target: 'pod' },
+    { id: 'quarantine_node', label: 'Quarantine Node', desc: 'Cordon node and evict all pods', color: '#ef4444', target: 'node' },
+    { id: 'block_image', label: 'Block Image', desc: 'Add to admission controller blocklist', color: '#a855f7', target: 'image' },
+    { id: 'revoke_service_account', label: 'Revoke SA Token', desc: 'Revoke service account token', color: '#3b82f6', target: 'pod' },
+    { id: 'scale_deployment', label: 'Scale to Zero', desc: 'Scale deployment to 0 replicas', color: '#f97316', target: 'pod' },
+  ] as const;
+  const activeAction = ACTIONS.find(a => a.id === action)!;
   const doAction = async () => {
-    const r = await containerSecurityAPI.respond({ action, pod_name: target, namespace: ns });
-    setMsg(r.data?.message || 'Action executed');
+    try {
+      const body: any = { action };
+      if (activeAction.target === 'pod') { body.pod_name = target; body.namespace = ns; }
+      else if (activeAction.target === 'node') { body.node_name = target; }
+      else if (activeAction.target === 'image') { body.image = target; }
+      const r = await containerSecurityAPI.respond(body);
+      setMsg(r.data?.message || 'Action executed');
+      setMsgErr(false);
+    } catch (err: any) {
+      setMsg(err?.response?.data?.error || 'Action failed');
+      setMsgErr(true);
+    }
     setTimeout(() => setMsg(''), 5000);
   };
   const doReport = async () => {
@@ -726,22 +738,37 @@ function ResponseTab() {
     setReportResult(r.data);
     setReportLoading(false);
   };
+  const riskPods = ap.risk_pods || [];
+  const riskRBAC = ap.risk_rbac || [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <SectionCard title="Attack Path Visualization">
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', minWidth: 600, padding: '8px 0', gap: 0 }}>
-            {(ap.nodes || []).map((node: any, i: number) => (
-              <div key={node.id} style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ textAlign: 'center' as const, minWidth: 100 }}>
-                  <div style={{ padding: '8px 12px', borderRadius: 8, background: node.risk >= 90 ? 'rgba(220,38,38,0.15)' : node.risk >= 70 ? 'rgba(234,88,12,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${node.risk >= 90 ? 'rgba(220,38,38,0.4)' : node.risk >= 70 ? 'rgba(234,88,12,0.4)' : 'var(--border)'}`, color: node.risk >= 90 ? '#f87171' : node.risk >= 70 ? '#fb923c' : 'var(--text-1)', fontSize: 11, fontWeight: 600 }}>
-                    {node.label}
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 4 }}>{node.type?.replace(/_/g, ' ')}</div>
+      <SectionCard title="Top Risk Factors">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 8 }}>Highest-Risk Pods</div>
+            {riskPods.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No privileged/root/host-network pods found.</div>}
+            {riskPods.map((p: any) => (
+              <div key={p.namespace + p.name} style={{ marginBottom: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <code style={{ fontSize: 11, fontWeight: 600 }}>{p.namespace}/{p.name}</code>
+                  <RiskBar score={p.risk_score} />
                 </div>
-                {i < (ap.nodes || []).length - 1 && (
-                  <div style={{ color: '#ef4444', fontSize: 18, padding: '0 4px', marginBottom: 14 }}>→</div>
-                )}
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
+                  {[p.is_privileged && 'privileged', p.run_as_root && 'root', p.host_network && 'host network'].filter(Boolean).join(' · ')}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 8 }}>RBAC Excessive Permissions</div>
+            {riskRBAC.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No excessive-permission RBAC findings.</div>}
+            {riskRBAC.map((r: any, i: number) => (
+              <div key={i} style={{ marginBottom: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <code style={{ fontSize: 11, fontWeight: 600 }}>{r.kind}/{r.name}</code>
+                  <SevBadge v={r.severity} />
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{r.subject} · {r.finding_type?.replace(/_/g, ' ')}</div>
               </div>
             ))}
           </div>
@@ -774,12 +801,27 @@ function ResponseTab() {
                 </button>
               ))}
             </div>
-            <input className="g-input" placeholder="Pod name (optional)" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />
-            <input className="g-input" placeholder="Namespace (optional)" value={ns} onChange={e => setNs(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
+            {activeAction.target === 'pod' && (
+              <>
+                <input className="g-input" placeholder="Pod name" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />
+                <input className="g-input" placeholder="Namespace" value={ns} onChange={e => setNs(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
+              </>
+            )}
+            {activeAction.target === 'node' && (
+              <input className="g-input" placeholder="Node name" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
+            )}
+            {activeAction.target === 'image' && (
+              <input className="g-input" placeholder="Image (e.g. docker.io/xmrig/xmrig)" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
+            )}
             <ActionButton variant="primary" style={{ width: '100%', justifyContent: 'center' }} onClick={doAction}>
-              Execute: {ACTIONS.find(a => a.id === action)?.label}
+              Execute: {activeAction.label}
             </ActionButton>
-            {msg && <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 6, fontSize: 12, color: '#4ade80' }}>{msg}</div>}
+            <a href="/playbooks" className="g-btn g-btn-ghost" style={{ marginTop: 8, width: '100%', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 6 }}>
+              Run SOAR Playbook
+            </a>
+            {msg && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: msgErr ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', border: `1px solid ${msgErr ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`, borderRadius: 6, fontSize: 12, color: msgErr ? '#f87171' : '#4ade80' }}>{msg}</div>
+            )}
           </div>
         </SectionCard>
         <SectionCard title="Generate Report" className="flex-1">

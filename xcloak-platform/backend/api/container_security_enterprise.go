@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -114,18 +116,18 @@ func GetContainerDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_pods WHERE tenant_id=$1 AND is_privileged=true`, tid).Scan(&privilegedPods)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_pods WHERE tenant_id=$1 AND has_resource_limits=false`, tid).Scan(&noLimits)
 	c.JSON(http.StatusOK, gin.H{
-		"clusters":           clusters,
-		"nodes":              nodes,
-		"pods":               pods,
-		"namespaces":         namespaces,
-		"running_containers": containers,
-		"critical_findings":  criticalFindings,
-		"vulnerable_images":  vulnerableImages,
-		"runtime_alerts":     runtimeAlerts,
-		"container_risk_score":  int(avgRisk),
-		"compliance_score":      int(avgCompliance),
-		"privileged_pods":    privilegedPods,
-		"pods_no_limits":     noLimits,
+		"clusters":             clusters,
+		"nodes":                nodes,
+		"pods":                 pods,
+		"namespaces":           namespaces,
+		"running_containers":   containers,
+		"critical_findings":    criticalFindings,
+		"vulnerable_images":    vulnerableImages,
+		"runtime_alerts":       runtimeAlerts,
+		"container_risk_score": int(avgRisk),
+		"compliance_score":     int(avgCompliance),
+		"privileged_pods":      privilegedPods,
+		"pods_no_limits":       noLimits,
 	})
 }
 
@@ -138,7 +140,8 @@ func GetK8sClusters(c *gin.Context) {
 			risk_score, compliance_score, last_scan, created_at
 		FROM k8s_clusters WHERE tenant_id=$1 ORDER BY risk_score DESC`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Cluster struct {
@@ -188,7 +191,8 @@ func GetK8sNodes(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Node struct {
@@ -234,19 +238,24 @@ func GetK8sPods(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("namespace"); v != "" {
-		q += fmt.Sprintf(" AND namespace=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND namespace=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("privileged"); v == "true" {
 		q += " AND is_privileged=true"
 	}
 	if v := c.Query("cluster_id"); v != "" {
-		q += fmt.Sprintf(" AND cluster_id=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND cluster_id=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY risk_score DESC LIMIT $%d", i)
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Pod struct {
@@ -289,9 +298,9 @@ func GetK8sNamespaces(c *gin.Context) {
 	createContainerSecurityTables()
 	tid := tenantIDFromContext(c)
 	type NSRow struct {
-		Namespace  string `json:"namespace"`
-		PodCount   int    `json:"pod_count"`
-		Privileged int    `json:"privileged_pods"`
+		Namespace  string  `json:"namespace"`
+		PodCount   int     `json:"pod_count"`
+		Privileged int     `json:"privileged_pods"`
 		RiskScore  float64 `json:"risk_score"`
 	}
 	rows, err := database.DB.Query(`
@@ -302,7 +311,8 @@ func GetK8sNamespaces(c *gin.Context) {
 		FROM k8s_pods WHERE tenant_id=$1 GROUP BY namespace ORDER BY avg_risk DESC
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	ns := []NSRow{}
@@ -338,7 +348,8 @@ func GetK8sImages(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Img struct {
@@ -387,23 +398,40 @@ func GetSupplyChain(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_images WHERE tenant_id=$1 AND signature_valid=true`, tid).Scan(&signed)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_images WHERE tenant_id=$1 AND sbom_available=true`, tid).Scan(&sbom)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_images WHERE tenant_id=$1 AND age_days>180`, tid).Scan(&oldBase)
+	realTotal := total
 	if total == 0 {
 		total = 1
 	}
+
+	registryRows, err := database.DB.Query(`SELECT registry, COUNT(*) FROM k8s_images WHERE tenant_id=$1 GROUP BY registry ORDER BY COUNT(*) DESC`, tid)
+	registries := []map[string]interface{}{}
+	if err == nil {
+		defer registryRows.Close()
+		for registryRows.Next() {
+			var reg string
+			var cnt int
+			if registryRows.Scan(&reg, &cnt) == nil {
+				registries = append(registries, map[string]interface{}{
+					"registry": reg, "trusted": trustedRegistries[reg], "images": cnt,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"total_images":     total,
-		"signed_images":    signed,
-		"sbom_available":   sbom,
-		"old_base_images":  oldBase,
-		"signature_rate":   signed * 100 / total,
-		"sbom_rate":        sbom * 100 / total,
-		"trusted_registries": []map[string]interface{}{
-			{"registry": "gcr.io", "trusted": true, "images": 4},
-			{"registry": "docker.io", "trusted": false, "images": 8},
-			{"registry": "ghcr.io", "trusted": true, "images": 3},
-			{"registry": "public.ecr.aws", "trusted": true, "images": 2},
-		},
+		"total_images":       realTotal,
+		"signed_images":      signed,
+		"sbom_available":     sbom,
+		"old_base_images":    oldBase,
+		"signature_rate":     signed * 100 / total,
+		"sbom_rate":          sbom * 100 / total,
+		"trusted_registries": registries,
 	})
+}
+
+var trustedRegistries = map[string]bool{
+	"gcr.io": true, "ghcr.io": true, "public.ecr.aws": true,
+	"quay.io": true, "registry.k8s.io": true, "mcr.microsoft.com": true,
 }
 
 // GetRuntimeAlerts — GET /api/containers/runtime-alerts
@@ -418,33 +446,38 @@ func GetRuntimeAlerts(c *gin.Context) {
 	args := []interface{}{tid}
 	i := 2
 	if v := c.Query("severity"); v != "" {
-		q += fmt.Sprintf(" AND severity=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND severity=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	if v := c.Query("alert_type"); v != "" {
-		q += fmt.Sprintf(" AND alert_type=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND alert_type=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Alert struct {
-		ID            int    `json:"id"`
-		ClusterID     int    `json:"cluster_id"`
-		Namespace     string `json:"namespace"`
-		PodName       string `json:"pod_name"`
-		ContainerName string `json:"container_name"`
-		AlertType     string `json:"alert_type"`
-		Severity      string `json:"severity"`
-		Description   string `json:"description"`
-		Process       string `json:"process"`
-		Command       string `json:"command"`
-		SourceIP      string `json:"source_ip"`
+		ID             int    `json:"id"`
+		ClusterID      int    `json:"cluster_id"`
+		Namespace      string `json:"namespace"`
+		PodName        string `json:"pod_name"`
+		ContainerName  string `json:"container_name"`
+		AlertType      string `json:"alert_type"`
+		Severity       string `json:"severity"`
+		Description    string `json:"description"`
+		Process        string `json:"process"`
+		Command        string `json:"command"`
+		SourceIP       string `json:"source_ip"`
 		MITRETechnique string `json:"mitre_technique"`
-		Status        string `json:"status"`
-		CreatedAt     string `json:"created_at"`
+		Status         string `json:"status"`
+		CreatedAt      string `json:"created_at"`
 	}
 	alerts := []Alert{}
 	for rows.Next() {
@@ -471,7 +504,8 @@ func GetK8sRBAC(c *gin.Context) {
 		FROM k8s_rbac_findings WHERE tenant_id=$1 ORDER BY severity DESC, created_at DESC LIMIT 50
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type RBAC struct {
@@ -505,12 +539,12 @@ func GetK8sRBAC(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_rbac_findings WHERE tenant_id=$1 AND finding_type='excessive_permissions'`, tid).Scan(&excessive)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_rbac_findings WHERE tenant_id=$1 AND finding_type='wildcard_permissions'`, tid).Scan(&wildcard)
 	c.JSON(http.StatusOK, gin.H{
-		"findings":     findings,
-		"total":        total,
+		"findings":      findings,
+		"total":         total,
 		"cluster_roles": clusterRoles,
-		"bindings":     bindings,
-		"excessive":    excessive,
-		"wildcard":     wildcard,
+		"bindings":      bindings,
+		"excessive":     excessive,
+		"wildcard":      wildcard,
 	})
 }
 
@@ -518,13 +552,10 @@ func GetK8sRBAC(c *gin.Context) {
 func GetK8sSecrets(c *gin.Context) {
 	createContainerSecurityTables()
 	tid := tenantIDFromContext(c)
-	var totalSecrets, plaintext, expired, exposed int
+	var totalSecrets int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_pods WHERE tenant_id=$1 AND volumes LIKE '%secret%'`, tid).Scan(&totalSecrets)
 	c.JSON(http.StatusOK, gin.H{
-		"total_secrets":  totalSecrets,
-		"plaintext":      plaintext,
-		"expired":        expired,
-		"exposed":        exposed,
+		"total_secrets": totalSecrets,
 		"providers": []map[string]interface{}{
 			{"name": "Kubernetes Secrets", "count": totalSecrets, "status": "active"},
 			{"name": "Vault", "count": 0, "status": "not_configured"},
@@ -545,7 +576,8 @@ func GetNetworkPolicies(c *gin.Context) {
 		FROM k8s_network_policies WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type NP struct {
@@ -585,7 +617,8 @@ func GetAdmissionControl(c *gin.Context) {
 		FROM k8s_admission_violations WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50
 	`, tid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type AV struct {
@@ -620,23 +653,41 @@ func GetContainerCompliance(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	var avgCompliance int
 	database.DB.QueryRow(`SELECT COALESCE(AVG(compliance_score),75) FROM k8s_clusters WHERE tenant_id=$1`, tid).Scan(&avgCompliance)
+
+	var total, denied, allowed int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_admission_violations WHERE tenant_id=$1`, tid).Scan(&total)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_admission_violations WHERE tenant_id=$1 AND action='denied'`, tid).Scan(&denied)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_admission_violations WHERE tenant_id=$1 AND action='allowed'`, tid).Scan(&allowed)
+
+	var critical, high, medium, low int
+	database.DB.QueryRow(`SELECT COUNT(*) FILTER (WHERE severity='critical'), COUNT(*) FILTER (WHERE severity='high'), COUNT(*) FILTER (WHERE severity='medium'), COUNT(*) FILTER (WHERE severity='low') FROM k8s_admission_violations WHERE tenant_id=$1`, tid).Scan(&critical, &high, &medium, &low)
+
+	rows, err := database.DB.Query(`
+		SELECT workload, kind, violation_type, severity, description, action, created_at
+		FROM k8s_admission_violations WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 20`, tid)
+	violations := []map[string]interface{}{}
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var workload, kind, vtype, severity, desc, action, createdAt string
+			if rows.Scan(&workload, &kind, &vtype, &severity, &desc, &action, &createdAt) == nil {
+				violations = append(violations, map[string]interface{}{
+					"workload": workload, "kind": kind, "violation_type": vtype,
+					"severity": severity, "description": desc, "action": action, "created_at": createdAt,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"overall_score": avgCompliance,
-		"frameworks": []map[string]interface{}{
-			{"name": "CIS Kubernetes Benchmark", "score": 72, "passed": 87, "failed": 34, "total": 121, "version": "1.8"},
-			{"name": "NSA Kubernetes Hardening", "score": 68, "passed": 41, "failed": 19, "total": 60, "version": "1.2"},
-			{"name": "PCI DSS", "score": 81, "passed": 22, "failed": 5, "total": 27, "version": "4.0"},
-			{"name": "NIST SP 800-190", "score": 74, "passed": 31, "failed": 11, "total": 42, "version": "1.0"},
-			{"name": "ISO 27001", "score": 79, "passed": 38, "failed": 10, "total": 48, "version": "2022"},
+		"overall_score":    avgCompliance,
+		"total_violations": total,
+		"denied":           denied,
+		"allowed":          allowed,
+		"by_severity": gin.H{
+			"critical": critical, "high": high, "medium": medium, "low": low,
 		},
-		"failed_controls": []map[string]interface{}{
-			{"control": "CIS 4.2.6", "title": "Minimize the admission of root containers", "severity": "high", "framework": "CIS"},
-			{"control": "CIS 5.2.2", "title": "Minimize the admission of privileged containers", "severity": "critical", "framework": "CIS"},
-			{"control": "CIS 5.7.4", "title": "The default namespace should not be used", "severity": "medium", "framework": "CIS"},
-			{"control": "NSA-5", "title": "Enable audit logging for Kubernetes API server", "severity": "high", "framework": "NSA"},
-			{"control": "NSA-8", "title": "Network policies should restrict all ingress", "severity": "high", "framework": "NSA"},
-			{"control": "PCI-2.2", "title": "Container images must be from approved registries", "severity": "high", "framework": "PCI DSS"},
-		},
+		"recent_violations": violations,
 	})
 }
 
@@ -644,30 +695,45 @@ func GetContainerCompliance(c *gin.Context) {
 func GetContainerThreatIntel(c *gin.Context) {
 	createContainerSecurityTables()
 	tid := tenantIDFromContext(c)
-	var alertCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_runtime_alerts WHERE tenant_id=$1`, tid).Scan(&alertCount)
+
+	maliciousImages := []map[string]interface{}{}
+	miRows, err := database.DB.Query(`SELECT image, tag, registry FROM k8s_images WHERE tenant_id=$1 AND malware_found=true LIMIT 10`, tid)
+	if err == nil {
+		defer miRows.Close()
+		for miRows.Next() {
+			var image, tag, registry string
+			if miRows.Scan(&image, &tag, &registry) == nil {
+				maliciousImages = append(maliciousImages, map[string]interface{}{
+					"image": image, "tag": tag, "registry": registry,
+				})
+			}
+		}
+	}
+
+	iocMatches := []map[string]interface{}{}
+	iocRows, err := database.DB.Query(`SELECT indicator, type, hit_count FROM iocs WHERE tenant_id=$1 AND type='image' AND enabled=true ORDER BY hit_count DESC LIMIT 10`, tid)
+	if err == nil {
+		defer iocRows.Close()
+		for iocRows.Next() {
+			var indicator, itype string
+			var hits int
+			if iocRows.Scan(&indicator, &itype, &hits) == nil {
+				iocMatches = append(iocMatches, map[string]interface{}{
+					"type": itype, "value": indicator, "hits": hits,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"malicious_images": []map[string]interface{}{
-			{"image": "alpine:3.14", "reason": "Known crypto mining tool embedded", "hits": 3, "cve": "CVE-2023-28432"},
-			{"image": "ubuntu:20.04", "reason": "Base image with Log4Shell vector", "hits": 1, "cve": "CVE-2021-44228"},
-		},
-		"threat_actors": []map[string]interface{}{
-			{"actor": "TeamTNT", "campaigns": 2, "target": "Kubernetes clusters", "ttps": "T1525,T1496,T1611"},
-			{"actor": "Kinsing", "campaigns": 1, "target": "Misconfigured Docker API", "ttps": "T1496,T1059.004"},
-		},
-		"ioc_matches": []map[string]interface{}{
-			{"type": "ip", "value": "185.220.101.47", "hits": 4, "category": "c2_server"},
-			{"type": "domain", "value": "xmrig.com", "hits": 2, "category": "crypto_mining"},
-			{"type": "image", "value": "docker.io/xmrig/xmrig", "hits": 1, "category": "crypto_miner"},
-		},
+		"malicious_images": maliciousImages,
+		"ioc_matches":      iocMatches,
+		// Generic, non-tenant-specific K8s ecosystem CVE advisory content —
+		// not a claim that these were detected against this tenant's images.
 		"recent_cves": []map[string]interface{}{
-			{"cve": "CVE-2024-21626", "score": 9.9, "affected": "runc < 1.1.12", "type": "container_escape"},
-			{"cve": "CVE-2023-2431", "score": 7.8, "affected": "kubelet", "type": "privilege_escalation"},
-			{"cve": "CVE-2022-3172", "score": 7.5, "affected": "kube-aggregator", "type": "ssrf"},
-		},
-		"malware_families": []map[string]interface{}{
-			{"family": "XMRig", "count": alertCount + 2, "category": "crypto_miner"},
-			{"family": "Doki", "count": 1, "category": "backdoor"},
+			{"cve": "CVE-2024-21626", "score": 9.9, "affected": "runc < 1.1.12", "type": "container_escape", "advisory": true},
+			{"cve": "CVE-2023-2431", "score": 7.8, "affected": "kubelet", "type": "privilege_escalation", "advisory": true},
+			{"cve": "CVE-2022-3172", "score": 7.5, "affected": "kube-aggregator", "type": "ssrf", "advisory": true},
 		},
 	})
 }
@@ -683,7 +749,8 @@ func GetContainerTimeline(c *gin.Context) {
 		ORDER BY created_at DESC LIMIT $2
 	`, tid, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Event struct {
@@ -722,7 +789,8 @@ func GetContainerVulns(c *gin.Context) {
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type VulnImage struct {
@@ -751,26 +819,50 @@ func GetContainerVulns(c *gin.Context) {
 // GetContainerAttackPaths — GET /api/containers/attack-paths
 func GetContainerAttackPaths(c *gin.Context) {
 	createContainerSecurityTables()
+	tid := tenantIDFromContext(c)
+
+	riskPods := []map[string]interface{}{}
+	podRows, err := database.DB.Query(`
+		SELECT name, namespace, image, is_privileged, run_as_root, host_network, risk_score
+		FROM k8s_pods WHERE tenant_id=$1 AND (is_privileged=true OR run_as_root=true OR host_network=true)
+		ORDER BY risk_score DESC LIMIT 5`, tid)
+	if err == nil {
+		defer podRows.Close()
+		for podRows.Next() {
+			var name, namespace, image string
+			var privileged, root, hostNet bool
+			var risk int
+			if podRows.Scan(&name, &namespace, &image, &privileged, &root, &hostNet, &risk) == nil {
+				riskPods = append(riskPods, map[string]interface{}{
+					"name": name, "namespace": namespace, "image": image,
+					"is_privileged": privileged, "run_as_root": root, "host_network": hostNet,
+					"risk_score": risk,
+				})
+			}
+		}
+	}
+
+	riskRBAC := []map[string]interface{}{}
+	rbacRows, err := database.DB.Query(`
+		SELECT kind, name, subject, finding_type, severity, description
+		FROM k8s_rbac_findings WHERE tenant_id=$1 AND finding_type IN ('excessive_permissions','wildcard_permissions')
+		ORDER BY severity DESC LIMIT 5`, tid)
+	if err == nil {
+		defer rbacRows.Close()
+		for rbacRows.Next() {
+			var kind, name, subject, findingType, severity, desc string
+			if rbacRows.Scan(&kind, &name, &subject, &findingType, &severity, &desc) == nil {
+				riskRBAC = append(riskRBAC, map[string]interface{}{
+					"kind": kind, "name": name, "subject": subject,
+					"finding_type": findingType, "severity": severity, "description": desc,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"nodes": []map[string]interface{}{
-			{"id": "internet", "label": "Internet", "type": "source", "risk": 100},
-			{"id": "ingress", "label": "Ingress Controller", "type": "network", "namespace": "ingress-nginx", "risk": 75},
-			{"id": "pod-web", "label": "web-app Pod", "type": "pod", "namespace": "production", "image": "webapp:1.2.3", "risk": 82},
-			{"id": "sa-web", "label": "web-app ServiceAccount", "type": "service_account", "permissions": "get,list,secrets", "risk": 91},
-			{"id": "k8s-api", "label": "Kubernetes API", "type": "api_server", "risk": 95},
-			{"id": "secret-db", "label": "db-credentials Secret", "type": "secret", "namespace": "production", "risk": 90},
-			{"id": "secret-aws", "label": "aws-keys Secret", "type": "secret", "namespace": "production", "risk": 88},
-			{"id": "cluster-admin", "label": "ClusterAdmin Role", "type": "rbac_role", "risk": 100},
-		},
-		"edges": []map[string]interface{}{
-			{"source": "internet", "target": "ingress", "label": "HTTP/HTTPS", "risk": "high"},
-			{"source": "ingress", "target": "pod-web", "label": "routes to", "risk": "medium"},
-			{"source": "pod-web", "target": "sa-web", "label": "uses SA", "risk": "high"},
-			{"source": "sa-web", "target": "k8s-api", "label": "API calls", "risk": "critical"},
-			{"source": "k8s-api", "target": "secret-db", "label": "reads secret", "risk": "critical"},
-			{"source": "k8s-api", "target": "secret-aws", "label": "reads secret", "risk": "critical"},
-			{"source": "k8s-api", "target": "cluster-admin", "label": "privilege escalation", "risk": "critical"},
-		},
+		"risk_pods": riskPods,
+		"risk_rbac": riskRBAC,
 	})
 }
 
@@ -792,61 +884,136 @@ func GetContainerAnalytics(c *gin.Context) {
 		database.DB.QueryRow(`SELECT COUNT(*) FROM k8s_runtime_alerts WHERE tenant_id=$1 AND DATE(created_at)=$2`, tid, d).Scan(&cnt)
 		trend = append(trend, TrendPoint{Date: d, Count: cnt})
 	}
+	topImages := []map[string]interface{}{}
+	imgRows, err := database.DB.Query(`
+		SELECT image, cve_critical, cve_high, risk_score FROM k8s_images
+		WHERE tenant_id=$1 ORDER BY cve_critical DESC, cve_high DESC LIMIT 5`, tid)
+	if err == nil {
+		defer imgRows.Close()
+		for imgRows.Next() {
+			var image string
+			var cveCritical, cveHigh, risk int
+			if imgRows.Scan(&image, &cveCritical, &cveHigh, &risk) == nil {
+				topImages = append(topImages, map[string]interface{}{
+					"image": image, "cve_critical": cveCritical, "cve_high": cveHigh, "risk": risk,
+				})
+			}
+		}
+	}
+
+	alertByType := []map[string]interface{}{}
+	atRows, err := database.DB.Query(`
+		SELECT alert_type, COUNT(*) FROM k8s_runtime_alerts
+		WHERE tenant_id=$1 GROUP BY alert_type ORDER BY COUNT(*) DESC`, tid)
+	if err == nil {
+		defer atRows.Close()
+		for atRows.Next() {
+			var atype string
+			var cnt int
+			if atRows.Scan(&atype, &cnt) == nil {
+				alertByType = append(alertByType, map[string]interface{}{"type": atype, "count": cnt})
+			}
+		}
+	}
+
+	nsRisk := []map[string]interface{}{}
+	nsRows, err := database.DB.Query(`
+		SELECT namespace, COUNT(*), COALESCE(AVG(risk_score),0)
+		FROM k8s_pods WHERE tenant_id=$1 GROUP BY namespace ORDER BY AVG(risk_score) DESC`, tid)
+	if err == nil {
+		defer nsRows.Close()
+		for nsRows.Next() {
+			var namespace string
+			var pods int
+			var risk float64
+			if nsRows.Scan(&namespace, &pods, &risk) == nil {
+				nsRisk = append(nsRisk, map[string]interface{}{
+					"namespace": namespace, "risk": int(risk), "pods": pods,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"total_pods":      totalPods,
-		"privileged_pods": privilegedPods,
-		"runtime_alert_trend": trend,
-		"top_vulnerable_images": []map[string]interface{}{
-			{"image": "nginx:1.19", "cve_critical": 4, "cve_high": 12, "risk": 94},
-			{"image": "redis:6.0", "cve_critical": 2, "cve_high": 8, "risk": 87},
-			{"image": "webapp:1.2.3", "cve_critical": 1, "cve_high": 6, "risk": 78},
-		},
-		"alert_by_type": []map[string]interface{}{
-			{"type": "reverse_shell", "count": 2},
-			{"type": "crypto_mining", "count": 3},
-			{"type": "privilege_escalation", "count": 1},
-			{"type": "container_escape", "count": 1},
-			{"type": "file_tampering", "count": 4},
-			{"type": "unexpected_network", "count": 6},
-		},
-		"namespace_risk": []map[string]interface{}{
-			{"namespace": "production", "risk": 78, "pods": 12},
-			{"namespace": "staging", "risk": 61, "pods": 8},
-			{"namespace": "kube-system", "risk": 45, "pods": 11},
-			{"namespace": "monitoring", "risk": 38, "pods": 4},
-		},
+		"total_pods":            totalPods,
+		"privileged_pods":       privilegedPods,
+		"runtime_alert_trend":   trend,
+		"top_vulnerable_images": topImages,
+		"alert_by_type":         alertByType,
+		"namespace_risk":        nsRisk,
 	})
 }
 
 // PostContainerResponse — POST /api/containers/response
 func PostContainerResponse(c *gin.Context) {
 	createContainerSecurityTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
-		Action    string `json:"action"`
-		Namespace string `json:"namespace"`
-		PodName   string `json:"pod_name"`
-		NodeName  string `json:"node_name"`
-		Image     string `json:"image"`
-		SAName    string `json:"service_account"`
+		Action     string `json:"action"`
+		Namespace  string `json:"namespace"`
+		PodName    string `json:"pod_name"`
+		NodeName   string `json:"node_name"`
+		Image      string `json:"image"`
+		SAName     string `json:"service_account"`
 		Deployment string `json:"deployment"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"kill_container":      "Container killed via SIGKILL",
-		"delete_pod":          "Pod deleted — replacement will be scheduled",
-		"scale_deployment":    "Deployment scaled to 0 replicas",
-		"quarantine_node":     "Node cordoned and pods evicted",
-		"block_image":         "Image blocked in admission controller",
-		"revoke_service_account": "Service account token revoked",
-		"run_soar_playbook":   "SOAR playbook triggered",
+
+	switch body.Action {
+	case "kill_container":
+		if body.Namespace == "" || body.PodName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "namespace and pod_name required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE k8s_pods SET status='terminated' WHERE tenant_id=$1 AND namespace=$2 AND name=$3`, tid, body.Namespace, body.PodName)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching pod found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": "Container killed via SIGKILL"})
+	case "delete_pod":
+		if body.Namespace == "" || body.PodName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "namespace and pod_name required"})
+			return
+		}
+		res, _ := database.DB.Exec(`DELETE FROM k8s_pods WHERE tenant_id=$1 AND namespace=$2 AND name=$3`, tid, body.Namespace, body.PodName)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching pod found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": "Pod deleted — replacement will be scheduled"})
+	case "quarantine_node":
+		if body.NodeName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "node_name required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE k8s_nodes SET status='cordoned' WHERE tenant_id=$1 AND name=$2`, tid, body.NodeName)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching node found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": "Node cordoned and pods evicted"})
+	case "block_image":
+		if body.Image == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "image required"})
+			return
+		}
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Image, Type: "image", Severity: "high", Enabled: true,
+			Description: "Blocked via Container Security",
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": "Image blocked in admission controller"})
+	case "revoke_service_account", "scale_deployment":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "no real Kubernetes API/IAM integration configured for this action"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
 	}
-	msg := messages[body.Action]
-	if msg == "" {
-		msg = "Action executed"
-	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "message": msg})
 }
 
 // PostContainerAI — POST /api/containers/ai
@@ -876,7 +1043,8 @@ Provide compact JSON: {"answer":"concise answer","confidence":85,"recommended_ac
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -911,7 +1079,8 @@ Provide compact JSON: {"title":"...","executive_summary":"3 sentences","key_find
 		clusters, nodes, pods, vulnImages, runtimeAlerts)
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
