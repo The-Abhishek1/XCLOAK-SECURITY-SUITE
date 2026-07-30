@@ -13,23 +13,24 @@ from ⬜ to ✅ with a one-line summary + spec file name). Full detail for each
 page lives in memory (`project_page_testing_phase.md`), not here — this file
 is just the index/checklist.
 
-Full suite status as of last page (Threat Hunt): **not run this pass** —
-this page's own investigation started from a live memory-leak incident (see
-`project_page_testing_phase.md`'s Hunt Workbench entry) that already
-consumed a full-suite run's worth of backend restarts, so only a targeted
-subset was re-verified after the Threat Hunt fixes landed: this page's own
-`hunt.spec.ts` (9/9 passed, 2 reruns needed to fix test-idempotency issues
-in the tests themselves, not product bugs), plus `hunt-workbench.spec.ts`
-and `threat-actors.spec.ts` since shared code (`api/mitre_matrix.go`,
-the `audit_logs` fix) touched both. 20/21 passed; `hunt-workbench.spec.ts`'s
-"AI Explain" test failed on both a fresh run and an isolated rerun with a
-plain timeout (`getByText(/hits found/)` never appeared) — checked live via
-psql that the underlying seed data it depends on still exists, and neither
-of this pass's backend changes touch that code path (`ExecuteHunt`/
-`runKQLHunt`), so treated as the same known high-load flakiness class
-documented below rather than chased further. **A full accumulated-suite run
-across all 27 pages is now overdue** — worth doing at the start of the next
-page's pass rather than deferring further.
+Full suite status as of last page (DFIR): **run in full this time** — 215
+passed, 15 failed, 4 skipped (234 total, ~8 minutes). All 15 failures are in
+already-completed pages unrelated to DFIR's own changes (`agents`,
+`clusters`, `elastic-query`, `hunt-workbench` AI-Explain, `incidents` ×6,
+`network-map`, `risk-posture`, `threat-detection` ×2, `threat-intel` AI) —
+`dfir.spec.ts` itself passed 8/8 cleanly within this same run. 3 of the 15
+are the already-documented CPU-bound local-LLM contention class
+(`elastic-query`, `hunt-workbench`, `threat-intel` — see below).
+**`incidents.spec.ts` failing 6/6 in one run is new and worth flagging**:
+this exact page had a "3-for-3 identical failure" streak flagged after the
+YARA Rules pass, then broke the streak (passed cleanly) during the JA3
+Fingerprints pass — now it's failed completely again, harder than before.
+Nothing in DFIR's or Threat Hunt's changes touches Incidents' code path,
+and the pattern (whole-page failure under a big parallel run, not a
+specific assertion) matches the same load-contention signature as every
+prior incident this phase rather than a standing regression — but if it
+fails a 4th/5th time on an unrelated future page's run, it's worth an
+actual dedicated look instead of continuing to wave it off as load.
 **Growing self-inflicted flake class — escalating, worth addressing soon**:
 this phase now has **5** CPU-bound local-LLM tests spread across 4 spec
 files (`elastic-query.spec.ts` ×2, `log-sources.spec.ts` ×1,
