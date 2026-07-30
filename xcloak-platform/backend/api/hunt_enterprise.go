@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
+	"xcloak-platform/models"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -516,15 +519,20 @@ func PostHuntIOC(c *gin.Context) {
 		}
 	}
 
-	// Search endpoint_connections for IP/domain IOC types
+	// Search endpoint_connections for IP/domain IOC types.
+	// `remote_addr`/`created_at` are not real columns on this table (the
+	// real names are `remote_address`/`collected_at`) — this query always
+	// failed outright (confirmed live via psql, same error already found
+	// and fixed 3 times over on the JA3 Fingerprints page), so connHits was
+	// silently empty for every IP/domain IOC hunt, forever.
 	if body.IOCType == "ip" || body.IOCType == "domain" {
 		cRows, _ := database.DB.Query(fmt.Sprintf(`
-			SELECT COALESCE(ag.hostname,'unknown'), ec.remote_addr, COALESCE(ec.state,''), ec.created_at
+			SELECT COALESCE(ag.hostname,'unknown'), ec.remote_address, COALESCE(ec.state,''), ec.collected_at
 			FROM endpoint_connections ec
 			JOIN agents ag ON ag.id = ec.agent_id
-			WHERE ag.tenant_id = $1 AND ec.remote_addr ILIKE $2
-			  AND ec.created_at > NOW() - INTERVAL '%s'
-			ORDER BY ec.created_at DESC LIMIT 50`, interval),
+			WHERE ag.tenant_id = $1 AND ec.remote_address ILIKE $2
+			  AND ec.collected_at > NOW() - INTERVAL '%s'
+			ORDER BY ec.collected_at DESC LIMIT 50`, interval),
 			tid, "%"+body.Value+"%")
 		if cRows != nil {
 			defer cRows.Close()
@@ -946,6 +954,12 @@ func DeleteHuntNotebook(c *gin.Context) {
 }
 
 // PostHuntResponse dispatches a response action from the hunt workbench.
+//
+// Previously this only wrote an audit_logs row and returned a canned
+// "queued: true" — the same 100%-fake-button pattern found and fixed on
+// UEBA/Insider Threat/Network Map/Attack Paths this phase. No agent_tasks
+// row, no incident, no IOC was ever actually created; every response action
+// from this page was a no-op that reported success.
 func PostHuntResponse(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	user := usernameFromContext(c)
@@ -958,6 +972,101 @@ func PostHuntResponse(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Queues a real agent task, routing destructive actions through the same
+	// pending_approval gate as incident_enterprise.go/nba_enterprise.go.
+	dispatchAgentTask := func(taskType string, payload map[string]any) (string, error) {
+		payloadJSON, _ := json.Marshal(payload)
+		task := models.AgentTask{AgentID: body.AgentID, TaskType: taskType, Payload: payloadJSON}
+		var err error
+		if services.IsDestructiveTask(taskType) {
+			err = repositories.CreateTaskPendingApproval(task)
+		} else {
+			err = repositories.CreateTask(task)
+		}
+		if err != nil {
+			return "", err
+		}
+		if services.IsDestructiveTask(taskType) {
+			return fmt.Sprintf("%s queued for agent %d, pending approval", taskType, body.AgentID), nil
+		}
+		return fmt.Sprintf("%s dispatched to agent %d", taskType, body.AgentID), nil
+	}
+
+	var result string
+	switch body.Action {
+	case "isolate_host":
+		if body.AgentID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id required"})
+			return
+		}
+		r, err := dispatchAgentTask("isolate_host", map[string]any{"reason": body.Reason, "source": "hunt_workbench", "run_id": body.RunID})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
+
+	case "kill_process":
+		if body.AgentID == 0 || body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id and target (pid) required"})
+			return
+		}
+		pid, err := strconv.Atoi(body.Target)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target must be a numeric pid"})
+			return
+		}
+		r, err := dispatchAgentTask("kill_process", map[string]any{"pid": pid, "reason": body.Reason})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
+
+	case "quarantine_file":
+		if body.AgentID == 0 || body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id and target (path) required"})
+			return
+		}
+		r, err := dispatchAgentTask("quarantine_file", map[string]any{"path": body.Target, "reason": body.Reason})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to dispatch: " + err.Error()})
+			return
+		}
+		result = r
+
+	case "block_ip":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target (ip) required"})
+			return
+		}
+		if err := repositories.CreateIOC(models.IOC{
+			Indicator: body.Target, Type: "ip", Severity: "high", Enabled: true,
+			Description: "Blocked via Hunt Workbench: " + body.Reason,
+		}, tid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block ip: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("IP %s blocked via IOC", body.Target)
+
+	case "create_incident":
+		var incidentID int
+		if err := database.DB.QueryRow(`
+			INSERT INTO incidents (tenant_id, title, description, severity, status)
+			VALUES ($1,$2,$3,'high','open') RETURNING id`,
+			tid, fmt.Sprintf("Hunt Finding: %s", body.Reason),
+			fmt.Sprintf("Escalated from hunt run #%d. %s", body.RunID, body.Reason),
+		).Scan(&incidentID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create incident: " + err.Error()})
+			return
+		}
+		result = fmt.Sprintf("Incident #%d created", incidentID)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
 		return
 	}
 
@@ -977,6 +1086,6 @@ func PostHuntResponse(c *gin.Context) {
 		"queued":  true,
 		"action":  body.Action,
 		"target":  body.Target,
-		"message": fmt.Sprintf("Response action '%s' queued for target '%s'", body.Action, body.Target),
+		"message": result,
 	})
 }

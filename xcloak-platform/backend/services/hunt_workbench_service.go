@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/lib/pq"
+
 	"xcloak-platform/database"
 	"xcloak-platform/models"
 )
@@ -68,7 +70,7 @@ func GetHuntRun(id, tenantID int) (models.HuntRun, error) {
 		SELECT id, template_id, tenant_id, name, kql_query, status, hit_count,
 		       findings::text, analyst, severity, notes, started_at, completed_at
 		FROM hunt_runs WHERE id=$1 AND tenant_id=$2`, id, tenantID)
-	runs, err := scanHuntRuns(singleRow{row})
+	runs, err := scanHuntRuns(&singleRow{r: row})
 	if err != nil || len(runs) == 0 {
 		return models.HuntRun{}, err
 	}
@@ -120,12 +122,41 @@ func runKQLHunt(tenantID int, query string) ([]models.HuntFinding, int) {
 		return nil, 0
 	}
 
+	// models.Log has no Hostname field (only AgentID) — the frontend
+	// findings list/IOC/TTP panels all render `hostname`, so every hunt run
+	// through this path showed a permanently blank host column while the
+	// IOC/TTP/Actor quick-hunt panels (which already join agents directly
+	// in their own SQL) correctly showed real hostnames. Resolve hostnames
+	// for the distinct agent IDs actually present in the results.
+	hostnames := map[int]string{}
+	if len(result.Logs) > 0 {
+		agentIDs := []int{}
+		seen := map[int]bool{}
+		for _, r := range result.Logs {
+			if !seen[r.AgentID] {
+				seen[r.AgentID] = true
+				agentIDs = append(agentIDs, r.AgentID)
+			}
+		}
+		rows, err := database.DB.Query(`SELECT id, hostname FROM agents WHERE tenant_id=$1 AND id = ANY($2)`, tenantID, pq.Array(agentIDs))
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id int
+				var hostname string
+				if rows.Scan(&id, &hostname) == nil {
+					hostnames[id] = hostname
+				}
+			}
+		}
+	}
+
 	findings := []models.HuntFinding{}
 	for _, r := range result.Logs {
 		findings = append(findings, models.HuntFinding{
 			LogID:     r.ID,
 			AgentID:   r.AgentID,
-			Hostname:  "",
+			Hostname:  hostnames[r.AgentID],
 			Source:    r.LogSource,
 			Message:   r.LogMessage,
 			Timestamp: r.CollectedAt.Format(time.RFC3339),
@@ -171,11 +202,31 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-type singleRow struct{ r rowScanner }
+// singleRow adapts a *sql.Row (rowScanner) to rowsIface so scanHuntRuns can
+// handle both the list (*sql.Rows) and single-row (*sql.Row) cases. Next()
+// must only report true once — a prior version always returned true, so
+// scanHuntRuns's `for rows.Next()` never terminated: every call after the
+// first re-scanned an already-closed *sql.Row (silently erroring, since
+// scanHuntRuns doesn't check Scan's return value) and kept appending
+// zero-valued HuntRuns forever. GetHuntRun calls this on every single hunt
+// run fetch — including every status-poll request — so a single request
+// would spin in a tight, allocation-only loop until the process was
+// OOM-killed (confirmed live: one request took RSS from ~50MB to 3GB+ in
+// under a minute).
+type singleRow struct {
+	r    rowScanner
+	done bool
+}
 
-func (s singleRow) Next() bool        { return true }
-func (s singleRow) Scan(d ...any) error { return s.r.Scan(d...) }
-func (s singleRow) Close() error       { return nil }
+func (s *singleRow) Next() bool {
+	if s.done {
+		return false
+	}
+	s.done = true
+	return true
+}
+func (s *singleRow) Scan(d ...any) error { return s.r.Scan(d...) }
+func (s *singleRow) Close() error        { return nil }
 
 type rowsIface interface {
 	Next() bool
@@ -189,9 +240,11 @@ func scanHuntRuns(rows rowsIface) ([]models.HuntRun, error) {
 	for rows.Next() {
 		var r models.HuntRun
 		var findingsJSON string
-		rows.Scan(&r.ID, &r.TemplateID, &r.TenantID, &r.Name, &r.KQLQuery,
+		if err := rows.Scan(&r.ID, &r.TemplateID, &r.TenantID, &r.Name, &r.KQLQuery,
 			&r.Status, &r.HitCount, &findingsJSON, &r.Analyst, &r.Severity,
-			&r.Notes, &r.StartedAt, &r.CompletedAt)
+			&r.Notes, &r.StartedAt, &r.CompletedAt); err != nil {
+			return out, err
+		}
 		json.Unmarshal([]byte(findingsJSON), &r.Findings)
 		if r.Findings == nil {
 			r.Findings = []models.HuntFinding{}

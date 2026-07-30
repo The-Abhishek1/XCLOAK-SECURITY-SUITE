@@ -5,7 +5,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { huntWorkbenchAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import { MetricCard } from '@/components/design-system';
-import { Activity, AlertCircle, AlertTriangle, BookOpen, Brain, CheckCircle, ChevronDown, ChevronRight, Clock, Download, Eye, FileText, Globe, Grid3X3, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, TrendingUp, X } from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, BookOpen, Brain, CheckCircle, ChevronDown, ChevronRight, Clock, Download, Eye, FileText, Globe, Grid3X3, Play, Plus, RefreshCw, Search, Shield, Target, Trash2, TrendingUp, Users, X } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,9 +56,11 @@ function SparkTrend({ data, key1, key2 }: { data: any[]; key1: string; key2?: st
 
 // ── Existing RunCard (preserved) ─────────────────────────────────────────────
 
-function RunCard({ run, onExpand, expanded, onUpdateNotes }: {
+function RunCard({ run, onExpand, expanded, onUpdateNotes, onRespond, respondingKey }: {
   run: HuntRun; expanded: boolean; onExpand: () => void;
   onUpdateNotes: (id: number, notes: string, severity: string) => void;
+  onRespond: (action: string, opts: { agent_id?: number; target?: string; reason?: string }, key: string) => void;
+  respondingKey: string | null;
 }) {
   const [notes, setNotes] = useState(run.notes);
   const [severity, setSeverity] = useState(run.severity || 'medium');
@@ -95,15 +97,31 @@ function RunCard({ run, onExpand, expanded, onUpdateNotes }: {
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#f85149' }}>Findings ({run.findings?.length || 0})</p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {(run.findings || []).slice(0, 20).map((f, i) => (
-                  <div key={i} className="rounded-lg px-3 py-2" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-[10px] font-mono" style={{ color: 'var(--accent)' }}>{f.source}</span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{f.timestamp}</span>
+                {(run.findings || []).slice(0, 20).map((f, i) => {
+                  const key = `iso-${run.id}-${i}`;
+                  return (
+                    <div key={i} className="rounded-lg px-3 py-2 flex items-start gap-2" style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-mono" style={{ color: 'var(--accent)' }}>{f.source}</span>
+                          <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{f.hostname}</span>
+                          <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{f.timestamp}</span>
+                        </div>
+                        <p className="text-[11px] truncate" style={{ color: 'var(--text-2)' }}>{f.message}</p>
+                      </div>
+                      {f.agent_id > 0 && (
+                        <button
+                          onClick={() => onRespond('isolate_host', { agent_id: f.agent_id, reason: `Hunt finding: ${f.message.slice(0, 120)}` }, key)}
+                          disabled={respondingKey === key}
+                          title={`Isolate ${f.hostname}`}
+                          className="text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap"
+                          style={{ background: 'rgba(248,81,73,0.12)', color: '#f85149' }}>
+                          {respondingKey === key ? '…' : 'Isolate Host'}
+                        </button>
+                      )}
                     </div>
-                    <p className="text-[11px] truncate" style={{ color: 'var(--text-2)' }}>{f.message}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -119,6 +137,14 @@ function RunCard({ run, onExpand, expanded, onUpdateNotes }: {
               <input value={notes} onChange={e => setNotes(e.target.value)} className="g-input text-xs w-full" placeholder="False positive / confirmed / escalated…" />
             </div>
             <button onClick={save} disabled={saving} className="g-btn g-btn-primary text-xs">{saving ? 'Saving…' : 'Save'}</button>
+            {run.hit_count > 0 && (
+              <button
+                onClick={() => onRespond('create_incident', { reason: run.name }, `inc-${run.id}`)}
+                disabled={respondingKey === `inc-${run.id}`}
+                className="g-btn g-btn-ghost text-xs whitespace-nowrap">
+                {respondingKey === `inc-${run.id}` ? 'Creating…' : 'Create Incident'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -159,6 +185,7 @@ const TABS = [
   { key: 'workspace',  label: 'Workspace',    icon: Search },
   { key: 'ioc-hunt',   label: 'IOC Hunt',     icon: Target },
   { key: 'ttp-hunt',   label: 'TTP Hunt',     icon: Shield },
+  { key: 'actor-hunt', label: 'Actor Hunt',   icon: Users },
   { key: 'templates',  label: 'Templates',    icon: BookOpen },
   { key: 'history',    label: 'History',      icon: Clock },
   { key: 'notebook',   label: 'Notebook',     icon: FileText },
@@ -204,6 +231,15 @@ export default function HuntWorkbenchPage() {
   const [ttpRunning, setTtpRunning] = useState<Partial<Record<TTPKEY, boolean>>>({});
   const [ttpRange, setTtpRange] = useState('24h');
 
+  // Actor hunt
+  const [actorName, setActorName] = useState('');
+  const [actorRange, setActorRange] = useState('7d');
+  const [actorResults, setActorResults] = useState<any>(null);
+  const [actorRunning, setActorRunning] = useState(false);
+
+  // Response actions (isolate_host / block_ip / create_incident, etc.)
+  const [respondingKey, setRespondingKey] = useState<string | null>(null);
+
   // notebook
   const [notebook, setNotebook] = useState<NoteEntry[]>([]);
   const [noteContent, setNoteContent] = useState('');
@@ -211,8 +247,6 @@ export default function HuntWorkbenchPage() {
   const [noteSaving, setNoteSaving] = useState(false);
 
   // AI
-  const [aiAction, setAiAction] = useState('generate_query');
-  const [aiPrompt, setAiPrompt] = useState('');
   const [aiResult, setAiResult] = useState<any>(null);
   const [aiRunning, setAiRunning] = useState(false);
 
@@ -264,6 +298,7 @@ export default function HuntWorkbenchPage() {
     const sess = sessions.find(s => s.id === sid);
     if (!sess || !sess.query) return;
     patchSession(sid, { running: true, run: null });
+    setAiResult(null);
     const r = await huntWorkbenchAPI.execute({ kql_query: sess.query, name: sess.name });
     if (r.data) {
       patchSession(sid, { running: false, run: r.data });
@@ -272,6 +307,22 @@ export default function HuntWorkbenchPage() {
     } else {
       patchSession(sid, { running: false });
     }
+  };
+
+  const explainSessionResults = async (sid: string) => {
+    const sess = sessions.find(s => s.id === sid);
+    if (!sess?.run?.findings?.length) return;
+    setAiRunning(true);
+    setAiResult(null);
+    try {
+      const r = await huntWorkbenchAPI.ai({
+        action: 'explain_results',
+        query: sess.query,
+        results: JSON.stringify(sess.run.findings.slice(0, 20)),
+      });
+      setAiResult(r.data);
+    } catch { notify('AI unavailable'); }
+    setAiRunning(false);
   };
 
   const generateKQL = async (sid: string) => {
@@ -352,6 +403,30 @@ export default function HuntWorkbenchPage() {
     setTtpRunning(prev => ({ ...prev, [ttp]: false }));
   };
 
+  const runActorHunt = async () => {
+    if (!actorName) return;
+    setActorRunning(true);
+    try {
+      const r = await huntWorkbenchAPI.actorHunt({ actor: actorName, time_range: actorRange });
+      setActorResults(r.data);
+    } catch { notify('Actor hunt failed'); }
+    setActorRunning(false);
+  };
+
+  // Dispatches a real response action (isolate_host / block_ip / create_incident / …)
+  // via the now-fixed POST /api/hunt/response — previously this endpoint only wrote
+  // an audit-log row and reported success with no real effect.
+  const dispatchResponse = async (action: string, opts: { agent_id?: number; target?: string; run_id?: number; reason?: string }, key: string) => {
+    setRespondingKey(key);
+    try {
+      const r = await huntWorkbenchAPI.response({ action, ...opts });
+      notify(r.data?.message || `${action} dispatched`);
+    } catch (e: any) {
+      notify(e?.response?.data?.error || `${action} failed`);
+    }
+    setRespondingKey(null);
+  };
+
   const addNote = async () => {
     if (!noteContent) return;
     setNoteSaving(true);
@@ -367,17 +442,6 @@ export default function HuntWorkbenchPage() {
   const deleteNote = async (id: number) => {
     await huntWorkbenchAPI.deleteNote(id);
     setNotebook(prev => prev.filter(n => n.id !== id));
-  };
-
-  const runAI = async () => {
-    if (!aiPrompt) return;
-    setAiRunning(true);
-    setAiResult(null);
-    try {
-      const r = await huntWorkbenchAPI.ai({ action: aiAction, prompt: aiPrompt, context: '' });
-      setAiResult(r.data);
-    } catch { notify('AI unavailable'); }
-    setAiRunning(false);
   };
 
   const filteredTemplates = useMemo(() =>
@@ -567,9 +631,10 @@ export default function HuntWorkbenchPage() {
                   <Plus className="h-3 w-3" /> Save as Template
                 </button>
                 <button
-                  onClick={() => { setAiPrompt(curSession.query); setAiAction('explain_results'); setTab('workspace'); }}
+                  onClick={() => explainSessionResults(curSession.id)}
+                  disabled={aiRunning || !curSession.run?.findings?.length}
                   className="g-btn g-btn-ghost text-xs flex items-center gap-1.5">
-                  <Brain className="h-3 w-3" /> AI Explain
+                  <Brain className="h-3 w-3" /> {aiRunning ? 'Analyzing…' : 'AI Explain'}
                 </button>
               </div>
 
@@ -586,6 +651,22 @@ export default function HuntWorkbenchPage() {
                       [{f.source}] {f.hostname}: {f.message}
                     </div>
                   ))}
+                  {aiResult && (
+                    <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 flex items-center gap-1" style={{ color: 'var(--accent)' }}>
+                        <Brain className="h-3 w-3" /> AI Analysis {aiResult.risk_level && <SevBadge sev={aiResult.risk_level} />}
+                      </p>
+                      {aiResult.summary && <p className="text-xs mb-1.5" style={{ color: 'var(--text-2)' }}>{aiResult.summary}</p>}
+                      {aiResult.false_positive_likelihood && (
+                        <p className="text-[10px] mb-1.5" style={{ color: 'var(--text-3)' }}>False positive likelihood: {aiResult.false_positive_likelihood}</p>
+                      )}
+                      {Array.isArray(aiResult.recommended_actions) && aiResult.recommended_actions.length > 0 && (
+                        <ul className="text-[11px] space-y-0.5 list-disc list-inside" style={{ color: 'var(--text-3)' }}>
+                          {aiResult.recommended_actions.map((a: string, i: number) => <li key={i}>{a}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -650,6 +731,14 @@ export default function HuntWorkbenchPage() {
                 <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: iocResults.total_hits > 0 ? 'rgba(248,81,73,0.15)' : 'var(--glass-bg-2)', color: iocResults.total_hits > 0 ? '#f85149' : 'var(--text-3)' }}>
                   {iocResults.total_hits} total hits
                 </span>
+                {iocResults.total_hits > 0 && (iocResults.ioc_type === 'ip' || iocResults.ioc_type === 'domain') && (
+                  <button
+                    onClick={() => dispatchResponse('block_ip', { target: iocResults.value, reason: `IOC hunt match (${iocResults.total_hits} hits)` }, 'ioc-block')}
+                    disabled={respondingKey === 'ioc-block'}
+                    className="g-btn g-btn-ghost text-xs ml-auto">
+                    {respondingKey === 'ioc-block' ? 'Blocking…' : 'Block'}
+                  </button>
+                )}
               </div>
               {iocResults.alert_hits?.length > 0 && (
                 <div>
@@ -739,6 +828,74 @@ export default function HuntWorkbenchPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── Actor Hunt ──────────────────────────────────────────────────────── */}
+      {tab === 'actor-hunt' && (
+        <div className="space-y-4">
+          <div className="g-card p-4 space-y-3">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Hunt by Threat Actor</p>
+            <div className="flex gap-3 flex-wrap items-end">
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-[10px] mb-1" style={{ color: 'var(--text-3)' }}>Actor Name</label>
+                <input value={actorName} onChange={e => setActorName(e.target.value)} className="g-input w-full text-sm"
+                  placeholder="APT29, Lazarus Group, FIN7…" />
+              </div>
+              <div>
+                <label className="block text-[10px] mb-1" style={{ color: 'var(--text-3)' }}>Time Range</label>
+                <select value={actorRange} onChange={e => setActorRange(e.target.value)} className="g-select text-sm">
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                </select>
+              </div>
+              <button onClick={runActorHunt} disabled={actorRunning || !actorName} className="g-btn g-btn-primary flex items-center gap-2">
+                <Users className="h-3.5 w-3.5" />{actorRunning ? 'Hunting…' : 'Hunt Actor'}
+              </button>
+            </div>
+          </div>
+
+          {actorResults && (
+            <div className="g-card p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Results for {actorResults.actor}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: actorResults.total_hits > 0 ? 'rgba(248,81,73,0.15)' : 'var(--glass-bg-2)', color: actorResults.total_hits > 0 ? '#f85149' : 'var(--text-3)' }}>
+                  {actorResults.total_hits} total hits
+                </span>
+              </div>
+              {actorResults.alert_hits?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#f85149' }}>Alerts ({actorResults.alert_hits.length})</p>
+                  {actorResults.alert_hits.map((h: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: '#f85149' }} />
+                      <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-1)' }}>{h.rule_name}</span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{h.hostname}</span>
+                      <SevBadge sev={h.severity} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {actorResults.ioc_hits?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-2)' }}>Attributed IOCs ({actorResults.ioc_hits.length})</p>
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {actorResults.ioc_hits.map((h: any, i: number) => (
+                      <div key={i} className="flex items-center gap-3 py-1.5 text-xs border-b" style={{ borderColor: 'var(--border)' }}>
+                        <Target className="h-3 w-3 shrink-0" style={{ color: 'var(--accent)' }} />
+                        <span className="font-mono" style={{ color: 'var(--text-1)' }}>{h.indicator}</span>
+                        <span style={{ color: 'var(--text-3)' }}>{h.type}</span>
+                        <span style={{ color: 'var(--text-3)' }}>{h.source}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {actorResults.total_hits === 0 && (
+                <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>No hits found in selected time range</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -842,7 +999,9 @@ export default function HuntWorkbenchPage() {
             <RunCard key={r.id} run={r}
               expanded={expandedRun === r.id}
               onExpand={() => setExpandedRun(prev => prev === r.id ? null : r.id)}
-              onUpdateNotes={updateNotes} />
+              onUpdateNotes={updateNotes}
+              onRespond={(action, opts, key) => dispatchResponse(action, { ...opts, run_id: r.id }, key)}
+              respondingKey={respondingKey} />
           ))}
         </div>
       )}
