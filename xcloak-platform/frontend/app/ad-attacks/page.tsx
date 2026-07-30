@@ -513,8 +513,8 @@ function LateralTab() {
       {sub === 'tiering' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {[
-            { label: 'Tier 0 — Control Plane', assets: tier.tier0_assets || [], color: '#ef4444', desc: 'Domain Controllers, PAWs, Tier-0 Groups' },
-            { label: 'Tier 1 — Server Administration', assets: tier.tier1_assets || [], color: '#f97316', desc: 'Server Admins, Member Servers' },
+            { label: 'Tier 0 — Control Plane', assets: tier.tier0_assets || [], color: '#ef4444', desc: 'Domain Controllers' },
+            { label: 'Tier 1 — Server Administration', assets: tier.tier1_assets || [], color: '#f97316', desc: 'Server Admins' },
             { label: 'Tier 2 — Workstation / User', assets: tier.tier2_assets || [], color: '#22c55e', desc: 'Workstations, Standard Users' },
           ].map(tierRow => (
             <div key={tierRow.label} className="g-card" style={{ padding: 20, borderLeft: `4px solid ${tierRow.color}` }}>
@@ -530,20 +530,6 @@ function LateralTab() {
               </div>
             </div>
           ))}
-          {(tier.privileged_sessions || []).length > 0 && (
-            <SectionCard title="Active Privileged Sessions">
-              <DataTable<any>
-                rows={tier.privileged_sessions}
-                rowKey={(s: any, i: number) => i}
-                columns={[
-                  { key: 'user', header: 'User', render: (s: any) => <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{s.user}</span> },
-                  { key: 'computer', header: 'Computer', render: (s: any) => <span style={{ fontFamily: 'monospace' }}>{s.computer}</span> },
-                  { key: 'start', header: 'Started', render: (s: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(s.start)}</span> },
-                  { key: 'duration', header: 'Duration', render: (s: any) => <span style={{ fontSize: 11 }}>{s.duration} min</span> },
-                ]}
-              />
-            </SectionCard>
-          )}
         </div>
       )}
       {sub === 'exposure' && (
@@ -614,20 +600,6 @@ function IntelligenceTab() {
       </div>
       {sub === 'intel' && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <SectionCard title="Threat Actors" className="flex-1">
-            <div style={{ minWidth: 260 }}>
-              {(ti.threat_actors || []).map((a: any) => (
-                <div key={a.actor} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700, color: '#ef4444' }}>{a.actor}</span>
-                    <SevBadge v={a.active ? 'critical' : 'medium'} />
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{a.target} · {a.campaigns} campaigns</div>
-                  <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 3, display: 'inline-block', marginTop: 6 }}>{a.ttps}</code>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
           <SectionCard title="IOC Matches" className="flex-1">
             <div style={{ minWidth: 260 }}>
               {(ti.ioc_matches || []).map((ioc: any) => (
@@ -636,22 +608,10 @@ function IntelligenceTab() {
                     <code style={{ fontSize: 11 }}>{ioc.value}</code>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444' }}>{ioc.hits} hits</span>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{ioc.type?.toUpperCase()} · {ioc.category?.replace(/_/g, ' ')} · {ioc.threat_actor}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{ioc.type?.toUpperCase()}</div>
                 </div>
               ))}
-            </div>
-          </SectionCard>
-          <SectionCard title="Malware & Tools" className="flex-1">
-            <div style={{ minWidth: 260 }}>
-              {(ti.malware || []).map((m: any) => (
-                <div key={m.family} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{m.family}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{m.category?.replace(/_/g, ' ')}</div>
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: m.detections > 0 ? '#ef4444' : '#22c55e' }}>{m.detections} detections</span>
-                </div>
-              ))}
+              {(ti.ioc_matches || []).length === 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>No IOC matches yet.</div>}
             </div>
           </SectionCard>
         </div>
@@ -713,23 +673,6 @@ function IntelligenceTab() {
                   )}
                 </div>
               )}
-            </div>
-          </SectionCard>
-          <SectionCard title="AI Insights" className="flex-1">
-            <div style={{ minWidth: 300 }}>
-              {[
-                { title: 'Kerberoasting Pattern Detected', insight: 'The service account svc_backup requested an unusually high number of Kerberos service tickets (23 in 4 minutes), consistent with automated Kerberoasting tooling (Rubeus).', severity: 'critical' },
-                { title: 'Impossible Travel Alert', insight: 'jsmith authenticated from Chicago and New York City within 4 minutes — indicating credential theft and relay from a remote attacker.', severity: 'high' },
-                { title: 'DCSync from Non-DC Host', insight: 'The Domain Admin account authenticated from WS-INFECTED01, a workstation it has never used before, then performed MS-DRSR replication requests.', severity: 'critical' },
-              ].map((ins, i) => (
-                <div key={i} style={{ marginBottom: 14, padding: '12px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, borderLeft: `3px solid ${ins.severity === 'critical' ? '#ef4444' : '#f97316'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12 }}>{ins.title}</span>
-                    <SevBadge v={ins.severity} />
-                  </div>
-                  <p style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5, margin: 0 }}>{ins.insight}</p>
-                </div>
-              ))}
             </div>
           </SectionCard>
         </div>
@@ -883,12 +826,12 @@ function ResponseTab() {
   const [target, setTarget] = useState('');
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState('');
+  const [msgErr, setMsgErr] = useState(false);
   const [reportType, setReportType] = useState('executive');
   const [reportResult, setReportResult] = useState<any>(null);
   const [reportLoading, setReportLoading] = useState(false);
   useEffect(() => { adSecurityAPI.getAttackPaths().then(r => setAttackPaths(r.data)); }, []);
   const ap = attackPaths || {};
-  const NODE_COLOR: Record<string, string> = { domain_controller: '#ef4444', user: '#3b82f6', service_account: '#a855f7', group: '#f97316', computer: '#22c55e', gpo: '#eab308', technique: '#dc2626' };
   const ACTIONS = [
     { id: 'disable_user', label: 'Disable User', desc: 'Disable AD account immediately', color: '#ef4444' },
     { id: 'reset_password', label: 'Reset Password', desc: 'Force password change on next login', color: '#f97316' },
@@ -896,11 +839,16 @@ function ResponseTab() {
     { id: 'remove_group_membership', label: 'Remove Group Membership', desc: 'Remove from privileged group', color: '#f97316' },
     { id: 'disable_service_account', label: 'Disable Service Account', desc: 'Disable service account', color: '#ef4444' },
     { id: 'isolate_endpoint', label: 'Isolate Endpoint', desc: 'Send isolation to EDR', color: '#3b82f6' },
-    { id: 'run_soar_playbook', label: 'Run SOAR Playbook', desc: 'Trigger identity response playbook', color: '#22c55e' },
   ];
   const doAction = async () => {
-    const r = await adSecurityAPI.respond({ action, target, reason });
-    setMsg(r.data?.message || 'Action executed');
+    try {
+      const r = await adSecurityAPI.respond({ action, target, reason });
+      setMsg(r.data?.message || 'Action executed');
+      setMsgErr(false);
+    } catch (err: any) {
+      setMsg(err?.response?.data?.error || 'Action failed');
+      setMsgErr(true);
+    }
     setTimeout(() => setMsg(''), 5000);
   };
   const doReport = async () => {
@@ -909,23 +857,34 @@ function ResponseTab() {
     setReportResult(r.data);
     setReportLoading(false);
   };
+  const riskIdentities = ap.risk_identities || [];
+  const riskComputers = ap.risk_computers || [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <SectionCard title="Attack Path">
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', minWidth: 500, padding: '8px 0' }}>
-            {(ap.nodes || []).map((node: any, i: number) => (
-              <div key={node.id} style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ textAlign: 'center' as const, minWidth: 110 }}>
-                  <div style={{ padding: '8px 12px', borderRadius: 8, background: `${NODE_COLOR[node.type] || '#888'}22`, border: `1px solid ${NODE_COLOR[node.type] || '#888'}44`, color: NODE_COLOR[node.type] || 'var(--text-1)', fontSize: 11, fontWeight: 700 }}>
-                    {node.label}
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 3 }}>{node.type?.replace(/_/g, ' ')}</div>
-                  <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>{node.detail}</div>
+      <SectionCard title="Top Risk Factors">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 8 }}>Highest-Risk Privileged Identities</div>
+            {riskIdentities.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>No admin/service accounts found.</div>}
+            {riskIdentities.map((u: any) => (
+              <div key={u.sam_account} style={{ marginBottom: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <code style={{ fontSize: 11, fontWeight: 600 }}>{u.sam_account}</code>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: u.risk_score >= 80 ? '#ef4444' : u.risk_score >= 60 ? '#f97316' : '#22c55e' }}>{u.risk_score}</span>
                 </div>
-                {i < (ap.nodes || []).length - 1 && (
-                  <div style={{ color: '#ef4444', fontSize: 18, padding: '0 4px', marginBottom: 18 }}>→</div>
-                )}
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{u.display_name} · {u.is_admin ? 'admin' : 'service account'}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase' as const, marginBottom: 8 }}>Computers with Unconstrained Delegation</div>
+            {riskComputers.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>None found.</div>}
+            {riskComputers.map((cmp: any) => (
+              <div key={cmp.name} style={{ marginBottom: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <code style={{ fontSize: 11, fontWeight: 600 }}>{cmp.name}</code>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: cmp.risk_score >= 80 ? '#ef4444' : cmp.risk_score >= 60 ? '#f97316' : '#22c55e' }}>{cmp.risk_score}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -945,14 +904,19 @@ function ResponseTab() {
             <input className="g-input" placeholder="Target (user/computer)" value={target} onChange={e => setTarget(e.target.value)} style={{ marginBottom: 8, width: '100%' }} />
             <input className="g-input" placeholder="Reason / ticket number" value={reason} onChange={e => setReason(e.target.value)} style={{ marginBottom: 12, width: '100%' }} />
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <ActionButton variant="ghost" style={{ fontSize: 11 }}>Open Timeline</ActionButton>
-              <ActionButton variant="ghost" style={{ fontSize: 11 }}>Start Hunt</ActionButton>
-              <ActionButton variant="ghost" style={{ fontSize: 11 }}>Log Search</ActionButton>
+              <a href="/timeline" className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Open Timeline</a>
+              <a href="/hunt-workbench" className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Start Hunt</a>
+              <a href="/log-search" className="g-btn g-btn-ghost" style={{ fontSize: 11 }}>Log Search</a>
             </div>
             <ActionButton variant="primary" style={{ width: '100%', justifyContent: 'center' }} onClick={doAction}>
               Execute: {ACTIONS.find(a => a.id === action)?.label}
             </ActionButton>
-            {msg && <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 6, fontSize: 12, color: '#4ade80' }}>{msg}</div>}
+            <a href="/playbooks" className="g-btn g-btn-ghost" style={{ marginTop: 8, width: '100%', justifyContent: 'center', display: 'flex' }}>
+              Run SOAR Playbook
+            </a>
+            {msg && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: msgErr ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', border: `1px solid ${msgErr ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`, borderRadius: 6, fontSize: 12, color: msgErr ? '#f87171' : '#4ade80' }}>{msg}</div>
+            )}
           </div>
         </SectionCard>
         <SectionCard title="Generate Report" className="flex-1">

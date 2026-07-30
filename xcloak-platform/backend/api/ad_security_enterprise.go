@@ -104,21 +104,23 @@ func GetADDashboard(c *gin.Context) {
 	var failedLogins int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_events WHERE tenant_id=$1 AND event_type='failed_login' AND created_at > NOW() - INTERVAL '24 hours'`, tid).Scan(&failedLogins)
 	c.JSON(http.StatusOK, gin.H{
-		"forests":          forests,
-		"domains":          domains,
-		"domain_controllers": dcs,
-		"domain_trusts":    trusts,
-		"high_risk_users":  highRiskUsers,
+		"forests":             forests,
+		"domains":             domains,
+		"domain_controllers":  dcs,
+		"domain_trusts":       trusts,
+		"high_risk_users":     highRiskUsers,
 		"privileged_accounts": privAccounts,
-		"active_attacks":   activeAttacks,
-		"ad_risk_score":    int(adRiskScore),
-		"identity_exposure": highRiskUsers*100/max(privAccounts, 1),
-		"failed_logins_24h": failedLogins,
+		"active_attacks":      activeAttacks,
+		"ad_risk_score":       int(adRiskScore),
+		"identity_exposure":   highRiskUsers * 100 / max(privAccounts, 1),
+		"failed_logins_24h":   failedLogins,
 	})
 }
 
 func max(a, b int) int {
-	if a > b { return a }
+	if a > b {
+		return a
+	}
 	return b
 }
 
@@ -161,19 +163,21 @@ func GetADInventory(c *gin.Context) {
 			}
 		}
 	}
-	if domainList == nil { domainList = []Domain{} }
+	if domainList == nil {
+		domainList = []Domain{}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"forests":          forests,
-		"domains":          domains,
+		"forests":            forests,
+		"domains":            domains,
 		"domain_controllers": dcs,
-		"users":            users,
-		"service_accounts": serviceAccounts,
-		"admin_accounts":   admins,
-		"computers":        computers,
-		"gpos":             gpos,
-		"groups":           groups,
-		"domain_list":      domainList,
+		"users":              users,
+		"service_accounts":   serviceAccounts,
+		"admin_accounts":     admins,
+		"computers":          computers,
+		"gpos":               gpos,
+		"groups":             groups,
+		"domain_list":        domainList,
 	})
 }
 
@@ -207,23 +211,24 @@ func GetADIdentityRisk(c *gin.Context) {
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type User struct {
-		ID                  int    `json:"id"`
-		SAMAccount          string `json:"sam_account"`
-		DisplayName         string `json:"display_name"`
-		Email               string `json:"email"`
-		Department          string `json:"department"`
-		IsAdmin             bool   `json:"is_admin"`
-		IsServiceAccount    bool   `json:"is_service_account"`
-		IsEnabled           bool   `json:"is_enabled"`
-		PasswordNeverExpires bool  `json:"password_never_expires"`
-		LastLogon           string `json:"last_logon"`
-		LastPasswordChange  string `json:"last_password_change"`
-		RiskScore           int    `json:"risk_score"`
-		CreatedAt           string `json:"created_at"`
+		ID                   int    `json:"id"`
+		SAMAccount           string `json:"sam_account"`
+		DisplayName          string `json:"display_name"`
+		Email                string `json:"email"`
+		Department           string `json:"department"`
+		IsAdmin              bool   `json:"is_admin"`
+		IsServiceAccount     bool   `json:"is_service_account"`
+		IsEnabled            bool   `json:"is_enabled"`
+		PasswordNeverExpires bool   `json:"password_never_expires"`
+		LastLogon            string `json:"last_logon"`
+		LastPasswordChange   string `json:"last_password_change"`
+		RiskScore            int    `json:"risk_score"`
+		CreatedAt            string `json:"created_at"`
 	}
 	users := []User{}
 	for rows.Next() {
@@ -234,7 +239,9 @@ func GetADIdentityRisk(c *gin.Context) {
 			users = append(users, u)
 		}
 	}
-	if users == nil { users = []User{} }
+	if users == nil {
+		users = []User{}
+	}
 	var highRisk, dormant, passwordNeverExpires, adminCount, serviceAccounts int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND risk_score>70`, tid).Scan(&highRisk)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND last_logon < NOW() - INTERVAL '90 days'`, tid).Scan(&dormant)
@@ -242,12 +249,12 @@ func GetADIdentityRisk(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND is_admin=true`, tid).Scan(&adminCount)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND is_service_account=true`, tid).Scan(&serviceAccounts)
 	c.JSON(http.StatusOK, gin.H{
-		"users":                 users,
-		"high_risk":             highRisk,
-		"dormant":               dormant,
+		"users":                  users,
+		"high_risk":              highRisk,
+		"dormant":                dormant,
 		"password_never_expires": passwordNeverExpires,
-		"admin_accounts":        adminCount,
-		"service_accounts":      serviceAccounts,
+		"admin_accounts":         adminCount,
+		"service_accounts":       serviceAccounts,
 	})
 }
 
@@ -287,7 +294,9 @@ func GetADAuthMonitor(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []Event{} }
+	if events == nil {
+		events = []Event{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"failed_logins":     failedLogins,
 		"password_spray":    passwordSpray,
@@ -311,25 +320,32 @@ func GetADAttacks(c *gin.Context) {
 		switch v {
 		case "kerberos":
 			q += fmt.Sprintf(" AND attack_type IN ('kerberoasting','as_rep_roasting','golden_ticket','silver_ticket','pass_the_ticket','kerberos_delegation') AND tenant_id=$%d", i)
-			args = append(args, tid); i++
+			args = append(args, tid)
+			i++
 		case "credential":
 			q += fmt.Sprintf(" AND attack_type IN ('pass_the_hash','credential_dumping','lsass_access','dcsync','dcshadow','skeleton_key','sam_access') AND tenant_id=$%d", i)
-			args = append(args, tid); i++
+			args = append(args, tid)
+			i++
 		case "privilege":
 			q += fmt.Sprintf(" AND attack_type IN ('admin_group_change','domain_admin_creation','sid_history_abuse','privilege_escalation') AND tenant_id=$%d", i)
-			args = append(args, tid); i++
+			args = append(args, tid)
+			i++
 		case "lateral":
 			q += fmt.Sprintf(" AND attack_type IN ('psexec','lateral_smb','lateral_rdp','lateral_winrm','lateral_wmi','lateral_dcom') AND tenant_id=$%d", i)
-			args = append(args, tid); i++
+			args = append(args, tid)
+			i++
 		}
 	} else if v := c.Query("attack_type"); v != "" {
-		q += fmt.Sprintf(" AND attack_type=$%d", i); args = append(args, v); i++
+		q += fmt.Sprintf(" AND attack_type=$%d", i)
+		args = append(args, v)
+		i++
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", i)
 	args = append(args, limit)
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 	type Attack struct {
@@ -354,7 +370,9 @@ func GetADAttacks(c *gin.Context) {
 			attacks = append(attacks, a)
 		}
 	}
-	if attacks == nil { attacks = []Attack{} }
+	if attacks == nil {
+		attacks = []Attack{}
+	}
 	var kerberoasting, asRepRoasting, goldenTicket, passTH, dcSync, dcShadow, lateralMove, privEsc int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_attacks WHERE tenant_id=$1 AND attack_type='kerberoasting' AND status='open'`, tid).Scan(&kerberoasting)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_attacks WHERE tenant_id=$1 AND attack_type='as_rep_roasting' AND status='open'`, tid).Scan(&asRepRoasting)
@@ -401,7 +419,9 @@ func GetADGPOChanges(c *gin.Context) {
 			}
 		}
 	}
-	if gpos == nil { gpos = []GPO{} }
+	if gpos == nil {
+		gpos = []GPO{}
+	}
 	c.JSON(http.StatusOK, gpos)
 }
 
@@ -435,29 +455,59 @@ func GetADChanges(c *gin.Context) {
 			}
 		}
 	}
-	if changes == nil { changes = []Change{} }
+	if changes == nil {
+		changes = []Change{}
+	}
 	c.JSON(http.StatusOK, changes)
 }
 
 // GetADAttackPaths — GET /api/ad/attack-paths
 func GetADAttackPaths(c *gin.Context) {
 	createADSecurityTables()
+	tid := tenantIDFromContext(c)
+
+	riskIdentities := []map[string]interface{}{}
+	idRows, err := database.DB.Query(`
+		SELECT sam_account, display_name, is_admin, is_service_account, risk_score
+		FROM ad_users WHERE tenant_id=$1 AND (is_admin=true OR is_service_account=true)
+		ORDER BY risk_score DESC LIMIT 5`, tid)
+	if err == nil {
+		defer idRows.Close()
+		for idRows.Next() {
+			var sam, display string
+			var admin, svc bool
+			var risk int
+			if idRows.Scan(&sam, &display, &admin, &svc, &risk) == nil {
+				riskIdentities = append(riskIdentities, map[string]interface{}{
+					"sam_account": sam, "display_name": display,
+					"is_admin": admin, "is_service_account": svc, "risk_score": risk,
+				})
+			}
+		}
+	}
+
+	riskComputers := []map[string]interface{}{}
+	compRows, err := database.DB.Query(`
+		SELECT name, has_unconstrained_delegation, risk_score
+		FROM ad_computers WHERE tenant_id=$1 AND has_unconstrained_delegation=true
+		ORDER BY risk_score DESC LIMIT 5`, tid)
+	if err == nil {
+		defer compRows.Close()
+		for compRows.Next() {
+			var name string
+			var delegation bool
+			var risk int
+			if compRows.Scan(&name, &delegation, &risk) == nil {
+				riskComputers = append(riskComputers, map[string]interface{}{
+					"name": name, "has_unconstrained_delegation": delegation, "risk_score": risk,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"nodes": []map[string]interface{}{
-			{"id": "user-svc", "label": "svc_backup", "type": "service_account", "risk": 85, "detail": "Kerberoastable SPN"},
-			{"id": "kerberoast", "label": "Kerberoast", "type": "technique", "risk": 100, "detail": "T1558.003"},
-			{"id": "user-hcraig", "label": "hcraig", "type": "user", "risk": 72, "detail": "IT Admin"},
-			{"id": "group-da", "label": "Domain Admins", "type": "group", "risk": 100, "detail": "12 members"},
-			{"id": "dc-prod", "label": "DC01.corp.local", "type": "domain_controller", "risk": 100, "detail": "PDC Emulator"},
-			{"id": "gpo-default", "label": "Default Domain Policy", "type": "gpo", "risk": 80, "detail": "Weak password policy"},
-		},
-		"edges": []map[string]interface{}{
-			{"source": "user-svc", "target": "kerberoast", "label": "vulnerable to", "risk": "critical"},
-			{"source": "kerberoast", "target": "user-hcraig", "label": "ticket cracked → pivot", "risk": "critical"},
-			{"source": "user-hcraig", "target": "group-da", "label": "member of", "risk": "critical"},
-			{"source": "group-da", "target": "dc-prod", "label": "controls", "risk": "critical"},
-			{"source": "gpo-default", "target": "dc-prod", "label": "linked to", "risk": "high"},
-		},
+		"risk_identities": riskIdentities,
+		"risk_computers":  riskComputers,
 	})
 }
 
@@ -465,27 +515,21 @@ func GetADAttackPaths(c *gin.Context) {
 func GetADTiering(c *gin.Context) {
 	createADSecurityTables()
 	tid := tenantIDFromContext(c)
-	var tier0, tier1, tier2 int
+	var tier0, tier1, tier2, standardUsers int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_domain_controllers WHERE tenant_id=$1`, tid).Scan(&tier0)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND is_admin=true`, tid).Scan(&tier1)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_computers WHERE tenant_id=$1`, tid).Scan(&tier2)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND is_admin=false AND is_service_account=false`, tid).Scan(&standardUsers)
 	c.JSON(http.StatusOK, gin.H{
 		"tier0_assets": []map[string]interface{}{
 			{"name": "Domain Controllers", "count": tier0, "type": "dc"},
-			{"name": "AD Admin Workstations", "count": 2, "type": "paw"},
-			{"name": "Tier-0 Groups", "count": 3, "type": "group"},
 		},
 		"tier1_assets": []map[string]interface{}{
 			{"name": "Server Admins", "count": tier1, "type": "admin_user"},
-			{"name": "Member Servers", "count": 8, "type": "server"},
 		},
 		"tier2_assets": []map[string]interface{}{
 			{"name": "Workstations", "count": tier2, "type": "workstation"},
-			{"name": "Standard Users", "count": 847, "type": "user"},
-		},
-		"privileged_sessions": []map[string]interface{}{
-			{"user": "administrator", "computer": "WS-ADMIN01", "start": time.Now().Add(-2*time.Hour).Format(time.RFC3339), "duration": 120},
-			{"user": "jsmith", "computer": "DC01", "start": time.Now().Add(-30*time.Minute).Format(time.RFC3339), "duration": 30},
+			{"name": "Standard Users", "count": standardUsers, "type": "user"},
 		},
 	})
 }
@@ -496,44 +540,59 @@ func GetADExposure(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	var unconstrainedDelegation int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_computers WHERE tenant_id=$1 AND has_unconstrained_delegation=true`, tid).Scan(&unconstrainedDelegation)
+
+	affected := []string{}
+	rows, err := database.DB.Query(`SELECT name FROM ad_computers WHERE tenant_id=$1 AND has_unconstrained_delegation=true LIMIT 10`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			if rows.Scan(&name) == nil {
+				affected = append(affected, name)
+			}
+		}
+	}
+
+	findings := []map[string]interface{}{}
+	if unconstrainedDelegation > 0 {
+		findings = append(findings, map[string]interface{}{
+			"type": "unconstrained_delegation", "severity": "critical", "count": unconstrainedDelegation,
+			"description": "Computers with unconstrained Kerberos delegation — any authenticated user's TGT is cached",
+			"affected":    affected,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"unconstrained_delegation": unconstrainedDelegation,
-		"findings": []map[string]interface{}{
-			{"type": "unconstrained_delegation", "severity": "critical", "count": unconstrainedDelegation + 2, "description": "Computers with unconstrained Kerberos delegation — any authenticated user's TGT is cached", "affected": []string{"FILE01", "PRINT01", "WEB-SRV01"}},
-			{"type": "constrained_delegation_abuse", "severity": "high", "count": 1, "description": "Service accounts with S4U2Self/S4U2Proxy delegation misconfiguration", "affected": []string{"svc_app_pool"}},
-			{"type": "rbcd", "severity": "high", "count": 0, "description": "Resource-Based Constrained Delegation paths that allow lateral movement", "affected": []string{}},
-			{"type": "weak_acls", "severity": "high", "count": 4, "description": "ACLs granting WriteDACL / GenericAll / GenericWrite to non-admin principals", "affected": []string{"svc_backup → Domain Admins", "jsmith → Domain Admins OU", "helpdesk → Reset Password"}},
-			{"type": "excessive_privileges", "severity": "high", "count": 3, "description": "Regular users in privileged groups without business justification", "affected": []string{"bob@corp.local in Domain Admins", "temp-admin in Enterprise Admins"}},
-			{"type": "anonymous_ldap", "severity": "medium", "count": 1, "description": "LDAP allows anonymous binds — unauthenticated enumeration possible", "affected": []string{"DC01.corp.local"}},
-			{"type": "legacy_protocols", "severity": "medium", "count": 3, "description": "NTLMv1, LM, and WDigest authentication enabled on DCs", "affected": []string{"NTLM v1 enabled", "WDigest plaintext caching", "LM hashes enabled"}},
-		},
+		"findings":                 findings,
 	})
 }
 
 // GetADThreatIntel — GET /api/ad/threat-intel
 func GetADThreatIntel(c *gin.Context) {
 	createADSecurityTables()
+	tid := tenantIDFromContext(c)
+
+	iocMatches := []map[string]interface{}{}
+	rows, err := database.DB.Query(`
+		SELECT indicator, type, hit_count FROM iocs
+		WHERE tenant_id=$1 AND enabled=true AND type IN ('ip','hash','sha256','md5')
+		ORDER BY hit_count DESC LIMIT 10`, tid)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var indicator, itype string
+			var hits int
+			if rows.Scan(&indicator, &itype, &hits) == nil {
+				iocMatches = append(iocMatches, map[string]interface{}{
+					"type": itype, "value": indicator, "hits": hits,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"threat_actors": []map[string]interface{}{
-			{"actor": "Lazarus Group", "campaigns": 2, "target": "Financial institutions", "ttps": "T1558.003,T1550.002,T1059.001", "active": true},
-			{"actor": "APT29 (Cozy Bear)", "campaigns": 1, "target": "Government / Defense", "ttps": "T1558.001,T1003.001,T1484", "active": true},
-			{"actor": "FIN7", "campaigns": 1, "target": "Retail / Finance", "ttps": "T1078,T1550.002,T1021.002", "active": false},
-		},
-		"malware": []map[string]interface{}{
-			{"family": "Mimikatz", "detections": 2, "category": "credential_theft", "cve": "N/A"},
-			{"family": "Impacket", "detections": 1, "category": "lateral_movement", "cve": "N/A"},
-			{"family": "Rubeus", "detections": 3, "category": "kerberos_attacks", "cve": "N/A"},
-			{"family": "BloodHound", "detections": 0, "category": "recon", "cve": "N/A"},
-		},
-		"ioc_matches": []map[string]interface{}{
-			{"type": "ip", "value": "192.168.100.47", "hits": 8, "category": "c2_server", "threat_actor": "APT29"},
-			{"type": "hash", "value": "fc3e4b4e6c1a7b5d2f9e0a3b6c8d1e2f", "hits": 3, "category": "mimikatz_variant", "threat_actor": "Unknown"},
-			{"type": "user", "value": "svc_backup", "hits": 12, "category": "compromised_account", "threat_actor": "Lazarus"},
-		},
-		"credential_campaigns": []map[string]interface{}{
-			{"campaign": "Kerberoasting Wave", "first_seen": "2026-07-10", "last_seen": "2026-07-16", "accounts_targeted": 7, "tickets_requested": 23},
-			{"campaign": "DCSync Attempt", "first_seen": "2026-07-14", "last_seen": "2026-07-14", "accounts_targeted": 1, "tickets_requested": 0},
-		},
+		"ioc_matches": iocMatches,
 	})
 }
 
@@ -564,7 +623,9 @@ func GetADTimeline(c *gin.Context) {
 			}
 		}
 	}
-	if events == nil { events = []TLEvent{} }
+	if events == nil {
+		events = []TLEvent{}
+	}
 	c.JSON(http.StatusOK, events)
 }
 
@@ -592,7 +653,8 @@ Provide compact JSON: {"answer":"concise answer","confidence":85,"recommended_ac
 	}
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]
@@ -609,35 +671,83 @@ Provide compact JSON: {"answer":"concise answer","confidence":85,"recommended_ac
 func GetADRelationshipGraph(c *gin.Context) {
 	createADSecurityTables()
 	tid := tenantIDFromContext(c)
-	var userCount, groupCount, computerCount, dcCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 LIMIT 10`, tid).Scan(&userCount)
+	var userCount, computerCount, dcCount, adminCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1`, tid).Scan(&userCount)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_computers WHERE tenant_id=$1`, tid).Scan(&computerCount)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_domain_controllers WHERE tenant_id=$1`, tid).Scan(&dcCount)
-	_ = groupCount
+	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND is_admin=true`, tid).Scan(&adminCount)
+
+	nodes := []map[string]interface{}{}
+	edges := []map[string]interface{}{}
+
+	type dc struct{ id, name string }
+	dcs := []dc{}
+	dcRows, err := database.DB.Query(`SELECT id, name, risk_score FROM ad_domain_controllers WHERE tenant_id=$1 LIMIT 3`, tid)
+	if err == nil {
+		defer dcRows.Close()
+		for dcRows.Next() {
+			var id, name string
+			var risk int
+			if dcRows.Scan(&id, &name, &risk) == nil {
+				nodeID := "dc-" + id
+				nodes = append(nodes, map[string]interface{}{"id": nodeID, "label": name, "type": "domain_controller", "risk": risk})
+				dcs = append(dcs, dc{id: nodeID, name: name})
+			}
+		}
+	}
+
+	if adminCount > 0 {
+		nodes = append(nodes, map[string]interface{}{"id": "group-domain-admins", "label": "Domain Admins", "type": "group", "risk": 100, "members": adminCount})
+		for _, d := range dcs {
+			edges = append(edges, map[string]interface{}{"source": "group-domain-admins", "target": d.id, "label": "AdminTo", "risk": "critical"})
+		}
+	}
+
+	userRows, err := database.DB.Query(`
+		SELECT id, sam_account, is_admin, is_service_account, risk_score
+		FROM ad_users WHERE tenant_id=$1 AND (is_admin=true OR is_service_account=true)
+		ORDER BY risk_score DESC LIMIT 6`, tid)
+	if err == nil {
+		defer userRows.Close()
+		for userRows.Next() {
+			var id, sam string
+			var admin, svc bool
+			var risk int
+			if userRows.Scan(&id, &sam, &admin, &svc, &risk) == nil {
+				nodeID := "user-" + id
+				ntype := "service_account"
+				if admin {
+					ntype = "user"
+				}
+				nodes = append(nodes, map[string]interface{}{"id": nodeID, "label": sam, "type": ntype, "risk": risk})
+				if admin {
+					edges = append(edges, map[string]interface{}{"source": nodeID, "target": "group-domain-admins", "label": "memberOf", "risk": "critical"})
+				}
+			}
+		}
+	}
+
+	compRows, err := database.DB.Query(`
+		SELECT id, name, risk_score FROM ad_computers
+		WHERE tenant_id=$1 AND has_unconstrained_delegation=true LIMIT 5`, tid)
+	if err == nil {
+		defer compRows.Close()
+		for compRows.Next() {
+			var id, name string
+			var risk int
+			if compRows.Scan(&id, &name, &risk) == nil {
+				nodeID := "comp-" + id
+				nodes = append(nodes, map[string]interface{}{"id": nodeID, "label": name, "type": "computer", "risk": risk})
+				if len(dcs) > 0 {
+					edges = append(edges, map[string]interface{}{"source": nodeID, "target": dcs[0].id, "label": "UnconstrainedDelegation", "risk": "critical"})
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"nodes": []map[string]interface{}{
-			{"id": "dc01", "label": "DC01.corp.local", "type": "domain_controller", "risk": 85},
-			{"id": "dc02", "label": "DC02.corp.local", "type": "domain_controller", "risk": 72},
-			{"id": "group-da", "label": "Domain Admins", "type": "group", "risk": 90, "members": 6},
-			{"id": "group-ea", "label": "Enterprise Admins", "type": "group", "risk": 95, "members": 3},
-			{"id": "user-admin", "label": "administrator", "type": "user", "risk": 60},
-			{"id": "user-jsmith", "label": "jsmith", "type": "user", "risk": 82},
-			{"id": "user-svcbak", "label": "svc_backup", "type": "service_account", "risk": 91},
-			{"id": "comp-ws01", "label": "WS-ADMIN01", "type": "computer", "risk": 55},
-			{"id": "comp-srv01", "label": "FILE-SRV01", "type": "computer", "risk": 68},
-			{"id": "gpo-default", "label": "Default Domain Policy", "type": "gpo", "risk": 75},
-		},
-		"edges": []map[string]interface{}{
-			{"source": "user-admin", "target": "group-da", "label": "memberOf", "risk": "critical"},
-			{"source": "user-jsmith", "target": "group-da", "label": "memberOf", "risk": "critical"},
-			{"source": "user-svcbak", "target": "group-da", "label": "memberOf", "risk": "critical"},
-			{"source": "group-da", "target": "dc01", "label": "AdminTo", "risk": "critical"},
-			{"source": "group-da", "target": "dc02", "label": "AdminTo", "risk": "critical"},
-			{"source": "group-ea", "target": "group-da", "label": "GenericAll", "risk": "critical"},
-			{"source": "user-jsmith", "target": "comp-ws01", "label": "AdminTo", "risk": "high"},
-			{"source": "comp-srv01", "target": "dc01", "label": "UnconstrainedDelegation", "risk": "critical"},
-			{"source": "gpo-default", "target": "dc01", "label": "AppliesTo", "risk": "high"},
-		},
+		"nodes": nodes,
+		"edges": edges,
 		"stats": gin.H{"users": userCount, "computers": computerCount, "dcs": dcCount},
 	})
 }
@@ -664,26 +774,40 @@ func GetADAnalytics(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_attacks WHERE tenant_id=$1 AND attack_type='dcsync'`, tid).Scan(&dcSync)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_attacks WHERE tenant_id=$1 AND attack_type IN ('admin_group_change','domain_admin_creation','privilege_escalation')`, tid).Scan(&privEsc)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_events WHERE tenant_id=$1 AND event_type='domain_admin_creation' AND created_at > NOW() - INTERVAL '7 days'`, tid).Scan(&newAdmins)
+
+	topFailedLogins := []map[string]interface{}{}
+	flRows, err := database.DB.Query(`
+		SELECT source_user, COUNT(*) AS cnt, MAX(source_ip) AS ip
+		FROM ad_events WHERE tenant_id=$1 AND event_type='failed_login' AND source_user != ''
+		GROUP BY source_user ORDER BY cnt DESC LIMIT 5`, tid)
+	if err == nil {
+		defer flRows.Close()
+		for flRows.Next() {
+			var user, ip string
+			var cnt int
+			if flRows.Scan(&user, &cnt, &ip) == nil {
+				topFailedLogins = append(topFailedLogins, map[string]interface{}{
+					"user": user, "count": cnt, "source_ip": ip,
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"auth_trend":        authTrend,
-		"total_attacks":     totalAttacks,
-		"kerberoasting":     kerberoasting,
-		"pass_the_hash":     passHash,
-		"dcsync_attempts":   dcSync,
-		"priv_escalations":  privEsc,
-		"new_admins_7d":     newAdmins,
-		"attack_breakdown":  []map[string]interface{}{
+		"auth_trend":       authTrend,
+		"total_attacks":    totalAttacks,
+		"kerberoasting":    kerberoasting,
+		"pass_the_hash":    passHash,
+		"dcsync_attempts":  dcSync,
+		"priv_escalations": privEsc,
+		"new_admins_7d":    newAdmins,
+		"attack_breakdown": []map[string]interface{}{
 			{"type": "Kerberoasting", "count": kerberoasting},
 			{"type": "Pass-the-Hash", "count": passHash},
 			{"type": "DCSync", "count": dcSync},
 			{"type": "Priv Escalation", "count": privEsc},
 		},
-		"top_failed_logins": []map[string]interface{}{
-			{"user": "administrator", "count": 47, "source_ip": "192.168.100.47"},
-			{"user": "jsmith", "count": 23, "source_ip": "10.0.1.88"},
-			{"user": "svc_backup", "count": 18, "source_ip": "10.0.2.112"},
-			{"user": "hcraig", "count": 11, "source_ip": "192.168.50.22"},
-		},
+		"top_failed_logins": topFailedLogins,
 	})
 }
 
@@ -691,51 +815,114 @@ func GetADAnalytics(c *gin.Context) {
 func GetADAssessment(c *gin.Context) {
 	createADSecurityTables()
 	tid := tenantIDFromContext(c)
-	var unconstrainedDelegation, passwordNeverExpires, staleComputers int
+	var unconstrainedDelegation, passwordNeverExpires, staleComputers, inactivePrivileged int
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_computers WHERE tenant_id=$1 AND has_unconstrained_delegation=true`, tid).Scan(&unconstrainedDelegation)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND password_never_expires=true`, tid).Scan(&passwordNeverExpires)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_computers WHERE tenant_id=$1 AND is_stale=true`, tid).Scan(&staleComputers)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM ad_users WHERE tenant_id=$1 AND is_admin=true AND last_logon < NOW() - INTERVAL '90 days'`, tid).Scan(&inactivePrivileged)
+
+	checks := []map[string]interface{}{}
+	failCount := 0
+	addCheck := func(id, title, severity, detail, remediation string, count int) {
+		status := "pass"
+		if count > 0 {
+			status = "fail"
+			failCount++
+		}
+		checks = append(checks, map[string]interface{}{
+			"id": id, "title": title, "status": status, "severity": severity,
+			"detail": detail, "remediation": remediation,
+		})
+	}
+	addCheck("inactive_privs", "Inactive Privileged Accounts", "high",
+		fmt.Sprintf("%d admin accounts have not logged in for >90 days", inactivePrivileged),
+		"Audit all privileged accounts quarterly; disable or delete stale admin accounts", inactivePrivileged)
+	addCheck("unconstrained_delegation", "Unconstrained Delegation", "critical",
+		fmt.Sprintf("%d computers with unconstrained Kerberos delegation", unconstrainedDelegation),
+		"Remove unconstrained delegation from all computers except DCs; use constrained delegation or RBCD instead", unconstrainedDelegation)
+	addCheck("stale_computers", "Stale Computer Accounts", "medium",
+		fmt.Sprintf("%d computer accounts haven't authenticated in 180+ days", staleComputers),
+		"Disable or delete stale computer accounts; implement automated stale account cleanup", staleComputers)
+	addCheck("password_never_expires", "Password Never Expires", "medium",
+		fmt.Sprintf("%d accounts have Password Never Expires set", passwordNeverExpires),
+		"Remove 'Password Never Expires' from all accounts except designated break-glass accounts", passwordNeverExpires)
+
+	score := 100 - failCount*20
+	if score < 0 {
+		score = 0
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"overall_score": 61,
-		"checks": []map[string]interface{}{
-			{"id": "pwd_policy", "title": "Weak Password Policy", "status": "fail", "severity": "high", "detail": "Minimum password length is 8 characters; complexity not enforced on all OUs", "remediation": "Set minimum length to 14+ characters, enforce complexity, enable Fine-Grained Password Policies for privileged accounts"},
-			{"id": "inactive_privs", "title": "Inactive Privileged Accounts", "status": "fail", "severity": "high", "detail": fmt.Sprintf("%d admin accounts have not logged in for >90 days", passwordNeverExpires), "remediation": "Audit all privileged accounts quarterly; disable or delete stale admin accounts"},
-			{"id": "unconstrained_delegation", "title": "Unconstrained Delegation", "status": "fail", "severity": "critical", "detail": fmt.Sprintf("%d computers with unconstrained Kerberos delegation", unconstrainedDelegation+2), "remediation": "Remove unconstrained delegation from all computers except DCs; use constrained delegation or RBCD instead"},
-			{"id": "ldap_signing", "title": "LDAP Signing Not Required", "status": "fail", "severity": "high", "detail": "DC does not require LDAP signing — vulnerable to LDAP relay attacks", "remediation": "Set 'Domain Controller: LDAP server signing requirements' to 'Require signing' in Group Policy"},
-			{"id": "smb_signing", "title": "SMB Signing Disabled", "status": "fail", "severity": "high", "detail": "SMB signing not required on all servers — vulnerable to NTLM relay", "remediation": "Enable 'Microsoft network server: Digitally sign communications (always)' in GPO"},
-			{"id": "excessive_groups", "title": "Excessive Group Memberships", "status": "fail", "severity": "medium", "detail": "Domain Admins group has 12 members; Enterprise Admins has 4 members", "remediation": "Reduce DA membership to minimum required; use tiered administration model"},
-			{"id": "stale_computers", "title": "Stale Computer Accounts", "status": "fail", "severity": "medium", "detail": fmt.Sprintf("%d computer accounts haven't authenticated in 180+ days", staleComputers+3), "remediation": "Disable or delete stale computer accounts; implement automated stale account cleanup"},
-			{"id": "password_never_expires", "title": "Password Never Expires", "status": "fail", "severity": "medium", "detail": fmt.Sprintf("%d accounts have Password Never Expires set", passwordNeverExpires), "remediation": "Remove 'Password Never Expires' from all accounts except designated break-glass accounts"},
-			{"id": "protected_users", "title": "Protected Users Group", "status": "warn", "severity": "medium", "detail": "Only 2 of 12 Domain Admins are in the Protected Users security group", "remediation": "Add all privileged accounts to Protected Users group to prevent NTLM, RC4, and unconstrained delegation"},
-			{"id": "privileged_access", "title": "Privileged Access Workstations", "status": "warn", "severity": "medium", "detail": "No PAW policy enforced — admins logging in from standard workstations", "remediation": "Implement Privileged Access Workstations (PAWs) for Tier-0 administration"},
-		},
+		"overall_score": score,
+		"checks":        checks,
 	})
 }
 
 // PostADResponse — POST /api/ad/response
 func PostADResponse(c *gin.Context) {
 	createADSecurityTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
-		Action   string `json:"action"`
-		Target   string `json:"target"`
-		Domain   string `json:"domain"`
-		Reason   string `json:"reason"`
+		Action string `json:"action"`
+		Target string `json:"target"`
+		Domain string `json:"domain"`
+		Reason string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Action == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
 	}
-	messages := map[string]string{
-		"disable_user":           "User account disabled in Active Directory",
-		"reset_password":         "Password reset — user must change on next login",
-		"force_ticket_renewal":   "Kerberos ticket renewal forced — all TGTs invalidated",
-		"remove_group_membership": "Removed from privileged group",
-		"disable_service_account": "Service account disabled",
-		"isolate_endpoint":       "Endpoint isolation request sent to EDR",
-		"run_soar_playbook":      "SOAR playbook triggered for AD identity response",
+
+	switch body.Action {
+	case "disable_user":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE ad_users SET is_enabled=false WHERE tenant_id=$1 AND sam_account=$2`, tid, body.Target)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching AD user found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "User account disabled in Active Directory"})
+	case "reset_password":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE ad_users SET last_password_change=NOW() WHERE tenant_id=$1 AND sam_account=$2`, tid, body.Target)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching AD user found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "Password reset — user must change on next login"})
+	case "remove_group_membership":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE ad_users SET is_admin=false WHERE tenant_id=$1 AND sam_account=$2 AND is_admin=true`, tid, body.Target)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "No privileged group membership found for this account"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "Removed from privileged group"})
+	case "disable_service_account":
+		if body.Target == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target required"})
+			return
+		}
+		res, _ := database.DB.Exec(`UPDATE ad_users SET is_enabled=false WHERE tenant_id=$1 AND sam_account=$2 AND is_service_account=true`, tid, body.Target)
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no matching service account found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": "Service account disabled"})
+	case "force_ticket_renewal", "isolate_endpoint":
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "no real Kerberos KDC / EDR integration configured for this action"})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
 	}
-	msg := messages[body.Action]
-	if msg == "" { msg = "Action executed" }
-	c.JSON(http.StatusOK, gin.H{"ok": true, "action": body.Action, "target": body.Target, "message": msg})
 }
 
 // PostADReport — POST /api/ad/report
@@ -758,7 +945,8 @@ Provide compact JSON: {"title":"...","executive_summary":"3 sentences","key_find
 		domains, users, attackCount, highRisk, body.ReportType, domains, users, attackCount, highRisk)
 	raw, err := services.CallLLM(prompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	if idx := strings.Index(raw, "```json"); idx != -1 {
 		raw = raw[idx+7:]

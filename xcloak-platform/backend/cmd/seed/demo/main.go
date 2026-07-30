@@ -164,6 +164,8 @@ func main() {
 	seedEmailSecurity(db)
 	log.Println("Seeding container security…")
 	seedContainerSecurity(db)
+	log.Println("Seeding AD security…")
+	seedADSecurity(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -3107,6 +3109,237 @@ func seedContainerSecurity(db *sql.DB) {
 			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 			clusterIDs[v.clusterIdx], v.namespace, v.workload, v.kind, v.vtype, v.severity, v.desc, v.action,
 			now.Add(-time.Duration(v.hoursAgo)*time.Hour),
+		)
+	}
+}
+
+func seedADSecurity(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_forests (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		name TEXT DEFAULT '', functional_level TEXT DEFAULT '',
+		domain_count INTEGER DEFAULT 0, dc_count INTEGER DEFAULT 0,
+		trust_count INTEGER DEFAULT 0, risk_score INTEGER DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_domains (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		forest_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		netbios TEXT DEFAULT '', functional_level TEXT DEFAULT '',
+		dc_count INTEGER DEFAULT 0, user_count INTEGER DEFAULT 0,
+		group_count INTEGER DEFAULT 0, computer_count INTEGER DEFAULT 0,
+		gpo_count INTEGER DEFAULT 0, trust_count INTEGER DEFAULT 0,
+		risk_score INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_domain_controllers (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		domain_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		ip TEXT DEFAULT '', os TEXT DEFAULT '',
+		roles TEXT DEFAULT '', is_global_catalog BOOLEAN DEFAULT false,
+		is_rodc BOOLEAN DEFAULT false, site TEXT DEFAULT '',
+		risk_score INTEGER DEFAULT 0, last_seen TIMESTAMPTZ DEFAULT NOW(),
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_users (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		domain_id INTEGER DEFAULT 0, sam_account TEXT DEFAULT '',
+		display_name TEXT DEFAULT '', email TEXT DEFAULT '',
+		department TEXT DEFAULT '', groups TEXT DEFAULT '',
+		is_admin BOOLEAN DEFAULT false, is_service_account BOOLEAN DEFAULT false,
+		is_enabled BOOLEAN DEFAULT true, password_never_expires BOOLEAN DEFAULT false,
+		last_logon TIMESTAMPTZ DEFAULT NOW(),
+		last_password_change TIMESTAMPTZ DEFAULT NOW(),
+		risk_score INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_computers (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		domain_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		os TEXT DEFAULT '', last_logon TIMESTAMPTZ DEFAULT NOW(),
+		is_enabled BOOLEAN DEFAULT true, is_stale BOOLEAN DEFAULT false,
+		has_unconstrained_delegation BOOLEAN DEFAULT false,
+		risk_score INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_gpo (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		domain_id INTEGER DEFAULT 0, name TEXT DEFAULT '',
+		status TEXT DEFAULT 'enabled', linked_ous TEXT DEFAULT '',
+		last_modified TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_events (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		event_type TEXT DEFAULT '', severity TEXT DEFAULT 'medium',
+		source_user TEXT DEFAULT '', source_computer TEXT DEFAULT '',
+		source_ip TEXT DEFAULT '', target TEXT DEFAULT '',
+		auth_type TEXT DEFAULT '', description TEXT DEFAULT '',
+		event_id INTEGER DEFAULT 0, status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS ad_attacks (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
+		attack_type TEXT DEFAULT '', severity TEXT DEFAULT 'high',
+		source_user TEXT DEFAULT '', source_computer TEXT DEFAULT '',
+		source_ip TEXT DEFAULT '', target TEXT DEFAULT '',
+		technique TEXT DEFAULT '', description TEXT DEFAULT '',
+		mitre_technique TEXT DEFAULT '', status TEXT DEFAULT 'open',
+		created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM ad_forests WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
+	now := time.Now()
+
+	var forestID int
+	db.QueryRow(`
+		INSERT INTO ad_forests (tenant_id, name, functional_level, domain_count, dc_count, trust_count, risk_score)
+		VALUES (9999,'corp.local','2016',2,3,1,58) RETURNING id`).Scan(&forestID)
+
+	domains := []struct {
+		name, netbios, level                                                      string
+		dcCount, userCount, groupCount, computerCount, gpoCount, trustCount, risk int
+	}{
+		{"corp.local", "CORP", "2016", 2, 12, 6, 6, 4, 1, 62},
+		{"eu.corp.local", "EUCORP", "2012R2", 1, 3, 2, 2, 1, 0, 48},
+	}
+	domainIDs := make([]int, len(domains))
+	for i, d := range domains {
+		db.QueryRow(`
+			INSERT INTO ad_domains (tenant_id, forest_id, name, netbios, functional_level, dc_count, user_count, group_count, computer_count, gpo_count, trust_count, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+			forestID, d.name, d.netbios, d.level, d.dcCount, d.userCount, d.groupCount, d.computerCount, d.gpoCount, d.trustCount, d.risk,
+		).Scan(&domainIDs[i])
+	}
+
+	dcs := []struct {
+		domainIdx                 int
+		name, ip, os, roles, site string
+		globalCatalog, rodc       bool
+		risk                      int
+	}{
+		{0, "DC01.corp.local", "10.10.1.10", "Windows Server 2022", "PDC Emulator,RID Master,Infrastructure Master", "HQ", true, false, 65},
+		{0, "DC02.corp.local", "10.10.1.11", "Windows Server 2022", "Global Catalog", "HQ", true, false, 52},
+		{1, "DC03.eu.corp.local", "10.20.1.10", "Windows Server 2019", "Global Catalog", "EU-DC", true, false, 47},
+	}
+	for _, dc := range dcs {
+		db.Exec(`
+			INSERT INTO ad_domain_controllers (tenant_id, domain_id, name, ip, os, roles, is_global_catalog, is_rodc, site, risk_score, last_seen)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			domainIDs[dc.domainIdx], dc.name, dc.ip, dc.os, dc.roles, dc.globalCatalog, dc.rodc, dc.site, dc.risk, now.Add(-5*time.Minute),
+		)
+	}
+
+	users := []struct {
+		domainIdx                                int
+		sam, display, email, dept                string
+		admin, svc, enabled, pwdNeverExpires     bool
+		lastLogonDaysAgo, pwdChangeDaysAgo, risk int
+	}{
+		{0, "administrator", "Administrator", "administrator@corp.local", "IT", true, false, true, true, 0, 400, 78},
+		{0, "jsmith", "John Smith", "jsmith@corp.local", "IT", true, false, true, false, 1, 40, 82},
+		{0, "hcraig", "Helen Craig", "hcraig@corp.local", "IT", true, false, true, false, 5, 60, 71},
+		{0, "svc_backup", "Backup Service", "", "IT", false, true, true, true, 2, 500, 88},
+		{0, "svc_sql", "SQL Service Account", "", "IT", false, true, true, true, 1, 480, 74},
+		{0, "svc_app_pool", "App Pool Identity", "", "Engineering", false, true, true, false, 3, 90, 55},
+		{0, "temp-admin", "Temp Admin (contractor)", "temp-admin@corp.local", "IT", true, false, true, false, 120, 150, 69},
+		{0, "bob", "Bob Wagner", "bob@corp.local", "Finance", true, false, true, false, 95, 200, 58},
+		{0, "mchen", "Maria Chen", "mchen@corp.local", "Finance", false, false, true, false, 3, 30, 20},
+		{0, "dwhite", "Dan White", "dwhite@corp.local", "Sales", false, false, true, false, 40, 60, 15},
+		{0, "helpdesk", "Helpdesk Team Alias", "helpdesk@corp.local", "IT", false, false, true, false, 0, 20, 25},
+		{1, "eu_admin", "EU Domain Admin", "eu_admin@eu.corp.local", "IT", true, false, true, false, 10, 70, 60},
+		{1, "svc_replicate", "Replication Service", "", "IT", false, true, true, true, 4, 460, 66},
+		{1, "pgarcia", "Pablo Garcia", "pgarcia@eu.corp.local", "Sales", false, false, true, false, 8, 45, 18},
+	}
+	for _, u := range users {
+		db.Exec(`
+			INSERT INTO ad_users (tenant_id, domain_id, sam_account, display_name, email, department, is_admin, is_service_account, is_enabled, password_never_expires, last_logon, last_password_change, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			domainIDs[u.domainIdx], u.sam, u.display, u.email, u.dept, u.admin, u.svc, u.enabled, u.pwdNeverExpires,
+			now.Add(-time.Duration(u.lastLogonDaysAgo)*24*time.Hour), now.Add(-time.Duration(u.pwdChangeDaysAgo)*24*time.Hour), u.risk,
+		)
+	}
+
+	computers := []struct {
+		domainIdx                               int
+		name, os                                string
+		enabled, stale, unconstrainedDelegation bool
+		lastLogonDaysAgo, risk                  int
+	}{
+		{0, "WS-ADMIN01", "Windows 11 Enterprise", true, false, false, 1, 55},
+		{0, "FILE-SRV01", "Windows Server 2019", true, false, true, 0, 91},
+		{0, "PRINT-SRV01", "Windows Server 2016", true, true, true, 220, 84},
+		{0, "WEB-SRV01", "Windows Server 2022", true, false, false, 2, 48},
+		{0, "WS-FIN-014", "Windows 10 Enterprise", true, true, false, 210, 30},
+		{0, "WS-SALES-002", "Windows 11 Enterprise", true, false, false, 5, 20},
+		{1, "EU-FILE01", "Windows Server 2019", true, false, false, 3, 35},
+		{1, "EU-WS-007", "Windows 10 Enterprise", true, true, false, 195, 28},
+	}
+	for _, cmp := range computers {
+		db.Exec(`
+			INSERT INTO ad_computers (tenant_id, domain_id, name, os, last_logon, is_enabled, is_stale, has_unconstrained_delegation, risk_score)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8)`,
+			domainIDs[cmp.domainIdx], cmp.name, cmp.os, now.Add(-time.Duration(cmp.lastLogonDaysAgo)*24*time.Hour), cmp.enabled, cmp.stale, cmp.unconstrainedDelegation, cmp.risk,
+		)
+	}
+
+	gpos := []struct {
+		domainIdx               int
+		name, status, linkedOUs string
+		lastModifiedDaysAgo     int
+	}{
+		{0, "Default Domain Policy", "enabled", "corp.local", 400},
+		{0, "IT Admins - Restricted", "enabled", "OU=IT,DC=corp,DC=local", 30},
+		{0, "Finance - Restricted", "modified", "OU=Finance,DC=corp,DC=local", 2},
+		{0, "Disable USB Storage", "created", "OU=Workstations,DC=corp,DC=local", 1},
+		{1, "EU Default Domain Policy", "enabled", "eu.corp.local", 300},
+	}
+	for _, g := range gpos {
+		db.Exec(`
+			INSERT INTO ad_gpo (tenant_id, domain_id, name, status, linked_ous, last_modified)
+			VALUES (9999,$1,$2,$3,$4,$5)`,
+			domainIDs[g.domainIdx], g.name, g.status, g.linkedOUs, now.Add(-time.Duration(g.lastModifiedDaysAgo)*24*time.Hour),
+		)
+	}
+
+	events := []struct {
+		etype, severity, sourceUser, sourceComputer, sourceIP, target, authType, desc string
+		hoursAgo                                                                      int
+	}{
+		{"failed_login", "medium", "administrator", "", "192.168.100.47", "DC01.corp.local", "NTLM", "Failed logon attempt — bad password", 2},
+		{"failed_login", "medium", "administrator", "", "192.168.100.47", "DC01.corp.local", "NTLM", "Failed logon attempt — bad password", 2},
+		{"failed_login", "high", "jsmith", "", "10.0.1.88", "DC01.corp.local", "Kerberos", "Failed logon attempt — bad password", 5},
+		{"failed_login", "medium", "svc_backup", "", "10.0.2.112", "DC02.corp.local", "NTLM", "Failed logon attempt — bad password", 8},
+		{"failed_login", "medium", "hcraig", "", "192.168.50.22", "DC01.corp.local", "Kerberos", "Failed logon attempt — bad password", 30},
+		{"suspicious_logon", "high", "jsmith", "WS-INFECTED-SIM01", "203.0.113.44", "DC01.corp.local", "NTLM", "Logon from a source IP never seen before for this account", 10},
+		{"user_created", "medium", "administrator", "", "", "temp-admin", "", "New user account created", 150},
+		{"admin_group_change", "critical", "administrator", "", "", "temp-admin", "", "User added to Domain Admins group", 150},
+		{"group_membership_changed", "high", "hcraig", "", "", "bob", "", "User added to Domain Admins group", 96 * 24},
+		{"computer_joined", "low", "administrator", "", "", "WS-SALES-002", "", "New computer joined the domain", 100 * 24},
+		{"trust_changed", "medium", "administrator", "", "", "eu.corp.local", "", "Forest trust relationship modified", 200 * 24},
+	}
+	for _, e := range events {
+		db.Exec(`
+			INSERT INTO ad_events (tenant_id, event_type, severity, source_user, source_computer, source_ip, target, auth_type, description, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,'open',$9)`,
+			e.etype, e.severity, e.sourceUser, e.sourceComputer, e.sourceIP, e.target, e.authType, e.desc,
+			now.Add(-time.Duration(e.hoursAgo)*time.Hour),
+		)
+	}
+
+	attacks := []struct {
+		atype, severity, sourceUser, sourceComputer, sourceIP, target, technique, desc, mitre, status string
+		hoursAgo                                                                                      int
+	}{
+		{"kerberoasting", "critical", "", "WS-INFECTED-SIM01", "203.0.113.44", "svc_backup", "Kerberoasting", "Unusually high volume of TGS-REQ requests for service accounts with SPNs — consistent with offline ticket cracking.", "T1558.003", "open", 3},
+		{"pass_the_hash", "critical", "", "WS-INFECTED-SIM01", "203.0.113.44", "jsmith", "Pass-the-Hash", "NTLM authentication using a hash without corresponding interactive logon.", "T1550.002", "open", 6},
+		{"dcsync", "critical", "", "WS-INFECTED-SIM01", "203.0.113.44", "DC01.corp.local", "DCSync", "Non-DC host performed a directory replication (MS-DRSR) request.", "T1003.006", "open", 6},
+		{"admin_group_change", "critical", "administrator", "", "", "temp-admin", "Domain Admin Group Modification", "User added to Domain Admins outside of change window.", "T1098", "open", 150},
+		{"lateral_smb", "high", "jsmith", "WS-ADMIN01", "10.0.1.14", "FILE-SRV01", "SMB Lateral Movement", "Administrative SMB share access from a non-standard host.", "T1021.002", "open", 20},
+		{"lateral_smb", "high", "jsmith", "WS-ADMIN01", "10.0.1.14", "PRINT-SRV01", "SMB Lateral Movement", "Administrative SMB share access from a non-standard host.", "T1021.002", "resolved", 200},
+		{"as_rep_roasting", "high", "", "", "203.0.113.44", "dwhite", "AS-REP Roasting", "AS-REQ without pre-authentication for an account with Kerberos pre-auth disabled.", "T1558.004", "open", 40},
+		{"golden_ticket", "critical", "", "", "", "corp.local", "Golden Ticket", "Kerberos TGT with an anomalously long validity lifetime observed.", "T1558.001", "resolved", 500},
+		{"privilege_escalation", "high", "hcraig", "", "", "bob", "Privilege Escalation via Group Change", "Non-IT user added to a privileged group by a non-standard actor.", "T1078.002", "open", 96 * 24},
+		{"skeleton_key", "critical", "", "DC01.corp.local", "", "corp.local", "Skeleton Key", "LSASS memory modification pattern consistent with a skeleton-key backdoor.", "T1556.001", "resolved", 600},
+	}
+	for _, a := range attacks {
+		db.Exec(`
+			INSERT INTO ad_attacks (tenant_id, attack_type, severity, source_user, source_computer, source_ip, target, technique, description, mitre_technique, status, created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			a.atype, a.severity, a.sourceUser, a.sourceComputer, a.sourceIP, a.target, a.technique, a.desc, a.mitre, a.status,
+			now.Add(-time.Duration(a.hoursAgo)*time.Hour),
 		)
 	}
 }
