@@ -3,7 +3,11 @@ package main
 import (
 	"log"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,10 +43,52 @@ func loadAllowedOrigins() {
 	}
 }
 
+// applyMemoryLimit sets a soft heap cap (debug.SetMemoryLimit takes effect
+// immediately, unlike the GOMEMLIMIT env var which the runtime only reads
+// at process init — before godotenv.Load() populates the environment).
+// This process was hard OOM-killed at ~11GB RSS three times in one day
+// (Jul 29 23:43, Jul 30 00:00, Jul 30 08:17) on a 13GB dev box, taking the
+// VS Code terminal session down with it. Without a limit the GC only
+// collects when it feels like it; this forces it to work harder well
+// before the OS steps in with a SIGKILL. Override via BACKEND_MEMORY_LIMIT_MB
+// (default 2048) — this is a safety net, not a fix for whatever is actually
+// allocating that much.
+func applyMemoryLimit() {
+	limitMB := 2048
+	if raw := os.Getenv("BACKEND_MEMORY_LIMIT_MB"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+			limitMB = v
+		}
+	}
+	debug.SetMemoryLimit(int64(limitMB) << 20)
+	slog.Info("startup: soft memory limit applied", "limit_mb", limitMB)
+}
+
+// startPprofServer exposes net/http/pprof on loopback only, opt-in via
+// ENABLE_PPROF=true. Off by default so it's never reachable in production;
+// the point is to have it ready for the *next* time RSS runs away, instead
+// of finding out again from a kernel OOM log after the fact:
+//
+//	go tool pprof http://127.0.0.1:6060/debug/pprof/heap
+//	go tool pprof http://127.0.0.1:6060/debug/pprof/goroutine
+func startPprofServer() {
+	if os.Getenv("ENABLE_PPROF") != "true" {
+		return
+	}
+	go func() {
+		slog.Info("pprof: listening on 127.0.0.1:6060")
+		if err := http.ListenAndServe("127.0.0.1:6060", nil); err != nil {
+			slog.Warn("pprof: server exited", "err", err)
+		}
+	}()
+}
+
 func main() {
 
 	godotenv.Load()
 	logger.Init()
+	applyMemoryLimit()
+	startPprofServer()
 
 	// Vault is optional (same BYO-infra pattern as Kafka/MinIO): Init no-ops
 	// if VAULT_ADDR isn't set. Must run before database.Connect/InitRedis/
