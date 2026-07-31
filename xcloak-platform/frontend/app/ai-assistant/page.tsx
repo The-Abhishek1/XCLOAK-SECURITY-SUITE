@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { aiaAPI } from '@/lib/api';
-import { MetricCard, SectionCard, TabBar, ActionButton, DataTable, EmptyState } from '@/components/design-system';
+import { MetricCard, SectionCard, TabBar, ActionButton, DataTable, EmptyState, Modal } from '@/components/design-system';
 import {
   LayoutDashboard, MessageSquare, MessageSquarePlus, Search, Bot, Lightbulb,
   Wand2, Sparkles, ListChecks, BookMarked, BarChart3, FileBarChart2, ScrollText,
@@ -156,6 +156,7 @@ export default function AIAssistantEnterprise() {
   const [reportTitle, setReportTitle] = useState('');
   const [reportType, setReportType]   = useState('executive_summary');
   const [genReport, setGenReport]     = useState(false);
+  const [viewingReport, setViewingReport] = useState<any>(null);
 
   async function loadAll() {
     setLoading(true);
@@ -225,6 +226,8 @@ export default function AIAssistantEnterprise() {
       await aiaAPI.createPrompt({ title: promptTitle, content: promptContent, category: promptCat, is_template: true });
       setPromptTitle(''); setPromptContent(''); setPromptCat('general');
       loadAll();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to save prompt');
     } finally { setSavingPrompt(false); }
   }
 
@@ -235,6 +238,8 @@ export default function AIAssistantEnterprise() {
       await aiaAPI.generateReport({ title: reportTitle, report_type: reportType });
       setReportTitle('');
       loadAll();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to generate report');
     } finally { setGenReport(false); }
   }
 
@@ -269,7 +274,6 @@ export default function AIAssistantEnterprise() {
                   <MetricCard label="Pending Actions"      value={d?.pending_actions ?? 0}       color="#d97706" />
                   <MetricCard label="Connected Sources"    value={d?.connected_sources ?? 0}     color="#16a34a" />
                   <MetricCard label="Health Score"         value={`${d?.health_score ?? 0}%`}    color="#16a34a" />
-                  <MetricCard label="Hours Saved"          value={d?.stats?.analyst_hours_saved ?? 0} sub="this month" color="#7c3aed" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -304,10 +308,9 @@ export default function AIAssistantEnterprise() {
                     <SectionCard title="Automation Stats">
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {[
-                          ['Automation Rate', `${d?.stats?.automation_rate ?? 34}%`],
-                          ['Queries/Today', d?.stats?.queries_today ?? 48],
-                          ['Actions Run', d?.stats?.actions_executed ?? 89],
-                          ['Success Rate', `${d?.stats?.success_rate ?? 97}%`],
+                          ['Queries/Today', d?.stats?.queries_today ?? 0],
+                          ['Actions Run', d?.stats?.actions_executed ?? 0],
+                          ['Success Rate', `${d?.stats?.success_rate ?? 0}%`],
                         ].map(([l, v]) => (
                           <div key={String(l)} style={{ background: 'var(--bg-2)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                             <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)' }}>{v}</div>
@@ -631,9 +634,9 @@ export default function AIAssistantEnterprise() {
                       { key: 'actions', header: 'Actions', render: (r: any) => r.status === 'open' ? (
                         <div style={{ display: 'flex', gap: 6 }}>
                           <ActionButton variant="primary" icon={Check} style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'accepted' }).then(loadAll)}>Accept</ActionButton>
+                            onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'accepted' }).then(loadAll).catch((err: any) => alert(err?.response?.data?.error || 'Failed to update recommendation'))}>Accept</ActionButton>
                           <ActionButton variant="ghost" icon={X} style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'dismissed' }).then(loadAll)}>Dismiss</ActionButton>
+                            onClick={() => aiaAPI.updateRecommendation(r.rec_id, { status: 'dismissed' }).then(loadAll).catch((err: any) => alert(err?.response?.data?.error || 'Failed to update recommendation'))}>Dismiss</ActionButton>
                         </div>
                       ) : null },
                     ]}
@@ -789,7 +792,7 @@ export default function AIAssistantEnterprise() {
                       <ActionButton key={i} variant="ghost" icon={Plus} style={{ width: '100%', textAlign: 'left', marginBottom: 6, fontSize: 12 }}
                         onClick={() => {
                           const desc = window.prompt(`Describe the ${act.label} action:`);
-                          if (desc) aiaAPI.createAction({ action_type: act.type, description: desc }).then(loadAll);
+                          if (desc) aiaAPI.createAction({ action_type: act.type, description: desc }).then(loadAll).catch((err: any) => alert(err?.response?.data?.error || 'Failed to create action'));
                         }}>
                         {act.label}
                       </ActionButton>
@@ -809,9 +812,9 @@ export default function AIAssistantEnterprise() {
                         { key: 'approve', header: 'Approve', render: (a: any) => a.status === 'pending_approval' ? (
                           <div style={{ display: 'flex', gap: 6 }}>
                             <ActionButton variant="primary" icon={Check} style={{ fontSize: 11, padding: '4px 10px' }}
-                              onClick={() => aiaAPI.approveAction(a.action_id, { approve: true }).then(loadAll)}>Approve</ActionButton>
+                              onClick={() => aiaAPI.approveAction(a.action_id, { approve: true }).then(loadAll).catch((err: any) => alert(err?.response?.data?.error || 'Failed to approve action'))}>Approve</ActionButton>
                             <ActionButton variant="ghost" icon={X} style={{ fontSize: 11, padding: '4px 10px' }}
-                              onClick={() => aiaAPI.approveAction(a.action_id, { approve: false }).then(loadAll)}>Reject</ActionButton>
+                              onClick={() => aiaAPI.approveAction(a.action_id, { approve: false }).then(loadAll).catch((err: any) => alert(err?.response?.data?.error || 'Failed to reject action'))}>Reject</ActionButton>
                           </div>
                         ) : null },
                       ]}
@@ -887,16 +890,14 @@ export default function AIAssistantEnterprise() {
                   <MetricCard label="Total Sessions"  value={data.analytics?.total_sessions ?? 0} color="var(--accent)" />
                   <MetricCard label="Total Messages"  value={data.analytics?.total_messages ?? 0} color="var(--accent)" />
                   <MetricCard label="Avg Response"    value={`${data.analytics?.response_quality?.avg_latency_ms ?? 0}ms`} color="var(--accent)" />
-                  <MetricCard label="User Rating"     value={`${data.analytics?.response_quality?.user_rating_avg ?? 0}/5`}   color="#16a34a" />
-                  <MetricCard label="Accuracy Rate"   value={`${data.analytics?.response_quality?.accuracy_rate ?? 0}%`}       color="#16a34a" />
-                  <MetricCard label="Hours Saved"     value={data.analytics?.automation_stats?.analyst_hours_saved ?? 0}        color="#7c3aed" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
                   <SectionCard title="Usage Trend (7 Days)">
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120 }}>
                       {(data.analytics?.usage_trend ?? []).map((d2: any, i: number) => {
-                        const barH = Math.max(4, Math.round((d2.sessions / 35) * 100));
+                        const maxSessions = Math.max(...(data.analytics?.usage_trend ?? [{ sessions: 1 }]).map((x: any) => x.sessions), 1);
+                        const barH = Math.max(4, Math.round((d2.sessions / maxSessions) * 100));
                         return (
                           <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                             <div title={`Sessions: ${d2.sessions}`}
@@ -922,16 +923,11 @@ export default function AIAssistantEnterprise() {
                   </SectionCard>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                   {[
-                    { label: 'Sigma Rules Generated', value: data.analytics?.automation_stats?.sigma_rules_generated ?? 0 },
-                    { label: 'YARA Rules Generated',  value: data.analytics?.automation_stats?.yara_rules_generated ?? 0 },
-                    { label: 'Playbooks Generated',   value: data.analytics?.automation_stats?.playbooks_generated ?? 0 },
-                    { label: 'Reports Generated',     value: data.analytics?.automation_stats?.reports_generated ?? 0 },
-                    { label: 'Scripts Generated',     value: data.analytics?.automation_stats?.scripts_generated ?? 0 },
-                    { label: 'Queries Generated',     value: data.analytics?.automation_stats?.queries_generated ?? 0 },
-                    { label: 'Hours Saved',           value: data.analytics?.automation_stats?.analyst_hours_saved ?? 0 },
-                    { label: 'Hallucination Rate',    value: `${data.analytics?.response_quality?.hallucination_rate ?? 0}%` },
+                    { label: 'Detection Rules Generated', value: data.analytics?.automation_stats?.detection_rules_generated ?? 0 },
+                    { label: 'Playbooks Generated',       value: data.analytics?.automation_stats?.playbooks_generated ?? 0 },
+                    { label: 'Reports Generated',         value: data.analytics?.automation_stats?.reports_generated ?? 0 },
                   ].map((item, i) => (
                     <div key={i} className="g-card" style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--accent)' }}>{item.value}</div>
@@ -992,6 +988,9 @@ export default function AIAssistantEnterprise() {
                         { key: 'format', header: 'Format', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{(r.format ?? '').toUpperCase()}</span> },
                         { key: 'generated_by', header: 'Generated By', render: (r: any) => <span style={{ fontSize: 12 }}>{r.generated_by}</span> },
                         { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span> },
+                        { key: 'view', header: '', render: (r: any) => (
+                          <ActionButton variant="ghost" style={{ fontSize: 11 }} onClick={() => setViewingReport(r)}>View</ActionButton>
+                        ) },
                         { key: 'regenerate', header: '', render: (r: any) => (
                           <ActionButton variant="ghost" icon={RefreshCw} style={{ fontSize: 11 }}
                             onClick={() => { setChatMode('executive'); setChatInput(`Generate ${r.report_type} report: ${r.title}`); setTab('chat'); }}>
@@ -1001,6 +1000,9 @@ export default function AIAssistantEnterprise() {
                       ]}
                     />
                   </SectionCard>
+                  <Modal open={!!viewingReport} onClose={() => setViewingReport(null)} title={viewingReport?.title} maxWidth={640}>
+                    {viewingReport && <MarkdownBlock content={viewingReport.content || 'No content available.'} />}
+                  </Modal>
                 </div>
               </div>
             )}

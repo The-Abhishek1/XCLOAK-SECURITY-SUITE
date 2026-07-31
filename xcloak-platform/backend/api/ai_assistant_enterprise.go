@@ -241,13 +241,16 @@ func GetAIADashboard(c *gin.Context) {
 		"total_sessions": totalSessions, "active_sessions": activeSessions,
 		"completed_sessions": completedSessions, "total_messages": totalMessages,
 		"saved_prompts": savedPrompts, "open_recommendations": openRecs,
-		"pending_actions": openActions,
+		"pending_actions":   openActions,
 		"connected_sources": connectedSources,
-		"health_score": healthScore,
-		"recent_sessions": recent, "by_mode": modes, "top_prompts": topPrompts,
+		"health_score":      healthScore,
+		"recent_sessions":   recent, "by_mode": modes, "top_prompts": topPrompts,
+		// automation_rate and analyst_hours_saved were dropped rather than
+		// left hardcoded at 0 — no real formula or tracked signal exists
+		// anywhere in this codebase for either.
 		"stats": gin.H{
-			"avg_response_ms": int(avgLatency), "automation_rate": 0, "analyst_hours_saved": 0,
-			"queries_today": queriesToday, "actions_executed": executedActions, "success_rate": successRate,
+			"avg_response_ms": int(avgLatency),
+			"queries_today":   queriesToday, "actions_executed": executedActions, "success_rate": successRate,
 		},
 	})
 }
@@ -262,11 +265,12 @@ func GetAIASessions(c *gin.Context) {
 	limit := parseLimit(c, 50)
 
 	where := []string{"tenant_id=$1"}
-	args  := []interface{}{tidStr}
-	i     := 2
+	args := []interface{}{tidStr}
+	i := 2
 	if mode != "" {
 		where = append(where, fmt.Sprintf("mode=$%d", i))
-		args = append(args, mode); i++
+		args = append(args, mode)
+		i++
 	}
 	args = append(args, limit)
 
@@ -361,9 +365,9 @@ func PatchAIASession(c *gin.Context) {
 	sessionID := c.Param("id")
 
 	var body struct {
-		Title     string `json:"title"`
-		Bookmarked *bool `json:"bookmarked"`
-		Status    string `json:"status"`
+		Title      string `json:"title"`
+		Bookmarked *bool  `json:"bookmarked"`
+		Status     string `json:"status"`
 	}
 	c.BindJSON(&body)
 	if body.Title != "" {
@@ -445,10 +449,10 @@ func PostAIAChat(c *gin.Context) {
 	})
 }
 
-// aiaBuildPrompt gathers real per-tenant security context (open alerts, incidents,
-// cases, agent/coverage counts) and combines it with the analyst's question so the
-// LLM answers grounded in this tenant's actual environment rather than fabricating one.
-func aiaBuildPrompt(tid int, message, mode string) string {
+// aiaGatherContext collects real per-tenant security context (open alerts,
+// incidents, agent/coverage counts) shared by both live chat prompts and
+// report generation, so both stay grounded in the same real data.
+func aiaGatherContext(tid int) string {
 	db := database.DB
 	var ctx strings.Builder
 
@@ -490,6 +494,15 @@ func aiaBuildPrompt(tid int, message, mode string) string {
 		arows.Close()
 	}
 
+	return ctx.String()
+}
+
+// aiaBuildPrompt combines the real per-tenant context above with the
+// analyst's question so the LLM answers grounded in this tenant's actual
+// environment rather than fabricating one.
+func aiaBuildPrompt(tid int, message, mode string) string {
+	ctxStr := aiaGatherContext(tid)
+
 	var task string
 	switch {
 	case mode == "investigate":
@@ -501,7 +514,7 @@ func aiaBuildPrompt(tid int, message, mode string) string {
 	}
 
 	return fmt.Sprintf("%s\n\nCurrent environment data for this tenant:\n%s\nAnalyst question: %s\n\nRespond in concise markdown.",
-		task, ctx.String(), message)
+		task, ctxStr, message)
 }
 
 // ── Recommendations ───────────────────────────────────────────────────────────
@@ -543,7 +556,9 @@ func PatchAIARecommendation(c *gin.Context) {
 	recID := c.Param("id")
 	actor := usernameFromContext(c)
 
-	var body struct{ Status string `json:"status"` }
+	var body struct {
+		Status string `json:"status"`
+	}
 	c.BindJSON(&body)
 	if body.Status == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status required"})
@@ -615,7 +630,9 @@ func PatchAIAActionApprove(c *gin.Context) {
 	actionID := c.Param("id")
 	actor := usernameFromContext(c)
 
-	var body struct{ Approve bool `json:"approve"` }
+	var body struct {
+		Approve bool `json:"approve"`
+	}
 	c.BindJSON(&body)
 	status := "rejected"
 	if body.Approve {
@@ -636,11 +653,12 @@ func GetAIAPrompts(c *gin.Context) {
 	category := c.Query("category")
 
 	where := []string{"tenant_id=$1"}
-	args  := []interface{}{tidStr}
-	i     := 2
+	args := []interface{}{tidStr}
+	i := 2
 	if category != "" {
 		where = append(where, fmt.Sprintf("category=$%d", i))
-		args = append(args, category); i++
+		args = append(args, category)
+		i++
 	}
 
 	var prompts []map[string]interface{}
@@ -736,33 +754,72 @@ func GetAIAAnalytics(c *gin.Context) {
 	db.QueryRow(`SELECT COUNT(*) FROM aia_sessions WHERE tenant_id=$1`, tidStr).Scan(&totalSessions)
 	db.QueryRow(`SELECT COUNT(*) FROM aia_messages WHERE tenant_id=$1`, tidStr).Scan(&totalMessages)
 
+	// usage_trend: real, bucketed by the last 7 real calendar days from
+	// aia_sessions/aia_messages/aia_actions created_at.
+	usageTrend := []map[string]interface{}{}
+	for i := 6; i >= 0; i-- {
+		dayStart := time.Now().AddDate(0, 0, -i).Truncate(24 * time.Hour)
+		dayEnd := dayStart.Add(24 * time.Hour)
+		var sessCnt, msgCnt, actCnt int
+		db.QueryRow(`SELECT COUNT(*) FROM aia_sessions WHERE tenant_id=$1 AND created_at>=$2 AND created_at<$3`, tidStr, dayStart, dayEnd).Scan(&sessCnt)
+		db.QueryRow(`SELECT COUNT(*) FROM aia_messages WHERE tenant_id=$1 AND created_at>=$2 AND created_at<$3`, tidStr, dayStart, dayEnd).Scan(&msgCnt)
+		db.QueryRow(`SELECT COUNT(*) FROM aia_actions WHERE tenant_id=$1 AND created_at>=$2 AND created_at<$3`, tidStr, dayStart, dayEnd).Scan(&actCnt)
+		usageTrend = append(usageTrend, map[string]interface{}{
+			"date": dayStart.Format("Mon"), "sessions": sessCnt, "messages": msgCnt, "actions": actCnt,
+		})
+	}
+
+	// response_quality: avg_latency_ms is real (same aia_messages.latency_ms
+	// column Dashboard already averages). accuracy_rate/hallucination_rate/
+	// user_rating_avg/correction_rate have no real source anywhere — no
+	// message ever collects a user rating or correction flag — omitted
+	// rather than faked.
+	var avgLatency float64
+	db.QueryRow(`SELECT COALESCE(AVG(latency_ms),0) FROM aia_messages WHERE tenant_id=$1 AND role='assistant'`, tidStr).Scan(&avgLatency)
+
+	// top_analysts: real, from aia_sessions grouped by created_by (sessions,
+	// messages via the real per-session message_count) left-joined against
+	// aia_actions grouped by requested_by for a real executed-action count.
+	topAnalysts := []map[string]interface{}{}
+	tar, _ := db.Query(`SELECT s.created_by, COUNT(*), COALESCE(SUM(s.message_count),0),
+		COALESCE((SELECT COUNT(*) FROM aia_actions a WHERE a.tenant_id=$1 AND a.requested_by=s.created_by AND a.executed_at IS NOT NULL),0)
+		FROM aia_sessions s WHERE s.tenant_id=$1 GROUP BY s.created_by ORDER BY COUNT(*) DESC LIMIT 10`, tidStr)
+	if tar != nil {
+		defer tar.Close()
+		for tar.Next() {
+			var analyst string
+			var sessCnt, msgCnt, actExec int
+			tar.Scan(&analyst, &sessCnt, &msgCnt, &actExec)
+			topAnalysts = append(topAnalysts, map[string]interface{}{
+				"analyst": analyst, "sessions": sessCnt, "messages": msgCnt, "actions_executed": actExec,
+			})
+		}
+	}
+
+	// automation_stats: reports_generated is a real aia_reports count;
+	// playbooks_generated and detection_rules_generated are real
+	// aia_actions counts by action_type (sigma vs. yara can't be split —
+	// both go through the same generic 'create_detection_rule' action
+	// type, so they're combined rather than guessed at). scripts_generated/
+	// queries_generated/analyst_hours_saved have no matching action_type
+	// or formula anywhere and were dropped rather than faked.
+	var reportsGenerated, playbooksGenerated, detectionRulesGenerated int
+	db.QueryRow(`SELECT COUNT(*) FROM aia_reports WHERE tenant_id=$1`, tidStr).Scan(&reportsGenerated)
+	db.QueryRow(`SELECT COUNT(*) FROM aia_actions WHERE tenant_id=$1 AND action_type='create_playbook'`, tidStr).Scan(&playbooksGenerated)
+	db.QueryRow(`SELECT COUNT(*) FROM aia_actions WHERE tenant_id=$1 AND action_type='create_detection_rule'`, tidStr).Scan(&detectionRulesGenerated)
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_sessions": totalSessions, "total_messages": totalMessages,
 		"by_mode": modes, "prompt_categories": cats,
-		"usage_trend": []map[string]interface{}{
-			{"date": "Mon", "sessions": 12, "messages": 47, "actions": 3},
-			{"date": "Tue", "sessions": 18, "messages": 71, "actions": 7},
-			{"date": "Wed", "sessions": 9, "messages": 34, "actions": 2},
-			{"date": "Thu", "sessions": 22, "messages": 89, "actions": 11},
-			{"date": "Fri", "sessions": 31, "messages": 124, "actions": 14},
-			{"date": "Sat", "sessions": 4, "messages": 18, "actions": 1},
-			{"date": "Sun", "sessions": 2, "messages": 9, "actions": 0},
-		},
+		"usage_trend": usageTrend,
 		"response_quality": gin.H{
-			"avg_latency_ms": 1240, "accuracy_rate": 94, "hallucination_rate": 0.8,
-			"user_rating_avg": 4.7, "correction_rate": 3.2,
+			"avg_latency_ms": int(avgLatency),
 		},
-		"top_analysts": []map[string]interface{}{
-			{"analyst": "alice.zhang", "sessions": 48, "messages": 192, "actions_executed": 12},
-			{"analyst": "carol.kim", "sessions": 37, "messages": 147, "actions_executed": 8},
-			{"analyst": "david.chen", "sessions": 24, "messages": 96, "actions_executed": 5},
-			{"analyst": "grace.lee", "sessions": 18, "messages": 71, "actions_executed": 3},
-		},
+		"top_analysts": topAnalysts,
 		"automation_stats": gin.H{
-			"sigma_rules_generated": 14, "yara_rules_generated": 7,
-			"playbooks_generated": 5, "reports_generated": 23,
-			"scripts_generated": 9, "queries_generated": 31,
-			"analyst_hours_saved": 127,
+			"reports_generated":         reportsGenerated,
+			"playbooks_generated":       playbooksGenerated,
+			"detection_rules_generated": detectionRulesGenerated,
 		},
 	})
 }
@@ -775,17 +832,18 @@ func GetAIAReports(c *gin.Context) {
 	tidStr := fmt.Sprintf("%d", tid)
 
 	var reports []map[string]interface{}
-	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,session_id,created_at
+	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,session_id,created_at,COALESCE(content,'')
 		FROM aia_reports WHERE tenant_id=$1 ORDER BY created_at DESC`, tidStr)
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var id, title, rtype, by, format string
+			var id, title, rtype, by, format, content string
 			var sid, ca *string
-			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sid, &ca); err == nil {
+			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sid, &ca, &content); err == nil {
 				reports = append(reports, map[string]interface{}{
 					"report_id": id, "title": title, "report_type": rtype,
 					"generated_by": by, "format": format, "session_id": sid, "created_at": ca,
+					"content": content,
 				})
 			}
 		}
@@ -794,6 +852,41 @@ func GetAIAReports(c *gin.Context) {
 		reports = []map[string]interface{}{}
 	}
 	c.JSON(http.StatusOK, reports)
+}
+
+// generateAIAReportContent writes real report content grounded in this
+// tenant's actual data: if a source session was given, it summarizes that
+// real conversation; otherwise it grounds in the same real fleet-wide
+// security context aiaBuildPrompt gathers for chat.
+func generateAIAReportContent(tid int, title, reportType, sessionID string) string {
+	db := database.DB
+	var ctx strings.Builder
+	if sessionID != "" {
+		rows, _ := db.Query(`SELECT role, content FROM aia_messages WHERE tenant_id=$1 AND session_id=$2 ORDER BY created_at ASC`, tid, sessionID)
+		if rows != nil {
+			ctx.WriteString("Source conversation:\n")
+			for rows.Next() {
+				var role, content string
+				rows.Scan(&role, &content)
+				fmt.Fprintf(&ctx, "[%s]: %s\n", role, content)
+			}
+			rows.Close()
+		}
+	}
+	if ctx.Len() == 0 {
+		ctx.WriteString(aiaGatherContext(tid))
+	}
+
+	prompt := fmt.Sprintf(`Write a %s titled %q for a SOC platform's AI Assistant. Ground it strictly in the real data below — do not invent incidents, CVEs, or figures not present.
+
+%s
+
+Respond in concise markdown suitable for direct display.`, strings.ReplaceAll(reportType, "_", " "), title, ctx.String())
+
+	if resp, err := services.CallLLM(prompt); err == nil && strings.TrimSpace(resp) != "" {
+		return strings.TrimSpace(resp)
+	}
+	return fmt.Sprintf("# %s\n\nUnable to reach the AI model to generate this report's narrative. Real underlying data was gathered but could not be summarized.", title)
 }
 
 func PostAIAReport(c *gin.Context) {
@@ -813,10 +906,11 @@ func PostAIAReport(c *gin.Context) {
 		body.Format = "markdown"
 	}
 	id := aiaID("AIA-RPT")
-	db.Exec(`INSERT INTO aia_reports (tenant_id,report_id,title,report_type,generated_by,format,session_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`, tidStr, id, body.Title, body.ReportType, actor, body.Format, aiaNullStr(body.SessionID))
+	content := generateAIAReportContent(tid, body.Title, body.ReportType, body.SessionID)
+	db.Exec(`INSERT INTO aia_reports (tenant_id,report_id,title,report_type,content,generated_by,format,session_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, tidStr, id, body.Title, body.ReportType, content, actor, body.Format, aiaNullStr(body.SessionID))
 	aiaAudit(tid, "report_generated", "report", id, actor, fmt.Sprintf("type:%s", body.ReportType))
-	c.JSON(http.StatusOK, gin.H{"report_id": id})
+	c.JSON(http.StatusOK, gin.H{"report_id": id, "content": content})
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

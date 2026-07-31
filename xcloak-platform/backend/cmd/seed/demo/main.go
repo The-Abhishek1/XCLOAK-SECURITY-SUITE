@@ -7155,6 +7155,12 @@ func seedAIAssistantEnterprise(db *sql.DB) {
 	const tid = 9999
 	now := time.Now()
 
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM aia_sessions WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
 	// ── Tables ────────────────────────────────────────────────────────────────
 
 	mustExec(db, `CREATE TABLE IF NOT EXISTS aia_sessions (
