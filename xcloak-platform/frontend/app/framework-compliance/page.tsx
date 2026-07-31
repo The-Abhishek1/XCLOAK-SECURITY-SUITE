@@ -236,10 +236,14 @@ function FrameworksTab({ frameworks, onRefresh }: { frameworks: any[]; onRefresh
 
   async function add() {
     if (!form.name) return;
-    await fceAPI.createFramework(form);
-    setShowAdd(false);
-    setForm({ name: '', version: '1.0', category: 'security', description: '', owner: '' });
-    onRefresh();
+    try {
+      await fceAPI.createFramework(form);
+      setShowAdd(false);
+      setForm({ name: '', version: '1.0', category: 'security', description: '', owner: '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create framework');
+    }
   }
 
   return (
@@ -298,12 +302,18 @@ function FrameworksTab({ frameworks, onRefresh }: { frameworks: any[]; onRefresh
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <ActionButton variant="ghost" icon={Power} style={{ fontSize: 11 }}
-                onClick={async () => { await fceAPI.updateFramework(fw.id, { is_active: !fw.is_active }); onRefresh(); }}>
+                onClick={async () => {
+                  try { await fceAPI.updateFramework(fw.id, { is_active: !fw.is_active }); onRefresh(); }
+                  catch (err: any) { alert(err?.response?.data?.error || 'Failed to update framework'); }
+                }}>
                 {fw.is_active ? 'Deactivate' : 'Activate'}
               </ActionButton>
               {!fw.is_builtin && (
                 <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11 }}
-                  onClick={async () => { await fceAPI.deleteFramework(fw.id); onRefresh(); }}>
+                  onClick={async () => {
+                    try { await fceAPI.deleteFramework(fw.id); onRefresh(); }
+                    catch (err: any) { alert(err?.response?.data?.error || 'Failed to delete framework'); }
+                  }}>
                   Delete
                 </ActionButton>
               )}
@@ -339,9 +349,13 @@ function ControlsTab({ controls, frameworks, onRefresh }: { controls: any[]; fra
 
   async function saveNote() {
     if (!noteTarget) return;
-    await fceAPI.updateControl(noteTarget.id, { notes: noteVal });
-    setNoteTarget(null);
-    onRefresh();
+    try {
+      await fceAPI.updateControl(noteTarget.id, { notes: noteVal });
+      setNoteTarget(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to save note');
+    }
   }
 
   return (
@@ -394,7 +408,10 @@ function ControlsTab({ controls, frameworks, onRefresh }: { controls: any[]; fra
               { key: 'priority', header: 'Priority', render: (c: any) => <span style={{ fontSize: 11, fontWeight: 600, color: RISK_CLR[c.priority] || 'var(--text-2)' }}>{c.priority}</span> },
               { key: 'assessment_status', header: 'Status', render: (c: any) => (
                 <select value={c.assessment_status}
-                  onChange={async e => { await fceAPI.updateControl(c.id, { assessment_status: e.target.value }); onRefresh(); }}
+                  onChange={async e => {
+                    try { await fceAPI.updateControl(c.id, { assessment_status: e.target.value }); onRefresh(); }
+                    catch (err: any) { alert(err?.response?.data?.error || 'Failed to update control status'); }
+                  }}
                   className="g-input" style={{ fontSize: 11, padding: '2px 6px' }}>
                   {['passed', 'failed', 'not_assessed', 'not_applicable'].map(s => (
                     <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
@@ -429,10 +446,14 @@ function EvidenceTab({ evidence, frameworks, onRefresh }: { evidence: any[]; fra
 
   async function add() {
     if (!form.name || !form.framework_id) return;
-    await fceAPI.addEvidence(form);
-    setShowAdd(false);
-    setForm({ framework_id: '', control_id: '', name: '', description: '', evidence_type: 'document', file_name: '', source: '' });
-    onRefresh();
+    try {
+      await fceAPI.addEvidence(form);
+      setShowAdd(false);
+      setForm({ framework_id: '', control_id: '', name: '', description: '', evidence_type: 'document', file_name: '', source: '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to add evidence');
+    }
   }
 
   return (
@@ -494,7 +515,10 @@ function EvidenceTab({ evidence, frameworks, onRefresh }: { evidence: any[]; fra
           { key: 'expires_at', header: 'Expires', render: (e: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(e.expires_at)}</span> },
           { key: 'actions', header: '', render: (e: any) => (
             <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 10 }}
-              onClick={async () => { await fceAPI.deleteEvidence(e.id); onRefresh(); }}>
+              onClick={async () => {
+                try { await fceAPI.deleteEvidence(e.id); onRefresh(); }
+                catch (err: any) { alert(err?.response?.data?.error || 'Failed to delete evidence'); }
+              }}>
               Delete
             </ActionButton>
           ) },
@@ -516,10 +540,14 @@ function GapsTab({ gaps, frameworks, onRefresh }: { gaps: any; frameworks: any[]
 
   async function createRemediation() {
     if (!modal || !form.title) return;
-    await fceAPI.createRemediation({ framework_id: modal.framework_id, control_id: modal.control_id, control_name: modal.name, ...form });
-    setModal(null);
-    setForm({ title: '', description: '', priority: 'high', assigned_to: '', due_date: '' });
-    onRefresh();
+    try {
+      await fceAPI.createRemediation({ framework_id: modal.framework_id, control_id: modal.control_id, control_name: modal.name, ...form });
+      setModal(null);
+      setForm({ title: '', description: '', priority: 'high', assigned_to: '', due_date: '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create remediation');
+    }
   }
 
   return (
@@ -646,7 +674,10 @@ function RemediationTab({ remediations, frameworks, onRefresh }: { remediations:
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {REMEDIATION_STATUSES.filter(s => s !== item.status).slice(0, 3).map(s => (
                   <ActionButton key={s} variant="ghost" style={{ fontSize: 10 }}
-                    onClick={async () => { await fceAPI.updateRemediation(item.id, { status: s }); onRefresh(); }}>
+                    onClick={async () => {
+                      try { await fceAPI.updateRemediation(item.id, { status: s }); onRefresh(); }
+                      catch (err: any) { alert(err?.response?.data?.error || 'Failed to update remediation'); }
+                    }}>
                     → {s.replace(/_/g, ' ')}
                   </ActionButton>
                 ))}
@@ -752,9 +783,14 @@ function AssessmentsTab({ assessments, frameworks, onRefresh }: { assessments: a
     if (!form.framework_id) return;
     setRunning(true);
     const fw = frameworks.find(f => f.framework_id === form.framework_id);
-    await fceAPI.runAssessment({ ...form, framework_name: fw?.name || form.framework_id });
-    setRunning(false); setShowRun(false); setForm({ framework_id: '', notes: '' });
-    onRefresh();
+    try {
+      await fceAPI.runAssessment({ ...form, framework_name: fw?.name || form.framework_id });
+      setShowRun(false); setForm({ framework_id: '', notes: '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to run assessment');
+    }
+    setRunning(false);
   }
 
   return (
@@ -899,8 +935,10 @@ export default function FrameworkCompliancePage() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const markRead = async () => {
-    await fceAPI.markNotificationsRead();
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      await fceAPI.markNotificationsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch { /* non-critical, next load will reflect real state */ }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;

@@ -4887,6 +4887,22 @@ func seedReportsEnterprise(db *sql.DB) {
 
 func seedFrameworkComplianceEnterprise(db *sql.DB) {
 	tid := 9999
+
+	// Same non-idempotency bug as Scheduled Tasks/Firewall/Reports:
+	// fce_frameworks/fce_evidence/fce_assessments/fce_remediations all have
+	// real unique constraints their own ON CONFLICT clauses correctly
+	// target, but fce_controls has no unique constraint at all (so its
+	// "ON CONFLICT DO NOTHING" with no target never matches anything) and
+	// fce_notifications/fce_audit have no ON CONFLICT clause whatsoever —
+	// each represents a historical event, not a config row. Confirmed
+	// live: fce_controls had accumulated 2208 rows (vs. ~46 in the static
+	// seed list) and fce_notifications/fce_audit had 460/690 (vs. ~10/~13)
+	// before this guard was added.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM fce_frameworks WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
 	now := time.Now()
 
 	// ── tables ────────────────────────────────────────────────────────────────

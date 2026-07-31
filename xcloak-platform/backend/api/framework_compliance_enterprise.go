@@ -155,7 +155,9 @@ func fceNotify(tid int, eventType, title, message, severity, frameworkID, contro
 }
 
 func fceNullStr(s string) interface{} {
-	if s == "" { return nil }
+	if s == "" {
+		return nil
+	}
 	return s
 }
 
@@ -229,22 +231,26 @@ func GetFCEDashboard(c *gin.Context) {
 	if overdueCount > 0 {
 		auditReadiness -= overdueCount * 3
 	}
-	if auditReadiness < 0 { auditReadiness = 0 }
-	if auditReadiness > 100 { auditReadiness = 100 }
+	if auditReadiness < 0 {
+		auditReadiness = 0
+	}
+	if auditReadiness > 100 {
+		auditReadiness = 100
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_frameworks":   totalFrameworks,
-		"active_frameworks":  activeFrameworks,
-		"overall_score":      int(overallScore),
-		"passed_controls":    passedControls,
-		"failed_controls":    failedControls,
-		"not_assessed":       notAssessed,
-		"critical_findings":  criticalFindings,
-		"open_remediations":  openRemediations,
-		"overdue_count":      overdueCount,
-		"audit_readiness":    auditReadiness,
-		"status_breakdown":   statusBreakdown,
-		"bottom_frameworks":  bottomFrameworks,
+		"total_frameworks":  totalFrameworks,
+		"active_frameworks": activeFrameworks,
+		"overall_score":     int(overallScore),
+		"passed_controls":   passedControls,
+		"failed_controls":   failedControls,
+		"not_assessed":      notAssessed,
+		"critical_findings": criticalFindings,
+		"open_remediations": openRemediations,
+		"overdue_count":     overdueCount,
+		"audit_readiness":   auditReadiness,
+		"status_breakdown":  statusBreakdown,
+		"bottom_frameworks": bottomFrameworks,
 	})
 }
 
@@ -322,9 +328,15 @@ func PostFCEFramework(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
-	if body.Category == "" { body.Category = "custom" }
-	if body.Version == "" { body.Version = "1.0" }
-	if body.Tags == "" { body.Tags = "[]" }
+	if body.Category == "" {
+		body.Category = "custom"
+	}
+	if body.Version == "" {
+		body.Version = "1.0"
+	}
+	if body.Tags == "" {
+		body.Tags = "[]"
+	}
 	fid := fceID("FWK")
 	var id int
 	err := database.DB.QueryRow(
@@ -393,17 +405,24 @@ func GetFCEControls(c *gin.Context) {
 	args := []interface{}{tid}
 	idx := 2
 	if frameworkID != "" {
-		q += fmt.Sprintf(` AND framework_id=$%d`, idx); args = append(args, frameworkID); idx++
+		q += fmt.Sprintf(` AND framework_id=$%d`, idx)
+		args = append(args, frameworkID)
+		idx++
 	}
 	if status != "" {
-		q += fmt.Sprintf(` AND assessment_status=$%d`, idx); args = append(args, status); idx++
+		q += fmt.Sprintf(` AND assessment_status=$%d`, idx)
+		args = append(args, status)
+		idx++
 	}
 	if risk != "" {
-		q += fmt.Sprintf(` AND risk_level=$%d`, idx); args = append(args, risk); idx++
+		q += fmt.Sprintf(` AND risk_level=$%d`, idx)
+		args = append(args, risk)
+		idx++
 	}
 	if search != "" {
 		q += fmt.Sprintf(` AND (name ILIKE $%d OR control_id ILIKE $%d OR description ILIKE $%d)`, idx, idx, idx)
-		args = append(args, "%"+search+"%"); idx++
+		args = append(args, "%"+search+"%")
+		idx++
 	}
 	q += fmt.Sprintf(` ORDER BY framework_id, control_id LIMIT $%d`, idx)
 	args = append(args, limit)
@@ -488,10 +507,14 @@ func GetFCEEvidence(c *gin.Context) {
 	args := []interface{}{tid}
 	idx := 2
 	if frameworkID != "" {
-		q += fmt.Sprintf(` AND framework_id=$%d`, idx); args = append(args, frameworkID); idx++
+		q += fmt.Sprintf(` AND framework_id=$%d`, idx)
+		args = append(args, frameworkID)
+		idx++
 	}
 	if controlID != "" {
-		q += fmt.Sprintf(` AND control_id=$%d`, idx); args = append(args, controlID); idx++
+		q += fmt.Sprintf(` AND control_id=$%d`, idx)
+		args = append(args, controlID)
+		idx++
 	}
 	q += ` ORDER BY created_at DESC LIMIT 200`
 	rows, err := database.DB.Query(q, args...)
@@ -548,8 +571,12 @@ func PostFCEEvidence(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
-	if body.EvidenceType == "" { body.EvidenceType = "document" }
-	if body.Tags == "" { body.Tags = "[]" }
+	if body.EvidenceType == "" {
+		body.EvidenceType = "document"
+	}
+	if body.Tags == "" {
+		body.Tags = "[]"
+	}
 	eid := fceID("EVD")
 	var id int
 	database.DB.QueryRow(
@@ -616,9 +643,15 @@ func GetFCEGapAnalysis(c *gin.Context) {
 	for rows.Next() {
 		var r GapRow
 		rows.Scan(&r.FrameworkID, &r.ControlID, &r.Name, &r.Category, &r.RiskLevel, &r.Status, &r.Score, &r.Evidence)
-		if r.RiskLevel == "critical" { criticalCount++ }
-		if r.RiskLevel == "high" { highCount++ }
-		if r.Evidence == 0 { missingEvidence++ }
+		if r.RiskLevel == "critical" {
+			criticalCount++
+		}
+		if r.RiskLevel == "high" {
+			highCount++
+		}
+		if r.Evidence == 0 {
+			missingEvidence++
+		}
 		gaps = append(gaps, r)
 	}
 
@@ -645,22 +678,22 @@ func GetFCEAssessments(c *gin.Context) {
 	}
 	defer rows.Close()
 	type Row struct {
-		ID             int        `json:"id"`
-		AssessmentID   string     `json:"assessment_id"`
-		FrameworkID    string     `json:"framework_id"`
-		FrameworkName  string     `json:"framework_name"`
-		Type           string     `json:"assessment_type"`
-		Status         string     `json:"status"`
-		StartedAt      time.Time  `json:"started_at"`
-		CompletedAt    *time.Time `json:"completed_at"`
-		StartedBy      string     `json:"started_by"`
-		TotalControls  int        `json:"total_controls"`
-		Passed         int        `json:"passed"`
-		Failed         int        `json:"failed"`
-		NotApplicable  int        `json:"not_applicable"`
-		NotAssessed    int        `json:"not_assessed"`
-		Score          int        `json:"score"`
-		Notes          *string    `json:"notes"`
+		ID            int        `json:"id"`
+		AssessmentID  string     `json:"assessment_id"`
+		FrameworkID   string     `json:"framework_id"`
+		FrameworkName string     `json:"framework_name"`
+		Type          string     `json:"assessment_type"`
+		Status        string     `json:"status"`
+		StartedAt     time.Time  `json:"started_at"`
+		CompletedAt   *time.Time `json:"completed_at"`
+		StartedBy     string     `json:"started_by"`
+		TotalControls int        `json:"total_controls"`
+		Passed        int        `json:"passed"`
+		Failed        int        `json:"failed"`
+		NotApplicable int        `json:"not_applicable"`
+		NotAssessed   int        `json:"not_assessed"`
+		Score         int        `json:"score"`
+		Notes         *string    `json:"notes"`
 	}
 	result := []Row{}
 	for rows.Next() {
@@ -686,7 +719,9 @@ func PostFCEAssessment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "framework_id required"})
 		return
 	}
-	if body.Type == "" { body.Type = "manual" }
+	if body.Type == "" {
+		body.Type = "manual"
+	}
 
 	// count controls
 	var total, passed, failed, na, notAssessed int
@@ -736,10 +771,14 @@ func GetFCERemediations(c *gin.Context) {
 	args := []interface{}{tid}
 	idx := 2
 	if status != "" {
-		q += fmt.Sprintf(` AND status=$%d`, idx); args = append(args, status); idx++
+		q += fmt.Sprintf(` AND status=$%d`, idx)
+		args = append(args, status)
+		idx++
 	}
 	if fwID != "" {
-		q += fmt.Sprintf(` AND framework_id=$%d`, idx); args = append(args, fwID); idx++
+		q += fmt.Sprintf(` AND framework_id=$%d`, idx)
+		args = append(args, fwID)
+		idx++
 	}
 	q += ` ORDER BY CASE priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, due_date ASC NULLS LAST`
 
@@ -807,7 +846,9 @@ func PostFCERemediation(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "title required"})
 		return
 	}
-	if body.Priority == "" { body.Priority = "medium" }
+	if body.Priority == "" {
+		body.Priority = "medium"
+	}
 	rid := fceID("REM")
 	var id int
 	database.DB.QueryRow(
@@ -954,15 +995,15 @@ func GetFCEAnalytics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"by_framework":          byFramework,
-		"failed_by_category":    failedByCategory,
-		"risk_distribution":     riskDistribution,
-		"total_remediations":    totalRemediations,
-		"closed_remediations":   closedRemediations,
-		"overdue_remediations":  overdueRemediations,
-		"remediation_progress":  remediationProgress,
-		"total_evidence":        totalEvidence,
-		"verified_evidence":     verifiedEvidence,
+		"by_framework":         byFramework,
+		"failed_by_category":   failedByCategory,
+		"risk_distribution":    riskDistribution,
+		"total_remediations":   totalRemediations,
+		"closed_remediations":  closedRemediations,
+		"overdue_remediations": overdueRemediations,
+		"remediation_progress": remediationProgress,
+		"total_evidence":       totalEvidence,
+		"verified_evidence":    verifiedEvidence,
 	})
 }
 
@@ -1026,8 +1067,16 @@ func PostFCEAI(c *gin.Context) {
 		frows.Close()
 	}
 
+	// fce_controls.framework_id is a TEXT code (e.g. "FWK-000123"), not the
+	// integer fce_frameworks.id — joining on f.id=c.framework_id compares
+	// integer to text, which Postgres rejects outright ("operator does not
+	// exist: integer = text"). The discarded Query() error meant crows was
+	// always nil, so "Top failing controls" never appeared in the AI's
+	// context regardless of how many real failing controls existed. Same
+	// bug class already fixed in GetVMCompliance (api/vulnerability_management)
+	// against the same two tables — found here independently.
 	crows, _ := db.Query(`SELECT c.control_id, c.name, f.name, c.risk_level, c.category
-		FROM fce_controls c JOIN fce_frameworks f ON f.id=c.framework_id
+		FROM fce_controls c JOIN fce_frameworks f ON f.framework_id=c.framework_id AND f.tenant_id=c.tenant_id
 		WHERE c.tenant_id=$1 AND c.assessment_status='failed'
 		ORDER BY CASE c.risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 10`, tid)
 	if crows != nil {
