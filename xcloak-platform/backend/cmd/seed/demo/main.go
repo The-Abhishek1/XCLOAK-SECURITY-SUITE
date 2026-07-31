@@ -185,6 +185,8 @@ func main() {
 	seedVulnQueue(db)
 	log.Println("Seeding alert suppression rules (sup_*)…")
 	seedSuppressionEnterprise(db)
+	log.Println("Seeding quarantine/isolation queue (qe_*)…")
+	seedQuarantineEnterprise(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -8497,4 +8499,169 @@ func seedSuppressionEnterprise(db *sql.DB) {
 	}
 
 	log.Printf("Suppression enterprise seed: %d rules with audit trail", len(ruleIDs))
+}
+
+// seedQuarantineEnterprise seeds api/quarantine_enterprise.go's qe_* tables
+// (distinct from the older quarantined_files table used by api/quarantine.go,
+// which seedQuarantine above already covers).
+func seedQuarantineEnterprise(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS qe_items (
+		id                    SERIAL PRIMARY KEY,
+		tenant_id             TEXT NOT NULL,
+		quarantine_id         TEXT NOT NULL,
+		asset_name            TEXT NOT NULL,
+		asset_type            TEXT NOT NULL DEFAULT 'endpoint',
+		severity              TEXT NOT NULL DEFAULT 'high',
+		risk_score            INTEGER DEFAULT 75,
+		status                TEXT NOT NULL DEFAULT 'active',
+		owner                 TEXT,
+		source_detection      TEXT,
+		incident_id           TEXT,
+		case_id               TEXT,
+		quarantine_type       TEXT NOT NULL DEFAULT 'full_network_isolation',
+		quarantine_reason     TEXT,
+		detection_rule        TEXT,
+		mitre_techniques      TEXT DEFAULT '[]',
+		related_alerts        TEXT DEFAULT '[]',
+		business_impact       TEXT,
+		analyst_notes         TEXT,
+		approval_status       TEXT DEFAULT 'not_required',
+		approved_by           TEXT,
+		evidence_collected    BOOLEAN DEFAULT FALSE,
+		evidence_types        TEXT DEFAULT '[]',
+		release_type          TEXT,
+		expires_at            TIMESTAMP,
+		created_at            TIMESTAMP DEFAULT NOW(),
+		updated_at            TIMESTAMP DEFAULT NOW()
+	)`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS qe_evidence (
+		id             SERIAL PRIMARY KEY,
+		tenant_id      TEXT NOT NULL,
+		item_id        INTEGER NOT NULL,
+		evidence_type  TEXT NOT NULL,
+		data           TEXT DEFAULT '{}',
+		collected_at   TIMESTAMP DEFAULT NOW()
+	)`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS qe_audit (
+		id             SERIAL PRIMARY KEY,
+		tenant_id      TEXT NOT NULL,
+		item_id        INTEGER,
+		quarantine_id  TEXT,
+		asset_name     TEXT,
+		action         TEXT NOT NULL,
+		actor          TEXT NOT NULL,
+		details        TEXT,
+		created_at     TIMESTAMP DEFAULT NOW()
+	)`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM qe_items WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	now := time.Now()
+
+	items := []struct {
+		assetName, assetType, severity, status, owner, source, incidentID, qtype, reason, rule, mitre, impact, approvalStatus, approvedBy, releaseType string
+		riskScore, ageHours, expiresInHours                                                                                                            int
+		evidenceCollected                                                                                                                              bool
+	}{
+		{"win-workstation-05", "endpoint", "critical", "active", "soc-analyst-1", "EDR: Cobalt Strike beacon detected", "INC-2026-0341", "full_network_isolation",
+			"Cobalt Strike beacon C2 traffic detected on host — full isolation pending approval.", "Cobalt_Strike_Beacon_YARA", `["T1071.001","T1059.001"]`, "Finance workstation — active user session at time of detection",
+			"pending", "", "", 95, 3, 0, false},
+		{"beacon", "file", "high", "active", "soc-analyst-2", "YARA: Cobalt_Strike_Beacon", "INC-2026-0341", "move_to_secure_storage",
+			"Malicious binary matched Cobalt Strike beacon signature; moved to secure evidence storage.", "Cobalt_Strike_Beacon_YARA", "[]", "Dropped via phishing attachment",
+			"not_required", "", "", 90, 3, 0, true},
+		{"mimikatz.exe", "file", "critical", "released", "soc-analyst-1", "YARA: Mimikatz_Generic", "INC-2026-0298", "move_to_secure_storage",
+			"Credential-theft tool isolated during incident response; released after forensic collection completed.", "Mimikatz_Generic_YARA", "[]", "Found on domain controller during IR",
+			"approved", "admin", "manual", 92, 96, 0, true},
+		{"jdoe@corp.local", "user", "high", "active", "soc-analyst-2", "UEBA: anomalous login pattern", "", "disable_account",
+			"Impossible-travel login anomaly — account disabled pending investigation.", "UEBA_Impossible_Travel", "[]", "Account has finance-system access",
+			"approved", "admin", "", 78, 30, 0, false},
+		{"phish-payload.docm", "email", "medium", "escalated", "soc-analyst-3", "Email gateway: malicious macro", "", "move_to_quarantine_mailbox",
+			"Weaponized document with macro payload — escalated for sandbox detonation analysis.", "Email_Macro_Heuristic", "[]", "Sent to 12 mailboxes before quarantine",
+			"not_required", "", "", 60, 12, 0, false},
+		{"db-server-02", "endpoint", "critical", "active", "soc-analyst-1", "Ransomware behavioral detection", "INC-2026-0355", "management_network_only",
+			"Ransomware-pattern file encryption activity detected — isolated to management network only, awaiting approval to expand scope.", "Ransomware_Behavioral", `["T1486","T1490"]`, "Production database host — revenue-impacting",
+			"pending", "", "", 98, 1, 4, false},
+		{"203.0.113.44", "network", "low", "active", "soc-analyst-3", "Threat intel: known scanner IP", "", "block_ip",
+			"Outbound connection to known scanning infrastructure — blocked pending review.", "ThreatIntel_IP_Match", "[]", "",
+			"not_required", "", "", 25, 50, 0, false},
+		{"win-workstation-09", "endpoint", "medium", "released", "soc-analyst-2", "AV: PUA detected", "", "internet_only",
+			"Potentially unwanted application isolated to internet-only network; released after remediation confirmed clean.", "AV_PUA_Signature", "[]", "",
+			"not_required", "", "manual", 45, 200, 0, true},
+	}
+
+	created := 0
+	for i, it := range items {
+		qid := fmt.Sprintf("QE-9999-%05d", 10000+i)
+		createdAt := now.Add(-time.Duration(it.ageHours) * time.Hour)
+		var expiresAt interface{}
+		if it.expiresInHours > 0 {
+			expiresAt = now.Add(time.Duration(it.expiresInHours) * time.Hour)
+		}
+		var approvedByVal interface{}
+		if it.approvedBy != "" {
+			approvedByVal = it.approvedBy
+		}
+		var releaseTypeVal interface{}
+		if it.releaseType != "" {
+			releaseTypeVal = it.releaseType
+		}
+		status := it.status
+
+		var id int
+		err := db.QueryRow(`
+			INSERT INTO qe_items (tenant_id,quarantine_id,asset_name,asset_type,severity,risk_score,status,owner,
+				source_detection,incident_id,quarantine_type,quarantine_reason,detection_rule,mitre_techniques,
+				business_impact,approval_status,approved_by,evidence_collected,release_type,expires_at,created_at,updated_at)
+			VALUES ('9999',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
+			RETURNING id`,
+			qid, it.assetName, it.assetType, it.severity, it.riskScore, status, it.owner,
+			it.source, it.incidentID, it.qtype, it.reason, it.rule, it.mitre,
+			it.impact, it.approvalStatus, approvedByVal, it.evidenceCollected, releaseTypeVal, expiresAt, createdAt,
+		).Scan(&id)
+		if err != nil {
+			log.Printf("qe_items: %v", err)
+			continue
+		}
+		created++
+
+		mustExec(db, `INSERT INTO qe_audit (tenant_id,item_id,quarantine_id,asset_name,action,actor,details,created_at)
+			VALUES ('9999',$1,$2,$3,'created',$4,$5,$6)`,
+			id, qid, it.assetName, it.owner, "Quarantine initiated for "+it.assetType+" "+it.assetName, createdAt)
+		if it.approvalStatus == "pending" {
+			mustExec(db, `INSERT INTO qe_audit (tenant_id,item_id,quarantine_id,asset_name,action,actor,details,created_at)
+				VALUES ('9999',$1,$2,$3,'approval_required',$4,'Critical severity — awaiting approval',$5)`,
+				id, qid, it.assetName, it.owner, createdAt.Add(time.Minute))
+		}
+		if it.approvalStatus == "approved" {
+			mustExec(db, `INSERT INTO qe_audit (tenant_id,item_id,quarantine_id,asset_name,action,actor,details,created_at)
+				VALUES ('9999',$1,$2,$3,'approved','admin','Approved for isolation',$4)`,
+				id, qid, it.assetName, createdAt.Add(time.Hour))
+		}
+		if it.evidenceCollected {
+			mustExec(db, `INSERT INTO qe_evidence (tenant_id,item_id,evidence_type,data,collected_at)
+				VALUES ('9999',$1,'memory_dump','{"size_mb":512,"tool":"WinPMEM"}',$2)`,
+				id, createdAt.Add(30*time.Minute))
+			mustExec(db, `INSERT INTO qe_evidence (tenant_id,item_id,evidence_type,data,collected_at)
+				VALUES ('9999',$1,'process_list','{"count":142}',$2)`,
+				id, createdAt.Add(31*time.Minute))
+			mustExec(db, `INSERT INTO qe_audit (tenant_id,item_id,quarantine_id,asset_name,action,actor,details,created_at)
+				VALUES ('9999',$1,$2,$3,'evidence_collected',$4,'Forensic evidence collected',$5)`,
+				id, qid, it.assetName, it.owner, createdAt.Add(31*time.Minute))
+		}
+		if status == "released" {
+			mustExec(db, `INSERT INTO qe_audit (tenant_id,item_id,quarantine_id,asset_name,action,actor,details,created_at)
+				VALUES ('9999',$1,$2,$3,'released','admin','Asset released after remediation confirmed',$4)`,
+				id, qid, it.assetName, createdAt.Add(2*time.Hour))
+		}
+		if status == "escalated" {
+			mustExec(db, `INSERT INTO qe_audit (tenant_id,item_id,quarantine_id,asset_name,action,actor,details,created_at)
+				VALUES ('9999',$1,$2,$3,'escalated',$4,'Escalated for deeper investigation',$5)`,
+				id, qid, it.assetName, it.owner, createdAt.Add(time.Hour))
+		}
+	}
+
+	log.Printf("Quarantine enterprise seed: %d items with audit trail/evidence", created)
 }

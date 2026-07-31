@@ -4,11 +4,11 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { qeAPI } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
-import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
 import {
   LayoutDashboard, ListChecks, Sparkles, CheckCircle2, BarChart3, ScrollText, FileText,
   RefreshCw, AlertTriangle, Clock, Download, Check, X, FolderOpen, Brain, Lock,
-  Monitor, Cpu, User, Mail, Network,
+  Monitor, Cpu, User, Mail, Network, Plus,
 } from 'lucide-react';
 
 type Tab = 'dashboard' | 'queue' | 'ai' | 'approvals' | 'analytics' | 'audit' | 'reports';
@@ -153,6 +153,32 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
   const [evidence, setEvidence] = useState<any[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [collectingEvidence, setCollectingEvidence] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const emptyCreateForm = {
+    asset_name: '', asset_type: 'endpoint', severity: 'high', risk_score: 75,
+    owner: '', source_detection: '', incident_id: '', case_id: '',
+    quarantine_type: 'full_network_isolation', quarantine_reason: '',
+    detection_rule: '', mitre_techniques: '', business_impact: '', expires_at: '',
+  };
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+
+  const createItem = async () => {
+    if (!createForm.asset_name.trim()) {
+      alert('Asset name is required');
+      return;
+    }
+    setCreating(true);
+    try {
+      await qeAPI.createItem({ ...createForm, risk_score: Number(createForm.risk_score) || 75 });
+      setShowCreate(false);
+      setCreateForm(emptyCreateForm);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create quarantine item');
+    }
+    setCreating(false);
+  };
 
   const filtered = useMemo(() => items.filter(r => {
     if (filterStatus && r.status !== filterStatus) return false;
@@ -182,25 +208,37 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
   const doAction = async (action: string) => {
     if (!selected) return;
     setActionLoading(true);
-    await qeAPI.action(selected.id, { action, notes });
-    onRefresh();
+    try {
+      await qeAPI.action(selected.id, { action, notes });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record action');
+    }
     setActionLoading(false);
   };
 
   const doCollectEvidence = async () => {
     if (!selected) return;
     setCollectingEvidence(true);
-    await qeAPI.collectEvidence(selected.id);
-    await loadEvidence(selected.id);
+    try {
+      await qeAPI.collectEvidence(selected.id);
+      await loadEvidence(selected.id);
+      setActiveDetail('evidence');
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to collect evidence');
+    }
     setCollectingEvidence(false);
-    setActiveDetail('evidence');
   };
 
   const approve = async (decision: string) => {
     if (!selected) return;
     setActionLoading(true);
-    await qeAPI.approve(selected.id, { decision, notes });
-    onRefresh();
+    try {
+      await qeAPI.approve(selected.id, { decision, notes });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record decision');
+    }
     setActionLoading(false);
   };
 
@@ -214,6 +252,7 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
   }
 
   return (
+    <>
     <div style={{ display: 'flex', gap: 14, height: 'calc(100vh - 220px)', minHeight: 500 }}>
       {/* Left list */}
       <div className="g-card" style={{ width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
@@ -230,6 +269,7 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
             </select>
             <ActionButton variant="ghost" icon={RefreshCw} onClick={onRefresh} style={{ fontSize: 11, flexShrink: 0 }} />
           </div>
+          <ActionButton variant="primary" icon={Plus} onClick={() => setShowCreate(true)} style={{ fontSize: 11 }}>Quarantine Asset</ActionButton>
           {pendingApprovals.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#f97316', background: '#f9731610', padding: '4px 8px', borderRadius: 4, border: '1px solid #f9731630' }}>
               <AlertTriangle style={{ width: 11, height: 11 }} />
@@ -450,6 +490,87 @@ function QueueTab({ items, onRefresh }: { items: any[]; onRefresh: () => void })
         </div>
       )}
     </div>
+
+    <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Quarantine Asset" maxWidth={560}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Asset Name *</label>
+            <input className="g-input" value={createForm.asset_name} onChange={e => setCreateForm(f => ({ ...f, asset_name: e.target.value }))} placeholder="win-workstation-07" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Asset Type</label>
+            <select className="g-select" value={createForm.asset_type} onChange={e => setCreateForm(f => ({ ...f, asset_type: e.target.value }))} style={{ width: '100%' }}>
+              {['endpoint','file','process','user','email','network'].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Severity</label>
+            <select className="g-select" value={createForm.severity} onChange={e => setCreateForm(f => ({ ...f, severity: e.target.value }))} style={{ width: '100%' }}>
+              {['critical','high','medium','low'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Risk Score</label>
+            <input className="g-input" type="number" min={0} max={100} value={createForm.risk_score} onChange={e => setCreateForm(f => ({ ...f, risk_score: Number(e.target.value) }))} style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Owner</label>
+            <input className="g-input" value={createForm.owner} onChange={e => setCreateForm(f => ({ ...f, owner: e.target.value }))} placeholder="analyst@corp.com" style={{ width: '100%' }} />
+          </div>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Quarantine Scope</label>
+          <select className="g-select" value={createForm.quarantine_type} onChange={e => setCreateForm(f => ({ ...f, quarantine_type: e.target.value }))} style={{ width: '100%' }}>
+            {Object.entries(QTYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Quarantine Reason</label>
+          <textarea className="g-input" rows={2} value={createForm.quarantine_reason} onChange={e => setCreateForm(f => ({ ...f, quarantine_reason: e.target.value }))} placeholder="Why this asset is being isolated…" style={{ width: '100%', resize: 'none' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Source Detection</label>
+            <input className="g-input" value={createForm.source_detection} onChange={e => setCreateForm(f => ({ ...f, source_detection: e.target.value }))} placeholder="EDR alert / rule name" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Detection Rule</label>
+            <input className="g-input" value={createForm.detection_rule} onChange={e => setCreateForm(f => ({ ...f, detection_rule: e.target.value }))} style={{ width: '100%' }} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Incident ID</label>
+            <input className="g-input" value={createForm.incident_id} onChange={e => setCreateForm(f => ({ ...f, incident_id: e.target.value }))} style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Case ID</label>
+            <input className="g-input" value={createForm.case_id} onChange={e => setCreateForm(f => ({ ...f, case_id: e.target.value }))} style={{ width: '100%' }} />
+          </div>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Business Impact</label>
+          <input className="g-input" value={createForm.business_impact} onChange={e => setCreateForm(f => ({ ...f, business_impact: e.target.value }))} placeholder="e.g. finance workstation, revenue-impacting" style={{ width: '100%' }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Expires At (optional)</label>
+          <input className="g-input" type="datetime-local" value={createForm.expires_at} onChange={e => setCreateForm(f => ({ ...f, expires_at: e.target.value }))} style={{ width: '100%' }} />
+        </div>
+        {createForm.severity === 'critical' && (
+          <div style={{ fontSize: 11, color: '#f97316', background: '#f9731610', padding: '6px 10px', borderRadius: 4, border: '1px solid #f9731630' }}>
+            Critical-severity items require approval before release.
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <ActionButton variant="primary" onClick={createItem} disabled={creating} style={{ fontSize: 12 }}>{creating ? 'Quarantining…' : 'Quarantine Asset'}</ActionButton>
+          <ActionButton variant="ghost" onClick={() => setShowCreate(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
+        </div>
+      </div>
+    </Modal>
+    </>
   );
 }
 
@@ -572,8 +693,12 @@ function ApprovalsTab({ items, onRefresh }: { items: any[]; onRefresh: () => voi
 
   const decide = async (id: number, decision: string) => {
     setLoading(id);
-    await qeAPI.approve(id, { decision, notes: notes[id] || '' });
-    onRefresh();
+    try {
+      await qeAPI.approve(id, { decision, notes: notes[id] || '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record decision');
+    }
     setLoading(null);
   };
 

@@ -1,9 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -78,16 +80,16 @@ func GetQEDashboard(c *gin.Context) {
 		return n
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"quarantined_endpoints":          count(` AND asset_type='endpoint' AND status='active'`),
-		"quarantined_files":              count(` AND asset_type='file' AND status='active'`),
-		"quarantined_processes":          count(` AND asset_type='process' AND status='active'`),
-		"quarantined_users":              count(` AND asset_type='user' AND status='active'`),
-		"quarantined_emails":             count(` AND asset_type='email' AND status='active'`),
+		"quarantined_endpoints":           count(` AND asset_type='endpoint' AND status='active'`),
+		"quarantined_files":               count(` AND asset_type='file' AND status='active'`),
+		"quarantined_processes":           count(` AND asset_type='process' AND status='active'`),
+		"quarantined_users":               count(` AND asset_type='user' AND status='active'`),
+		"quarantined_emails":              count(` AND asset_type='email' AND status='active'`),
 		"quarantined_network_connections": count(` AND asset_type='network' AND status='active'`),
-		"active_quarantine_sessions":     count(` AND status='active'`),
-		"released_assets":                count(` AND status='released'`),
-		"pending_approvals":              count(` AND approval_status='pending'`),
-		"expiring_soon":                  count(` AND expires_at IS NOT NULL AND expires_at < NOW() + INTERVAL '24 hours' AND status='active'`),
+		"active_quarantine_sessions":      count(` AND status='active'`),
+		"released_assets":                 count(` AND status='released'`),
+		"pending_approvals":               count(` AND approval_status='pending'`),
+		"expiring_soon":                   count(` AND expires_at IS NOT NULL AND expires_at < NOW() + INTERVAL '24 hours' AND status='active'`),
 	})
 }
 
@@ -107,21 +109,27 @@ func GetQEQueue(c *gin.Context) {
 	i := 2
 
 	if status != "" {
-		q += fmt.Sprintf(` AND status=$%d`, i); args = append(args, status); i++
+		q += fmt.Sprintf(` AND status=$%d`, i)
+		args = append(args, status)
+		i++
 	}
 	if assetType != "" {
-		q += fmt.Sprintf(` AND asset_type=$%d`, i); args = append(args, assetType); i++
+		q += fmt.Sprintf(` AND asset_type=$%d`, i)
+		args = append(args, assetType)
+		i++
 	}
 	if search != "" {
 		q += fmt.Sprintf(` AND (asset_name ILIKE $%d OR quarantine_id ILIKE $%d OR owner ILIKE $%d)`, i, i, i)
-		args = append(args, "%"+search+"%"); i++
+		args = append(args, "%"+search+"%")
+		i++
 	}
 	q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d`, i)
 	args = append(args, limit)
 
 	rows, err := database.DB.Query(q, args...)
 	if err != nil {
-		c.JSON(http.StatusOK, []interface{}{}); return
+		c.JSON(http.StatusOK, []interface{}{})
+		return
 	}
 	defer rows.Close()
 
@@ -152,16 +160,25 @@ func GetQEItem(c *gin.Context) {
 	var rid, riskScore int
 	var evCol bool
 	var expiresAt, createdAt *time.Time
-	err := database.DB.QueryRow(`SELECT id,quarantine_id,asset_name,asset_type,severity,risk_score,status,owner,
-		source_detection,incident_id,case_id,quarantine_type,quarantine_reason,detection_rule,
-		mitre_techniques,related_alerts,business_impact,analyst_notes,approval_status,approved_by,
-		evidence_collected,evidence_types,release_type,expires_at,created_at
+	// owner/source_detection/incident_id/case_id/quarantine_reason/
+	// detection_rule/business_impact/analyst_notes/approved_by/
+	// release_type are all nullable with no DEFAULT — PostQEItem doesn't
+	// set analyst_notes/approved_by/release_type at all, so every item
+	// has NULL there until a later action sets one. Scanning NULL into a
+	// plain Go string used to fail this query's Scan() unconditionally,
+	// meaning GetQEItem 404'd for every quarantine item ever created
+	// (confirmed live: a freshly-created item immediately 404'd here).
+	err := database.DB.QueryRow(`SELECT id,quarantine_id,asset_name,asset_type,severity,risk_score,status,COALESCE(owner,''),
+		COALESCE(source_detection,''),COALESCE(incident_id,''),COALESCE(case_id,''),quarantine_type,COALESCE(quarantine_reason,''),COALESCE(detection_rule,''),
+		mitre_techniques,related_alerts,COALESCE(business_impact,''),COALESCE(analyst_notes,''),approval_status,COALESCE(approved_by,''),
+		evidence_collected,evidence_types,COALESCE(release_type,''),expires_at,created_at
 		FROM qe_items WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(
 		&rid, &qid, &name, &atype, &sev, &riskScore, &st, &owner, &src, &inc, &cas,
 		&qtype, &qreason, &rule, &mitre, &alerts, &impact, &notes, &appSt, &approvedBy,
 		&evCol, &evTypes, &relType, &expiresAt, &createdAt)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"id": rid, "quarantine_id": qid, "asset_name": name, "asset_type": atype,
@@ -196,29 +213,55 @@ func PostQEItem(c *gin.Context) {
 		ExpiresAt        string `json:"expires_at"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil || b.AssetName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "asset_name required"}); return
+		c.JSON(http.StatusBadRequest, gin.H{"error": "asset_name required"})
+		return
 	}
-	if b.AssetType == "" { b.AssetType = "endpoint" }
-	if b.Severity == "" { b.Severity = "high" }
-	if b.RiskScore == 0 { b.RiskScore = 75 }
-	if b.QuarantineType == "" { b.QuarantineType = "full_network_isolation" }
-	if b.MitreTechniques == "" { b.MitreTechniques = "[]" }
+	if b.AssetType == "" {
+		b.AssetType = "endpoint"
+	}
+	if b.Severity == "" {
+		b.Severity = "high"
+	}
+	if b.RiskScore == 0 {
+		b.RiskScore = 75
+	}
+	if b.QuarantineType == "" {
+		b.QuarantineType = "full_network_isolation"
+	}
+	if b.MitreTechniques == "" {
+		b.MitreTechniques = "[]"
+	}
 
 	qid := fmt.Sprintf("QE-%04d-%d", tid, time.Now().UnixMilli()%100000)
 	approvalStatus := "not_required"
-	if b.Severity == "critical" { approvalStatus = "pending" }
+	if b.Severity == "critical" {
+		approvalStatus = "pending"
+	}
+
+	// b.ExpiresAt was previously bound from the request body but never
+	// referenced again — accepted then silently dropped, so a caller
+	// asking for an expiry at creation time got none.
+	var expiresAt interface{}
+	if b.ExpiresAt != "" {
+		if t, perr := time.Parse("2006-01-02T15:04", b.ExpiresAt); perr == nil {
+			expiresAt = t
+		} else if t, perr := time.Parse(time.RFC3339, b.ExpiresAt); perr == nil {
+			expiresAt = t
+		}
+	}
 
 	var id int
 	err := database.DB.QueryRow(`INSERT INTO qe_items
 		(tenant_id,quarantine_id,asset_name,asset_type,severity,risk_score,owner,
 		source_detection,incident_id,case_id,quarantine_type,quarantine_reason,
-		detection_rule,mitre_techniques,business_impact,approval_status)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+		detection_rule,mitre_techniques,business_impact,approval_status,expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
 		tid, qid, b.AssetName, b.AssetType, b.Severity, b.RiskScore, b.Owner,
 		b.SourceDetection, b.IncidentID, b.CaseID, b.QuarantineType, b.QuarantineReason,
-		b.DetectionRule, b.MitreTechniques, b.BusinessImpact, approvalStatus).Scan(&id)
+		b.DetectionRule, b.MitreTechniques, b.BusinessImpact, approvalStatus, expiresAt).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	qeAudit(tid, id, qid, b.AssetName, "created", actor, "Quarantine initiated for "+b.AssetType+" "+b.AssetName)
 	if approvalStatus == "pending" {
@@ -244,16 +287,19 @@ func PostQEAction(c *gin.Context) {
 	var qid, name string
 	database.DB.QueryRow(`SELECT quarantine_id,asset_name FROM qe_items WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&qid, &name)
 	if qid == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
 	}
 
 	switch b.Action {
 	case "release":
-		database.DB.Exec(`UPDATE qe_items SET status='released',updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, id, tid)
+		database.DB.Exec(`UPDATE qe_items SET status='released',release_type='manual',updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, id, tid)
 		qeAudit(tid, id, qid, name, "released", actor, "Asset released. Notes: "+b.Notes)
 	case "extend":
 		dur := b.Duration
-		if dur == 0 { dur = 24 }
+		if dur == 0 {
+			dur = 24
+		}
 		database.DB.Exec(`UPDATE qe_items SET expires_at=NOW()+$3*interval'1 hour',updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, id, tid, dur)
 		qeAudit(tid, id, qid, name, "extended", actor, fmt.Sprintf("Quarantine extended by %dh", dur))
 	case "collect_evidence":
@@ -284,11 +330,14 @@ func PostQEApprove(c *gin.Context) {
 	var qid, name string
 	database.DB.QueryRow(`SELECT quarantine_id,asset_name FROM qe_items WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&qid, &name)
 	if qid == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
 	}
 
 	appStatus := "rejected"
-	if b.Decision == "approve" { appStatus = "approved" }
+	if b.Decision == "approve" {
+		appStatus = "approved"
+	}
 	database.DB.Exec(`UPDATE qe_items SET approval_status=$3,approved_by=$4,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, id, tid, appStatus, actor)
 	qeAudit(tid, id, qid, name, appStatus, actor, "Approval decision: "+b.Notes)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "decision": b.Decision})
@@ -303,7 +352,8 @@ func PostQECollectEvidence(c *gin.Context) {
 	var qid, name string
 	database.DB.QueryRow(`SELECT quarantine_id,asset_name FROM qe_items WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&qid, &name)
 	if qid == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"}); return
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
 	}
 
 	types := []string{"processes", "network_connections", "event_logs", "file_metadata", "registry_changes"}
@@ -322,7 +372,8 @@ func GetQEEvidence(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	rows, err := database.DB.Query(`SELECT id,evidence_type,data,collected_at FROM qe_evidence WHERE item_id=$1 AND tenant_id=$2 ORDER BY collected_at DESC`, id, tid)
 	if err != nil {
-		c.JSON(http.StatusOK, []interface{}{}); return
+		c.JSON(http.StatusOK, []interface{}{})
+		return
 	}
 	defer rows.Close()
 	items := []map[string]interface{}{}
@@ -347,11 +398,26 @@ func PostQEAI(c *gin.Context) {
 		MitreTechniques string `json:"mitre_techniques"`
 	}
 	c.ShouldBindJSON(&b)
-	prompt := fmt.Sprintf("Quarantine AI analysis for %s %s. Type: %s. Severity: %s. Detection: %s. MITRE: %s. Provide: threat_summary, root_cause, recommended_actions (array), estimated_business_impact, similar_historical_cases (array), release_recommendation.",
+	prompt := fmt.Sprintf(`Quarantine AI analysis for %s %s. Type: %s. Severity: %s. Detection: %s. MITRE: %s.
+Respond with a single JSON object, no other text, no markdown code fences: {"threat_summary": string, "root_cause": string, "recommended_actions": [string], "estimated_business_impact": string, "similar_historical_cases": [string], "release_recommendation": string}`,
 		b.AssetType, b.AssetName, b.QuarantineType, b.Severity, b.SourceDetection, b.MitreTechniques)
 	resp, err := services.CallLLM(prompt)
 	if err != nil {
 		resp = fmt.Sprintf(`{"threat_summary":"Threat analysis for %s","root_cause":"Malicious activity detected via %s","recommended_actions":["Collect memory dump","Review lateral movement","Check parent processes","Verify threat removal before release"],"estimated_business_impact":"Medium — asset isolated from production network. Service degradation possible.","similar_historical_cases":["INC-2024-0341 — similar endpoint isolation","INC-2024-0289 — same detection rule triggered"],"release_recommendation":"Do not release until endpoint health check passes and EDR confirms clean."}`, b.AssetName, b.SourceDetection)
+	} else {
+		// The frontend does its own JSON.parse(ai_analysis) — strip any
+		// markdown code fences the LLM adds despite being asked not to,
+		// the same way every other page's AI endpoint already does before
+		// handing raw text back to a JSON parser.
+		if idx := strings.Index(resp, "```json"); idx != -1 {
+			resp = resp[idx+7:]
+		} else if idx := strings.Index(resp, "```"); idx != -1 {
+			resp = resp[idx+3:]
+		}
+		if idx := strings.LastIndex(resp, "```"); idx != -1 {
+			resp = resp[:idx]
+		}
+		resp = strings.TrimSpace(resp)
 	}
 	c.JSON(http.StatusOK, gin.H{"ai_analysis": resp})
 }
@@ -363,7 +429,8 @@ func GetQEAudit(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id,item_id,quarantine_id,asset_name,action,actor,details,created_at
 		FROM qe_audit WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2`, tid, limit)
 	if err != nil {
-		c.JSON(http.StatusOK, []interface{}{}); return
+		c.JSON(http.StatusOK, []interface{}{})
+		return
 	}
 	defer rows.Close()
 	entries := []map[string]interface{}{}
@@ -389,10 +456,10 @@ func GetQEAnalytics(c *gin.Context) {
 		return n
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"total_quarantined":    count(``),
-		"active":               count(` AND status='active'`),
-		"released":             count(` AND status='released'`),
-		"pending_approval":     count(` AND approval_status='pending'`),
+		"total_quarantined": count(``),
+		"active":            count(` AND status='active'`),
+		"released":          count(` AND status='released'`),
+		"pending_approval":  count(` AND approval_status='pending'`),
 		"by_type": gin.H{
 			"endpoint": count(` AND asset_type='endpoint'`),
 			"file":     count(` AND asset_type='file'`),
@@ -412,32 +479,95 @@ func GetQEAnalytics(c *gin.Context) {
 
 // POST /api/qe/report
 func PostQEReport(c *gin.Context) {
-	var b struct{ ReportType string `json:"report_type"` }
+	tid := tenantIDFromContext(c)
+	var b struct {
+		ReportType string `json:"report_type"`
+	}
 	c.ShouldBindJSON(&b)
 	actor := usernameFromContext(c)
-	if b.ReportType == "" { b.ReportType = "quarantine_activity" }
+	if b.ReportType == "" {
+		b.ReportType = "quarantine_activity"
+	}
 	titles := map[string]string{
-		"quarantine_activity":  "Quarantine Activity Report",
-		"endpoint_isolation":   "Endpoint Isolation Report",
-		"malware_containment":  "Malware Containment Report",
-		"executive_summary":    "Executive Summary",
-		"audit_report":         "Audit Report",
-		"compliance_report":    "Compliance Report",
+		"quarantine_activity": "Quarantine Activity Report",
+		"endpoint_isolation":  "Endpoint Isolation Report",
+		"malware_containment": "Malware Containment Report",
+		"executive_summary":   "Executive Summary",
+		"audit_report":        "Audit Report",
+		"compliance_report":   "Compliance Report",
 	}
 	title := titles[b.ReportType]
-	if title == "" { title = "Quarantine Report" }
+	if title == "" {
+		title = "Quarantine Report"
+	}
+
+	count := func(where string, args ...interface{}) int {
+		var n int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM qe_items WHERE tenant_id=$1`+where, append([]interface{}{tid}, args...)...).Scan(&n)
+		return n
+	}
+	total := count(``)
+	active := count(` AND status='active'`)
+	released := count(` AND status='released'`)
+	pendingApproval := count(` AND approval_status='pending'`)
+	byType := gin.H{
+		"endpoint": count(` AND asset_type='endpoint'`),
+		"file":     count(` AND asset_type='file'`),
+		"process":  count(` AND asset_type='process'`),
+		"user":     count(` AND asset_type='user'`),
+		"email":    count(` AND asset_type='email'`),
+		"network":  count(` AND asset_type='network'`),
+	}
+	evidenceCollected := count(` AND evidence_collected=true`)
+
+	prompt := fmt.Sprintf(`You are a SOC quarantine/containment reporting assistant. Write a %s based on these REAL metrics: %d total quarantine items, %d currently active, %d released, %d pending approval, %d with evidence collected. Respond as a JSON object with fields: executive_summary (2-3 sentences grounded only in these numbers, no invented incidents), recommendations (a JSON array of up to 4 short actionable strings based only on the real data given — if there isn't enough data, say so instead of inventing findings).`,
+		title, total, active, released, pendingApproval, evidenceCollected)
+	var summary string
+	var recommendations []string
+	raw, err := services.CallLLM(prompt)
+	if err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		if total == 0 {
+			summary = "No quarantine activity has been recorded for this tenant."
+		} else {
+			summary = fmt.Sprintf("%d quarantine items recorded, %d currently active and %d released. %d item(s) are pending approval.", total, active, released, pendingApproval)
+		}
+		recommendations = []string{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"title":            title,
-		"report_type":      b.ReportType,
-		"generated_at":     time.Now(),
-		"generated_by":     actor,
-		"classification":   "CONFIDENTIAL",
-		"executive_summary": "This report summarizes quarantine activity, containment effectiveness, and analyst response metrics across all asset types for the reporting period.",
-		"recommendations": []interface{}{
-			"Review and release assets with clean verification scores",
-			"Implement automated release workflows for low-risk endpoints",
-			"Ensure evidence collection runs within 15 minutes of quarantine",
-			"Enable manager approval for all user account quarantines",
+		"title":             title,
+		"report_type":       b.ReportType,
+		"generated_at":      time.Now(),
+		"generated_by":      actor,
+		"classification":    "CONFIDENTIAL",
+		"executive_summary": summary,
+		"key_metrics": gin.H{
+			"total_quarantined":  total,
+			"active":             active,
+			"released":           released,
+			"pending_approval":   pendingApproval,
+			"evidence_collected": evidenceCollected,
 		},
+		"by_type_summary": byType,
+		"recommendations": recommendations,
 	})
 }
