@@ -2,13 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { cmdbAPI } from '@/lib/api';
-import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
 import {
   LayoutDashboard, Boxes, LayoutGrid, Share2, Radar, HeartPulse, ShieldAlert,
-  ShieldCheck, BarChart3, Sparkles, FileBarChart2, ScrollText, X, Check, FilePlus2, Bell,
+  ShieldCheck, BarChart3, Sparkles, FileBarChart2, ScrollText, X, Check, FilePlus2, Bell, Eye, Pencil,
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'inventory' | 'categories' | 'relationships' | 'discovery' | 'health' | 'risk' | 'compliance' | 'analytics' | 'ai' | 'reports' | 'audit';
+type Tab = 'dashboard' | 'inventory' | 'categories' | 'relationships' | 'discovery' | 'health' | 'risk' | 'compliance' | 'analytics' | 'ai' | 'reports' | 'notifications' | 'audit';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -145,11 +145,37 @@ function AIPanel({ onClose, selectedAsset }: { onClose: () => void; selectedAsse
 function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () => void }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ owner: '', business_unit: '', department: '', criticality: 'medium', location: '', status: 'online' });
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
-    cmdbAPI.getAssetDetail(assetId).then(r => { setData(r.data); setLoading(false); });
+    cmdbAPI.getAssetDetail(assetId).then(r => {
+      setData(r.data);
+      setForm({
+        owner: r.data?.owner ?? '', business_unit: r.data?.business_unit ?? '',
+        department: r.data?.department ?? '', criticality: r.data?.criticality ?? 'medium',
+        location: r.data?.location ?? '', status: r.data?.status ?? 'online',
+      });
+      setLoading(false);
+    });
   }, [assetId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await cmdbAPI.updateAsset(assetId, form);
+      setEditing(false);
+      load();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to update asset');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div style={{ position: 'fixed', inset: '0 0 0 auto', width: 520, background: 'var(--bg-1)', borderLeft: '1px solid var(--border)', zIndex: 150, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
@@ -158,11 +184,48 @@ function AssetDetailPanel({ assetId, onClose }: { assetId: string; onClose: () =
           <div style={{ fontWeight: 700, fontSize: 15 }}>{loading ? '…' : data?.name}</div>
           {data && <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{data.hostname} · {data.asset_type} · {data.category}</div>}
         </div>
-        <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '4px 8px' }} />
+        <div style={{ display: 'flex', gap: 6 }}>
+          {!loading && data && !editing && <ActionButton variant="ghost" icon={Pencil} onClick={() => setEditing(true)} style={{ padding: '4px 8px' }} />}
+          <ActionButton variant="ghost" icon={X} onClick={onClose} style={{ padding: '4px 8px' }} />
+        </div>
       </div>
 
       {loading && <div style={{ padding: 32, color: 'var(--text-2)', textAlign: 'center' }}>Loading…</div>}
-      {!loading && data && (
+      {!loading && data && editing && (
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <SectionCard title="Edit Asset">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Owner
+                <input className="g-input" style={{ width: '100%', marginTop: 4 }} value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Business Unit
+                <input className="g-input" style={{ width: '100%', marginTop: 4 }} value={form.business_unit} onChange={e => setForm(f => ({ ...f, business_unit: e.target.value }))} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Department
+                <input className="g-input" style={{ width: '100%', marginTop: 4 }} value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Location
+                <input className="g-input" style={{ width: '100%', marginTop: 4 }} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Criticality
+                <select className="g-input" style={{ width: '100%', marginTop: 4 }} value={form.criticality} onChange={e => setForm(f => ({ ...f, criticality: e.target.value }))}>
+                  {['critical', 'high', 'medium', 'low'].map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-2)' }}>Status
+                <select className="g-input" style={{ width: '100%', marginTop: 4 }} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                  {['online', 'offline', 'in-maintenance', 'quarantine', 'retired'].map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </label>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <ActionButton variant="primary" icon={Check} onClick={save} disabled={saving} style={{ fontSize: 12 }}>{saving ? 'Saving…' : 'Save'}</ActionButton>
+                <ActionButton variant="ghost" onClick={() => setEditing(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+      )}
+      {!loading && data && !editing && (
         <div style={{ padding: 24 }}>
           {/* status row */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -370,10 +433,14 @@ function InventoryTab({ assets, onSelect }: { assets: any[]; onSelect: (a: any) 
 
   const doBulk = async () => {
     if (!selected.size || !bulkVal) return;
-    await cmdbAPI.bulkOperation({ operation: bulkOp, asset_ids: Array.from(selected), value: bulkVal });
-    setBulkDone(`Applied "${bulkOp}" to ${selected.size} assets.`);
-    setSelected(new Set());
-    setBulkVal('');
+    try {
+      await cmdbAPI.bulkOperation({ operation: bulkOp, asset_ids: Array.from(selected), value: bulkVal });
+      setBulkDone(`Applied "${bulkOp}" to ${selected.size} assets.`);
+      setSelected(new Set());
+      setBulkVal('');
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to apply bulk operation');
+    }
   };
 
   return (
@@ -982,14 +1049,20 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
   const [rtype, setRtype] = useState('asset_inventory');
   const [format, setFormat] = useState('pdf');
   const [gen, setGen] = useState(false);
+  const [viewing, setViewing] = useState<any>(null);
 
   const generate = async () => {
     if (!title) return;
     setGen(true);
-    await cmdbAPI.generateReport({ title, report_type: rtype, format });
-    setTitle('');
-    onRefresh();
-    setGen(false);
+    try {
+      await cmdbAPI.generateReport({ title, report_type: rtype, format });
+      setTitle('');
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to generate report');
+    } finally {
+      setGen(false);
+    }
   };
 
   return (
@@ -1030,11 +1103,49 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
             { key: 'generated_by', header: 'Generated By', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.generated_by}</span> },
             { key: 'asset_count', header: 'Assets', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.asset_count?.toLocaleString()}</span> },
             { key: 'format', header: 'Format', render: (r: any) => pill(r.format, 'info') },
-            { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</span> },
+            { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? (r.size_bytes < 1024 ? `${r.size_bytes} B` : `${(r.size_bytes / 1024).toFixed(0)} KB`) : '—'}</span> },
             { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span> },
+            { key: 'view', header: '', render: (r: any) => (
+              <ActionButton variant="ghost" icon={Eye} onClick={() => setViewing(r)} style={{ padding: '2px 8px', fontSize: 11 }}>View</ActionButton>
+            ) },
           ]}
         />
       </SectionCard>
+      <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.title} maxWidth={560}>
+        {viewing && (
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-1)', whiteSpace: 'pre-wrap' }}>
+            {viewing.summary || 'No summary available.'}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ── Tab: Notifications ───────────────────────────────────────────────────────
+
+function NotificationsTab({ notifs, onMarkRead }: { notifs: any[]; onMarkRead: () => void }) {
+  const unread = notifs.filter(n => !n.read).length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {unread > 0 && (
+          <ActionButton variant="ghost" onClick={onMarkRead} style={{ fontSize: 11 }}>
+            Mark all read ({unread})
+          </ActionButton>
+        )}
+      </div>
+      {!notifs.length && <EmptyState title="No notifications" />}
+      {notifs.map((n: any, i: number) => (
+        <div key={i} style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--bg-2)', border: `1px solid ${n.read ? 'var(--border)' : (({ critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e', info: '#3b82f6' } as Record<string, string>)[n.severity] || 'var(--border)') + '44'}`, opacity: n.read ? 0.7 : 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            {pill(n.severity, n.severity)}
+            <span style={{ fontSize: 12, fontWeight: n.read ? 400 : 600, color: 'var(--text-1)' }}>{n.title}</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 4 }}>{n.message}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{n.source}{n.asset_id ? ` · ${n.asset_id}` : ''} · {n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1075,6 +1186,7 @@ const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: 'analytics',     label: 'Analytics',     icon: BarChart3 },
   { key: 'ai',            label: 'AI Advisor',    icon: Sparkles },
   { key: 'reports',       label: 'Reports',       icon: FileBarChart2 },
+  { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'audit',         label: 'Audit Trail',   icon: ScrollText },
 ];
 
@@ -1134,8 +1246,13 @@ export default function AssetsPage() {
   };
 
   const markRead = async () => {
-    await cmdbAPI.markNotificationsRead();
-    setUnread(0);
+    try {
+      await cmdbAPI.markNotificationsRead();
+      setUnread(0);
+      setNotifications(ns => ns.map(n => ({ ...n, read: true })));
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to mark notifications read');
+    }
   };
 
   return (
@@ -1145,7 +1262,7 @@ export default function AssetsPage() {
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
-            <ActionButton variant="ghost" icon={Bell} onClick={() => { setTab('audit'); markRead(); }} />
+            <ActionButton variant="ghost" icon={Bell} onClick={() => setTab('notifications')} />
             {unread > 0 && (
               <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                 {unread}
@@ -1172,6 +1289,7 @@ export default function AssetsPage() {
       {tab === 'analytics'     && <AnalyticsTab d={analytics} />}
       {tab === 'ai'            && <AIInsightsTab selectedAsset={selectedAsset} />}
       {tab === 'reports'       && <ReportsTab reports={reports} onRefresh={() => cmdbAPI.getReports().then(r => setReports(r.data ?? []))} />}
+      {tab === 'notifications' && <NotificationsTab notifs={notifications} onMarkRead={markRead} />}
       {tab === 'audit'         && <AuditTab entries={audit} />}
 
       {showDetail && selectedAsset && (

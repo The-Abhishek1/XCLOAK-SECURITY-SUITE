@@ -6037,6 +6037,12 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 	const tid = "9999"
 	now := time.Now()
 
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
 	// ensure tables exist
 	for _, s := range []string{
 		`CREATE TABLE IF NOT EXISTS ace_assets (
@@ -6441,7 +6447,7 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 			active_users,discovery_source,last_seen_at,first_seen_at,created_at,updated_at)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
 			$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,
-			$37,$38,$39,$40,$41,$42,$43,$44,$44) ON CONFLICT (tenant_id,asset_id) DO NOTHING`,
+			$37,$38,$39,$40,$41,$42,$43,$44,$45) ON CONFLICT (tenant_id,asset_id) DO NOTHING`,
 			tid, a.assetID, a.name, exeNullStrSeed(a.hostname), a.assetType, a.category, a.status,
 			exeNullStrSeed(a.owner), exeNullStrSeed(a.businessUnit), exeNullStrSeed(a.department),
 			a.criticality, a.riskScore, a.internetFacing, a.managed,
@@ -6451,7 +6457,7 @@ func seedAssetsCMDBEnterprise(db *sql.DB) {
 			a.cpuCores, a.memoryGB, a.diskGB, a.diskUsedPct, a.cpuUsagePct, a.memoryUsagePct,
 			a.agentStatus, a.patchStatus, a.antivirusStatus, a.firewallStatus, a.backupStatus,
 			a.certExpiryDays, a.openPorts, a.runningServices, a.swCount,
-			a.activeUsers, a.discoverySource, lastSeen, firstSeen,
+			a.activeUsers, a.discoverySource, lastSeen, firstSeen, now, now,
 		)
 	}
 

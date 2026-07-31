@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -165,6 +166,7 @@ func createACETables() {
 			_ = err
 		}
 	}
+	db.Exec(`ALTER TABLE ace_reports ADD COLUMN IF NOT EXISTS summary TEXT`)
 }
 
 func InitACETables() {
@@ -201,7 +203,10 @@ func GetACEDashboard(c *gin.Context) {
 	}
 
 	// category breakdown
-	type catCount struct{ Category, AssetType string; Count int }
+	type catCount struct {
+		Category, AssetType string
+		Count               int
+	}
 	catRows := []map[string]interface{}{}
 	rows, _ := db.Query(`SELECT asset_type, COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired'
 		GROUP BY asset_type ORDER BY COUNT(*) DESC`, tidStr)
@@ -257,7 +262,7 @@ func GetACEDashboard(c *gin.Context) {
 		"unmanaged": unmanaged, "retired": retired, "new_last_7d": newAssets,
 		"avg_risk_score": avgRisk, "agent_coverage": agentCoverage,
 		"cmdb_coverage": cmdbCoverage,
-		"by_type": catRows, "by_criticality": critRows,
+		"by_type":       catRows, "by_criticality": critRows,
 		"recent_discoveries": discoveries,
 	})
 }
@@ -270,19 +275,19 @@ func GetACEAssets(c *gin.Context) {
 	tidStr := fmt.Sprintf("%d", tid)
 
 	// filters
-	search      := c.Query("search")
-	assetType   := c.Query("type")
-	category    := c.Query("category")
-	status      := c.Query("status")
+	search := c.Query("search")
+	assetType := c.Query("type")
+	category := c.Query("category")
+	status := c.Query("status")
 	criticality := c.Query("criticality")
-	owner       := c.Query("owner")
-	bu          := c.Query("business_unit")
-	riskLevel   := c.Query("risk_level")
-	limit       := parseLimit(c, 200)
+	owner := c.Query("owner")
+	bu := c.Query("business_unit")
+	riskLevel := c.Query("risk_level")
+	limit := parseLimit(c, 200)
 
 	where := []string{"a.tenant_id=$1"}
-	args  := []interface{}{tidStr}
-	i     := 2
+	args := []interface{}{tidStr}
+	i := 2
 
 	if search != "" {
 		where = append(where, fmt.Sprintf("(a.name ILIKE $%d OR a.hostname ILIKE $%d OR a.asset_id ILIKE $%d OR a.ip_addresses::text ILIKE $%d)", i, i, i, i))
@@ -291,27 +296,33 @@ func GetACEAssets(c *gin.Context) {
 	}
 	if assetType != "" {
 		where = append(where, fmt.Sprintf("a.asset_type=$%d", i))
-		args = append(args, assetType); i++
+		args = append(args, assetType)
+		i++
 	}
 	if category != "" {
 		where = append(where, fmt.Sprintf("a.category=$%d", i))
-		args = append(args, category); i++
+		args = append(args, category)
+		i++
 	}
 	if status != "" {
 		where = append(where, fmt.Sprintf("a.status=$%d", i))
-		args = append(args, status); i++
+		args = append(args, status)
+		i++
 	}
 	if criticality != "" {
 		where = append(where, fmt.Sprintf("a.criticality=$%d", i))
-		args = append(args, criticality); i++
+		args = append(args, criticality)
+		i++
 	}
 	if owner != "" {
 		where = append(where, fmt.Sprintf("a.owner ILIKE $%d", i))
-		args = append(args, "%"+owner+"%"); i++
+		args = append(args, "%"+owner+"%")
+		i++
 	}
 	if bu != "" {
 		where = append(where, fmt.Sprintf("a.business_unit=$%d", i))
-		args = append(args, bu); i++
+		args = append(args, bu)
+		i++
 	}
 	if riskLevel == "high" {
 		where = append(where, "a.risk_score >= 70")
@@ -382,12 +393,12 @@ func GetACEAssetDetail(c *gin.Context) {
 		FROM ace_assets WHERE tenant_id=$1 AND asset_id=$2`, tidStr, assetID)
 
 	var (
-		id, name, at, cat, st, crit, agentSt, patchSt, avSt, fwSt, bkSt, discSrc string
+		id, name, at, cat, st, crit, agentSt, patchSt, avSt, fwSt, bkSt, discSrc        string
 		host, owner2, bu2, dept, loc, tags, ips, mac, osn, osv, dom, serial, mfr, model string
-		riskScore, intFacing, managed, cpuCores, memGB, diskGB, diskUsedPct int
-		cpuUsage, memUsage, certDays, runningSvcs, swCount int
-		openPorts, activeUsers string
-		lsa, fsa, ca, ua *string
+		riskScore, intFacing, managed, cpuCores, memGB, diskGB, diskUsedPct             int
+		cpuUsage, memUsage, certDays, runningSvcs, swCount                              int
+		openPorts, activeUsers                                                          string
+		lsa, fsa, ca, ua                                                                *string
 	)
 	err := row.Scan(&id, &name, &host, &at, &cat, &st, &owner2, &bu2, &dept, &crit, &riskScore, &loc,
 		&tags, &ips, &mac, &intFacing, &managed, &osn, &osv, &dom, &serial, &mfr, &model,
@@ -637,21 +648,40 @@ func GetACEDiscovery(c *gin.Context) {
 		}
 	}
 
+	// discovery_sources bridges the same by_source grouping into a
+	// connector-status shape: last_run is the real MAX(first_seen_at) for
+	// that source, and status is derived from whether that source has
+	// discovered anything in the last 30 days (no real per-connector health
+	// signal exists anywhere in this codebase, so "active" here means
+	// "has produced a real asset recently", not a fabricated heartbeat).
+	discoverySources := []map[string]interface{}{}
+	dsRows, _ := db.Query(`SELECT discovery_source, COUNT(*), MAX(first_seen_at)
+		FROM ace_assets WHERE tenant_id=$1 GROUP BY discovery_source ORDER BY COUNT(*) DESC`, tidStr)
+	if dsRows != nil {
+		defer dsRows.Close()
+		for dsRows.Next() {
+			var src string
+			var cnt int
+			var lastRun *time.Time
+			dsRows.Scan(&src, &cnt, &lastRun)
+			status := "inactive"
+			var lastRunStr interface{}
+			if lastRun != nil {
+				lastRunStr = lastRun.Format(time.RFC3339)
+				if time.Since(*lastRun) < 30*24*time.Hour {
+					status = "active"
+				}
+			}
+			discoverySources = append(discoverySources, map[string]interface{}{
+				"source": src, "status": status, "last_run": lastRunStr, "discovered": cnt,
+			})
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"by_source": sources,
-		"unmanaged": unmanaged,
-		"discovery_sources": []map[string]interface{}{
-			{"source": "EDR Agent", "status": "active", "last_run": time.Now().Add(-5 * time.Minute).Format(time.RFC3339), "discovered": 1823},
-			{"source": "Active Directory", "status": "active", "last_run": time.Now().Add(-1 * time.Hour).Format(time.RFC3339), "discovered": 4200},
-			{"source": "Network Discovery (Nmap)", "status": "active", "last_run": time.Now().Add(-2 * time.Hour).Format(time.RFC3339), "discovered": 312},
-			{"source": "AWS API", "status": "active", "last_run": time.Now().Add(-15 * time.Minute).Format(time.RFC3339), "discovered": 214},
-			{"source": "Azure API", "status": "active", "last_run": time.Now().Add(-20 * time.Minute).Format(time.RFC3339), "discovered": 89},
-			{"source": "Kubernetes API", "status": "active", "last_run": time.Now().Add(-3 * time.Minute).Format(time.RFC3339), "discovered": 847},
-			{"source": "Vulnerability Scanner", "status": "active", "last_run": time.Now().Add(-6 * time.Hour).Format(time.RFC3339), "discovered": 3448},
-			{"source": "DHCP", "status": "active", "last_run": time.Now().Add(-1 * time.Minute).Format(time.RFC3339), "discovered": 2841},
-			{"source": "SNMP", "status": "degraded", "last_run": time.Now().Add(-4 * time.Hour).Format(time.RFC3339), "discovered": 127},
-			{"source": "MDM (Intune)", "status": "active", "last_run": time.Now().Add(-30 * time.Minute).Format(time.RFC3339), "discovered": 412},
-		},
+		"by_source":         sources,
+		"unmanaged":         unmanaged,
+		"discovery_sources": discoverySources,
 	})
 }
 
@@ -662,7 +692,10 @@ func GetACEHealth(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	tidStr := fmt.Sprintf("%d", tid)
 
-	type healthCounts struct{ Status string; Count int }
+	type healthCounts struct {
+		Status string
+		Count  int
+	}
 	countQuery := func(col string) map[string]int {
 		result := map[string]int{}
 		r, _ := db.Query(fmt.Sprintf(`SELECT %s, COUNT(*) FROM ace_assets WHERE tenant_id=$1 GROUP BY %s`, col, col), tidStr)
@@ -678,11 +711,11 @@ func GetACEHealth(c *gin.Context) {
 		return result
 	}
 
-	agentH  := countQuery("agent_status")
-	patchH  := countQuery("patch_status")
-	avH     := countQuery("antivirus_status")
-	fwH     := countQuery("firewall_status")
-	bkH     := countQuery("backup_status")
+	agentH := countQuery("agent_status")
+	patchH := countQuery("patch_status")
+	avH := countQuery("antivirus_status")
+	fwH := countQuery("firewall_status")
+	bkH := countQuery("backup_status")
 
 	// critical cert expirations
 	certs := []map[string]interface{}{}
@@ -714,11 +747,11 @@ func GetACEHealth(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"agent_status":    agentH,
-		"patch_status":    patchH,
-		"antivirus_status": avH,
-		"firewall_status": fwH,
-		"backup_status":   bkH,
+		"agent_status":       agentH,
+		"patch_status":       patchH,
+		"antivirus_status":   avH,
+		"firewall_status":    fwH,
+		"backup_status":      bkH,
 		"cert_expiring_soon": certs,
 		"high_disk_usage":    highDisk,
 	})
@@ -746,7 +779,7 @@ func GetACERisk(c *gin.Context) {
 				"asset_id": id, "name": name, "asset_type": at,
 				"criticality": crit, "risk_score": riskScore,
 				"internet_facing": intFacing == 1,
-				"patch_status": pst, "agent_status": agentSt,
+				"patch_status":    pst, "agent_status": agentSt,
 			})
 		}
 	}
@@ -766,21 +799,52 @@ func GetACERisk(c *gin.Context) {
 		}
 	}
 
+	// risk_factors: assets_affected is real, computed from this tenant's own
+	// ace_assets columns; weight is a fixed policy-priority reference (not
+	// tenant data), the same "fixed reference applied to a real count"
+	// pattern used for MITRE tactic sizes on the SOC Metrics page.
+	var eolSystems, internetExposure, missingPatches, noAgent, weakControls int
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND patch_status='eol' AND status!='retired'`, tidStr).Scan(&eolSystems)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND internet_facing=TRUE AND status!='retired'`, tidStr).Scan(&internetExposure)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND patch_status IN ('behind','eol') AND status!='retired'`, tidStr).Scan(&missingPatches)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND agent_status='none' AND status!='retired'`, tidStr).Scan(&noAgent)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired'
+		AND ((antivirus_status NOT IN ('active','not-applicable')) OR (firewall_status NOT IN ('active','not-applicable')))`, tidStr).Scan(&weakControls)
+
+	// attack_paths: real 1-hop chains from an internet-facing asset to a
+	// critical/high-criticality target via ace_relationships — a simplified
+	// (single-hop) real substitute for a full graph traversal, since no
+	// attack-path engine exists in this file (the dedicated /attack-path
+	// page has its own, unrelated graph).
+	attackPaths := []map[string]interface{}{}
+	apRows, _ := db.Query(`SELECT s.name, r.relationship_type, t.name, t.criticality
+		FROM ace_relationships r
+		JOIN ace_assets s ON s.asset_id=r.source_id AND s.tenant_id=r.tenant_id
+		JOIN ace_assets t ON t.asset_id=r.target_id AND t.tenant_id=r.tenant_id
+		WHERE r.tenant_id=$1 AND s.internet_facing=TRUE AND t.criticality IN ('critical','high')
+		LIMIT 10`, tidStr)
+	if apRows != nil {
+		defer apRows.Close()
+		for apRows.Next() {
+			var sName, rtype, tName, tCrit string
+			apRows.Scan(&sName, &rtype, &tName, &tCrit)
+			attackPaths = append(attackPaths, map[string]interface{}{
+				"path": fmt.Sprintf("Internet → %s → %s", sName, tName), "risk": tCrit, "steps": 2,
+			})
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"top_risky_assets": topRisk,
 		"by_business_unit": buRisk,
 		"risk_factors": []map[string]interface{}{
-			{"factor": "Critical Vulnerabilities", "assets_affected": 89, "weight": 35},
-			{"factor": "Internet Exposure", "assets_affected": 47, "weight": 25},
-			{"factor": "Missing Patches", "assets_affected": 241, "weight": 20},
-			{"factor": "No EDR Agent", "assets_affected": 34, "weight": 15},
-			{"factor": "Compliance Failures", "assets_affected": 128, "weight": 5},
+			{"factor": "End-of-Life Systems", "assets_affected": eolSystems, "weight": 35},
+			{"factor": "Internet Exposure", "assets_affected": internetExposure, "weight": 25},
+			{"factor": "Missing Patches", "assets_affected": missingPatches, "weight": 20},
+			{"factor": "No EDR Agent", "assets_affected": noAgent, "weight": 15},
+			{"factor": "Weak Security Controls", "assets_affected": weakControls, "weight": 5},
 		},
-		"attack_paths": []map[string]interface{}{
-			{"path": "Internet → WKSTN-FIN-047 → Finance DB", "risk": "critical", "steps": 3},
-			{"path": "VPN → SRV-DMZ-012 → Internal Network", "risk": "high", "steps": 2},
-			{"path": "Email → WKSTN-HR-023 → AD Domain Controller", "risk": "critical", "steps": 3},
-		},
+		"attack_paths": attackPaths,
 	})
 }
 
@@ -790,6 +854,7 @@ func GetACEAnalytics(c *gin.Context) {
 	db := database.DB
 	tid := tenantIDFromContext(c)
 	tidStr := fmt.Sprintf("%d", tid)
+	now := time.Now()
 
 	// OS distribution
 	osDist := []map[string]interface{}{}
@@ -825,74 +890,168 @@ func GetACEAnalytics(c *gin.Context) {
 		}
 	}
 
-	// unsupported OS
-	unsupportedOS := []map[string]interface{}{
-		{"os": "Windows 7", "count": 8, "risk": "critical"},
-		{"os": "Windows Server 2012 R2", "count": 12, "risk": "critical"},
-		{"os": "CentOS 7", "count": 24, "risk": "high"},
-		{"os": "Ubuntu 18.04", "count": 17, "risk": "high"},
-		{"os": "macOS 11 Big Sur", "count": 6, "risk": "medium"},
+	// unsupported OS: real counts queried directly against the full fleet
+	// (not the top-12-capped os_distribution above) against a fixed
+	// EOL-reference list — a policy classification, not tenant data, same
+	// pattern as risk_factors' weights and SOC Metrics' MITRE tactic sizes.
+	eolReference := []struct{ match, risk string }{
+		{"Windows 7", "critical"}, {"Windows Server 2012", "critical"},
+		{"Windows 10", "high"}, {"CentOS", "high"},
+	}
+	unsupportedOS := []map[string]interface{}{}
+	for _, ref := range eolReference {
+		var cnt int
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND os_name LIKE $2`,
+			tidStr, "%"+ref.match+"%").Scan(&cnt)
+		if cnt > 0 {
+			unsupportedOS = append(unsupportedOS, map[string]interface{}{
+				"os": ref.match, "count": cnt, "risk": ref.risk,
+			})
+		}
+	}
+
+	// asset_growth: real, computed from this tenant's own first_seen_at/
+	// updated_at columns for the last 6 real calendar months — total is
+	// cumulative real discoveries as of each month's end, new is real
+	// discoveries within that month, retired is real status='retired'
+	// transitions within that month (PatchACEAsset sets updated_at on every
+	// status change, so this reflects genuine writes, not a fabricated
+	// historical snapshot).
+	assetGrowth := []map[string]interface{}{}
+	for i := 5; i >= 0; i-- {
+		monthEnd := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -i+1, 0)
+		monthStart := monthEnd.AddDate(0, -1, 0)
+		var total, newCount, retiredCount int
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND first_seen_at < $2`, tidStr, monthEnd).Scan(&total)
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND first_seen_at >= $2 AND first_seen_at < $3`, tidStr, monthStart, monthEnd).Scan(&newCount)
+		db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status='retired' AND updated_at >= $2 AND updated_at < $3`, tidStr, monthStart, monthEnd).Scan(&retiredCount)
+		assetGrowth = append(assetGrowth, map[string]interface{}{
+			"month": monthStart.Format("Jan"), "total": total, "new": newCount, "retired": retiredCount,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"os_distribution":    osDist,
-		"type_distribution":  typeDist,
-		"missing_agents":     gin.H{"no_agent": noAgent, "inactive": inactiveAgent},
-		"unsupported_os":     unsupportedOS,
-		"asset_growth": []map[string]interface{}{
-			{"month": "Jan", "total": 3102, "new": 84, "retired": 12},
-			{"month": "Feb", "total": 3174, "new": 91, "retired": 19},
-			{"month": "Mar", "total": 3248, "new": 103, "retired": 29},
-			{"month": "Apr", "total": 3312, "new": 88, "retired": 24},
-			{"month": "May", "total": 3376, "new": 94, "retired": 30},
-			{"month": "Jun", "total": 3448, "new": 112, "retired": 40},
-		},
-		"health_trend": []map[string]interface{}{
-			{"month": "Apr", "healthy": 78, "at_risk": 14, "critical": 8},
-			{"month": "May", "healthy": 80, "at_risk": 13, "critical": 7},
-			{"month": "Jun", "healthy": 82, "at_risk": 12, "critical": 6},
-		},
+		"os_distribution":   osDist,
+		"type_distribution": typeDist,
+		"missing_agents":    gin.H{"no_agent": noAgent, "inactive": inactiveAgent},
+		"unsupported_os":    unsupportedOS,
+		"asset_growth":      assetGrowth,
 	})
 }
 
 // ── Compliance ────────────────────────────────────────────────────────────────
+
+// aceOpenPortsHasSSH reports whether a JSON array of ports (e.g. "[443,22]")
+// contains port 22, used to derive a real "SSH exposed to internet" finding
+// without a fragile SQL substring match.
+func aceOpenPortsHasSSH(openPorts string) bool {
+	var ports []int
+	if json.Unmarshal([]byte(openPorts), &ports) != nil {
+		return false
+	}
+	for _, p := range ports {
+		if p == 22 {
+			return true
+		}
+	}
+	return false
+}
 
 func GetACECompliance(c *gin.Context) {
 	db := database.DB
 	tid := tenantIDFromContext(c)
 	tidStr := fmt.Sprintf("%d", tid)
 
-	var total, encryptedDisk, mfaEnabled, patchedRecent int
+	var total int
 	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired'`, tidStr).Scan(&total)
 
+	// Every control below is a real per-asset status column on ace_assets.
+	// Disk Encryption / MFA Enrolled / Logging Enabled have no real column
+	// or correlated data source anywhere in this codebase (no disk-
+	// encryption field exists, and ace_assets.owner never matches a real
+	// users.username so a users.totp_enabled join would be a technically-
+	// real but permanently-empty join) — omitted rather than faked.
+	controlPct := func(activeCount int) int {
+		if total == 0 {
+			return 0
+		}
+		return activeCount * 100 / total
+	}
+	var edrActive, avActive, fwActive, backupActive, patchCurrent int
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND agent_status='active'`, tidStr).Scan(&edrActive)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND antivirus_status='active'`, tidStr).Scan(&avActive)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND firewall_status='active'`, tidStr).Scan(&fwActive)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND backup_status='active'`, tidStr).Scan(&backupActive)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND patch_status='current'`, tidStr).Scan(&patchCurrent)
+
+	controls := []map[string]interface{}{
+		{"control": "EDR Agent Coverage", "passed": edrActive, "failed": total - edrActive, "pct": controlPct(edrActive)},
+		{"control": "Patch Compliance", "passed": patchCurrent, "failed": total - patchCurrent, "pct": controlPct(patchCurrent)},
+		{"control": "Antivirus Active", "passed": avActive, "failed": total - avActive, "pct": controlPct(avActive)},
+		{"control": "Firewall Enabled", "passed": fwActive, "failed": total - fwActive, "pct": controlPct(fwActive)},
+		{"control": "Backup Configured", "passed": backupActive, "failed": total - backupActive, "pct": controlPct(backupActive)},
+	}
+	sumPct := 0
+	for _, ctl := range controls {
+		sumPct += ctl["pct"].(int)
+	}
+	complianceScore := 0
+	if len(controls) > 0 {
+		complianceScore = sumPct / len(controls)
+	}
+
+	// policy_violations: each count is a real, independently-computed
+	// ace_assets query; only non-zero violation types are included so the
+	// list doesn't imply a fixed catalog of categories that always exist.
+	var noEDRCritical, missingBackup, certNearExpiry int
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND criticality='critical' AND agent_status!='active'`, tidStr).Scan(&noEDRCritical)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND criticality IN ('critical','high') AND backup_status='none'`, tidStr).Scan(&missingBackup)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND cert_expiry_days>=0 AND cert_expiry_days<14`, tidStr).Scan(&certNearExpiry)
+
+	policyViolations := []map[string]interface{}{}
+	if noEDRCritical > 0 {
+		policyViolations = append(policyViolations, map[string]interface{}{"policy": "No EDR agent on critical server", "count": noEDRCritical, "severity": "critical"})
+	}
+	if missingBackup > 0 {
+		policyViolations = append(policyViolations, map[string]interface{}{"policy": "Missing backup on critical/high asset", "count": missingBackup, "severity": "critical"})
+	}
+	if certNearExpiry > 0 {
+		policyViolations = append(policyViolations, map[string]interface{}{"policy": "Certificate expiring within 14 days", "count": certNearExpiry, "severity": "high"})
+	}
+
+	// audit_findings: EOL OS and internet-exposed SSH are both derived from
+	// real per-asset columns (os_name / open_ports+internet_facing); no
+	// software-inventory table exists to detect "shadow IT," so that
+	// category is omitted rather than fabricated.
+	auditFindings := []map[string]interface{}{}
+	var eolCount int
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND patch_status='eol'`, tidStr).Scan(&eolCount)
+	if eolCount > 0 {
+		auditFindings = append(auditFindings, map[string]interface{}{"finding": fmt.Sprintf("%d asset(s) running an end-of-life OS with no patches available", eolCount), "severity": "critical"})
+	}
+	var sshExposed int
+	prows, _ := db.Query(`SELECT open_ports FROM ace_assets WHERE tenant_id=$1 AND status!='retired' AND internet_facing=TRUE`, tidStr)
+	if prows != nil {
+		for prows.Next() {
+			var ports string
+			prows.Scan(&ports)
+			if aceOpenPortsHasSSH(ports) {
+				sshExposed++
+			}
+		}
+		prows.Close()
+	}
+	if sshExposed > 0 {
+		auditFindings = append(auditFindings, map[string]interface{}{"finding": fmt.Sprintf("SSH exposed to internet on %d asset(s)", sshExposed), "severity": "high"})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"compliance_score": 76,
-		"total_assets": total,
-		"encrypted_disk": encryptedDisk,
-		"mfa_enabled": mfaEnabled,
-		"patched_recently": patchedRecent,
-		"controls": []map[string]interface{}{
-			{"control": "Disk Encryption", "passed": total * 84 / 100, "failed": total * 16 / 100, "pct": 84},
-			{"control": "EDR Agent Coverage", "passed": total * 97 / 100, "failed": total * 3 / 100, "pct": 97},
-			{"control": "Patch Compliance (30d)", "passed": total * 78 / 100, "failed": total * 22 / 100, "pct": 78},
-			{"control": "Antivirus Active", "passed": total * 94 / 100, "failed": total * 6 / 100, "pct": 94},
-			{"control": "MFA Enrolled", "passed": total * 71 / 100, "failed": total * 29 / 100, "pct": 71},
-			{"control": "Firewall Enabled", "passed": total * 88 / 100, "failed": total * 12 / 100, "pct": 88},
-			{"control": "Backup Configured", "passed": total * 73 / 100, "failed": total * 27 / 100, "pct": 73},
-			{"control": "Logging Enabled", "passed": total * 91 / 100, "failed": total * 9 / 100, "pct": 91},
-		},
-		"policy_violations": []map[string]interface{}{
-			{"policy": "No EDR on critical server", "count": 3, "severity": "critical"},
-			{"policy": "Unencrypted disk on finance workstation", "count": 12, "severity": "high"},
-			{"policy": "Missing backup on production DB", "count": 4, "severity": "critical"},
-			{"policy": "Certificate expired", "count": 7, "severity": "high"},
-			{"policy": "No MFA on admin accounts", "count": 18, "severity": "high"},
-		},
-		"audit_findings": []map[string]interface{}{
-			{"finding": "Shadow IT application detected on 8 workstations", "severity": "medium"},
-			{"finding": "3 servers running EOL OS (Windows Server 2012)", "severity": "critical"},
-			{"finding": "SSH exposed to internet on 2 Linux servers", "severity": "high"},
-		},
+		"compliance_score":  complianceScore,
+		"total_assets":      total,
+		"total":             total,
+		"controls":          controls,
+		"policy_violations": policyViolations,
+		"audit_findings":    auditFindings,
 	})
 }
 
@@ -1090,20 +1249,20 @@ func GetACEReports(c *gin.Context) {
 	tidStr := fmt.Sprintf("%d", tid)
 
 	var reports []map[string]interface{}
-	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,size_bytes,asset_count,created_at
+	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,size_bytes,asset_count,created_at,COALESCE(summary,'')
 		FROM ace_reports WHERE tenant_id=$1 ORDER BY created_at DESC`, tidStr)
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var id, title, rtype, by, format string
+			var id, title, rtype, by, format, summary string
 			var sizeB int64
 			var assetCnt int
 			var ca *string
-			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sizeB, &assetCnt, &ca); err == nil {
+			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sizeB, &assetCnt, &ca, &summary); err == nil {
 				reports = append(reports, map[string]interface{}{
 					"report_id": id, "title": title, "report_type": rtype,
 					"generated_by": by, "format": format, "size_bytes": sizeB,
-					"asset_count": assetCnt, "created_at": ca,
+					"asset_count": assetCnt, "created_at": ca, "summary": summary,
 				})
 			}
 		}
@@ -1112,6 +1271,32 @@ func GetACEReports(c *gin.Context) {
 		reports = []map[string]interface{}{}
 	}
 	c.JSON(http.StatusOK, reports)
+}
+
+// generateACEReportSummary grounds a real, LLM-written executive summary in
+// this tenant's real ace_assets fleet metrics, falling back to a plain
+// numeric sentence if the LLM is unreachable.
+func generateACEReportSummary(tid int, title, reportType string, assetCount int) string {
+	db := database.DB
+	tidStr := fmt.Sprintf("%d", tid)
+	var critical, internetFacing, unmanaged, noAgent int
+	var avgRisk float64
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND criticality='critical'`, tidStr).Scan(&critical)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND internet_facing=TRUE`, tidStr).Scan(&internetFacing)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND managed=FALSE`, tidStr).Scan(&unmanaged)
+	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND agent_status='none' AND status!='retired'`, tidStr).Scan(&noAgent)
+	db.QueryRow(`SELECT COALESCE(AVG(risk_score),0) FROM ace_assets WHERE tenant_id=$1 AND status!='retired'`, tidStr).Scan(&avgRisk)
+
+	prompt := fmt.Sprintf(`You are a CMDB/asset security analyst writing a %s report titled %q. Real current fleet metrics: %d assets total, %d critical-criticality, %d internet-facing, %d unmanaged, %d with no EDR agent, average risk score %.0f/100.
+
+Write a 2-4 sentence executive summary grounded strictly in these numbers. Do not invent specific CVE numbers, asset names, or figures not present above. Respond in plain text, no markdown.`,
+		reportType, title, assetCount, critical, internetFacing, unmanaged, noAgent, avgRisk)
+
+	if resp, err := services.CallLLM(prompt); err == nil && strings.TrimSpace(resp) != "" {
+		return strings.TrimSpace(resp)
+	}
+	return fmt.Sprintf("%d assets in inventory (%d critical-criticality, %d internet-facing, %d unmanaged, %d with no EDR agent). Average risk score %.0f/100.",
+		assetCount, critical, internetFacing, unmanaged, noAgent, avgRisk)
 }
 
 func PostACEReport(c *gin.Context) {
@@ -1135,17 +1320,19 @@ func PostACEReport(c *gin.Context) {
 	id := aceID("ACE-RPT")
 	var assetCount int
 	db.QueryRow(`SELECT COUNT(*) FROM ace_assets WHERE tenant_id=$1 AND status!='retired'`, tidStr).Scan(&assetCount)
-	sizeB := int64(300_000 + rand.Intn(800_000))
 
-	_, err := db.Exec(`INSERT INTO ace_reports (tenant_id,report_id,title,report_type,generated_by,format,size_bytes,asset_count)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		tidStr, id, body.Title, body.ReportType, actor, body.Format, sizeB, assetCount)
+	summary := generateACEReportSummary(tid, body.Title, body.ReportType, assetCount)
+	sizeB := int64(len(summary))
+
+	_, err := db.Exec(`INSERT INTO ace_reports (tenant_id,report_id,title,report_type,generated_by,format,size_bytes,asset_count,summary)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		tidStr, id, body.Title, body.ReportType, actor, body.Format, sizeB, assetCount, summary)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create report"})
 		return
 	}
 	aceAudit(tid, "report_generated", "report", id, body.Title, actor, fmt.Sprintf("type:%s assets:%d", body.ReportType, assetCount))
-	c.JSON(http.StatusOK, gin.H{"report_id": id, "title": body.Title, "asset_count": assetCount})
+	c.JSON(http.StatusOK, gin.H{"report_id": id, "title": body.Title, "asset_count": assetCount, "summary": summary})
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
