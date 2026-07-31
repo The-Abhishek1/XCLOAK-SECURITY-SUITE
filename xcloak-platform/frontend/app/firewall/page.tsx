@@ -59,12 +59,6 @@ const APPROVAL_POLICIES = ['internet_facing', 'production_firewall', 'default_po
 function pill(label: string, color: string) {
   return <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: color + '22', color, border: `1px solid ${color}44`, textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{label}</span>;
 }
-function bytes(n: number) {
-  if (n > 1e9) return `${(n / 1e9).toFixed(1)} GB`;
-  if (n > 1e6) return `${(n / 1e6).toFixed(1)} MB`;
-  if (n > 1e3) return `${(n / 1e3).toFixed(1)} KB`;
-  return `${n} B`;
-}
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) => void }) {
@@ -77,7 +71,6 @@ function DashboardTab({ dash, onTabChange }: { dash: any; onTabChange: (t: Tab) 
         <MetricCard label="Threat Blocks"     value={dash.threat_blocks}      color="#ef4444" />
         <MetricCard label="Blocks (24h)"      value={dash.threats_24h}        color="#f97316" sub="last 24 hours" />
         <MetricCard label="Active Conns"      value={dash.active_connections} color="#3b82f6" />
-        <MetricCard label="Total Traffic"     value={bytes(dash.total_bytes || 0)} color="#a855f7" />
         <MetricCard label="Pending Approvals" value={dash.pending_approvals}  color="#f97316" />
         <MetricCard label="Unread Alerts"     value={dash.unread_notifications} color="#ef4444" />
       </div>
@@ -143,7 +136,8 @@ function PoliciesTab({ policies, onRefresh }: { policies: any[]; onRefresh: () =
     } catch { notify('Failed'); } finally { setSaving(false); }
   };
   const del = async (id: number, name: string) => {
-    await fweAPI.deletePolicy(id); onRefresh(); notify(`Policy '${name}' deleted`);
+    try { await fweAPI.deletePolicy(id); onRefresh(); notify(`Policy '${name}' deleted`); }
+    catch { notify('Failed to delete policy'); }
   };
 
   return (
@@ -239,12 +233,12 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
     finally { setValidating(false); }
   };
   const del = async (id: number) => {
-    await firewallAPI.delete(id);
-    onRefresh(); notify('Rule deleted');
+    try { await firewallAPI.delete(id); onRefresh(); notify('Rule deleted'); }
+    catch { notify('Failed to delete rule'); }
   };
   const toggle = async (r: any) => {
-    await firewallAPI.update(r.id, { ...r, enabled: !r.enabled });
-    onRefresh();
+    try { await firewallAPI.update(r.id, { ...r, enabled: !r.enabled }); onRefresh(); }
+    catch { notify('Failed to update rule'); }
   };
   const saveRule = async () => {
     if (!form.name) return;
@@ -628,14 +622,10 @@ function ConnectionsTab({ conns }: { conns: any[] }) {
             { key: 'source', header: 'Source', render: (c: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{c.src_ip}:{c.src_port}</span> },
             { key: 'destination', header: 'Destination', render: (c: any) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-2)' }}>{c.dst_ip}:{c.dst_port}</span> },
             { key: 'protocol', header: 'Protocol', render: (c: any) => <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-3)' }}>{c.protocol}</span> },
-            { key: 'application', header: 'Application', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--accent)' }}>{c.application || '—'}</span> },
+            { key: 'application', header: 'Process', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--accent)' }}>{c.application || '—'}</span> },
             { key: 'state', header: 'State', render: (c: any) => pill(c.state, STATUS_COLOR[c.state] || '#6b7280') },
-            { key: 'duration', header: 'Duration', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.duration ? `${c.duration}s` : '—'}</span> },
-            { key: 'bytes_recv', header: 'Bytes In', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{bytes(c.bytes_recv || 0)}</span> },
-            { key: 'bytes_sent', header: 'Bytes Out', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{bytes(c.bytes_sent || 0)}</span> },
-            { key: 'zone_src', header: 'Zone Src', render: (c: any) => <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{c.zone_src || '—'}</span> },
-            { key: 'zone_dst', header: 'Zone Dst', render: (c: any) => <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{c.zone_dst || '—'}</span> },
-            { key: 'rule_id', header: 'Rule', render: (c: any) => <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)' }}>{c.rule_id || '—'}</span> },
+            { key: 'agent_hostname', header: 'Agent', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.agent_hostname || '—'}</span> },
+            { key: 'last_seen', header: 'Last Seen', render: (c: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(c.last_seen)}</span> },
           ]}
         />
       </SectionCard>
@@ -911,11 +901,22 @@ function AuditTab({ items }: { items: any[] }) {
 }
 
 // ── Reports ────────────────────────────────────────────────────────────────
-function ReportsTab({ onGenerate }: { onGenerate: (t: string) => void }) {
+function ReportsTab({ onGenerate }: { onGenerate: (t: string) => Promise<any> }) {
   const [gen, setGen] = useState('');
   const [toast, setToast] = useState('');
+  const [result, setResult] = useState<any>(null);
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
-  const go = async (type: string) => { setGen(type); await onGenerate(type); notify(`${type.replace(/_/g, ' ')} report generated`); setGen(''); };
+  const go = async (type: string) => {
+    setGen(type);
+    try {
+      const data = await onGenerate(type);
+      setResult(data);
+      notify(`${type.replace(/_/g, ' ')} report generated`);
+    } catch {
+      notify('Failed to generate report');
+    }
+    setGen('');
+  };
   const reports = [
     { id: 'firewall_activity', label: 'Firewall Activity Report', desc: 'Complete log of all rule hits, allows, and denies' },
     { id: 'policy_compliance', label: 'Policy Compliance Report', desc: 'Rule compliance against security baseline' },
@@ -939,6 +940,35 @@ function ReportsTab({ onGenerate }: { onGenerate: (t: string) => void }) {
           </SectionCard>
         ))}
       </div>
+      {result && (
+        <div className="g-card" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{result.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}</div>
+            </div>
+          </div>
+          <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
+            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>{result.executive_summary}</div>
+          </div>
+          {result.key_metrics && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {Object.entries(result.key_metrics).map(([k, v]) => <MetricCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />)}
+            </div>
+          )}
+          {result.recommendations?.length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Recommendations</div>
+              {result.recommendations.map((r: string, i: number) => (
+                <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-2)', marginBottom: 5 }}>
+                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{i + 1}.</span><span>{r}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1038,8 +1068,10 @@ export default function FirewallPage() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const markRead = async () => {
-    await fweAPI.markNotificationsRead();
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      await fweAPI.markNotificationsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch { /* non-critical, next load will reflect real state */ }
   };
 
   const pendingApprovals = approvals.filter(a => a.status === 'pending').length;
@@ -1078,7 +1110,7 @@ export default function FirewallPage() {
       {tab === 'approvals'     && <ApprovalsTab approvals={approvals} onRefresh={() => loadAll()} />}
       {tab === 'notifications' && <NotificationsTab items={notifications} onMarkRead={markRead} />}
       {tab === 'audit'         && <AuditTab items={audit} />}
-      {tab === 'reports'       && <ReportsTab onGenerate={async (t) => { await fweAPI.report({ report_type: t }); }} />}
+      {tab === 'reports'       && <ReportsTab onGenerate={async (t) => { const r = await fweAPI.report({ report_type: t }); return r.data; }} />}
 
       {showAI && <AIPanel onClose={() => setShowAI(false)} />}
     </RootLayout>

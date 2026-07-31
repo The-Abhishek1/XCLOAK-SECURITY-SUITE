@@ -1,9 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -183,8 +185,10 @@ func GetFWEDashboard(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*) FROM fwe_approvals WHERE tenant_id=$1 AND status='pending'`, tid).Scan(&pendingApprovals)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM fwe_notifications WHERE tenant_id=$1 AND read=FALSE`, tid).Scan(&unreadNotif)
 
+	// fwe_connections has no real writer — active_connections is computed
+	// from endpoint_connections instead (see GetFWEConnections).
 	var activeConns int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM fwe_connections WHERE tenant_id=$1 AND state='established'`, tid).Scan(&activeConns)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM endpoint_connections WHERE tenant_id=$1 AND state='ESTABLISHED'`, tid).Scan(&activeConns)
 
 	type topIP struct {
 		IP    string `json:"ip"`
@@ -211,24 +215,20 @@ func GetFWEDashboard(c *gin.Context) {
 		dstRows.Close()
 	}
 
-	var totalBytes int64
-	database.DB.QueryRow(`SELECT COALESCE(SUM(bytes_sent+bytes_recv),0) FROM fwe_connections WHERE tenant_id=$1`, tid).Scan(&totalBytes)
-
 	c.JSON(http.StatusOK, gin.H{
-		"active_rules":          countRules(` AND enabled=TRUE`),
-		"total_rules":           countRules(``),
-		"disabled_rules":        countRules(` AND enabled=FALSE`),
-		"threat_blocks":         countThreats(` AND action_taken='blocked'`),
-		"threats_24h":           countThreats(` AND created_at > NOW()-INTERVAL '24 hours'`),
-		"port_scan_blocks":      countThreats(` AND threat_type='port_scan'`),
-		"brute_force_blocks":    countThreats(` AND threat_type='brute_force'`),
-		"c2_blocks":             countThreats(` AND threat_type='c2_traffic'`),
-		"active_connections":    activeConns,
-		"total_bytes":           totalBytes,
-		"pending_approvals":     pendingApprovals,
-		"unread_notifications":  unreadNotif,
-		"top_source_ips":        topSrc,
-		"top_dest_ips":          topDst,
+		"active_rules":         countRules(` AND enabled=TRUE`),
+		"total_rules":          countRules(``),
+		"disabled_rules":       countRules(` AND enabled=FALSE`),
+		"threat_blocks":        countThreats(` AND action_taken='blocked'`),
+		"threats_24h":          countThreats(` AND created_at > NOW()-INTERVAL '24 hours'`),
+		"port_scan_blocks":     countThreats(` AND threat_type='port_scan'`),
+		"brute_force_blocks":   countThreats(` AND threat_type='brute_force'`),
+		"c2_blocks":            countThreats(` AND threat_type='c2_traffic'`),
+		"active_connections":   activeConns,
+		"pending_approvals":    pendingApprovals,
+		"unread_notifications": unreadNotif,
+		"top_source_ips":       topSrc,
+		"top_dest_ips":         topDst,
 	})
 }
 
@@ -506,10 +506,14 @@ func GetFWEThreats(c *gin.Context) {
 	args := []any{tid}
 	i := 2
 	if threatType != "" {
-		q += fmt.Sprintf(` AND threat_type=$%d`, i); args = append(args, threatType); i++
+		q += fmt.Sprintf(` AND threat_type=$%d`, i)
+		args = append(args, threatType)
+		i++
 	}
 	if severity != "" {
-		q += fmt.Sprintf(` AND severity=$%d`, i); args = append(args, severity); i++
+		q += fmt.Sprintf(` AND severity=$%d`, i)
+		args = append(args, severity)
+		i++
 	}
 	q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d`, i)
 	args = append(args, limit)
@@ -553,11 +557,24 @@ func GetFWEThreats(c *gin.Context) {
 // ── Live Connections ──────────────────────────────────────────────────────
 
 // GET /api/fwe/connections
+//
+// fwe_connections has no real writer anywhere in this codebase — this tab
+// used to show only seeded, static data regardless of what any real agent
+// was actually doing. Backed by endpoint_connections instead, the real
+// periodic connection-snapshot table agents report to via
+// POST /api/agents/connections (see repositories.SaveConnections) —
+// real src/dst/protocol/state/process data. bytes_sent/bytes_recv/duration/
+// zone_src/zone_dst/rule_id have no equivalent real source anywhere in this
+// codebase (no live packet/flow byte-counting or zone-correlation exists)
+// and are intentionally omitted rather than fabricated.
 func GetFWEConnections(c *gin.Context) {
 	tid := tenantIDFromContext(c)
-	rows, err := database.DB.Query(`SELECT id,src_ip,dst_ip,src_port,dst_port,protocol,application,
-		state,bytes_sent,bytes_recv,duration,rule_id,zone_src,zone_dst,started_at,last_seen
-		FROM fwe_connections WHERE tenant_id=$1 ORDER BY last_seen DESC LIMIT 100`, tid)
+	rows, err := database.DB.Query(`SELECT ec.id, ec.local_address, ec.remote_address, ec.protocol, ec.state,
+		COALESCE(ec.process_name,''), ec.collected_at, a.hostname
+		FROM endpoint_connections ec
+		JOIN agents a ON a.id = ec.agent_id
+		WHERE ec.tenant_id=$1
+		ORDER BY ec.collected_at DESC LIMIT 200`, tid)
 	if err != nil {
 		c.JSON(http.StatusOK, []any{})
 		return
@@ -566,26 +583,31 @@ func GetFWEConnections(c *gin.Context) {
 	out := []map[string]any{}
 	for rows.Next() {
 		var id int
-		var srcPort, dstPort, duration int
-		var bytesSent, bytesRecv int64
-		var srcIP, dstIP, protocol, state string
-		var app, ruleID, zoneSrc, zoneDst *string
-		var startedAt, lastSeen time.Time
-		rows.Scan(&id, &srcIP, &dstIP, &srcPort, &dstPort, &protocol, &app,
-			&state, &bytesSent, &bytesRecv, &duration, &ruleID, &zoneSrc, &zoneDst, &startedAt, &lastSeen)
-		conn := map[string]any{
-			"id": id, "src_ip": srcIP, "dst_ip": dstIP, "src_port": srcPort, "dst_port": dstPort,
-			"protocol": protocol, "state": state, "bytes_sent": bytesSent, "bytes_recv": bytesRecv,
-			"duration": duration, "started_at": startedAt.Format(time.RFC3339), "last_seen": lastSeen.Format(time.RFC3339),
-		}
-		for k, v := range map[string]*string{"application": app, "rule_id": ruleID, "zone_src": zoneSrc, "zone_dst": zoneDst} {
-			if v != nil {
-				conn[k] = *v
-			}
-		}
-		out = append(out, conn)
+		var localAddr, remoteAddr, protocol, state, procName, hostname string
+		var collectedAt time.Time
+		rows.Scan(&id, &localAddr, &remoteAddr, &protocol, &state, &procName, &collectedAt, &hostname)
+		srcIP, srcPort := splitHostPortLoose(localAddr)
+		dstIP, dstPort := splitHostPortLoose(remoteAddr)
+		out = append(out, map[string]any{
+			"id": id, "src_ip": srcIP, "src_port": srcPort, "dst_ip": dstIP, "dst_port": dstPort,
+			"protocol": strings.ToLower(protocol), "state": strings.ToUpper(state), "application": procName,
+			"agent_hostname": hostname, "last_seen": collectedAt.Format(time.RFC3339),
+		})
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+// splitHostPortLoose splits an "ip:port" string (as agents report for
+// local/remote socket addresses) into ip and port, tolerating a missing or
+// unparseable port rather than erroring — real /proc/net or netstat output
+// occasionally lacks a port for some entry types.
+func splitHostPortLoose(addr string) (string, int) {
+	idx := strings.LastIndex(addr, ":")
+	if idx == -1 {
+		return addr, 0
+	}
+	port, _ := strconv.Atoi(addr[idx+1:])
+	return addr[:idx], port
 }
 
 // ── Response Actions ──────────────────────────────────────────────────────
@@ -621,33 +643,53 @@ func PostFWEBlock(c *gin.Context) {
 // GET /api/fwe/blocked
 func GetFWEBlocked(c *gin.Context) {
 	tid := tenantIDFromContext(c)
+	out := []map[string]any{}
 	rows, err := database.DB.Query(`SELECT id,block_type,value,reason,blocked_by,expires_at,active,created_at
 		FROM fwe_blocked WHERE tenant_id=$1 AND active=TRUE ORDER BY created_at DESC`, tid)
-	if err != nil {
-		c.JSON(http.StatusOK, []any{})
-		return
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			var blockType, value, blockedBy string
+			var reason *string
+			var expiresAt *time.Time
+			var active bool
+			var createdAt time.Time
+			rows.Scan(&id, &blockType, &value, &reason, &blockedBy, &expiresAt, &active, &createdAt)
+			b := map[string]any{
+				"id": fmt.Sprintf("fwe-%d", id), "block_type": blockType, "value": value,
+				"blocked_by": blockedBy, "active": active, "created_at": createdAt.Format(time.RFC3339),
+			}
+			if reason != nil {
+				b["reason"] = *reason
+			}
+			if expiresAt != nil {
+				b["expires_at"] = expiresAt.Format(time.RFC3339)
+			}
+			out = append(out, b)
+		}
 	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var id int
-		var blockType, value, blockedBy string
-		var reason *string
-		var expiresAt *time.Time
-		var active bool
-		var createdAt time.Time
-		rows.Scan(&id, &blockType, &value, &reason, &blockedBy, &expiresAt, &active, &createdAt)
-		b := map[string]any{
-			"id": id, "block_type": blockType, "value": value,
-			"blocked_by": blockedBy, "active": active, "created_at": createdAt.Format(time.RFC3339),
+
+	// ioc_firewall_blocks is a second, genuinely real block source (see
+	// services.autoBlockIOC) that fwe_blocked's manual-block-only view
+	// never surfaced — real automatic blocks triggered by IOC matches,
+	// distinct from the manual blocks added via PostFWEBlock above.
+	iocRows, err := database.DB.Query(`SELECT b.id, i.type, b.indicator, i.severity, b.blocked_at
+		FROM ioc_firewall_blocks b JOIN iocs i ON i.id = b.ioc_id
+		WHERE b.tenant_id=$1 ORDER BY b.blocked_at DESC LIMIT 100`, tid)
+	if err == nil {
+		defer iocRows.Close()
+		for iocRows.Next() {
+			var id int
+			var iocType, indicator, severity string
+			var blockedAt time.Time
+			iocRows.Scan(&id, &iocType, &indicator, &severity, &blockedAt)
+			out = append(out, map[string]any{
+				"id": fmt.Sprintf("ioc-%d", id), "block_type": iocType, "value": indicator,
+				"reason":     fmt.Sprintf("Auto-blocked: IOC match (%s severity)", severity),
+				"blocked_by": "ids-auto", "active": true, "created_at": blockedAt.Format(time.RFC3339),
+			})
 		}
-		if reason != nil {
-			b["reason"] = *reason
-		}
-		if expiresAt != nil {
-			b["expires_at"] = expiresAt.Format(time.RFC3339)
-		}
-		out = append(out, b)
 	}
 	c.JSON(http.StatusOK, out)
 }
@@ -818,7 +860,7 @@ func GetFWEAnalytics(c *gin.Context) {
 		Protocol string `json:"protocol"`
 		Count    int    `json:"count"`
 	}
-	prows, _ := database.DB.Query(`SELECT protocol, COUNT(*) as c FROM fwe_connections WHERE tenant_id=$1 AND protocol IS NOT NULL GROUP BY protocol ORDER BY c DESC LIMIT 8`, tid)
+	prows, _ := database.DB.Query(`SELECT protocol, COUNT(*) as c FROM endpoint_connections WHERE tenant_id=$1 AND protocol IS NOT NULL GROUP BY protocol ORDER BY c DESC LIMIT 8`, tid)
 	protoStats := []protoStat{}
 	if prows != nil {
 		for prows.Next() {
@@ -848,11 +890,11 @@ func GetFWEAnalytics(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COUNT(*), COUNT(*) FILTER (WHERE created_at > NOW()-INTERVAL '24 hours') FROM fwe_threats WHERE tenant_id=$1`, tid).Scan(&totalThreats, &last24h)
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_threats":    totalThreats,
-		"threats_24h":      last24h,
-		"by_threat_type":   threatStats,
-		"by_protocol":      protoStats,
-		"top_blocked_ips":  topBlockedIPs,
+		"total_threats":   totalThreats,
+		"threats_24h":     last24h,
+		"by_threat_type":  threatStats,
+		"by_protocol":     protoStats,
+		"top_blocked_ips": topBlockedIPs,
 	})
 }
 
@@ -939,7 +981,7 @@ func PostFWEAI(c *gin.Context) {
 	}
 
 	var activeConns, totalRules int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM fwe_connections WHERE tenant_id=$1 AND state='established'`, tid).Scan(&activeConns)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM endpoint_connections WHERE tenant_id=$1 AND state='ESTABLISHED'`, tid).Scan(&activeConns)
 	database.DB.QueryRow(`SELECT COUNT(*) FROM firewall_rules WHERE tenant_id=$1`, tid).Scan(&totalRules)
 	fmt.Fprintf(&ctx, "\nActive established connections: %d\nTotal configured rules: %d\n", activeConns, totalRules)
 
@@ -1005,10 +1047,10 @@ func PostFWEValidate(c *gin.Context) {
 	issues := []issue{}
 
 	type rule struct {
-		id, priority         int
-		name, srcIP, dstIP   string
-		protocol, portRange  string
-		action               string
+		id, priority        int
+		name, srcIP, dstIP  string
+		protocol, portRange string
+		action              string
 	}
 	allRules := []rule{}
 	if rules != nil {
@@ -1059,10 +1101,81 @@ func PostFWEReport(c *gin.Context) {
 		ReportType string `json:"report_type"`
 	}
 	c.ShouldBindJSON(&b)
+
+	titles := map[string]string{
+		"firewall_activity": "Firewall Activity Report", "policy_compliance": "Policy Compliance Report",
+		"threat_blocking": "Threat Blocking Report", "config_change": "Configuration Change Report",
+		"executive_summary": "Executive Summary", "audit": "Audit Report",
+	}
+	title := titles[b.ReportType]
+	if title == "" {
+		title = "Firewall Report"
+	}
+
+	row := func(q string) int {
+		var n int
+		database.DB.QueryRow(q, tid).Scan(&n)
+		return n
+	}
+	totalRules := row(`SELECT COUNT(*) FROM firewall_rules WHERE tenant_id=$1`)
+	activeRules := row(`SELECT COUNT(*) FROM firewall_rules WHERE tenant_id=$1 AND enabled=TRUE`)
+	totalThreats := row(`SELECT COUNT(*) FROM fwe_threats WHERE tenant_id=$1`)
+	threats24h := row(`SELECT COUNT(*) FROM fwe_threats WHERE tenant_id=$1 AND created_at > NOW()-INTERVAL '24 hours'`)
+	pendingApprovals := row(`SELECT COUNT(*) FROM fwe_approvals WHERE tenant_id=$1 AND status='pending'`)
+	iocBlocks := row(`SELECT COUNT(*) FROM ioc_firewall_blocks WHERE tenant_id=$1`)
+
+	// This used to return zero real numbers at all — not even a fabricated
+	// snapshot, just a generic "X report generated successfully" string,
+	// with no key_metrics field for the frontend to render.
+	prompt := fmt.Sprintf(`You are a network security reporting assistant writing a %s. Real metrics for this tenant: %d total firewall rules (%d enabled), %d total threat events blocked (%d in the last 24 hours), %d real IOC-triggered auto-blocks, %d change requests currently pending approval. Respond as a JSON object with fields: executive_summary (2-3 sentences grounded only in these numbers, no invented incidents), recommendations (a JSON array of up to 4 short actionable strings based only on the real data given — if there isn't enough data, say so instead of inventing findings).`,
+		title, totalRules, activeRules, totalThreats, threats24h, iocBlocks, pendingApprovals)
+	var summary string
+	var recommendations []string
+	if raw, err := services.CallLLM(prompt); err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		if totalRules == 0 {
+			summary = "No firewall rules have been configured for this tenant."
+		} else {
+			summary = fmt.Sprintf("%d firewall rules configured (%d enabled), %d threat events blocked (%d in the last 24 hours). %d change request(s) currently pending approval.", totalRules, activeRules, totalThreats, threats24h, pendingApprovals)
+		}
+		recommendations = []string{}
+	}
+
 	fweAudit(tid, "report_generated", "report", "", b.ReportType, actor, "")
 	c.JSON(http.StatusOK, gin.H{
-		"ok": true, "report_type": b.ReportType,
-		"generated_at": time.Now().Format(time.RFC3339),
-		"summary":      fmt.Sprintf("%s report generated successfully", b.ReportType),
+		"ok":                true,
+		"title":             title,
+		"report_type":       b.ReportType,
+		"generated_at":      time.Now().Format(time.RFC3339),
+		"generated_by":      actor,
+		"classification":    "CONFIDENTIAL",
+		"executive_summary": summary,
+		"key_metrics": gin.H{
+			"total_rules":       totalRules,
+			"active_rules":      activeRules,
+			"total_threats":     totalThreats,
+			"threats_24h":       threats24h,
+			"ioc_blocks":        iocBlocks,
+			"pending_approvals": pendingApprovals,
+		},
+		"recommendations": recommendations,
 	})
 }

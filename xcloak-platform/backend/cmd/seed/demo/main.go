@@ -4167,6 +4167,22 @@ func seedDefenseEvasion(db *sql.DB) {
 
 func seedFirewallEnterprise(db *sql.DB) {
 	const tid = 9999
+
+	// Same non-idempotency bug as seedScheduledTasksEnterprise: this
+	// function's own CREATE TABLE statements below assume columns/UNIQUE
+	// constraints (policy_id UNIQUE, zone_id, interface_names, etc.) that
+	// don't match what api/firewall_enterprise_v2.go's createFWETables()
+	// actually creates — since that handler runs first in this environment,
+	// CREATE TABLE IF NOT EXISTS below is a permanent no-op against the
+	// real schema, and every ON CONFLICT DO NOTHING clause has no matching
+	// unique constraint to ever conflict on. Confirmed live: this dev DB
+	// had accumulated hundreds of duplicate rows across every fwe_* table
+	// before this guard was added.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM fwe_policies WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
 	now := time.Now()
 
 	// ── tables ──────────────────────────────────────────────────────────────
@@ -4340,30 +4356,10 @@ func seedFirewallEnterprise(db *sql.DB) {
 		)
 	}
 
-	// ── live connections ─────────────────────────────────────────────────────
-	type fweConn struct {
-		id, srcIP, dstIP, proto, app, state, zsrc, zdst, rule string
-		srcP, dstP, dur                                       int
-		bsent, brecv                                          int64
-	}
-	connRows := []fweConn{
-		{"CONN-001", "10.5.1.100", "203.0.113.50", "tcp", "HTTPS", "established", "lan", "wan", "RULE-003", 54321, 443, 1823, 48234, 189234},
-		{"CONN-002", "10.10.20.5", "8.8.8.8", "udp", "DNS", "established", "lan", "wan", "RULE-011", 33481, 53, 12, 512, 1024},
-		{"CONN-003", "192.168.100.10", "10.0.1.80", "tcp", "HTTP", "established", "dmz", "lan", "RULE-015", 80, 45234, 3920, 892341, 124230},
-		{"CONN-004", "10.200.0.42", "10.10.5.10", "tcp", "SSH", "established", "vpn", "srv", "RULE-022", 22, 62341, 412, 84231, 2341},
-		{"CONN-005", "10.0.0.15", "172.217.14.196", "tcp", "HTTPS", "established", "lan", "wan", "RULE-003", 53221, 443, 892, 23412, 84231},
-		{"CONN-006", "10.5.3.22", "192.168.100.10", "tcp", "HTTP", "established", "lan", "dmz", "RULE-018", 45123, 80, 234, 12342, 34521},
-		{"CONN-007", "192.168.200.15", "8.8.4.4", "udp", "DNS", "established", "guest", "wan", "RULE-031", 51234, 53, 5, 64, 128},
-		{"CONN-008", "10.10.5.20", "10.10.5.25", "tcp", "MySQL", "established", "srv", "srv", "RULE-040", 3306, 34521, 9823, 423100, 84231},
-	}
-	for _, c := range connRows {
-		mustExec(db, `INSERT INTO fwe_connections (tenant_id, src_ip, src_port, dst_ip, dst_port, protocol, application, state, bytes_sent, bytes_recv, duration, zone_src, zone_dst, rule_id, started_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-			tid, c.srcIP, c.srcP, c.dstIP, c.dstP, c.proto, c.app, c.state,
-			c.bsent, c.brecv, c.dur, c.zsrc, c.zdst, c.rule,
-			now.Add(-time.Duration(c.dur)*time.Second),
-		)
-	}
+	// Live Connections is no longer backed by fwe_connections (see
+	// GetFWEConnections in firewall_enterprise_v2.go) — it reads real
+	// endpoint_connections data instead, so seeding fake rows here would
+	// just be dead weight nothing ever reads.
 
 	// ── approvals ────────────────────────────────────────────────────────────
 	type fweApproval struct {
@@ -4471,8 +4467,8 @@ func seedFirewallEnterprise(db *sql.DB) {
 		)
 	}
 
-	log.Printf("Firewall enterprise seed: %d policies, %d zones, %d NAT, %d threats, %d conns, %d approvals, %d notifs, %d blocks, %d audit",
-		len(policies), len(zones), len(natRules), len(threatRows), len(connRows), len(approvalRows), len(notifRows), len(blockRows), len(auditRows))
+	log.Printf("Firewall enterprise seed: %d policies, %d zones, %d NAT, %d threats, %d approvals, %d notifs, %d blocks, %d audit",
+		len(policies), len(zones), len(natRules), len(threatRows), len(approvalRows), len(notifRows), len(blockRows), len(auditRows))
 }
 
 func seedReportsEnterprise(db *sql.DB) {
