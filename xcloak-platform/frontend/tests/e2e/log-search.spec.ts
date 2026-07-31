@@ -129,6 +129,11 @@ test.describe('Log Search — regression guard: dead context-menu items are gone
   });
 
   test('Add to Case and Hunt Similar navigate to their real pages', async ({ page }) => {
+    // Two sequential new-tab open+navigate+close round trips (Cases, then
+    // Hunt Workbench — both real, non-trivial pages with their own mount-time
+    // API calls) can outrun Playwright's 30s default, independent of any
+    // product bug.
+    test.setTimeout(60_000);
     await runDefaultSearch(page);
 
     const firstRow = page.locator('button.w-full.text-left.flex.items-start').first();

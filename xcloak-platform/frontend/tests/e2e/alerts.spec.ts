@@ -136,16 +136,24 @@ test.describe('Alerts — acknowledge/resolve against the live backend', () => {
   // counted in `total` — real alerts could vanish from the very first page
   // of the Alerts list while the count claimed they existed.
   test('a real alert with a NULL agent_id and NULL MITRE fields still appears in the paginated list', async ({ page }) => {
+    // Unique reason so this test can find its own alert via the `q` search
+    // filter — this environment has a very active live background alert
+    // generator (real agents feeding real detections, tens of new alerts
+    // per minute), so a plain "most recent alert" or "first N alerts"
+    // assumption is flaky: the created alert sinks in rank almost
+    // immediately. Filtering server-side by its own unique reason text
+    // makes the check independent of how much other alert volume exists.
+    const reason = `e2e-null-agent-regression-${Date.now()}`;
     const createRes = await page.request.post('/api/dpi/response-action', {
-      data: { action: 'create_alert', reason: 'e2e-null-agent-regression' },
+      data: { action: 'create_alert', reason },
     });
     expect(createRes.status()).toBe(200);
 
-    const listRes = await page.request.get('/api/alerts/paginated?status=open&per_page=1&page=1');
+    const listRes = await page.request.get(`/api/alerts/paginated?status=open&per_page=5&page=1&q=${encodeURIComponent(reason)}`);
     const list = await listRes.json();
     expect(list.total).toBeGreaterThan(0);
-    // This is the exact regression: previously `alerts` was `[]` here even
-    // though `total` was correctly nonzero.
+    // This is the exact regression: previously the NULL-agent_id alert was
+    // silently dropped from `alerts` while still being counted in `total`.
     expect(list.alerts.length).toBeGreaterThan(0);
     expect(list.alerts[0].agent_id).toBe(0);
   });
