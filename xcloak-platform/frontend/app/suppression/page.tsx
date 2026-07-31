@@ -154,21 +154,33 @@ function RulesTab({ rules, onRefresh }: { rules: any[]; onRefresh: () => void })
   }), [rules, filterStatus, search]);
 
   const setStatus = async (rule: any, status: string) => {
-    await supAPI.updateRule(rule.id, { status });
-    onRefresh();
+    try {
+      await supAPI.updateRule(rule.id, { status });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to update rule status');
+    }
   };
 
   const deleteRule = async (rule: any) => {
-    await supAPI.deleteRule(rule.id);
-    if (selected?.id === rule.id) setSelected(null);
-    onRefresh();
+    try {
+      await supAPI.deleteRule(rule.id);
+      if (selected?.id === rule.id) setSelected(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to delete rule');
+    }
   };
 
   const approve = async (decision: string) => {
     if (!selected) return;
-    await supAPI.approveRule(selected.id, { decision, notes: approveNotes });
-    setShowApprove(false);
-    onRefresh();
+    try {
+      await supAPI.approveRule(selected.id, { decision, notes: approveNotes });
+      setShowApprove(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record decision');
+    }
   };
 
   let conditions: any[] = [];
@@ -400,9 +412,13 @@ function BuilderTab({ onRefresh }: { onRefresh: () => void }) {
 
   const save = async () => {
     if (!name) return;
-    await supAPI.createRule({ rule_name: name, description, priority, suppression_type: supType, scope, scope_value: scopeValue, time_type: timeType, expires_at: expiresAt, conditions: JSON.stringify(conditions), exceptions: JSON.stringify(exceptions) });
-    setSaved(true);
-    onRefresh();
+    try {
+      await supAPI.createRule({ rule_name: name, description, priority, suppression_type: supType, scope, scope_value: scopeValue, time_type: timeType, expires_at: expiresAt, conditions: JSON.stringify(conditions), exceptions: JSON.stringify(exceptions) });
+      setSaved(true);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to save rule');
+    }
   };
 
   return (

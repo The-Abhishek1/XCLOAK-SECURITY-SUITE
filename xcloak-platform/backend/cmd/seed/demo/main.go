@@ -183,6 +183,8 @@ func main() {
 	seedVulnerabilityManagement(db)
 	log.Println("Seeding vulnerability remediation queue (vq_*)…")
 	seedVulnQueue(db)
+	log.Println("Seeding alert suppression rules (sup_*)…")
+	seedSuppressionEnterprise(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -8418,4 +8420,81 @@ func seedVulnQueue(db *sql.DB) {
 	}
 
 	log.Printf("VQ seed: %d items, 1 dependency, 1 exception", len(itemIDs))
+}
+
+// seedSuppressionEnterprise seeds api/suppression_enterprise.go's sup_*
+// tables (distinct from the older, simpler suppression_rules table used
+// elsewhere in the app).
+func seedSuppressionEnterprise(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sup_rules (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, rule_name TEXT NOT NULL, description TEXT DEFAULT '',
+		status TEXT DEFAULT 'draft', owner TEXT DEFAULT '', priority TEXT DEFAULT 'medium',
+		suppression_type TEXT DEFAULT 'full_suppress', scope TEXT DEFAULT 'single_asset', scope_value TEXT DEFAULT '',
+		time_type TEXT DEFAULT 'until_date', expires_at TIMESTAMPTZ, maintenance_window TEXT DEFAULT '',
+		recurring_schedule TEXT DEFAULT '', conditions TEXT DEFAULT '', exceptions TEXT DEFAULT '',
+		approval_status TEXT DEFAULT 'not_required', approved_by TEXT DEFAULT '', approved_at TIMESTAMPTZ,
+		total_suppressed INTEGER DEFAULT 0, last_triggered_at TIMESTAMPTZ, created_by TEXT DEFAULT '',
+		created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS sup_audit (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, rule_id INTEGER, rule_name TEXT DEFAULT '',
+		action TEXT NOT NULL, actor TEXT DEFAULT '', details TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM sup_rules WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	now := time.Now()
+
+	rules := []struct {
+		name, desc, status, priority, suppType, scope, scopeValue, approvalStatus, owner string
+		totalSuppressed                                                                  int
+		lastTriggeredHoursAgo                                                            int
+		expiresInDays                                                                    int
+	}{
+		{"Backup Window — win-workstation-05", "Suppress noisy backup-agent alerts during the nightly maintenance window.", "active", "low", "hide_from_queue", "single_asset", "win-workstation-05", "not_required", "admin", 342, 2, 30},
+		{"Known False Positive — TLS Negotiation Warnings", "Legacy monitoring systems trigger weak-TLS alerts that are already tracked and accepted.", "active", "medium", "full_suppress", "detection_type", "Weak TLS Negotiated", "not_required", "admin", 128, 6, 90},
+		{"USB Debugging — Android Test Fleet", "Android test devices legitimately run with USB debugging enabled.", "active", "low", "full_suppress", "single_asset", "android-mobile-01", "not_required", "admin", 87, 20, 60},
+		{"Critical Asset Global Suppress — db-server-02", "Proposed global suppression for all alerts on the production database host during a migration window.", "draft", "critical", "full_suppress", "single_asset", "db-server-02", "pending", "admin", 0, 0, 7},
+		{"Ransomware Pattern — Under Review", "Requested suppression of ransomware file-pattern alerts; pending SOC manager review.", "draft", "critical", "full_suppress", "detection_type", "Ransomware File Pattern", "pending", "admin", 0, 0, 14},
+		{"Expiring Soon — Pen Test Window", "Temporary suppression for an authorized external penetration test.", "active", "medium", "full_suppress", "asset_group", "pentest-scope", "not_required", "admin", 54, 30, 2},
+	}
+	ruleIDs := []int{}
+	for _, r := range rules {
+		var expiresAt interface{}
+		if r.expiresInDays > 0 {
+			expiresAt = now.AddDate(0, 0, r.expiresInDays)
+		}
+		var lastTriggered interface{}
+		if r.lastTriggeredHoursAgo > 0 {
+			lastTriggered = now.Add(-time.Duration(r.lastTriggeredHoursAgo) * time.Hour)
+		}
+		var approvedBy interface{}
+		var approvedAt interface{}
+		if r.approvalStatus == "not_required" && r.status == "active" {
+			approvedBy = "admin"
+			approvedAt = now.AddDate(0, 0, -30)
+		}
+		var id int
+		err := db.QueryRow(`
+			INSERT INTO sup_rules (tenant_id,rule_name,description,status,owner,priority,suppression_type,scope,scope_value,approval_status,approved_by,approved_at,total_suppressed,last_triggered_at,expires_at,created_by,created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			RETURNING id`,
+			r.name, r.desc, r.status, r.owner, r.priority, r.suppType, r.scope, r.scopeValue, r.approvalStatus, approvedBy, approvedAt,
+			r.totalSuppressed, lastTriggered, expiresAt, r.owner, now.AddDate(0, 0, -45),
+		).Scan(&id)
+		if err != nil {
+			log.Printf("sup_rules: %v", err)
+			continue
+		}
+		ruleIDs = append(ruleIDs, id)
+		mustExec(db, `INSERT INTO sup_audit (tenant_id,rule_id,rule_name,action,actor,details,created_at) VALUES (9999,$1,$2,'created','admin','Rule created in draft status',$3)`,
+			id, r.name, now.AddDate(0, 0, -45))
+		if r.status == "active" {
+			mustExec(db, `INSERT INTO sup_audit (tenant_id,rule_id,rule_name,action,actor,details,created_at) VALUES (9999,$1,$2,'active','admin','Status changed to active',$3)`,
+				id, r.name, now.AddDate(0, 0, -44))
+		}
+	}
+
+	log.Printf("Suppression enterprise seed: %d rules with audit trail", len(ruleIDs))
 }

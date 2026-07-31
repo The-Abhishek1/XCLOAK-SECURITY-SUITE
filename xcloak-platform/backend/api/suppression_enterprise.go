@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -241,6 +242,7 @@ func PatchSupRule(c *gin.Context) {
 		ExpiresAt   string `json:"expires_at"`
 	}
 	_ = c.ShouldBindJSON(&body)
+	ruleIDInt, _ := strconv.Atoi(id)
 	var ruleNamePtr *string
 	_ = database.DB.QueryRow(`SELECT rule_name FROM sup_rules WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&ruleNamePtr)
 	ruleName := ""
@@ -249,11 +251,11 @@ func PatchSupRule(c *gin.Context) {
 	}
 	if body.Status != "" {
 		database.DB.Exec(`UPDATE sup_rules SET status=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, body.Status, id, tid)
-		supAudit(tid, 0, ruleName, body.Status, user, fmt.Sprintf("Status changed to %s", body.Status))
+		supAudit(tid, ruleIDInt, ruleName, body.Status, user, fmt.Sprintf("Status changed to %s", body.Status))
 	}
 	if body.Conditions != "" {
 		database.DB.Exec(`UPDATE sup_rules SET conditions=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, body.Conditions, id, tid)
-		supAudit(tid, 0, ruleName, "modified", user, "Conditions updated")
+		supAudit(tid, ruleIDInt, ruleName, "modified", user, "Conditions updated")
 	}
 	if body.Exceptions != "" {
 		database.DB.Exec(`UPDATE sup_rules SET exceptions=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, body.Exceptions, id, tid)
@@ -266,11 +268,12 @@ func DeleteSupRule(c *gin.Context) {
 	createSupTables()
 	tid := tenantIDFromContext(c)
 	id := c.Param("id")
+	ruleIDInt, _ := strconv.Atoi(id)
 	user := usernameFromContext(c)
 	var ruleName string
 	_ = database.DB.QueryRow(`SELECT rule_name FROM sup_rules WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&ruleName)
 	database.DB.Exec(`DELETE FROM sup_rules WHERE id=$1 AND tenant_id=$2`, id, tid)
-	supAudit(tid, 0, ruleName, "deleted", user, "Rule permanently deleted")
+	supAudit(tid, ruleIDInt, ruleName, "deleted", user, "Rule permanently deleted")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -285,12 +288,19 @@ func PostSupApprove(c *gin.Context) {
 		Notes    string `json:"notes"`
 	}
 	_ = c.ShouldBindJSON(&body)
+	var ruleIDInt int
+	var ruleNamePtr *string
+	_ = database.DB.QueryRow(`SELECT id, rule_name FROM sup_rules WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&ruleIDInt, &ruleNamePtr)
+	ruleName := ""
+	if ruleNamePtr != nil {
+		ruleName = *ruleNamePtr
+	}
 	if body.Decision == "approve" {
 		database.DB.Exec(`UPDATE sup_rules SET approval_status='approved', approved_by=$1, approved_at=NOW(), status='active', updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, user, id, tid)
-		supAudit(tid, 0, "", "approved", user, "Rule approved and activated")
+		supAudit(tid, ruleIDInt, ruleName, "approved", user, "Rule approved and activated")
 	} else {
 		database.DB.Exec(`UPDATE sup_rules SET approval_status='rejected', approved_by=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3`, user, id, tid)
-		supAudit(tid, 0, "", "rejected", user, body.Notes)
+		supAudit(tid, ruleIDInt, ruleName, "rejected", user, body.Notes)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -448,12 +458,27 @@ func PostSupAI(c *gin.Context) {
 	}
 	prompt := fmt.Sprintf(`You are a SOC analyst advisor. Analyze whether to suppress the following alert:
 Detection: %s, Count in last %d days: %d, Confirmed incidents: %d, Asset type: %s, Severity: %s, MITRE: %s.
-Respond with JSON: {recommendation: "suppress"|"do_not_suppress"|"conditional_suppress", confidence_pct: number, reasoning: string, conditions_if_conditional: string, risk_if_suppressed: string, alternative: string}`,
+Respond with JSON: {"recommendation": "suppress"|"do_not_suppress"|"conditional_suppress", "confidence_pct": number, "reasoning": string, "conditions_if_conditional": string, "risk_if_suppressed": string, "alternative": string}`,
 		body.DetectionName, body.LookbackDays, body.AlertCount, body.IncidentCount, body.AssetType, body.Severity, body.MITRETechnique)
-	resp, err := services.CallLLM(prompt)
-	if err != nil || resp == "" {
-		resp = supDeterministicAI(body.DetectionName, body.AlertCount, body.IncidentCount, body.Severity)
+	raw, err := services.CallLLM(prompt)
+	if err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed map[string]interface{}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			c.JSON(http.StatusOK, parsed)
+			return
+		}
 	}
+	// Deterministic fallback — used only when the real LLM call itself
+	// fails or returns unparseable JSON, not layered underneath it.
 	rec := "conditional_suppress"
 	reasoning := supDeterministicReasoning(body.DetectionName, body.AlertCount, body.IncidentCount, body.Severity, body.AssetType)
 	if body.IncidentCount == 0 && body.AlertCount > 500 {
@@ -470,15 +495,7 @@ Respond with JSON: {recommendation: "suppress"|"do_not_suppress"|"conditional_su
 		"conditions_if_conditional": "Limit suppression to known backup server asset group during 02:00–06:00 UTC maintenance window only",
 		"risk_if_suppressed":        supRisk(body.Severity, body.IncidentCount),
 		"alternative":               "Lower severity to Low instead of fully suppressing, preserving log retention for forensics",
-		"ai_analysis":               resp,
 	})
-}
-
-func supDeterministicAI(detection string, count, incidents int, severity string) string {
-	if incidents > 0 {
-		return fmt.Sprintf("Do not suppress '%s'. This detection has correlated with %d confirmed incident(s). Suppression would create a critical visibility gap.", detection, incidents)
-	}
-	return fmt.Sprintf("'%s' has triggered %d times with no confirmed incidents. Consider time-based or scope-limited suppression rather than a global rule.", detection, count)
 }
 
 func supDeterministicReasoning(detection string, count, incidents int, severity, assetType string) string {
