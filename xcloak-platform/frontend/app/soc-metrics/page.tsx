@@ -3,16 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { socMetricsAPI } from '@/lib/api';
-import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
 import {
   LayoutDashboard, Bell, ShieldAlert, Briefcase, Users, Crosshair, Wand2, Flame,
   Laptop, Bug, ShieldCheck, Server, Sparkles, FileBarChart2, ScrollText,
-  X, FileText, Target, Share2, Settings, ClipboardList,
+  X, FileText, Target, Share2, Settings, ClipboardList, Eye,
 } from 'lucide-react';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard'|'alerts'|'incidents'|'cases'|'analysts'|'detection'|'automation'|'threats'|'endpoints'|'vulns'|'compliance'|'infra'|'ai'|'reports'|'audit';
+type Tab = 'dashboard'|'alerts'|'incidents'|'cases'|'analysts'|'detection'|'automation'|'threats'|'endpoints'|'vulns'|'compliance'|'infra'|'ai'|'reports'|'notifications'|'audit';
 
 const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: 'dashboard',  label: 'Dashboard',       icon: LayoutDashboard },
@@ -29,6 +29,7 @@ const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: 'infra',      label: 'Infrastructure',  icon: Server },
   { key: 'ai',         label: 'AI Insights',     icon: Sparkles },
   { key: 'reports',    label: 'Reports',         icon: FileBarChart2 },
+  { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'audit',      label: 'Audit Trail',     icon: ScrollText },
 ];
 
@@ -546,7 +547,6 @@ function AutomationTab({ automation }: { automation: any }) {
             { label: 'Pending', value: approval.pending, color: '#eab308' },
             { label: 'Approved', value: approval.approved, color: '#22c55e' },
             { label: 'Rejected', value: approval.rejected, color: '#ef4444' },
-            { label: 'Avg Wait', value: `${approval.avg_wait_mins}m`, color: '#3b82f6' },
           ].map(s => (
             <span key={s.label} style={{ fontSize: 10, background: s.color + '18', borderRadius: 6, padding: '4px 10px', color: s.color, fontWeight: 600 }}>
               {s.label}: {s.value}
@@ -667,10 +667,6 @@ function EndpointsTab({ endpoints }: { endpoints: any }) {
           </div>
           <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-2)', display: 'flex', gap: 16 }}>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>Network Throughput</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6' }}>{endpoints.network_throughput_gbps} Gbps</div>
-            </div>
-            <div>
               <div style={{ fontSize: 10, color: 'var(--text-3)' }}>Blocked Connections</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#ef4444' }}>{(endpoints.blocked_connections || 0).toLocaleString()}</div>
             </div>
@@ -759,7 +755,6 @@ function ComplianceTab({ compliance }: { compliance: any }) {
         <MetricCard label="Frameworks"          value={compliance.framework_count || 0} color="var(--accent)" />
         <MetricCard label="Audit Readiness"     value={`${compliance.audit_readiness || 0}%`} color="#22c55e" />
         <MetricCard label="Open Findings"       value={compliance.open_findings || 0}    color="#eab308" />
-        <MetricCard label="Policy Violations"   value={compliance.policy_violations || 0} color="#ef4444" />
         <MetricCard label="Remediation Progress" value={`${compliance.remediation_progress || 0}%`} color="#3b82f6" />
       </div>
       {frameworks.length > 0 && (
@@ -868,15 +863,27 @@ function AIInsightsTab() {
 
 // ── Reports tab ───────────────────────────────────────────────────────────────
 
+function fmtSize(bytes?: number) {
+  if (!bytes) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
 function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => void }) {
   const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState({ title: '', report_type: 'daily_operations', period_days: 1 });
+  const [viewing, setViewing] = useState<any>(null);
 
   async function generate() {
     setGenerating(true);
-    await socMetricsAPI.generateReport(form).catch(() => null);
-    setGenerating(false);
-    onRefresh();
+    try {
+      await socMetricsAPI.generateReport(form);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to generate report');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   const typeColors: Record<string, string> = {
@@ -932,13 +939,66 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
             { key: 'period', header: 'Period', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmt(r.period_start)} – {fmt(r.period_end)}</span> },
             { key: 'generated_by', header: 'Generated By', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{r.generated_by}</span> },
             { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(r.created_at)}</span> },
-            { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</span> },
+            { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtSize(r.size_bytes)}</span> },
+            { key: 'view', header: '', render: (r: any) => (
+              <ActionButton variant="ghost" icon={Eye} onClick={() => setViewing(r)} style={{ padding: '2px 8px', fontSize: 11 }}>View</ActionButton>
+            ) },
           ]}
           rows={reports}
           rowKey={(r: any, i: number) => r.id ?? i}
           emptyState={<EmptyState title="No reports yet" />}
         />
       </SectionCard>
+      <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.title} maxWidth={560}>
+        {viewing && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {pill(viewing.report_type?.replace(/_/g, ' '), typeColors[viewing.report_type] || '#6b7280')}
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmt(viewing.period_start)} – {fmt(viewing.period_end)} · {fmtSize(viewing.size_bytes)}</span>
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-1)', whiteSpace: 'pre-wrap' }}>
+              {viewing.summary || 'No summary available.'}
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ── Notifications tab ─────────────────────────────────────────────────────────
+
+function NotificationsTab({ notifs, onRefresh }: { notifs: any[]; onRefresh: () => void }) {
+  async function markRead() {
+    try {
+      await socMetricsAPI.markNotificationsRead();
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to mark notifications read');
+    }
+  }
+  const unread = notifs.filter(n => !n.read).length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {unread > 0 && (
+          <ActionButton variant="ghost" onClick={markRead} style={{ fontSize: 11 }}>
+            Mark all read ({unread})
+          </ActionButton>
+        )}
+      </div>
+      {!notifs.length && <EmptyState title="No notifications" />}
+      {notifs.map((n: any, i: number) => (
+        <div key={i} style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--bg-2)', border: `1px solid ${n.read ? 'var(--border)' : (SEV_CLR[n.severity] || 'var(--border)') + '44'}`, opacity: n.read ? 0.7 : 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            {pill(n.severity, SEV_CLR[n.severity] || '#6b7280')}
+            <span style={{ fontSize: 12, fontWeight: n.read ? 400 : 600, color: 'var(--text-1)' }}>{n.title}</span>
+            {!n.read && <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: SEV_CLR[n.severity] || '#3b82f6', display: 'inline-block', flexShrink: 0 }} />}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 4 }}>{n.message}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{n.source} · {fmt(n.created_at)}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1049,7 +1109,7 @@ export default function SOCMetricsPage() {
     <div style={{ display: 'flex', gap: 8 }}>
       {unreadCount > 0 && (
         <div style={{ position: 'relative' }}>
-          <ActionButton variant="ghost" icon={Bell} onClick={() => setTab('audit')}>Alerts</ActionButton>
+          <ActionButton variant="ghost" icon={Bell} onClick={() => setTab('notifications')}>Alerts</ActionButton>
           <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', fontSize: 9, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, pointerEvents: 'none' }}>{unreadCount}</span>
         </div>
       )}
@@ -1074,6 +1134,7 @@ export default function SOCMetricsPage() {
       case 'infra':      return <InfraTab      infra={infra} />;
       case 'ai':         return <AIInsightsTab />;
       case 'reports':    return <ReportsTab    reports={reports} onRefresh={loadAll} />;
+      case 'notifications': return <NotificationsTab notifs={notifs} onRefresh={loadAll} />;
       case 'audit':      return <AuditTab      audit={audit} />;
       default:           return null;
     }

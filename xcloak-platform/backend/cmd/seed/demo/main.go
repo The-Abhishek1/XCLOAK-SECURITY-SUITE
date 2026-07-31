@@ -5610,6 +5610,12 @@ func seedSOCMetricsEnterprise(db *sql.DB) {
 	tid := 9999
 	now := time.Now()
 
+	var existingNotifs int
+	db.QueryRow(`SELECT COUNT(*) FROM sme_notifications WHERE tenant_id='9999'`).Scan(&existingNotifs)
+	if existingNotifs > 0 {
+		return
+	}
+
 	// tables
 	for _, q := range []string{
 		`CREATE TABLE IF NOT EXISTS sme_snapshots (

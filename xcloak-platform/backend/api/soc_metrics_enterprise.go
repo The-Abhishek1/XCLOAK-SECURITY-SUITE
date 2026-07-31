@@ -231,13 +231,13 @@ func GetSMEDashboard(c *gin.Context) {
 
 	// latest snapshot
 	var (
-		date                                                                        string
-		healthScore, activeAnalysts, analystsOnline, autoCoverage                  int
-		totalAlerts, critAlerts, highAlerts, alertQueue                             int
-		totalInc, critInc, openInc                                                  int
-		openCases, casePending                                                      int
-		slaComp, pbExec                                                              int
-		mttd, mttr                                                                  float64
+		date                                                      string
+		healthScore, activeAnalysts, analystsOnline, autoCoverage int
+		totalAlerts, critAlerts, highAlerts, alertQueue           int
+		totalInc, critInc, openInc                                int
+		openCases, casePending                                    int
+		slaComp, pbExec                                           int
+		mttd, mttr                                                float64
 	)
 	_ = db.QueryRow(`SELECT snapshot_date,soc_health_score,active_analysts,analysts_online,
 		automation_coverage,total_alerts,critical_alerts,high_alerts,alert_queue_size,
@@ -291,7 +291,7 @@ func GetSMEAlerts(c *gin.Context) {
 
 	var (
 		total, crit, high, med, low, suppressed, fp, escalated, dups, queueSize int
-		procMins                                                                   float64
+		procMins                                                                float64
 	)
 	_ = db.QueryRow(`SELECT total_alerts,critical_alerts,high_alerts,medium_alerts,low_alerts,
 		suppressed_alerts,false_positives,escalated_alerts,duplicate_alerts,
@@ -384,7 +384,7 @@ func GetSMEIncidents(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"total_incidents": total, "critical": crit, "open": open, "closed": closed,
 		"sla_compliance": sla,
-		"mttd_mins": mttd, "mtta_mins": mtta, "mttc_mins": mttc,
+		"mttd_mins":      mttd, "mtta_mins": mtta, "mttc_mins": mttc,
 		"mttr_mins": mttr, "mttrec_mins": mttrec,
 		"by_severity": bySev,
 		"by_category": []map[string]interface{}{},
@@ -457,8 +457,8 @@ func GetSMEAnalysts(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 
 	type analystRow struct {
-		Name, Team, Shift                                      string
-		Alerts, Incidents, Cases                               int
+		Name, Team, Shift                                        string
+		Alerts, Incidents, Cases                                 int
 		AvgResp, AvgInv, FPRate, Workload, Productivity, Burnout float64
 	}
 	var analysts []map[string]interface{}
@@ -683,11 +683,21 @@ func GetSMEAutomation(c *gin.Context) {
 	db.QueryRow(`SELECT COUNT(*) FROM agent_tasks t JOIN agents a ON a.id=t.agent_id
 		WHERE a.tenant_id=$1 AND t.status='pending_approval'`, tid).Scan(&pendingApproval)
 
+	// approved/rejected are real counts from the audit trail ApproveTask/
+	// RejectTask write (task_approval.go) — agent_tasks itself loses the
+	// distinction once an approved task re-enters the normal 'pending'
+	// queue, so audit_logs is the only place this is still recoverable.
+	// avg_wait_mins has no reliable per-task correlation available from
+	// that free-text audit trail and is intentionally omitted.
+	var approved, rejected int
+	db.QueryRow(`SELECT COUNT(*) FROM audit_logs WHERE tenant_id=$1 AND action='SOAR_ACTION_APPROVED'`, tid).Scan(&approved)
+	db.QueryRow(`SELECT COUNT(*) FROM audit_logs WHERE tenant_id=$1 AND action='SOAR_ACTION_REJECTED'`, tid).Scan(&rejected)
+
 	c.JSON(http.StatusOK, gin.H{
 		"playbook_executions": pbExec, "script_executions": scriptExec,
 		"analyst_hours_saved": hoursaved, "automation_success_rate": autoRate,
 		"automation_coverage": autoRate,
-		"approval_queue":      gin.H{"pending": pendingApproval, "approved": 0, "rejected": 0, "avg_wait_mins": 0},
+		"approval_queue":      gin.H{"pending": pendingApproval, "approved": approved, "rejected": rejected},
 		"playbooks":           playbooks,
 		"trend":               trend,
 	})
@@ -801,16 +811,25 @@ func GetSMEEndpoints(c *gin.Context) {
 		coveragePct = healthy * 100 / total
 	}
 
+	// blocked_connections bridges the two real block sources also used by
+	// the Firewall page: manual fwe_blocked entries plus real IOC-triggered
+	// auto-blocks. dpi_events is the real per-agent DPI finding count.
+	// network_throughput_gbps has no real source anywhere in this codebase
+	// (no live byte-counting exists) and is intentionally omitted.
+	var manualBlocks, iocBlocks, dpiEvents int
+	db.QueryRow(`SELECT COUNT(*) FROM fwe_blocked WHERE tenant_id=$1 AND active=true`, fmt.Sprintf("%d", tid)).Scan(&manualBlocks)
+	db.QueryRow(`SELECT COUNT(*) FROM ioc_firewall_blocks WHERE tenant_id=$1`, tid).Scan(&iocBlocks)
+	db.QueryRow(`SELECT COUNT(*) FROM dpi_findings WHERE tenant_id=$1`, tid).Scan(&dpiEvents)
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_endpoints": total, "healthy": healthy, "offline": offline,
 		"quarantined": quarantined, "isolated": isolated,
-		"coverage_pct":            coveragePct,
-		"firewall_blocks":         fwBlocks, "network_anomalies": netAnom,
-		"blocked_connections":     0,
-		"dpi_events":              0,
-		"network_throughput_gbps": 0,
-		"endpoint_platforms":      platforms,
-		"recent_isolations":       isolations,
+		"coverage_pct":    coveragePct,
+		"firewall_blocks": fwBlocks, "network_anomalies": netAnom,
+		"blocked_connections": manualBlocks + iocBlocks,
+		"dpi_events":          dpiEvents,
+		"endpoint_platforms":  platforms,
+		"recent_isolations":   isolations,
 	})
 }
 
@@ -861,12 +880,16 @@ func GetSMEVulns(c *gin.Context) {
 		}
 	}
 
+	var exploitable int
+	db.QueryRow(`SELECT COUNT(*) FROM vulnerabilities v JOIN agents a ON a.id=v.agent_id
+		WHERE a.tenant_id=$1 AND v.is_kev=true`, tid).Scan(&exploitable)
+
 	c.JSON(http.StatusOK, gin.H{
 		"critical": critVulns, "high": highVulns, "medium": medVulns, "low": lowVulns,
-		"total": critVulns + highVulns + medVulns + lowVulns,
+		"total":            critVulns + highVulns + medVulns + lowVulns,
 		"patch_compliance": patchComp, "overdue_remediations": 0,
 		"mttr_days": 0, "verification_success_rate": 0,
-		"exploitable":      0,
+		"exploitable":      exploitable,
 		"risk_prioritized": riskPrioritized,
 		"trend":            trend,
 	})
@@ -915,11 +938,14 @@ func GetSMECompliance(c *gin.Context) {
 		remediationProgress = passedControls * 100 / total
 	}
 
+	// No policy-violation tracking exists anywhere in this codebase that is
+	// generic across frameworks (mdm_policies/email_policies/etc are page-
+	// specific), so this field is intentionally omitted rather than faked.
 	c.JSON(http.StatusOK, gin.H{
 		"compliance_score": compScore, "passed_controls": passedControls,
 		"failed_controls": failedControls, "framework_count": frameworkCount,
-		"audit_readiness": compScore,
-		"open_findings": openFindings, "policy_violations": 0,
+		"audit_readiness":      compScore,
+		"open_findings":        openFindings,
 		"remediation_progress": remediationProgress,
 		"frameworks":           frameworks,
 	})
@@ -1066,24 +1092,53 @@ func GetSMEReports(c *gin.Context) {
 
 	var reports []map[string]interface{}
 	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,size_bytes,
-		period_start,period_end,created_at FROM sme_reports
+		period_start,period_end,created_at,COALESCE(summary,'') FROM sme_reports
 		WHERE tenant_id=$1 ORDER BY created_at DESC`, tid)
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var id, title, rtype, by, format string
+			var id, title, rtype, by, format, summary string
 			var sizeB int64
 			var ps, pe, ca *string
-			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sizeB, &ps, &pe, &ca); err == nil {
+			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sizeB, &ps, &pe, &ca, &summary); err == nil {
 				reports = append(reports, map[string]interface{}{
 					"report_id": id, "title": title, "report_type": rtype,
 					"generated_by": by, "format": format, "size_bytes": sizeB,
 					"period_start": ps, "period_end": pe, "created_at": ca,
+					"summary": summary,
 				})
 			}
 		}
 	}
 	c.JSON(http.StatusOK, reports)
+}
+
+// generateSMEReportSummary grounds a real, LLM-written executive summary in
+// this tenant's latest real sme_snapshots row, falling back to a plain
+// numeric sentence if the LLM is unreachable.
+func generateSMEReportSummary(tid int, title, reportType string, periodDays int) string {
+	db := database.DB
+	var healthScore, activeAnalysts, autoCoverage int
+	var totalAlerts, critAlerts, totalInc, openInc, slaComp, pbExec int
+	var mttd, mttr float64
+	db.QueryRow(`SELECT soc_health_score,active_analysts,automation_coverage,
+		total_alerts,critical_alerts,total_incidents,open_incidents,
+		sla_compliance,playbook_executions,mttd_mins,mttr_mins
+		FROM sme_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(
+		&healthScore, &activeAnalysts, &autoCoverage, &totalAlerts, &critAlerts,
+		&totalInc, &openInc, &slaComp, &pbExec, &mttd, &mttr)
+
+	prompt := fmt.Sprintf(`You are a SOC operations analyst writing a %s report titled %q, covering the last %d day(s). Real current metrics: SOC health score %d/100, %d active analysts, automation coverage %d%%, %d total alerts (%d critical), %d total incidents (%d open), SLA compliance %d%%, %d playbook executions, MTTD %.1f min, MTTR %.1f min.
+
+Write a 2-4 sentence executive summary grounded strictly in these numbers. Do not invent specific incident names, threat actors, or figures not present above. Respond in plain text, no markdown.`,
+		reportType, title, periodDays, healthScore, activeAnalysts, autoCoverage,
+		totalAlerts, critAlerts, totalInc, openInc, slaComp, pbExec, mttd, mttr)
+
+	if resp, err := services.CallLLM(prompt); err == nil && strings.TrimSpace(resp) != "" {
+		return strings.TrimSpace(resp)
+	}
+	return fmt.Sprintf("SOC health score %d/100 with %d active analysts (automation coverage %d%%). %d total alerts (%d critical) and %d total incidents (%d open) as of the latest snapshot. SLA compliance %d%%, MTTD %.1f min, MTTR %.1f min.",
+		healthScore, activeAnalysts, autoCoverage, totalAlerts, critAlerts, totalInc, openInc, slaComp, mttd, mttr)
 }
 
 func PostSMEReport(c *gin.Context) {
@@ -1110,19 +1165,21 @@ func PostSMEReport(c *gin.Context) {
 	id := smeID("SME-RPT")
 	periodEnd := time.Now().Format("2006-01-02")
 	periodStart := time.Now().AddDate(0, 0, -body.PeriodDays).Format("2006-01-02")
-	sizeB := int64(200_000 + rand.Intn(600_000))
+
+	summary := generateSMEReportSummary(tid, body.Title, body.ReportType, body.PeriodDays)
+	sizeB := int64(len(summary))
 
 	_, err := db.Exec(`INSERT INTO sme_reports
-		(tenant_id,report_id,title,report_type,generated_by,format,size_bytes,period_start,period_end)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		tid, id, body.Title, body.ReportType, actor, body.Format, sizeB, periodStart, periodEnd)
+		(tenant_id,report_id,title,report_type,generated_by,format,size_bytes,period_start,period_end,summary)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		tid, id, body.Title, body.ReportType, actor, body.Format, sizeB, periodStart, periodEnd, summary)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create report"})
 		return
 	}
 	smeAudit(tid, "report_generated", "report", id, body.Title, actor, fmt.Sprintf("type:%s format:%s period:%dd", body.ReportType, body.Format, body.PeriodDays))
 	smeNotify(tid, "report_ready", "SOC Report Ready: "+body.Title, "Your SOC report has been generated and is ready for review.", "info", "Reports")
-	c.JSON(http.StatusOK, gin.H{"report_id": id, "title": body.Title, "status": "generated"})
+	c.JSON(http.StatusOK, gin.H{"report_id": id, "title": body.Title, "status": "generated", "summary": summary})
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
