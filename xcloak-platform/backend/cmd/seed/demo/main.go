@@ -187,6 +187,8 @@ func main() {
 	seedSuppressionEnterprise(db)
 	log.Println("Seeding quarantine/isolation queue (qe_*)…")
 	seedQuarantineEnterprise(db)
+	log.Println("Seeding script runner (sr_*)…")
+	seedScriptRunnerEnterprise(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -8665,3 +8667,221 @@ func seedQuarantineEnterprise(db *sql.DB) {
 
 	log.Printf("Quarantine enterprise seed: %d items with audit trail/evidence", created)
 }
+
+// seedScriptRunnerEnterprise seeds api/script_runner_enterprise.go's sr_*
+// tables — a separate system from the older api/script_runner.go
+// (/api/scripts/* routes), confirmed via grep this page's frontend only
+// ever calls srAPI. One schedule is deliberately seeded already-due
+// (next_run in the past, enabled) against a real agent hostname with real
+// script content, so the scheduler's 30s tick has something genuine to
+// dispatch through services.RunDueScriptSchedules on a fresh dev boot.
+func seedScriptRunnerEnterprise(db *sql.DB) {
+	mustExec(db, `
+	CREATE TABLE IF NOT EXISTS sr_scripts (
+		id              SERIAL PRIMARY KEY,
+		tenant_id       INTEGER NOT NULL,
+		script_id       TEXT NOT NULL,
+		name            TEXT NOT NULL,
+		description     TEXT,
+		category        TEXT NOT NULL DEFAULT 'general',
+		language        TEXT NOT NULL DEFAULT 'bash',
+		version         TEXT NOT NULL DEFAULT '1.0.0',
+		author          TEXT NOT NULL,
+		status          TEXT NOT NULL DEFAULT 'active',
+		content         TEXT NOT NULL DEFAULT '',
+		tags            TEXT NOT NULL DEFAULT '[]',
+		parameters      TEXT NOT NULL DEFAULT '[]',
+		requires_approval INTEGER NOT NULL DEFAULT 0,
+		is_signed       INTEGER NOT NULL DEFAULT 0,
+		last_modified   TIMESTAMP NOT NULL DEFAULT NOW(),
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS sr_executions (
+		id              SERIAL PRIMARY KEY,
+		tenant_id       INTEGER NOT NULL,
+		execution_id    TEXT NOT NULL,
+		script_id       TEXT NOT NULL,
+		script_name     TEXT NOT NULL,
+		target          TEXT NOT NULL,
+		target_count    INTEGER NOT NULL DEFAULT 1,
+		status          TEXT NOT NULL DEFAULT 'running',
+		agent_task_id   INTEGER,
+		exit_code       INTEGER,
+		stdout          TEXT,
+		stderr          TEXT,
+		execution_time  INTEGER,
+		trigger_source  TEXT NOT NULL DEFAULT 'manual',
+		run_as          TEXT NOT NULL DEFAULT 'system',
+		parameters      TEXT NOT NULL DEFAULT '{}',
+		executed_by     TEXT NOT NULL,
+		approval_id     INTEGER,
+		started_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+		completed_at    TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS sr_schedules (
+		id              SERIAL PRIMARY KEY,
+		tenant_id       INTEGER NOT NULL,
+		name            TEXT NOT NULL,
+		script_id       TEXT NOT NULL,
+		script_name     TEXT NOT NULL,
+		schedule_type   TEXT NOT NULL DEFAULT 'once',
+		cron_expr       TEXT,
+		target          TEXT NOT NULL,
+		run_as          TEXT NOT NULL DEFAULT 'system',
+		parameters      TEXT NOT NULL DEFAULT '{}',
+		enabled         INTEGER NOT NULL DEFAULT 1,
+		last_run        TIMESTAMP,
+		next_run        TIMESTAMP,
+		created_by      TEXT NOT NULL,
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS sr_approvals (
+		id              SERIAL PRIMARY KEY,
+		tenant_id       INTEGER NOT NULL,
+		execution_id    TEXT NOT NULL,
+		script_id       TEXT NOT NULL,
+		script_name     TEXT NOT NULL,
+		target          TEXT NOT NULL,
+		run_as          TEXT NOT NULL,
+		requested_by    TEXT NOT NULL,
+		reason          TEXT,
+		decision        TEXT NOT NULL DEFAULT 'pending',
+		decided_by      TEXT,
+		decided_at      TIMESTAMP,
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS sr_audit (
+		id              SERIAL PRIMARY KEY,
+		tenant_id       INTEGER NOT NULL,
+		action          TEXT NOT NULL,
+		script_id       TEXT,
+		script_name     TEXT NOT NULL,
+		actor           TEXT NOT NULL,
+		details         TEXT,
+		created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+	)`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	// next_run/last_run are plain TIMESTAMP (no time zone) columns compared
+	// directly against Postgres's own NOW() by the scheduler — using UTC
+	// here (rather than this server's local IST wall-clock) keeps the
+	// deliberately-already-due schedule below actually due when the real
+	// scheduler tick reads it back.
+	now := time.Now().UTC()
+
+	scripts := []struct {
+		name, desc, category, language, author, status, content string
+		requiresApproval, isSigned                              bool
+	}{
+		{"Collect Forensic Triage Snapshot", "Gathers process list, network connections, and recent auth log entries for IR triage.", "forensics", "bash", "admin",
+			"active", "#!/bin/bash\nset -euo pipefail\nps aux\nss -tulpn\ntail -n 200 /var/log/auth.log\necho \"triage collected: $(date -u)\"\nexit 0\n", false, true},
+		{"Kill Malicious Process by PID", "Terminates a process by PID and captures its command line before killing it.", "remediation", "powershell", "admin",
+			"active", "param([int]$Pid)\nGet-Process -Id $Pid | Select-Object Id,ProcessName,Path\nStop-Process -Id $Pid -Force\nWrite-Output \"killed PID $Pid\"\n", true, true},
+		{"Apply Emergency CVE Patch", "Applies pending security patches via the system package manager.", "patch", "bash", "ops",
+			"active", "#!/bin/bash\nset -euo pipefail\napt-get update -y\napt-get upgrade -y --only-upgrade\necho \"patch cycle complete: $(date -u)\"\nexit 0\n", false, false},
+		{"Disable Compromised AD Account", "Disables an Active Directory account and forces a password reset on next login.", "identity", "powershell", "admin",
+			"active", "param([string]$SamAccountName)\nDisable-ADAccount -Identity $SamAccountName\nSet-ADUser -Identity $SamAccountName -ChangePasswordAtLogon $true\nWrite-Output \"disabled $SamAccountName\"\n", true, false},
+		{"Audit Firewall Rule Drift", "Compares live firewall rules against the last known-good baseline and reports differences.", "security", "python", "ops",
+			"active", "#!/usr/bin/env python3\nimport subprocess\nrules = subprocess.run(['iptables','-L','-n'], capture_output=True, text=True)\nprint(rules.stdout)\n", false, false},
+		{"Legacy Log Rotation", "Superseded by the platform's built-in log retention policy.", "general", "bash", "ops",
+			"deprecated", "#!/bin/bash\nfind /var/log/legacy -mtime +30 -delete\n", false, false},
+	}
+	scriptIDs := map[string]string{}
+	for i, s := range scripts {
+		sid := fmt.Sprintf("SCR-9999-%05d", 20000+i)
+		reqApproval, isSigned := 0, 0
+		if s.requiresApproval {
+			reqApproval = 1
+		}
+		if s.isSigned {
+			isSigned = 1
+		}
+		mustExec(db, `INSERT INTO sr_scripts (tenant_id,script_id,name,description,category,language,author,status,content,requires_approval,is_signed,last_modified,created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
+			sid, s.name, s.desc, s.category, s.language, s.author, s.status, s.content, reqApproval, isSigned, now.AddDate(0, 0, -30))
+		scriptIDs[s.name] = sid
+		mustExec(db, `INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details,created_at) VALUES (9999,'created',$1,$2,$3,$4,$5)`,
+			sid, s.name, s.author, fmt.Sprintf("Language: %s, Category: %s", s.language, s.category), now.AddDate(0, 0, -30))
+	}
+
+	executions := []struct {
+		scriptName, target, status, runAs, triggerSource, executedBy, stderr string
+		startedHoursAgo, execTimeMs                                          int
+		exitCode                                                             *int
+	}{
+		{"Collect Forensic Triage Snapshot", "web-prod-01", "success", "system", "manual", "soc-analyst-1", "", 2, 1850, intPtr(0)},
+		{"Apply Emergency CVE Patch", "db-server-02", "success", "root", "scheduled", "scheduler", "", 26, 94200, intPtr(0)},
+		{"Kill Malicious Process by PID", "win-workstation-05", "failed", "administrator", "manual", "soc-analyst-2", "no registered agent matches target \"win-workstation-05-old\"", 5, 0, intPtr(1)},
+		{"Audit Firewall Rule Drift", "android-mobile-01", "running", "system", "manual", "soc-analyst-1", "", 0, 0, nil},
+		{"Collect Forensic Triage Snapshot", "db-server-02", "success", "system", "scheduled", "scheduler", "", 50, 2100, intPtr(0)},
+	}
+	for i, e := range executions {
+		execID := fmt.Sprintf("EXEC-9999-%06d", 500000+i)
+		sid := scriptIDs[e.scriptName]
+		startedAt := now.Add(-time.Duration(e.startedHoursAgo) * time.Hour)
+		var completedAt interface{}
+		var execTime interface{}
+		if e.status != "running" {
+			completedAt = startedAt.Add(time.Duration(e.execTimeMs) * time.Millisecond)
+			execTime = e.execTimeMs
+		}
+		var exitCode interface{}
+		if e.exitCode != nil {
+			exitCode = *e.exitCode
+		}
+		mustExec(db, `INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,exit_code,stderr,execution_time,trigger_source,run_as,executed_by,started_at,completed_at)
+			VALUES (9999,$1,$2,$3,$4,1,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+			execID, sid, e.scriptName, e.target, e.status, exitCode, e.stderr, execTime, e.triggerSource, e.runAs, e.executedBy, startedAt, completedAt)
+		mustExec(db, `INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details,created_at) VALUES (9999,'executed',$1,$2,$3,$4,$5)`,
+			sid, e.scriptName, e.executedBy, fmt.Sprintf("Target: %s, RunAs: %s", e.target, e.runAs), startedAt)
+	}
+
+	// One schedule seeded already-due (next_run in the past) against a real
+	// agent hostname with a real script that has real content, so the
+	// scheduler's 30s tick has something genuine to dispatch on a fresh
+	// dev boot rather than needing a manually-created schedule first.
+	schedules := []struct {
+		name, scriptName, schedType, cronExpr, target, runAs string
+		enabled                                              bool
+		nextRunOffset                                        time.Duration
+	}{
+		{"Hourly Forensic Snapshot — win-workstation-05", "Collect Forensic Triage Snapshot", "hourly", "", "win-workstation-05", "system", true, -2 * time.Minute},
+		{"Weekly Firewall Drift Audit", "Audit Firewall Rule Drift", "weekly", "", "db-server-02", "system", true, 3 * 24 * time.Hour},
+		{"Nightly Legacy Log Rotation", "Legacy Log Rotation", "daily", "", "web-prod-01", "system", false, time.Hour},
+	}
+	for _, s := range schedules {
+		en := 0
+		if s.enabled {
+			en = 1
+		}
+		mustExec(db, `INSERT INTO sr_schedules (tenant_id,name,script_id,script_name,schedule_type,cron_expr,target,run_as,enabled,next_run,created_by,created_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,'admin',$10)`,
+			s.name, scriptIDs[s.scriptName], s.scriptName, s.schedType, nil, s.target, s.runAs, en, now.Add(s.nextRunOffset), now.AddDate(0, 0, -10))
+		mustExec(db, `INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details,created_at) VALUES (9999,'scheduled',$1,$2,'admin',$3,$4)`,
+			scriptIDs[s.scriptName], s.scriptName, fmt.Sprintf("Schedule: %s, Target: %s", s.schedType, s.target), now.AddDate(0, 0, -10))
+	}
+
+	// Approvals: one still pending (privileged run_as), one already decided.
+	pendingExecID := fmt.Sprintf("EXEC-9999-%06d", 500100)
+	var pendingApprovalID int
+	db.QueryRow(`INSERT INTO sr_approvals (tenant_id,execution_id,script_id,script_name,target,run_as,requested_by,reason,decision,created_at)
+		VALUES (9999,$1,$2,$3,'web-prod-01','root','soc-analyst-2','Execution requires approval','pending',$4) RETURNING id`,
+		pendingExecID, scriptIDs["Kill Malicious Process by PID"], "Kill Malicious Process by PID", now.Add(-30*time.Minute)).Scan(&pendingApprovalID)
+	mustExec(db, `INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details,created_at) VALUES (9999,'approval_required',$1,$2,'soc-analyst-2',$3,$4)`,
+		scriptIDs["Kill Malicious Process by PID"], "Kill Malicious Process by PID", "Target: web-prod-01, RunAs: root", now.Add(-30*time.Minute))
+
+	decidedExecID := fmt.Sprintf("EXEC-9999-%06d", 500101)
+	mustExec(db, `INSERT INTO sr_approvals (tenant_id,execution_id,script_id,script_name,target,run_as,requested_by,reason,decision,decided_by,decided_at,created_at)
+		VALUES (9999,$1,$2,$3,'win-workstation-05','administrator','soc-analyst-1','Execution requires approval','approve','admin',$4,$5)`,
+		decidedExecID, scriptIDs["Disable Compromised AD Account"], "Disable Compromised AD Account", now.AddDate(0, 0, -3).Add(time.Hour), now.AddDate(0, 0, -3))
+	mustExec(db, `INSERT INTO sr_audit (tenant_id,action,script_id,script_name,actor,details,created_at) VALUES (9999,'approved',$1,$2,'admin',$3,$4)`,
+		scriptIDs["Disable Compromised AD Account"], "Disable Compromised AD Account", fmt.Sprintf("Execution %s approved and started", decidedExecID), now.AddDate(0, 0, -3).Add(time.Hour))
+
+	log.Printf("Script Runner enterprise seed: %d scripts, %d executions, %d schedules, 2 approvals", len(scripts), len(executions), len(schedules))
+}
+
+func intPtr(n int) *int { return &n }

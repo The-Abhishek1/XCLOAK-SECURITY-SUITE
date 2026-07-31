@@ -142,8 +142,12 @@ function ScriptsTab({ scripts, onOpenEditor, onRefresh }: { scripts: any[]; onOp
 
   const del = async (id: number) => {
     setDeleting(id);
-    await srAPI.deleteScript(id);
-    onRefresh();
+    try {
+      await srAPI.deleteScript(id);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to delete script');
+    }
     setDeleting(null);
   };
 
@@ -240,29 +244,37 @@ function EditorTab({ editScript, onSaved }: { editScript: any; onSaved: () => vo
   const save = async () => {
     setSaving(true);
     const data = { name, description: desc, language: lang, category: cat, version: ver, content, tags: `[${tags.split(',').filter(Boolean).map(t => `"${t.trim()}"`).join(',')}]`, requires_approval: reqApproval };
-    if (editScript?.id) {
-      await srAPI.updateScript(editScript.id, data);
-    } else {
-      await srAPI.createScript(data);
+    try {
+      if (editScript?.id) {
+        await srAPI.updateScript(editScript.id, data);
+      } else {
+        await srAPI.createScript(data);
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      onSaved();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to save script');
     }
-    setSaved(true);
     setSaving(false);
-    setTimeout(() => setSaved(false), 2000);
-    onSaved();
   };
 
   const execute = async () => {
     if (!execTarget) return;
     setExecuting(true);
-    const r = await srAPI.execute({
-      script_id: editScript?.script_id || 'new',
-      script_name: name,
-      target: execTarget,
-      run_as: execRunAs,
-      require_approval: reqApproval,
-      trigger_source: 'manual',
-    });
-    setExecResult(r.data);
+    try {
+      const r = await srAPI.execute({
+        script_id: editScript?.script_id || 'new',
+        script_name: name,
+        target: execTarget,
+        run_as: execRunAs,
+        require_approval: reqApproval,
+        trigger_source: 'manual',
+      });
+      setExecResult(r.data);
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to execute script');
+    }
     setExecuting(false);
   };
 
@@ -709,23 +721,35 @@ function ScheduleTab({ schedules, scripts, onRefresh }: { schedules: any[]; scri
   const create = async () => {
     setSaving(true);
     const s = scripts.find(s => String(s.id) === formScript);
-    await srAPI.createSchedule({ name: formName, script_id: s?.script_id || '', script_name: s?.name || '', schedule_type: formType, cron_expr: formCron, target: formTarget, run_as: formRunAs });
-    setShowForm(false);
-    setFormName(''); setFormScript(''); setFormTarget('');
-    onRefresh();
+    try {
+      await srAPI.createSchedule({ name: formName, script_id: s?.script_id || '', script_name: s?.name || '', schedule_type: formType, cron_expr: formCron, target: formTarget, run_as: formRunAs });
+      setShowForm(false);
+      setFormName(''); setFormScript(''); setFormTarget('');
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create schedule');
+    }
     setSaving(false);
   };
 
   const toggle = async (id: number, enabled: boolean) => {
     setToggling(id);
-    await srAPI.toggleSchedule(id, !enabled);
-    onRefresh();
+    try {
+      await srAPI.toggleSchedule(id, !enabled);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to update schedule');
+    }
     setToggling(null);
   };
 
   const del = async (id: number) => {
-    await srAPI.deleteSchedule(id);
-    onRefresh();
+    try {
+      await srAPI.deleteSchedule(id);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to delete schedule');
+    }
   };
 
   const SCHED_TYPES = ['once', 'hourly', 'daily', 'weekly', 'monthly', 'cron', 'event'];
@@ -809,8 +833,12 @@ function ApprovalsTab({ approvals, onRefresh }: { approvals: any[]; onRefresh: (
 
   const decide = async (id: number, decision: string) => {
     setLoading(id);
-    await srAPI.decide(id, { decision, notes: notes[id] || '' });
-    onRefresh();
+    try {
+      await srAPI.decide(id, { decision, notes: notes[id] || '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record decision');
+    }
     setLoading(null);
   };
 

@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
-	"xcloak-platform/models"
-	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -119,7 +118,13 @@ func GetSRDashboard(c *gin.Context) {
 		database.DB.QueryRow(q, tid).Scan(&n)
 		return n
 	}
-	avgTime := 0
+	// Postgres AVG() over an integer column returns numeric, not integer —
+	// scanning that into a plain Go int fails and QueryRow's error return
+	// was discarded here, so avg_execution_time silently stayed 0 forever
+	// regardless of how much real execution_time data existed. float64 is
+	// the scannable type (matches the same AVG-into-float64 idiom already
+	// used elsewhere in this codebase, e.g. GetAIAssistant's avgLatency).
+	var avgTime float64
 	database.DB.QueryRow(`SELECT COALESCE(AVG(execution_time),0) FROM sr_executions WHERE tenant_id=$1 AND execution_time IS NOT NULL`, tid).Scan(&avgTime)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -274,8 +279,17 @@ func PatchSRScript(c *gin.Context) {
 	}
 	var sid, name string
 	database.DB.QueryRow(`SELECT script_id,name FROM sr_scripts WHERE id=$1 AND tenant_id=$2`, id, tid).Scan(&sid, &name)
+
+	// The Code Editor's Save button always sends the full script object
+	// (name/description/language/category/version/content/tags/
+	// requires_approval) whether creating or updating — this handler used
+	// to only persist content/status/version, so editing a script's name,
+	// description, language, category, tags, or requires_approval flag was
+	// silently discarded on every save of an existing script.
+	contentChanged := false
 	if content, ok := b["content"].(string); ok {
 		database.DB.Exec(`UPDATE sr_scripts SET content=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, content, id, tid)
+		contentChanged = true
 	}
 	if status, ok := b["status"].(string); ok {
 		database.DB.Exec(`UPDATE sr_scripts SET status=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, status, id, tid)
@@ -284,7 +298,32 @@ func PatchSRScript(c *gin.Context) {
 	if ver, ok := b["version"].(string); ok {
 		database.DB.Exec(`UPDATE sr_scripts SET version=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, ver, id, tid)
 	}
-	srAudit(tid, sid, name, "modified", actor, "Script content updated")
+	if newName, ok := b["name"].(string); ok && newName != "" {
+		database.DB.Exec(`UPDATE sr_scripts SET name=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, newName, id, tid)
+		name = newName
+	}
+	if desc, ok := b["description"].(string); ok {
+		database.DB.Exec(`UPDATE sr_scripts SET description=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, desc, id, tid)
+	}
+	if lang, ok := b["language"].(string); ok && lang != "" {
+		database.DB.Exec(`UPDATE sr_scripts SET language=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, lang, id, tid)
+	}
+	if cat, ok := b["category"].(string); ok && cat != "" {
+		database.DB.Exec(`UPDATE sr_scripts SET category=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, cat, id, tid)
+	}
+	if tags, ok := b["tags"].(string); ok {
+		database.DB.Exec(`UPDATE sr_scripts SET tags=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, tags, id, tid)
+	}
+	if reqApproval, ok := b["requires_approval"].(bool); ok {
+		v := 0
+		if reqApproval {
+			v = 1
+		}
+		database.DB.Exec(`UPDATE sr_scripts SET requires_approval=$1,last_modified=NOW() WHERE id=$2 AND tenant_id=$3`, v, id, tid)
+	}
+	if contentChanged {
+		srAudit(tid, sid, name, "modified", actor, "Script content updated")
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -353,7 +392,7 @@ func PostSRExecute(c *gin.Context) {
 		return
 	}
 
-	status, agentTaskID, failReason := dispatchScriptExecution(tid, b.ScriptID, b.Target, b.RunAs, params)
+	status, agentTaskID, failReason := services.DispatchScriptExecution(tid, b.ScriptID, b.Target, b.RunAs, params)
 
 	database.DB.Exec(
 		`INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,agent_task_id,stderr,trigger_source,run_as,parameters,executed_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
@@ -362,47 +401,6 @@ func PostSRExecute(c *gin.Context) {
 	srAudit(tid, b.ScriptID, b.ScriptName, "executed", actor, fmt.Sprintf("Target: %s, RunAs: %s", b.Target, b.RunAs))
 
 	c.JSON(http.StatusOK, gin.H{"execution_id": execID, "approval_required": false, "status": status})
-}
-
-// dispatchScriptExecution resolves target to a real agent by hostname and
-// dispatches a real execute_script AgentTask carrying the script's actual
-// content. Returns the execution's initial status ("running" if dispatched,
-// "failed" if no matching agent or script content was found), the created
-// agent_tasks.id (0 if none), and a failure reason (empty on success).
-func dispatchScriptExecution(tid int, scriptID, target, runAs, params string) (status string, agentTaskID int, failReason string) {
-	var content, language string
-	err := database.DB.QueryRow(`SELECT content,language FROM sr_scripts WHERE script_id=$1 AND tenant_id=$2`, scriptID, tid).Scan(&content, &language)
-	if err != nil || content == "" {
-		return "failed", 0, "script not found in library or has no content"
-	}
-
-	var agentID int
-	err = database.DB.QueryRow(
-		`SELECT id FROM agents WHERE tenant_id=$1 AND (hostname=$2 OR ip_address=$2)`, tid, target,
-	).Scan(&agentID)
-	if err != nil {
-		return "failed", 0, fmt.Sprintf("no registered agent matches target %q", target)
-	}
-
-	shell := "bash"
-	switch language {
-	case "python", "python3":
-		shell = "python3"
-	case "powershell", "pwsh":
-		shell = "pwsh"
-	case "sh":
-		shell = "sh"
-	}
-	payload, _ := json.Marshal(map[string]string{"script": content, "shell": shell, "label": scriptID, "run_as": runAs, "parameters": params})
-
-	task := models.AgentTask{AgentID: agentID, TaskType: "execute_script", Payload: payload}
-	if err := repositories.CreateTask(task); err != nil {
-		return "failed", 0, "failed to dispatch task: " + err.Error()
-	}
-	database.DB.QueryRow(
-		`SELECT id FROM agent_tasks WHERE agent_id=$1 AND task_type='execute_script' ORDER BY id DESC LIMIT 1`, agentID,
-	).Scan(&agentTaskID)
-	return "running", agentTaskID, ""
 }
 
 func nullableInt(n int) interface{} {
@@ -438,8 +436,18 @@ func syncExecutionFromAgentTask(tid, execRowID, agentTaskID int) {
 	if result != nil {
 		stdout = *result
 	}
+	// execution_time (ms) was never set here, only on the initial INSERT
+	// where it's always NULL — meaning every completed execution kept
+	// execution_time NULL forever, and the dashboard/analytics
+	// avg_execution_time and automation_time_saved_hours metrics (both
+	// AVG()/SUM()-over-execution_time, gated on IS NOT NULL) stayed 0
+	// permanently regardless of how many scripts actually ran. Computed
+	// directly in SQL from this row's own started_at against the
+	// completed_at just read from the agent task.
 	database.DB.Exec(
-		`UPDATE sr_executions SET status=$1,exit_code=$2,stdout=$3,completed_at=$4 WHERE id=$5 AND tenant_id=$6 AND status='running'`,
+		`UPDATE sr_executions SET status=$1,exit_code=$2,stdout=$3,completed_at=$4,
+			execution_time=EXTRACT(EPOCH FROM ($4::timestamp - started_at))*1000
+			WHERE id=$5 AND tenant_id=$6 AND status='running'`,
 		newStatus, exitCode, stdout, completedAt, execRowID, tid,
 	)
 }
@@ -475,20 +483,23 @@ func GetSRExecutions(c *gin.Context) {
 	}
 	defer rows.Close()
 	type execRow struct {
-		id, targetCount        int
+		id, targetCount                                                  int
 		execID, scriptID, scriptName, target, st, trigSrc, runAs, execBy string
-		agentTaskID            *int
-		exitCode, execTime     *int
-		startedAt              time.Time
-		completedAt            *time.Time
+		agentTaskID                                                      *int
+		exitCode, execTime                                               *int
+		startedAt                                                        time.Time
+		completedAt                                                      *time.Time
 	}
-	pending := []execRow{}
+	type pendingRow struct {
+		idx, id, agentTaskID int
+	}
+	pending := []pendingRow{}
 	out := []map[string]interface{}{}
 	for rows.Next() {
 		var r execRow
 		rows.Scan(&r.id, &r.execID, &r.scriptID, &r.scriptName, &r.target, &r.targetCount, &r.st, &r.agentTaskID, &r.exitCode, &r.execTime, &r.trigSrc, &r.runAs, &r.execBy, &r.startedAt, &r.completedAt)
 		if r.st == "running" && r.agentTaskID != nil {
-			pending = append(pending, r)
+			pending = append(pending, pendingRow{idx: len(out), id: r.id, agentTaskID: *r.agentTaskID})
 		}
 		out = append(out, map[string]interface{}{
 			"id": r.id, "execution_id": r.execID, "script_id": r.scriptID, "script_name": r.scriptName,
@@ -498,8 +509,23 @@ func GetSRExecutions(c *gin.Context) {
 		})
 	}
 	rows.Close()
-	for _, r := range pending {
-		syncExecutionFromAgentTask(tid, r.id, *r.agentTaskID)
+	// syncExecutionFromAgentTask can flip a row from running to
+	// success/failed mid-request — without re-reading it, this response
+	// would keep showing "running" (and a null execution_time) for a job
+	// that had already genuinely finished by the time this same request
+	// returned.
+	for _, p := range pending {
+		syncExecutionFromAgentTask(tid, p.id, p.agentTaskID)
+		var st string
+		var exitCode, execTime *int
+		var completedAt *time.Time
+		if database.DB.QueryRow(`SELECT status,exit_code,execution_time,completed_at FROM sr_executions WHERE id=$1 AND tenant_id=$2`, p.id, tid).
+			Scan(&st, &exitCode, &execTime, &completedAt) == nil {
+			out[p.idx]["status"] = st
+			out[p.idx]["exit_code"] = exitCode
+			out[p.idx]["execution_time"] = execTime
+			out[p.idx]["completed_at"] = completedAt
+		}
 	}
 	c.JSON(http.StatusOK, out)
 }
@@ -524,9 +550,14 @@ func GetSRExecution(c *gin.Context) {
 	}
 	if st == "running" && agentTaskID != nil {
 		syncExecutionFromAgentTask(tid, id, *agentTaskID)
+		// This refresh used to omit execution_time, so the very first read
+		// right after a real completion still reported it as null (the
+		// pre-sync value captured above) even though syncExecutionFromAgentTask
+		// had just written a real value to the row — only a second request,
+		// landing after status was no longer "running", would ever see it.
 		database.DB.QueryRow(
-			`SELECT status,exit_code,COALESCE(stdout,''),completed_at FROM sr_executions WHERE id=$1 AND tenant_id=$2`, id, tid,
-		).Scan(&st, &exitCode, &stdout, &completedAt)
+			`SELECT status,exit_code,COALESCE(stdout,''),completed_at,execution_time FROM sr_executions WHERE id=$1 AND tenant_id=$2`, id, tid,
+		).Scan(&st, &exitCode, &stdout, &completedAt, &execTime)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"execution_id": execID, "script_id": scriptID, "script_name": scriptName,
@@ -573,7 +604,26 @@ func PostSRAI(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// The frontend does its own JSON.parse(result) with a raw-text
+	// fallback on parse failure — strip markdown code fences the LLM adds
+	// despite the prompt not asking for them, the same way every other
+	// page's AI endpoint already does, so a genuinely successful response
+	// renders as its real structured fields instead of falling back to a
+	// dumped code block.
+	resp = stripJSONFences(resp)
 	c.JSON(http.StatusOK, gin.H{"action": b.Action, "result": resp})
+}
+
+func stripJSONFences(s string) string {
+	if idx := strings.Index(s, "```json"); idx != -1 {
+		s = s[idx+7:]
+	} else if idx := strings.Index(s, "```"); idx != -1 {
+		s = s[idx+3:]
+	}
+	if idx := strings.LastIndex(s, "```"); idx != -1 {
+		s = s[:idx]
+	}
+	return strings.TrimSpace(s)
 }
 
 // ── Schedules ─────────────────────────────────────────────────────────────
@@ -634,7 +684,13 @@ func PostSRSchedule(c *gin.Context) {
 	if b.Parameters == "" {
 		b.Parameters = "{}"
 	}
-	nextRun := time.Now().Add(time.Hour)
+	// "event"-type schedules have no time basis (meant to fire on an
+	// external trigger, not a clock) — leaving next_run NULL keeps the
+	// scheduler's due-schedule query from ever picking one up on a timer.
+	var nextRun interface{}
+	if b.ScheduleType != "event" {
+		nextRun = time.Now().UTC().Add(time.Hour)
+	}
 	var id int
 	database.DB.QueryRow(
 		`INSERT INTO sr_schedules (tenant_id,name,script_id,script_name,schedule_type,cron_expr,target,run_as,parameters,next_run,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
@@ -725,7 +781,7 @@ func PostSRApprove(c *gin.Context) {
 		b.Decision, actor, id, tid,
 	)
 	if b.Decision == "approve" {
-		status, agentTaskID, failReason := dispatchScriptExecution(tid, sid, target, runAs, "{}")
+		status, agentTaskID, failReason := services.DispatchScriptExecution(tid, sid, target, runAs, "{}")
 		database.DB.Exec(
 			`INSERT INTO sr_executions (tenant_id,execution_id,script_id,script_name,target,target_count,status,agent_task_id,stderr,trigger_source,run_as,parameters,executed_by,approval_id) VALUES ($1,$2,$3,$4,$5,1,$6,$7,$8,'manual',$9,'{}',$10,$11)`,
 			tid, execID, sid, sname, target, status, nullableInt(agentTaskID), failReason, runAs, actor, id,
@@ -789,7 +845,11 @@ func GetSRAnalytics(c *gin.Context) {
 		successRate = success * 100 / total
 	}
 
-	avgTime := 0
+	// See GetSRDashboard: AVG() over an integer column returns numeric, not
+	// integer, so this must scan into a float64 or the query's error
+	// (silently discarded via the un-checked Scan return) leaves avgTime
+	// at its zero value forever regardless of real data.
+	var avgTime float64
 	database.DB.QueryRow(`SELECT COALESCE(AVG(execution_time),0) FROM sr_executions WHERE tenant_id=$1 AND execution_time IS NOT NULL`, tid).Scan(&avgTime)
 
 	trend := []map[string]interface{}{}
@@ -809,7 +869,7 @@ func GetSRAnalytics(c *gin.Context) {
 		"avg_execution_time":          avgTime,
 		"total_scripts":               row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1`),
 		"active_scripts":              row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1 AND status='active'`),
-		"automation_time_saved_hours": (success * avgTime) / 3600000,
+		"automation_time_saved_hours": (float64(success) * avgTime) / 3600000,
 		"most_executed":               topScripts,
 		"by_category":                 byCategory,
 		"execution_trend":             trend,
@@ -883,6 +943,33 @@ func PostSRReport(c *gin.Context) {
 		title = "Script Runner Report"
 	}
 
+	totalScripts := row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1`)
+	unsignedScripts := row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1 AND is_signed=0 AND status='active'`)
+	pendingApprovals := row(`SELECT COUNT(*) FROM sr_approvals WHERE tenant_id=$1 AND decision='pending'`)
+	scheduledJobs := row(`SELECT COUNT(*) FROM sr_schedules WHERE tenant_id=$1`)
+
+	// recommendations used to be 4 fixed strings returned regardless of
+	// report_type or any real data — grounded in this tenant's own
+	// numbers instead, matching every other page's report endpoint.
+	prompt := fmt.Sprintf(`You are a SOC automation reporting assistant writing a %s. Real metrics for this tenant: %d total script executions, %d successful, %d failed (%d%% success rate), %d scripts in the library (%d of them active and unsigned), %d executions currently pending approval, %d scheduled jobs configured. Respond as a JSON object with fields: executive_summary (2-3 sentences grounded only in these numbers, no invented incidents), recommendations (a JSON array of up to 4 short actionable strings based only on the real data given — if there isn't enough data to recommend something specific, say so instead of inventing findings).`,
+		title, total, success, failed, successRate, totalScripts, unsignedScripts, pendingApprovals, scheduledJobs)
+	var summary string
+	var recommendations []string
+	if raw, err := services.CallLLM(prompt); err == nil {
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(stripJSONFences(raw)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		summary = fmt.Sprintf("During the reporting period, %d script executions were recorded with a %d%% success rate. %d executions completed successfully, %d failed.", total, successRate, success, failed)
+		recommendations = []string{}
+	}
+
 	srAudit(tid, "", "System", "report_generated", actor, fmt.Sprintf("Report: %s", b.ReportType))
 	c.JSON(http.StatusOK, gin.H{
 		"title":             title,
@@ -890,19 +977,14 @@ func PostSRReport(c *gin.Context) {
 		"generated_at":      time.Now(),
 		"generated_by":      actor,
 		"classification":    "CONFIDENTIAL",
-		"executive_summary": fmt.Sprintf("During the reporting period, %d script executions were recorded with a %d%% success rate. %d executions completed successfully, %d failed.", total, successRate, success, failed),
+		"executive_summary": summary,
 		"key_metrics": map[string]interface{}{
 			"total_executions": total,
 			"success_rate":     successRate,
 			"failed":           failed,
-			"total_scripts":    row(`SELECT COUNT(*) FROM sr_scripts WHERE tenant_id=$1`),
-			"scheduled_jobs":   row(`SELECT COUNT(*) FROM sr_schedules WHERE tenant_id=$1`),
+			"total_scripts":    totalScripts,
+			"scheduled_jobs":   scheduledJobs,
 		},
-		"recommendations": []string{
-			"Enable script signing for all production scripts",
-			"Implement approval workflow for privileged executions",
-			"Schedule regular audit reviews of high-frequency scripts",
-			"Enable secret vault integration for credential management",
-		},
+		"recommendations": recommendations,
 	})
 }
