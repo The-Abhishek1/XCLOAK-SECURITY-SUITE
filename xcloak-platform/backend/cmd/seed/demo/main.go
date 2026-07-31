@@ -5338,6 +5338,18 @@ func fceNullStrSeed(s string) interface{} {
 
 func seedExecutiveEnterprise(db *sql.DB) {
 	tid := 9999
+
+	// exe_snapshots/exe_forecasts/exe_reports/exe_integrations all have
+	// real unique constraints their own ON CONFLICT clauses correctly
+	// target, but exe_notifications/exe_audit have none (each row is a
+	// historical event, not a config row) — same pattern as every other
+	// seeder fixed this phase. Confirmed live: 480/576 rows had
+	// accumulated (vs. ~10/~12 intended) before this guard was added.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM exe_notifications WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
 	now := time.Now()
 
 	// tables

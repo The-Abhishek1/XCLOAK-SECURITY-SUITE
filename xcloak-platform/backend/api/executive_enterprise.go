@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -134,7 +135,9 @@ func exeNotify(tid int, eventType, title, message, severity, source string) {
 }
 
 func exeNullStr(s string) interface{} {
-	if s == "" { return nil }
+	if s == "" {
+		return nil
+	}
 	return s
 }
 
@@ -162,10 +165,10 @@ func GetEXEDashboard(c *gin.Context) {
 
 	// 30-day trend series — one row per snapshot, matching what the frontend expects
 	type trendPoint struct {
-		Date            string `json:"date"`
-		SecurityScore   int    `json:"security_score"`
-		RiskScore       int    `json:"risk_score"`
-		TotalIncidents  int    `json:"total_incidents"`
+		Date           string `json:"date"`
+		SecurityScore  int    `json:"security_score"`
+		RiskScore      int    `json:"risk_score"`
+		TotalIncidents int    `json:"total_incidents"`
 	}
 	tRows, _ := db.Query(`SELECT snapshot_date, security_score, risk_score, total_incidents FROM exe_snapshots
 		WHERE tenant_id=$1 ORDER BY snapshot_date ASC LIMIT 30`, tid)
@@ -234,7 +237,8 @@ func GetEXERisk(c *gin.Context) {
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var d time.Time; var v int
+			var d time.Time
+			var v int
 			rows.Scan(&d, &v)
 			trend = append(trend, dp{d.Format("Jan 2"), v})
 		}
@@ -330,7 +334,10 @@ func GetEXEKPIs(c *gin.Context) {
 	db.QueryRow(`SELECT COUNT(*) FROM cases WHERE tenant_id=$1 AND status NOT IN ('closed','archived')`, tid).Scan(&openCases)
 
 	// Month-over-month changes (compare last 2 snapshots)
-	type snap struct{ Incidents, Compliance, DetCov int; MTTD, MTTR float64 }
+	type snap struct {
+		Incidents, Compliance, DetCov int
+		MTTD, MTTR                    float64
+	}
 	var prev snap
 	db.QueryRow(`SELECT total_incidents, compliance_score, detection_coverage, mttd_hours, mttr_hours
 		FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC OFFSET 7 LIMIT 1`, tid).Scan(
@@ -376,9 +383,9 @@ func GetEXEBusinessImpact(c *gin.Context) {
 		LIMIT 8`, tid)
 
 	type buRaw struct {
-		Name     string
-		CritInc  int
-		OpenInc  int
+		Name    string
+		CritInc int
+		OpenInc int
 	}
 	var raws []buRaw
 	totalOpen := 0
@@ -416,11 +423,15 @@ func GetEXEBusinessImpact(c *gin.Context) {
 		})
 	}
 
+	// max_potential_loss/avg_recovery_cost/cyber_insurance_coverage used to
+	// be hardcoded to 0/0/"" always — no actuarial/incident-cost model or
+	// insurance-policy data exists anywhere in this codebase to compute
+	// them honestly, and rendering "$0"/"—" forever reads as a real
+	// computed answer rather than "no data source exists." Dropped rather
+	// than fabricated, matching the same precedent as Vulnerabilities'
+	// removed TLS-certificate section and Firewall's removed total_bytes.
 	c.JSON(http.StatusOK, gin.H{
 		"financial_risk_usd":      financialRisk,
-		"max_potential_loss":      0,
-		"avg_recovery_cost":       0,
-		"cyber_insurance_coverage": "",
 		"revenue_impact_usd":      financialRisk,
 		"affected_business_units": affectedBUs,
 		"business_units":          businessUnits,
@@ -514,12 +525,12 @@ func GetEXECompliance(c *gin.Context) {
 
 	// Pull from fce_frameworks if available
 	type fwRow struct {
-		Name           string `json:"name"`
-		ComplianceScore int   `json:"compliance_score"`
-		ControlsPassed int    `json:"controls_passed"`
-		TotalControls  int    `json:"total_controls"`
-		Category       string `json:"category"`
-		Status         string `json:"status"`
+		Name            string `json:"name"`
+		ComplianceScore int    `json:"compliance_score"`
+		ControlsPassed  int    `json:"controls_passed"`
+		TotalControls   int    `json:"total_controls"`
+		Category        string `json:"category"`
+		Status          string `json:"status"`
 	}
 	frows, _ := db.Query(`SELECT name, overall_score, passed_controls, total_controls, category, compliance_status
 		FROM fce_frameworks WHERE tenant_id=$1 AND is_active=TRUE ORDER BY overall_score ASC LIMIT 8`, tid)
@@ -556,10 +567,14 @@ func GetEXEVulns(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	db := database.DB
 
-	var totalVulns, critVulns, highVulns int
+	var totalVulns, critVulns, highVulns, exploitableVulns int
 	var avgCvss float64
 	db.QueryRow(`SELECT COUNT(*), COUNT(*) FILTER (WHERE severity='critical'), COUNT(*) FILTER (WHERE severity='high'), COALESCE(AVG(cvss_score),0)
 		FROM vulnerabilities WHERE tenant_id=$1`, tid).Scan(&totalVulns, &critVulns, &highVulns, &avgCvss)
+	// "exploitable" used to be hardcoded to 0 — vulnerabilities.is_kev (CISA
+	// Known Exploited Vulnerabilities) is a real, already-populated column
+	// that's exactly what this label means.
+	db.QueryRow(`SELECT COUNT(*) FROM vulnerabilities WHERE tenant_id=$1 AND is_kev=true`, tid).Scan(&exploitableVulns)
 
 	var patchComp int
 	db.QueryRow(`SELECT patch_compliance FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&patchComp)
@@ -586,8 +601,8 @@ func GetEXEVulns(c *gin.Context) {
 	}
 
 	type buVulnRow struct {
-		Name         string `json:"name"`
-		CriticalVulns int   `json:"critical_vulns"`
+		Name          string `json:"name"`
+		CriticalVulns int    `json:"critical_vulns"`
 	}
 	byBU := []buVulnRow{}
 	brows, _ := db.Query(`
@@ -610,7 +625,7 @@ func GetEXEVulns(c *gin.Context) {
 		"total_vulns":      totalVulns,
 		"critical":         critVulns,
 		"high":             highVulns,
-		"exploitable":      0,
+		"exploitable":      exploitableVulns,
 		"patch_coverage":   patchComp,
 		"avg_cvss":         avgCvss,
 		"top_vulns":        topVulns,
@@ -654,17 +669,17 @@ func GetEXEIncidents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_incidents":  totalInc,
+		"total_incidents":    totalInc,
 		"critical_incidents": critInc,
-		"open":              open,
-		"repeat_incidents":  repeatIncidents,
-		"mttd_hours":        mttd,
-		"mttr_hours":        mttr,
-		"sla_compliance":    slaComp,
-		"sla_breach_count":  0,
-		"by_severity":       bySev,
-		"by_category":       []gin.H{},
-		"root_causes":       []gin.H{},
+		"open":               open,
+		"repeat_incidents":   repeatIncidents,
+		"mttd_hours":         mttd,
+		"mttr_hours":         mttr,
+		"sla_compliance":     slaComp,
+		"sla_breach_count":   0,
+		"by_severity":        bySev,
+		"by_category":        []gin.H{},
+		"root_causes":        []gin.H{},
 	})
 }
 
@@ -776,7 +791,8 @@ func GetEXEAnalytics(c *gin.Context) {
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var s snap; var d time.Time
+			var s snap
+			var d time.Time
 			rows.Scan(&d, &s.SecurityScore, &s.RiskScore, &s.ComplianceScore, &s.Incidents, &s.Vulns, &s.MTTD, &s.MTTR, &s.SLAComp, &s.DetCov)
 			s.Date = d.Format("Jan 2")
 			series = append(series, s)
@@ -794,33 +810,51 @@ func GetEXEAnalytics(c *gin.Context) {
 
 func GetEXEReports(c *gin.Context) {
 	tid := tenantIDFromContext(c)
+	// summary has no DEFAULT (older rows predate real content generation)
+	// — COALESCE avoids reintroducing the NULL-into-non-nullable-string
+	// scan bug class already hit repeatedly elsewhere this phase.
 	rows, _ := database.DB.Query(`SELECT id, report_id, title, report_type, generated_by,
-		security_score, risk_score, format, size_bytes, created_at
+		security_score, risk_score, COALESCE(summary,''), key_findings, recommendations, format, size_bytes, created_at
 		FROM exe_reports WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50`, tid)
-	if rows == nil { c.JSON(http.StatusOK, []interface{}{}); return }
+	if rows == nil {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
 	defer rows.Close()
 	type Row struct {
-		ID           int       `json:"id"`
-		ReportID     string    `json:"report_id"`
-		Title        string    `json:"title"`
-		ReportType   string    `json:"report_type"`
-		GeneratedBy  string    `json:"generated_by"`
-		SecurityScore int      `json:"security_score"`
-		RiskScore    int       `json:"risk_score"`
-		Format       string    `json:"format"`
-		SizeBytes    int64     `json:"size_bytes"`
-		CreatedAt    time.Time `json:"created_at"`
+		ID              int       `json:"id"`
+		ReportID        string    `json:"report_id"`
+		Title           string    `json:"title"`
+		ReportType      string    `json:"report_type"`
+		GeneratedBy     string    `json:"generated_by"`
+		SecurityScore   int       `json:"security_score"`
+		RiskScore       int       `json:"risk_score"`
+		Summary         string    `json:"summary"`
+		KeyFindings     string    `json:"key_findings"`
+		Recommendations string    `json:"recommendations"`
+		Format          string    `json:"format"`
+		SizeBytes       int64     `json:"size_bytes"`
+		CreatedAt       time.Time `json:"created_at"`
 	}
 	result := []Row{}
 	for rows.Next() {
 		var r Row
 		rows.Scan(&r.ID, &r.ReportID, &r.Title, &r.ReportType, &r.GeneratedBy,
-			&r.SecurityScore, &r.RiskScore, &r.Format, &r.SizeBytes, &r.CreatedAt)
+			&r.SecurityScore, &r.RiskScore, &r.Summary, &r.KeyFindings, &r.Recommendations, &r.Format, &r.SizeBytes, &r.CreatedAt)
 		result = append(result, r)
 	}
 	c.JSON(http.StatusOK, result)
 }
 
+// PostEXEReport used to insert a metadata-only row with a fake
+// randomish size_bytes (420000+time.Now().Unix()%200000) and leave the
+// table's own summary/key_findings/recommendations columns permanently
+// NULL — there's no PDF/download claim on this page (unlike Reports'
+// PostRPEGenerate), but the schema clearly intends real report content and
+// nothing ever produced or surfaced it. Now generates a real LLM-grounded
+// summary/findings/recommendations from the same real metrics PostEXEAI
+// already gathers, and size_bytes reflects the real generated content's
+// length instead of a random number.
 func PostEXEReport(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actor := usernameFromContext(c)
@@ -830,23 +864,65 @@ func PostEXEReport(c *gin.Context) {
 		Format     string `json:"format"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.Title == "" { body.Title = "Executive Security Report — " + time.Now().Format("January 2006") }
-	if body.Format == "" { body.Format = "pdf" }
-	if body.ReportType == "" { body.ReportType = "executive_summary" }
+	if body.Title == "" {
+		body.Title = "Executive Security Report — " + time.Now().Format("January 2006")
+	}
+	if body.Format == "" {
+		body.Format = "pdf"
+	}
+	if body.ReportType == "" {
+		body.ReportType = "executive_summary"
+	}
 
 	rid := fmt.Sprintf("EXE-RPT-%d", time.Now().Unix()%100000)
-	var secScore, riskScore int
-	database.DB.QueryRow(`SELECT security_score, risk_score FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).Scan(&secScore, &riskScore)
+	var secScore, riskScore, critInc, critVulns int
+	database.DB.QueryRow(`SELECT security_score, risk_score, critical_incidents, critical_vulns FROM exe_snapshots WHERE tenant_id=$1 ORDER BY snapshot_date DESC LIMIT 1`, tid).
+		Scan(&secScore, &riskScore, &critInc, &critVulns)
+
+	summary, findings, recommendations := generateEXEReportContent(tid, body.Title, secScore, riskScore, critInc, critVulns)
+	findingsJSON, _ := json.Marshal(findings)
+	recsJSON, _ := json.Marshal(recommendations)
+	sizeBytes := int64(len(summary) + len(findingsJSON) + len(recsJSON))
 
 	var id int
-	database.DB.QueryRow(`INSERT INTO exe_reports (tenant_id,report_id,title,report_type,generated_by,security_score,risk_score,format,size_bytes)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-		tid, rid, body.Title, body.ReportType, actor, secScore, riskScore, body.Format, 420000+time.Now().Unix()%200000,
+	database.DB.QueryRow(`INSERT INTO exe_reports (tenant_id,report_id,title,report_type,generated_by,security_score,risk_score,summary,key_findings,recommendations,format,size_bytes)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+		tid, rid, body.Title, body.ReportType, actor, secScore, riskScore, summary, string(findingsJSON), string(recsJSON), body.Format, sizeBytes,
 	).Scan(&id)
 
 	exeAudit(tid, "report_generated", "report", rid, body.Title, actor, fmt.Sprintf("Type: %s, Format: %s", body.ReportType, body.Format))
-	exeNotify(tid, "report_available", fmt.Sprintf("New Report: %s", body.Title), "Your executive report has been generated and is ready for download.", "info", "Report Generator")
+	exeNotify(tid, "report_available", fmt.Sprintf("New Report: %s", body.Title), "Your executive report has been generated and is ready to view.", "info", "Report Generator")
 	c.JSON(http.StatusOK, gin.H{"id": id, "report_id": rid})
+}
+
+// generateEXEReportContent builds a real executive report body grounded in
+// this tenant's real security/risk metrics, falling back to a real-numbers
+// sentence (no invented findings) if the LLM call itself fails.
+func generateEXEReportContent(tid int, title string, secScore, riskScore, critInc, critVulns int) (summary string, findings, recommendations []string) {
+	prompt := fmt.Sprintf(`You are a CISO's analyst writing an executive report titled %q. Real metrics for this tenant: security score %d/100, risk score %d/100, %d critical incidents open, %d critical vulnerabilities open. Respond as a JSON object with fields: summary (2-4 sentences grounded only in these numbers, no invented incidents or CVEs), key_findings (a JSON array of up to 5 short findings based only on this real data), recommendations (a JSON array of up to 5 short actionable strings — if there isn't enough data, say so instead of inventing findings).`,
+		title, secScore, riskScore, critInc, critVulns)
+
+	if raw, err := services.CallLLM(prompt); err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			Summary         string   `json:"summary"`
+			KeyFindings     []string `json:"key_findings"`
+			Recommendations []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil && parsed.Summary != "" {
+			return parsed.Summary, parsed.KeyFindings, parsed.Recommendations
+		}
+	}
+	summary = fmt.Sprintf("Security score %d/100, risk score %d/100. %d critical incident(s) and %d critical vulnerability(ies) currently open.", secScore, riskScore, critInc, critVulns)
+	return summary, []string{}, []string{}
 }
 
 // ── notifications ─────────────────────────────────────────────────────────────
@@ -856,7 +932,10 @@ func GetEXENotifications(c *gin.Context) {
 	rows, _ := database.DB.Query(
 		`SELECT id, event_type, title, message, severity, source, read, created_at
 		 FROM exe_notifications WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100`, tid)
-	if rows == nil { c.JSON(http.StatusOK, []interface{}{}); return }
+	if rows == nil {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
 	defer rows.Close()
 	type Row struct {
 		ID        int       `json:"id"`
@@ -889,7 +968,10 @@ func GetEXEIntegrations(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	rows, _ := database.DB.Query(`SELECT id, integration_id, name, category, status, last_sync_at, records_synced, health_score, error_count, config_summary
 		FROM exe_integrations WHERE tenant_id=$1 ORDER BY category, name`, tid)
-	if rows == nil { c.JSON(http.StatusOK, []interface{}{}); return }
+	if rows == nil {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
 	defer rows.Close()
 	type Row struct {
 		ID            int        `json:"id"`
@@ -919,7 +1001,10 @@ func GetEXEAudit(c *gin.Context) {
 	limit := parseLimit(c, 100)
 	rows, _ := database.DB.Query(`SELECT id, action, object_type, object_id, object_name, actor, ip_address, details, created_at
 		FROM exe_audit WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2`, tid, limit)
-	if rows == nil { c.JSON(http.StatusOK, []interface{}{}); return }
+	if rows == nil {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
 	defer rows.Close()
 	type Row struct {
 		ID         int       `json:"id"`
