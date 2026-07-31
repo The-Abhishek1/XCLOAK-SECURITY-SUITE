@@ -6613,6 +6613,12 @@ func seedMDMEnterprise(db *sql.DB) {
 	const tid = "9999"
 	now := time.Now()
 
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+
 	for _, s := range []string{
 		`CREATE TABLE IF NOT EXISTS mdme_devices (
 			id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL, device_id TEXT NOT NULL,

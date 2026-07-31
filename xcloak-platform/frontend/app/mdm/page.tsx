@@ -2,14 +2,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { mdmeAPI } from '@/lib/api';
-import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } from '@/components/design-system';
+import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton, Modal } from '@/components/design-system';
 import {
   LayoutDashboard, Smartphone, AppWindow, FileText, ShieldCheck, Radio, ShieldAlert,
   BarChart3, Sparkles, FileBarChart2, ScrollText, X, Lock, Unlock, MapPin, Volume2,
-  RotateCw, RefreshCw, CheckCircle2, KeyRound, Trash2, Eraser, ShieldOff, Bell, Search, FilePlus2,
+  RotateCw, RefreshCw, CheckCircle2, KeyRound, Trash2, Eraser, ShieldOff, Bell, Search, FilePlus2, Eye,
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'inventory' | 'apps' | 'policies' | 'compliance' | 'remote' | 'threats' | 'analytics' | 'ai' | 'reports' | 'audit';
+type Tab = 'dashboard' | 'inventory' | 'apps' | 'policies' | 'compliance' | 'remote' | 'threats' | 'analytics' | 'ai' | 'reports' | 'notifications' | 'audit';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -169,9 +169,13 @@ function DevicePanel({ deviceId, onClose, onRemoteAction }: { deviceId: string; 
     if (['factory_reset', 'wipe_corporate'].includes(type)) {
       if (!window.confirm(`Send "${label}" to ${data.device_name}? This cannot be undone.`)) return;
     }
-    await mdmeAPI.sendRemoteAction({ device_id: deviceId, device_name: data.device_name, action_type: type });
-    setActionDone(`"${label}" queued successfully`);
-    setTimeout(() => setActionDone(''), 3000);
+    try {
+      await mdmeAPI.sendRemoteAction({ device_id: deviceId, device_name: data.device_name, action_type: type });
+      setActionDone(`"${label}" queued successfully`);
+      setTimeout(() => setActionDone(''), 3000);
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to send remote action');
+    }
   };
 
   return (
@@ -649,11 +653,16 @@ function RemoteActionsTab({ actions, devices, onRefresh }: { actions: any[]; dev
       if (!window.confirm(`Send "${label}" to ${device.device_name}? This cannot be undone.`)) return;
     }
     setSending(type);
-    await mdmeAPI.sendRemoteAction({ device_id: selDevice, device_name: device.device_name, action_type: type });
-    setSending('');
-    setActionDone(`"${label}" queued for ${device.device_name}`);
-    setTimeout(() => setActionDone(''), 4000);
-    onRefresh();
+    try {
+      await mdmeAPI.sendRemoteAction({ device_id: selDevice, device_name: device.device_name, action_type: type });
+      setActionDone(`"${label}" queued for ${device.device_name}`);
+      setTimeout(() => setActionDone(''), 4000);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to send remote action');
+    } finally {
+      setSending('');
+    }
   };
 
   const statusColor: Record<string, string> = { pending: '#eab308', completed: '#22c55e', failed: '#ef4444' };
@@ -713,12 +722,20 @@ function ThreatsTab({ d, onRefresh }: { d: any; onRefresh: () => void }) {
   const summary = d?.summary ?? {};
 
   const resolve = async (threatId: string) => {
-    await mdmeAPI.updateThreat(threatId, { status: 'resolved' });
-    onRefresh();
+    try {
+      await mdmeAPI.updateThreat(threatId, { status: 'resolved' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to resolve threat');
+    }
   };
   const investigate = async (threatId: string) => {
-    await mdmeAPI.updateThreat(threatId, { status: 'investigating' });
-    onRefresh();
+    try {
+      await mdmeAPI.updateThreat(threatId, { status: 'investigating' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to update threat');
+    }
   };
 
   return (
@@ -912,14 +929,20 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
   const [rtype, setRtype] = useState('device_inventory');
   const [format, setFormat] = useState('pdf');
   const [gen, setGen] = useState(false);
+  const [viewing, setViewing] = useState<any>(null);
 
   const generate = async () => {
     if (!title) return;
     setGen(true);
-    await mdmeAPI.generateReport({ title, report_type: rtype, format });
-    setTitle('');
-    onRefresh();
-    setGen(false);
+    try {
+      await mdmeAPI.generateReport({ title, report_type: rtype, format });
+      setTitle('');
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to generate report');
+    } finally {
+      setGen(false);
+    }
   };
 
   return (
@@ -957,10 +980,49 @@ function ReportsTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
           { key: 'generated_by', header: 'By', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.generated_by}</span> },
           { key: 'device_count', header: 'Devices', render: (r: any) => <span style={{ fontWeight: 600 }}>{r.device_count}</span> },
           { key: 'format', header: 'Format', render: (r: any) => pill(r.format, '#3b82f6') },
-          { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? `${(r.size_bytes / 1024).toFixed(0)} KB` : '—'}</span> },
+          { key: 'size_bytes', header: 'Size', render: (r: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.size_bytes ? (r.size_bytes < 1024 ? `${r.size_bytes} B` : `${(r.size_bytes / 1024).toFixed(0)} KB`) : '—'}</span> },
           { key: 'created_at', header: 'Date', render: (r: any) => <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span> },
+          { key: 'view', header: '', render: (r: any) => (
+            <ActionButton variant="ghost" icon={Eye} onClick={() => setViewing(r)} style={{ padding: '2px 8px', fontSize: 11 }}>View</ActionButton>
+          ) },
         ]}
       />
+      <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.title} maxWidth={560}>
+        {viewing && (
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-1)', whiteSpace: 'pre-wrap' }}>
+            {viewing.summary || 'No summary available.'}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ── Tab: Notifications ───────────────────────────────────────────────────────
+
+function NotificationsTab({ notifs, onMarkRead }: { notifs: any[]; onMarkRead: () => void }) {
+  const sevColor: Record<string, string> = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e', info: '#3b82f6' };
+  const unread = notifs.filter(n => !n.read).length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {unread > 0 && (
+          <ActionButton variant="ghost" onClick={onMarkRead} style={{ fontSize: 11 }}>
+            Mark all read ({unread})
+          </ActionButton>
+        )}
+      </div>
+      {!notifs.length && <EmptyState title="No notifications" />}
+      {notifs.map((n: any, i: number) => (
+        <div key={i} style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--bg-2)', border: `1px solid ${n.read ? 'var(--border)' : (sevColor[n.severity] || 'var(--border)') + '44'}`, opacity: n.read ? 0.7 : 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            {pill(n.severity, sevColor[n.severity])}
+            <span style={{ fontSize: 12, fontWeight: n.read ? 400 : 600, color: 'var(--text-1)' }}>{n.title}</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 4 }}>{n.message}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{n.device_id ? `${n.device_id} · ` : ''}{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1000,6 +1062,7 @@ const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: 'analytics',  label: 'Analytics',       icon: BarChart3 },
   { key: 'ai',         label: 'AI Assistant',    icon: Sparkles },
   { key: 'reports',    label: 'Reports',         icon: FileBarChart2 },
+  { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'audit',      label: 'Audit Trail',     icon: ScrollText },
 ];
 
@@ -1059,8 +1122,13 @@ export default function MDMPage() {
   };
 
   const markRead = async () => {
-    await mdmeAPI.markNotificationsRead();
-    setUnread(0);
+    try {
+      await mdmeAPI.markNotificationsRead();
+      setUnread(0);
+      setNotifications(ns => ns.map(n => ({ ...n, read: true })));
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to mark notifications read');
+    }
   };
 
   const refreshRemoteActions = useCallback(async () => {
@@ -1075,7 +1143,7 @@ export default function MDMPage() {
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
-            <ActionButton variant="ghost" icon={Bell} onClick={() => { setTab('audit'); markRead(); }} />
+            <ActionButton variant="ghost" icon={Bell} onClick={() => setTab('notifications')} />
             {unread > 0 && (
               <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                 {unread}
@@ -1101,6 +1169,7 @@ export default function MDMPage() {
       {tab === 'analytics'  && <AnalyticsTab d={analytics} />}
       {tab === 'ai'         && <AIInsightsTab device={selectedDevice} />}
       {tab === 'reports'    && <ReportsTab reports={reports} onRefresh={() => mdmeAPI.getReports().then(r => setReports(r.data ?? []))} />}
+      {tab === 'notifications' && <NotificationsTab notifs={notifications} onMarkRead={markRead} />}
       {tab === 'audit'      && <AuditTab entries={audit} />}
 
       {showDevicePanel && selectedDevice && (

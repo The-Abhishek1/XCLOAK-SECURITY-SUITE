@@ -222,6 +222,7 @@ func InitMDMETables() {
 	for _, s := range stmts {
 		db.Exec(s)
 	}
+	db.Exec(`ALTER TABLE mdme_reports ADD COLUMN IF NOT EXISTS summary TEXT`)
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -250,7 +251,7 @@ func GetMDMEDashboard(c *gin.Context) {
 	}
 	healthScore := 0
 	if total > 0 {
-		healthScore = (compliant * 100 / total + (total-rooted)*100/total + (total-lost)*100/total) / 3
+		healthScore = (compliant*100/total + (total-rooted)*100/total + (total-lost)*100/total) / 3
 	}
 
 	// by platform
@@ -305,37 +306,42 @@ func GetMDMEDevices(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	tidStr := fmt.Sprintf("%d", tid)
 
-	search     := c.Query("search")
-	platform   := c.Query("platform")
+	search := c.Query("search")
+	platform := c.Query("platform")
 	compliance := c.Query("compliance")
 	enrollment := c.Query("enrollment")
-	dept       := c.Query("department")
-	riskLevel  := c.Query("risk_level")
-	limit      := parseLimit(c, 500)
+	dept := c.Query("department")
+	riskLevel := c.Query("risk_level")
+	limit := parseLimit(c, 500)
 
 	where := []string{"tenant_id=$1"}
-	args  := []interface{}{tidStr}
-	i     := 2
+	args := []interface{}{tidStr}
+	i := 2
 
 	if search != "" {
 		where = append(where, fmt.Sprintf("(device_name ILIKE $%d OR owner ILIKE $%d OR imei ILIKE $%d OR serial_number ILIKE $%d)", i, i, i, i))
-		args = append(args, "%"+search+"%"); i++
+		args = append(args, "%"+search+"%")
+		i++
 	}
 	if platform != "" {
 		where = append(where, fmt.Sprintf("platform=$%d", i))
-		args = append(args, platform); i++
+		args = append(args, platform)
+		i++
 	}
 	if compliance != "" {
 		where = append(where, fmt.Sprintf("compliance_status=$%d", i))
-		args = append(args, compliance); i++
+		args = append(args, compliance)
+		i++
 	}
 	if enrollment != "" {
 		where = append(where, fmt.Sprintf("enrollment_status=$%d", i))
-		args = append(args, enrollment); i++
+		args = append(args, enrollment)
+		i++
 	}
 	if dept != "" {
 		where = append(where, fmt.Sprintf("department=$%d", i))
-		args = append(args, dept); i++
+		args = append(args, dept)
+		i++
 	}
 	if riskLevel == "high" {
 		where = append(where, "risk_score >= 70")
@@ -375,7 +381,7 @@ func GetMDMEDevices(c *gin.Context) {
 				"business_unit": bu, "enrollment_status": enrollSt,
 				"compliance_status": compSt, "risk_score": risk,
 				"battery_level": battery,
-				"rooted": rooted == 1, "jailbroken": jailbroken == 1,
+				"rooted":        rooted == 1, "jailbroken": jailbroken == 1,
 				"is_lost": lost == 1, "is_quarantined": quar == 1,
 				"encryption_enabled": enc == 1, "screen_lock_enabled": screenLock == 1,
 				"last_checkin_at": lc, "enrolled_at": ea,
@@ -408,11 +414,11 @@ func GetMDMEDeviceDetail(c *gin.Context) {
 
 	var (
 		id, name, dtype, plat, mfr, model, serial, imei, osv, patch, owner, email, dept, bu string
-		enrollSt, compSt, wifiSSID, carrier, gpsLoc string
-		risk, battery, wifiSig, cellSig, lockTimeout int
-		storTotal, storUsed, memTotal, memUsed, lat, lon float64
-		bt, enc, rooted, jailb, lock, bio, lost, quar bool
-		lc, ea *string
+		enrollSt, compSt, wifiSSID, carrier, gpsLoc                                         string
+		risk, battery, wifiSig, cellSig, lockTimeout                                        int
+		storTotal, storUsed, memTotal, memUsed, lat, lon                                    float64
+		bt, enc, rooted, jailb, lock, bio, lost, quar                                       bool
+		lc, ea                                                                              *string
 	)
 	err := row.Scan(&id, &name, &dtype, &plat, &mfr, &model, &serial, &imei, &osv, &patch,
 		&owner, &email, &dept, &bu, &enrollSt, &compSt, &risk, &battery,
@@ -501,7 +507,7 @@ func GetMDMEDeviceDetail(c *gin.Context) {
 		"os_version": osv, "security_patch": patch, "owner": owner, "owner_email": email,
 		"department": dept, "business_unit": bu,
 		"enrollment_status": enrollSt, "compliance_status": compSt, "risk_score": risk,
-		"battery_level": battery,
+		"battery_level":    battery,
 		"storage_total_gb": storTotal, "storage_used_gb": storUsed, "storage_pct": storPct,
 		"memory_total_gb": memTotal, "memory_used_gb": memUsed, "memory_pct": memPct,
 		"wifi_ssid": wifiSSID, "wifi_signal_pct": wifiSig,
@@ -525,11 +531,12 @@ func GetMDMEApps(c *gin.Context) {
 	limit := parseLimit(c, 200)
 
 	where := []string{"tenant_id=$1"}
-	args  := []interface{}{tidStr}
-	i     := 2
+	args := []interface{}{tidStr}
+	i := 2
 	if statusFilter != "" {
 		where = append(where, fmt.Sprintf("status=$%d", i))
-		args = append(args, statusFilter); i++
+		args = append(args, statusFilter)
+		i++
 	}
 	args = append(args, limit)
 
@@ -620,6 +627,49 @@ func GetMDMEPolicies(c *gin.Context) {
 	c.JSON(http.StatusOK, policies)
 }
 
+// mdmeVersionParts splits a dotted version string like "17.4.1" into
+// numeric components for ordinal comparison; non-numeric segments (e.g.
+// "23H2") stop parsing at that point.
+func mdmeVersionParts(v string) []int {
+	parts := strings.Split(v, ".")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n := 0
+		matched := false
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				break
+			}
+			n = n*10 + int(r-'0')
+			matched = true
+		}
+		if !matched {
+			break
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// mdmeVersionBelow reports whether v is strictly below min, comparing
+// numeric components left to right (missing trailing components count as 0).
+func mdmeVersionBelow(v, min string) bool {
+	vp, mp := mdmeVersionParts(v), mdmeVersionParts(min)
+	for i := 0; i < len(vp) || i < len(mp); i++ {
+		var a, b int
+		if i < len(vp) {
+			a = vp[i]
+		}
+		if i < len(mp) {
+			b = mp[i]
+		}
+		if a != b {
+			return a < b
+		}
+	}
+	return false
+}
+
 // ── Compliance ────────────────────────────────────────────────────────────────
 
 func GetMDMECompliance(c *gin.Context) {
@@ -662,6 +712,58 @@ func GetMDMECompliance(c *gin.Context) {
 		return n * 100 / total
 	}
 
+	// "OS below minimum version": real per-platform minimum, taken as the
+	// strictest (max) min_os_version among enabled policies for that
+	// platform, compared against each real device's real os_version.
+	// Platforms with no version-bearing policy (e.g. windows, which only
+	// has an 'all'-platform policy with no min_os_version) are skipped
+	// rather than guessed at.
+	minOSByPlatform := map[string]string{}
+	mor, _ := db.Query(`SELECT platform, min_os_version FROM mdme_policies
+		WHERE tenant_id=$1 AND enabled=TRUE AND min_os_version IS NOT NULL AND min_os_version!='' AND platform!='all'`, tidStr)
+	if mor != nil {
+		for mor.Next() {
+			var plat, minOS string
+			mor.Scan(&plat, &minOS)
+			if cur, ok := minOSByPlatform[plat]; !ok || mdmeVersionBelow(cur, minOS) {
+				minOSByPlatform[plat] = minOS
+			}
+		}
+		mor.Close()
+	}
+	belowMinOS := 0
+	dvr, _ := db.Query(`SELECT platform, os_version FROM mdme_devices WHERE tenant_id=$1`, tidStr)
+	if dvr != nil {
+		for dvr.Next() {
+			var plat, osv string
+			dvr.Scan(&plat, &osv)
+			if minOS, ok := minOSByPlatform[plat]; ok && mdmeVersionBelow(osv, minOS) {
+				belowMinOS++
+			}
+		}
+		dvr.Close()
+	}
+
+	// "Blocked app installed": real, distinct devices with at least one
+	// app in mdme_apps flagged status='blocked'.
+	var blockedAppDevices int
+	db.QueryRow(`SELECT COUNT(DISTINCT device_id) FROM mdme_apps WHERE tenant_id=$1 AND status='blocked'`, tidStr).Scan(&blockedAppDevices)
+
+	// No certificate-expiry data exists anywhere in this codebase for MDM
+	// devices (unlike ace_assets' cert_expiry_days) — "Expired certificate"
+	// was dropped rather than faked.
+	violations := []map[string]interface{}{
+		{"violation": "Encryption disabled", "count": total - enc, "severity": "critical"},
+		{"violation": "Screen lock not set", "count": total - screenLock, "severity": "high"},
+		{"violation": "Rooted/Jailbroken", "count": total - noRooted, "severity": "critical"},
+	}
+	if belowMinOS > 0 {
+		violations = append(violations, map[string]interface{}{"violation": "OS below minimum version", "count": belowMinOS, "severity": "high"})
+	}
+	if blockedAppDevices > 0 {
+		violations = append(violations, map[string]interface{}{"violation": "Blocked app installed", "count": blockedAppDevices, "severity": "medium"})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total": total, "compliant": compliant, "non_compliant": nonCompliant,
 		"compliance_rate": pct(compliant),
@@ -672,14 +774,7 @@ func GetMDMECompliance(c *gin.Context) {
 			{"control": "Not Rooted/Jailbroken", "passed": noRooted, "failed": total - noRooted, "pct": pct(noRooted)},
 		},
 		"non_compliant_devices": nonCompliantDevs,
-		"violations": []map[string]interface{}{
-			{"violation": "Encryption disabled", "count": total - enc, "severity": "critical"},
-			{"violation": "Screen lock not set", "count": total - screenLock, "severity": "high"},
-			{"violation": "Rooted/Jailbroken", "count": total - noRooted, "severity": "critical"},
-			{"violation": "OS below minimum version", "count": 3, "severity": "high"},
-			{"violation": "Expired certificate", "count": 2, "severity": "medium"},
-			{"violation": "Blocked app installed", "count": 5, "severity": "medium"},
-		},
+		"violations":            violations,
 	})
 }
 
@@ -729,11 +824,12 @@ func GetMDMERemoteActions(c *gin.Context) {
 	limit := parseLimit(c, 100)
 
 	where := []string{"tenant_id=$1"}
-	args  := []interface{}{tidStr}
-	i     := 2
+	args := []interface{}{tidStr}
+	i := 2
 	if devID != "" {
 		where = append(where, fmt.Sprintf("device_id=$%d", i))
-		args = append(args, devID); i++
+		args = append(args, devID)
+		i++
 	}
 	args = append(args, limit)
 
@@ -813,7 +909,9 @@ func PatchMDMEThreat(c *gin.Context) {
 	threatID := c.Param("id")
 	actor := usernameFromContext(c)
 
-	var body struct{ Status string `json:"status"` }
+	var body struct {
+		Status string `json:"status"`
+	}
 	c.BindJSON(&body)
 	if body.Status == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status required"})
@@ -863,6 +961,7 @@ func GetMDMEAnalytics(c *gin.Context) {
 	db := database.DB
 	tid := tenantIDFromContext(c)
 	tidStr := fmt.Sprintf("%d", tid)
+	now := time.Now()
 
 	// OS version distribution
 	osVers := []map[string]interface{}{}
@@ -906,44 +1005,50 @@ func GetMDMEAnalytics(c *gin.Context) {
 		}
 	}
 
+	// top_apps: real, mirrors GetMDMEApps' own device-count grouping —
+	// this was previously computed correctly elsewhere on this same page
+	// but faked here instead of reused.
+	topApps := []map[string]interface{}{}
+	tar, _ := db.Query(`SELECT app_name, category, COUNT(DISTINCT device_id) FROM mdme_apps
+		WHERE tenant_id=$1 GROUP BY app_name, category ORDER BY COUNT(DISTINCT device_id) DESC LIMIT 8`, tidStr)
+	if tar != nil {
+		defer tar.Close()
+		for tar.Next() {
+			var name, cat string
+			var cnt int
+			tar.Scan(&name, &cat, &cnt)
+			topApps = append(topApps, map[string]interface{}{"app_name": name, "device_count": cnt, "category": cat})
+		}
+	}
+
+	// enrollment_trend: real, computed from this tenant's own
+	// enrolled_at/updated_at columns for the last 6 real calendar months —
+	// same "no new snapshot table needed" pattern used on Assets/CMDB's
+	// asset_growth, since enrolled_at already varies per seeded device.
+	enrollmentTrend := []map[string]interface{}{}
+	for i := 5; i >= 0; i-- {
+		monthEnd := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -i+1, 0)
+		monthStart := monthEnd.AddDate(0, -1, 0)
+		var enrolledCnt, unenrolledCnt int
+		db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND enrolled_at < $2`, tidStr, monthEnd).Scan(&enrolledCnt)
+		db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND enrollment_status='unenrolled' AND updated_at >= $2 AND updated_at < $3`, tidStr, monthStart, monthEnd).Scan(&unenrolledCnt)
+		enrollmentTrend = append(enrollmentTrend, map[string]interface{}{
+			"month": monthStart.Format("Jan"), "enrolled": enrolledCnt, "unenrolled": unenrolledCnt,
+		})
+	}
+
+	// compliance_trend and threat_trend were both dropped: neither has a
+	// real historical basis (compliance_status has no change-history
+	// tracking — mdme_devices.updated_at is touched by any field update,
+	// not specifically compliance transitions) and threat_trend was
+	// confirmed via grep to be computed but never rendered anywhere in
+	// the frontend.
 	c.JSON(http.StatusOK, gin.H{
 		"os_distribution":   osVers,
 		"type_distribution": typeBreak,
 		"dept_distribution": deptBreak,
-		"enrollment_trend": []map[string]interface{}{
-			{"month": "Jan", "enrolled": 312, "unenrolled": 8},
-			{"month": "Feb", "enrolled": 334, "unenrolled": 12},
-			{"month": "Mar", "enrolled": 361, "unenrolled": 9},
-			{"month": "Apr", "enrolled": 388, "unenrolled": 15},
-			{"month": "May", "enrolled": 408, "unenrolled": 11},
-			{"month": "Jun", "enrolled": 427, "unenrolled": 7},
-		},
-		"compliance_trend": []map[string]interface{}{
-			{"month": "Jan", "compliant": 284, "non_compliant": 28},
-			{"month": "Feb", "compliant": 302, "non_compliant": 32},
-			{"month": "Mar", "compliant": 331, "non_compliant": 30},
-			{"month": "Apr", "compliant": 360, "non_compliant": 28},
-			{"month": "May", "compliant": 382, "non_compliant": 26},
-			{"month": "Jun", "compliant": 403, "non_compliant": 24},
-		},
-		"threat_trend": []map[string]interface{}{
-			{"month": "Jan", "rooted": 4, "malware": 2, "phishing": 1},
-			{"month": "Feb", "rooted": 3, "malware": 3, "phishing": 2},
-			{"month": "Mar", "rooted": 2, "malware": 1, "phishing": 3},
-			{"month": "Apr", "rooted": 3, "malware": 2, "phishing": 1},
-			{"month": "May", "rooted": 1, "malware": 2, "phishing": 2},
-			{"month": "Jun", "rooted": 2, "malware": 1, "phishing": 1},
-		},
-		"top_apps": []map[string]interface{}{
-			{"app_name": "Microsoft Outlook", "device_count": 401, "category": "productivity"},
-			{"app_name": "Microsoft Teams", "device_count": 398, "category": "communication"},
-			{"app_name": "CrowdStrike Falcon", "device_count": 415, "category": "security"},
-			{"app_name": "Zscaler Client Connector", "device_count": 390, "category": "security"},
-			{"app_name": "Slack", "device_count": 312, "category": "communication"},
-			{"app_name": "Zoom", "device_count": 401, "category": "communication"},
-			{"app_name": "Chrome", "device_count": 388, "category": "browser"},
-			{"app_name": "1Password", "device_count": 271, "category": "security"},
-		},
+		"enrollment_trend":  enrollmentTrend,
+		"top_apps":          topApps,
 	})
 }
 
@@ -1065,20 +1170,20 @@ func GetMDMEReports(c *gin.Context) {
 	tidStr := fmt.Sprintf("%d", tid)
 
 	var reports []map[string]interface{}
-	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,size_bytes,device_count,created_at
+	rows, _ := db.Query(`SELECT report_id,title,report_type,generated_by,format,size_bytes,device_count,created_at,COALESCE(summary,'')
 		FROM mdme_reports WHERE tenant_id=$1 ORDER BY created_at DESC`, tidStr)
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var id, title, rtype, by, format string
+			var id, title, rtype, by, format, summary string
 			var sizeB int64
 			var cnt int
 			var ca *string
-			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sizeB, &cnt, &ca); err == nil {
+			if err := rows.Scan(&id, &title, &rtype, &by, &format, &sizeB, &cnt, &ca, &summary); err == nil {
 				reports = append(reports, map[string]interface{}{
 					"report_id": id, "title": title, "report_type": rtype,
 					"generated_by": by, "format": format, "size_bytes": sizeB,
-					"device_count": cnt, "created_at": ca,
+					"device_count": cnt, "created_at": ca, "summary": summary,
 				})
 			}
 		}
@@ -1087,6 +1192,32 @@ func GetMDMEReports(c *gin.Context) {
 		reports = []map[string]interface{}{}
 	}
 	c.JSON(http.StatusOK, reports)
+}
+
+// generateMDMEReportSummary grounds a real, LLM-written executive summary
+// in this tenant's real fleet metrics, falling back to a plain numeric
+// sentence if the LLM is unreachable.
+func generateMDMEReportSummary(tid int, title, reportType string, deviceCount int) string {
+	db := database.DB
+	tidStr := fmt.Sprintf("%d", tid)
+	var compliant, nonCompliant, rooted, lost int
+	var avgRisk float64
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND compliance_status='compliant'`, tidStr).Scan(&compliant)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND compliance_status='non_compliant'`, tidStr).Scan(&nonCompliant)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND (rooted=TRUE OR jailbroken=TRUE)`, tidStr).Scan(&rooted)
+	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1 AND is_lost=TRUE`, tidStr).Scan(&lost)
+	db.QueryRow(`SELECT COALESCE(AVG(risk_score),0) FROM mdme_devices WHERE tenant_id=$1`, tidStr).Scan(&avgRisk)
+
+	prompt := fmt.Sprintf(`You are an MDM analyst writing a %s report titled %q. Real current fleet metrics: %d devices total, %d compliant, %d non-compliant, %d rooted/jailbroken, %d lost, average risk score %.0f/100.
+
+Write a 2-4 sentence executive summary grounded strictly in these numbers. Do not invent specific device names or figures not present above. Respond in plain text, no markdown.`,
+		reportType, title, deviceCount, compliant, nonCompliant, rooted, lost, avgRisk)
+
+	if resp, err := services.CallLLM(prompt); err == nil && strings.TrimSpace(resp) != "" {
+		return strings.TrimSpace(resp)
+	}
+	return fmt.Sprintf("%d devices in fleet (%d compliant, %d non-compliant, %d rooted/jailbroken, %d lost). Average risk score %.0f/100.",
+		deviceCount, compliant, nonCompliant, rooted, lost, avgRisk)
 }
 
 func PostMDMEReport(c *gin.Context) {
@@ -1100,18 +1231,30 @@ func PostMDMEReport(c *gin.Context) {
 		ReportType string `json:"report_type"`
 		Format     string `json:"format"`
 	}
-	c.BindJSON(&body)
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
 	if body.Format == "" {
 		body.Format = "pdf"
 	}
 	id := mdmeID("MDME-RPT")
 	var cnt int
 	db.QueryRow(`SELECT COUNT(*) FROM mdme_devices WHERE tenant_id=$1`, tidStr).Scan(&cnt)
-	sizeB := int64(150_000 + rand.Intn(500_000))
-	db.Exec(`INSERT INTO mdme_reports (tenant_id,report_id,title,report_type,generated_by,format,size_bytes,device_count)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		tidStr, id, body.Title, body.ReportType, actor, body.Format, sizeB, cnt)
-	c.JSON(http.StatusOK, gin.H{"report_id": id, "device_count": cnt})
+
+	summary := generateMDMEReportSummary(tid, body.Title, body.ReportType, cnt)
+	sizeB := int64(len(summary))
+
+	_, err := db.Exec(`INSERT INTO mdme_reports (tenant_id,report_id,title,report_type,generated_by,format,size_bytes,device_count,summary)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		tidStr, id, body.Title, body.ReportType, actor, body.Format, sizeB, cnt, summary)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create report"})
+		return
+	}
+	mdmeAudit(tid, "report_generated", "report", id, body.Title, actor, fmt.Sprintf("type:%s devices:%d", body.ReportType, cnt))
+	mdmeNotify(tid, "report_ready", "MDM Report Ready: "+body.Title, "Your MDM report has been generated and is ready for review.", "info", "")
+	c.JSON(http.StatusOK, gin.H{"report_id": id, "device_count": cnt, "summary": summary})
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
