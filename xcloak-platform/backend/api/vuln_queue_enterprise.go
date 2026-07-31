@@ -1,9 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -80,10 +80,33 @@ func GetVQDashboard(c *gin.Context) {
 		FROM vq_items WHERE tenant_id=$1`, tid)
 	var total, unassigned, assigned, inProgress, awaitingVerify, verified, closed, overdue int
 	_ = row.Scan(&total, &unassigned, &assigned, &inProgress, &awaitingVerify, &verified, &closed, &overdue)
-	slaCompliance := 95.0
+	slaCompliance := 100.0
 	if total > 0 {
 		slaCompliance = float64(total-overdue) / float64(total) * 100
 	}
+	var mttr float64
+	database.DB.QueryRow(`SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (closed_at-created_at))/86400),0) FROM vq_items WHERE tenant_id=$1 AND status='closed' AND closed_at IS NOT NULL`, tid).Scan(&mttr)
+
+	type teamRow struct {
+		Team    string `json:"team"`
+		Total   int    `json:"total"`
+		Overdue int    `json:"overdue"`
+	}
+	teamBreakdown := []teamRow{}
+	tRows, _ := database.DB.Query(`
+		SELECT COALESCE(NULLIF(assigned_team,''),'Unassigned'), COUNT(*),
+			COUNT(*) FILTER (WHERE due_date < NOW() AND status NOT IN ('closed','verified'))
+		FROM vq_items WHERE tenant_id=$1 AND status != 'closed' GROUP BY 1 ORDER BY COUNT(*) DESC`, tid)
+	if tRows != nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var r teamRow
+			if tRows.Scan(&r.Team, &r.Total, &r.Overdue) == nil {
+				teamBreakdown = append(teamBreakdown, r)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total":                 total,
 		"unassigned":            unassigned,
@@ -94,14 +117,8 @@ func GetVQDashboard(c *gin.Context) {
 		"closed":                closed,
 		"overdue":               overdue,
 		"sla_compliance":        slaCompliance,
-		"mttr_days":             8.4,
-		"team_breakdown": []interface{}{
-			map[string]interface{}{"team": "Network Team", "total": 4, "overdue": 1},
-			map[string]interface{}{"team": "Windows Team", "total": 3, "overdue": 0},
-			map[string]interface{}{"team": "Linux Team", "total": 2, "overdue": 1},
-			map[string]interface{}{"team": "Cloud Team", "total": 2, "overdue": 0},
-			map[string]interface{}{"team": "DevOps Team", "total": 1, "overdue": 0},
-		},
+		"mttr_days":             mttr,
+		"team_breakdown":        teamBreakdown,
 	})
 }
 
@@ -455,13 +472,30 @@ func PostVQAI(c *gin.Context) {
 		RemediationAction string  `json:"remediation_action"`
 	}
 	_ = c.ShouldBindJSON(&body)
-	prompt := fmt.Sprintf(`You are a remediation advisor. Provide concise remediation steps for CVE: %s on asset: %s (priority: %s, risk: %.1f, team: %s). Respond with JSON: {recommendation, steps: [], estimated_effort, risks_if_delayed, alternative_mitigations: []}`, body.CVEID, body.AssetName, body.Priority, body.RiskScore, body.AssignedTeam)
-	resp, err := services.CallLLM(prompt)
-	if err != nil || resp == "" {
-		resp = vqDeterministicAI(body.CVEID, body.Priority, body.AssignedTeam)
+	prompt := fmt.Sprintf(`You are a remediation advisor. Provide concise remediation steps for CVE: %s on asset: %s (priority: %s, risk: %.1f, team: %s). Respond with JSON: {"recommendation": string, "steps": [string], "estimated_effort": string, "risks_if_delayed": string, "alternative_mitigations": [string]}`, body.CVEID, body.AssetName, body.Priority, body.RiskScore, body.AssignedTeam)
+	raw, err := services.CallLLM(prompt)
+	if err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed map[string]interface{}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			parsed["cve_id"] = body.CVEID
+			parsed["asset_name"] = body.AssetName
+			c.JSON(http.StatusOK, parsed)
+			return
+		}
 	}
+	// Deterministic fallback — same shape the LLM is asked for, not a
+	// separate set of fields the real response never fed into.
 	c.JSON(http.StatusOK, gin.H{
-		"recommendation": "Apply the vendor-supplied patch to resolve this vulnerability.",
+		"recommendation": vqDeterministicAI(body.CVEID, body.Priority, body.AssignedTeam),
 		"cve_id":         body.CVEID,
 		"asset_name":     body.AssetName,
 		"steps": []interface{}{
@@ -476,7 +510,6 @@ func PostVQAI(c *gin.Context) {
 		"estimated_effort":        "2–4 hours including maintenance window",
 		"risks_if_delayed":        vqRiskIfDelayed(body.Priority),
 		"alternative_mitigations": []interface{}{"Apply WAF rules to block known exploit patterns", "Restrict network access to the affected service", "Increase monitoring on the asset until patched"},
-		"ai_analysis":             resp,
 	})
 }
 
@@ -510,43 +543,108 @@ func GetVQAnalytics(c *gin.Context) {
 	var closedCount int
 	var avgDays *float64
 	_ = row.Scan(&closedCount, &avgDays)
-	mttr := 8.4
-	if avgDays != nil && *avgDays > 0 {
+	mttr := 0.0
+	if avgDays != nil {
 		mttr = *avgDays
 	}
+
+	var total, overdueCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1`, tid).Scan(&total)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND due_date < NOW() AND status NOT IN ('closed','verified')`, tid).Scan(&overdueCount)
+	slaCompliance := 100.0
+	if total > 0 {
+		slaCompliance = float64(total-overdueCount) / float64(total) * 100
+	}
+
+	type teamPerfRow struct {
+		Team     string  `json:"team"`
+		Assigned int     `json:"assigned"`
+		Closed   int     `json:"closed"`
+		Overdue  int     `json:"overdue"`
+		AvgDays  float64 `json:"avg_days"`
+	}
+	teamPerf := []teamPerfRow{}
+	tRows, _ := database.DB.Query(`
+		SELECT COALESCE(NULLIF(assigned_team,''),'Unassigned'),
+			COUNT(*),
+			COUNT(*) FILTER (WHERE status='closed'),
+			COUNT(*) FILTER (WHERE due_date < NOW() AND status NOT IN ('closed','verified')),
+			COALESCE(AVG(EXTRACT(EPOCH FROM (closed_at-created_at))/86400) FILTER (WHERE status='closed' AND closed_at IS NOT NULL),0)
+		FROM vq_items WHERE tenant_id=$1 AND status != 'unassigned' GROUP BY 1 ORDER BY COUNT(*) DESC`, tid)
+	if tRows != nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var r teamPerfRow
+			if tRows.Scan(&r.Team, &r.Assigned, &r.Closed, &r.Overdue, &r.AvgDays) == nil {
+				teamPerf = append(teamPerf, r)
+			}
+		}
+	}
+
+	type trendRow struct {
+		Week   string `json:"week"`
+		Opened int    `json:"opened"`
+		Closed int    `json:"closed"`
+	}
+	trend := []trendRow{}
+	for i := 3; i >= 0; i-- {
+		weekStart := time.Now().AddDate(0, 0, -7*(i+1))
+		weekEnd := time.Now().AddDate(0, 0, -7*i)
+		_, isoWeek := weekEnd.ISOWeek()
+		var opened, closedInWeek int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND created_at>=$2 AND created_at<$3`, tid, weekStart, weekEnd).Scan(&opened)
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND closed_at>=$2 AND closed_at<$3`, tid, weekStart, weekEnd).Scan(&closedInWeek)
+		trend = append(trend, trendRow{Week: fmt.Sprintf("W%d", isoWeek), Opened: opened, Closed: closedInWeek})
+	}
+
+	type delayedRow struct {
+		Asset        string `json:"asset"`
+		OverdueDays  int    `json:"overdue_days"`
+		AssignedTeam string `json:"assigned_team"`
+	}
+	topDelayed := []delayedRow{}
+	dRows, _ := database.DB.Query(`
+		SELECT asset_name, EXTRACT(EPOCH FROM (NOW()-due_date))/86400, COALESCE(NULLIF(assigned_team,''),'Unassigned')
+		FROM vq_items WHERE tenant_id=$1 AND due_date < NOW() AND status NOT IN ('closed','verified')
+		ORDER BY due_date ASC LIMIT 5`, tid)
+	if dRows != nil {
+		defer dRows.Close()
+		for dRows.Next() {
+			var r delayedRow
+			var days float64
+			if dRows.Scan(&r.Asset, &days, &r.AssignedTeam) == nil {
+				r.OverdueDays = int(days)
+				topDelayed = append(topDelayed, r)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"mttr_days":      mttr,
-		"sla_compliance": 94.2,
-		"overdue_count":  2,
-		"closed_count":   closedCount,
-		"team_performance": []interface{}{
-			map[string]interface{}{"team": "Network Team", "assigned": 4, "closed": 2, "overdue": 1, "avg_days": 6.2},
-			map[string]interface{}{"team": "Windows Team", "assigned": 3, "closed": 3, "overdue": 0, "avg_days": 4.1},
-			map[string]interface{}{"team": "Linux Team", "assigned": 2, "closed": 1, "overdue": 1, "avg_days": 12.3},
-			map[string]interface{}{"team": "Cloud Team", "assigned": 2, "closed": 2, "overdue": 0, "avg_days": 3.7},
-			map[string]interface{}{"team": "DevOps Team", "assigned": 1, "closed": 1, "overdue": 0, "avg_days": 2.1},
-		},
-		"remediation_trend": []interface{}{
-			map[string]interface{}{"week": "W27", "opened": 4, "closed": 3},
-			map[string]interface{}{"week": "W28", "opened": 3, "closed": 5},
-			map[string]interface{}{"week": "W29", "opened": 6, "closed": 4},
-			map[string]interface{}{"week": "W30", "opened": 2, "closed": 6},
-		},
-		"top_delayed_assets": []interface{}{
-			map[string]interface{}{"asset": "VPN-GW-01", "overdue_days": 3, "assigned_team": "Network Team"},
-			map[string]interface{}{"asset": "EKS-CLUSTER-01", "overdue_days": 1, "assigned_team": "DevOps Team"},
-		},
-		"sla_by_priority": []interface{}{
-			map[string]interface{}{"priority": "critical", "sla_hours": 24, "avg_hours": 19.2, "compliance_pct": 100},
-			map[string]interface{}{"priority": "high", "sla_hours": 168, "avg_hours": 98.4, "compliance_pct": 96.2},
-			map[string]interface{}{"priority": "medium", "sla_hours": 720, "avg_hours": 312.1, "compliance_pct": 91.4},
-			map[string]interface{}{"priority": "low", "sla_hours": 2160, "avg_hours": 980.2, "compliance_pct": 88.6},
-		},
+		"mttr_days":          mttr,
+		"sla_compliance":     slaCompliance,
+		"overdue_count":      overdueCount,
+		"closed_count":       closedCount,
+		"team_performance":   teamPerf,
+		"remediation_trend":  trend,
+		"top_delayed_assets": topDelayed,
 	})
 }
 
 // GET /api/vq/sla
 func GetVQSLA(c *gin.Context) {
+	createVQTables()
+	tid := tenantIDFromContext(c)
+	currentCompliance := gin.H{}
+	for _, p := range []string{"critical", "high", "medium", "low"} {
+		var total, onTime int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND priority=$2`, tid, p).Scan(&total)
+		database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND priority=$2 AND (status IN ('closed','verified') OR due_date >= NOW())`, tid, p).Scan(&onTime)
+		compliance := 100.0
+		if total > 0 {
+			compliance = float64(onTime) / float64(total) * 100
+		}
+		currentCompliance[p] = compliance
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"policies": []interface{}{
 			map[string]interface{}{"priority": "critical", "time_to_assign_h": 2, "time_to_start_h": 4, "time_to_patch_h": 24, "time_to_verify_h": 48, "time_to_close_h": 72},
@@ -554,17 +652,14 @@ func GetVQSLA(c *gin.Context) {
 			map[string]interface{}{"priority": "medium", "time_to_assign_h": 24, "time_to_start_h": 72, "time_to_patch_h": 720, "time_to_verify_h": 744, "time_to_close_h": 792},
 			map[string]interface{}{"priority": "low", "time_to_assign_h": 72, "time_to_start_h": 168, "time_to_patch_h": 2160, "time_to_verify_h": 2184, "time_to_close_h": 2208},
 		},
-		"current_compliance": map[string]interface{}{
-			"critical": 100.0,
-			"high":     96.2,
-			"medium":   91.4,
-			"low":      88.6,
-		},
+		"current_compliance": currentCompliance,
 	})
 }
 
 // POST /api/vq/report
 func PostVQReport(c *gin.Context) {
+	createVQTables()
+	tid := tenantIDFromContext(c)
 	var body struct {
 		ReportType string `json:"report_type"`
 	}
@@ -580,32 +675,88 @@ func PostVQReport(c *gin.Context) {
 	case "executive":
 		title = "Executive Remediation Summary"
 	}
+
+	var totalActive, overdue, closedThisPeriod int
+	var slaCompliance, mttr float64
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND status != 'closed'`, tid).Scan(&totalActive)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND due_date < NOW() AND status NOT IN ('closed','verified')`, tid).Scan(&overdue)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=$1 AND status='closed' AND closed_at > NOW()-INTERVAL '30 days'`, tid).Scan(&closedThisPeriod)
+	database.DB.QueryRow(`SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (closed_at-created_at))/86400),0) FROM vq_items WHERE tenant_id=$1 AND status='closed' AND closed_at IS NOT NULL`, tid).Scan(&mttr)
+	if total := totalActive + closedThisPeriod; total > 0 {
+		slaCompliance = float64(total-overdue) / float64(total) * 100
+	} else {
+		slaCompliance = 100
+	}
+
+	type overdueRow struct {
+		QueueID     string `json:"queue_id"`
+		CVE         string `json:"cve"`
+		Asset       string `json:"asset"`
+		Team        string `json:"team"`
+		DaysOverdue int    `json:"days_overdue"`
+	}
+	overdueItems := []overdueRow{}
+	oRows, _ := database.DB.Query(`
+		SELECT queue_id, cve_id, asset_name, COALESCE(NULLIF(assigned_team,''),'Unassigned'), EXTRACT(EPOCH FROM (NOW()-due_date))/86400
+		FROM vq_items WHERE tenant_id=$1 AND due_date < NOW() AND status NOT IN ('closed','verified') ORDER BY due_date ASC LIMIT 10`, tid)
+	if oRows != nil {
+		defer oRows.Close()
+		for oRows.Next() {
+			var r overdueRow
+			var days float64
+			if oRows.Scan(&r.QueueID, &r.CVE, &r.Asset, &r.Team, &days) == nil {
+				r.DaysOverdue = int(days)
+				overdueItems = append(overdueItems, r)
+			}
+		}
+	}
+
+	prompt := fmt.Sprintf(`You are a vulnerability remediation reporting assistant. Write a %s based on these REAL metrics: %d active remediation tasks, %d overdue, %d closed in the last 30 days, %.1f%% SLA compliance, %.1f-day average time to remediate. Overdue items: %v. Respond as a JSON object with fields: executive_summary (2-3 sentences grounded only in these numbers, no invented history or comparisons), recommendations (a JSON array of up to 4 short actionable strings based only on the real data given — if there isn't enough data, say so instead of inventing findings).`,
+		title, totalActive, overdue, closedThisPeriod, slaCompliance, mttr, overdueItems)
+	var summary string
+	var recommendations []string
+	raw, err := services.CallLLM(prompt)
+	if err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		if totalActive == 0 {
+			summary = "No active remediation tasks have been recorded for this tenant."
+		} else {
+			summary = fmt.Sprintf("%d active remediation tasks, %d overdue. SLA compliance is %.1f%% with a mean time to remediate of %.1f days.", totalActive, overdue, slaCompliance, mttr)
+		}
+		recommendations = []string{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"title":            title + " — " + time.Now().Format("January 2006"),
-		"generated_at":     time.Now().Format(time.RFC3339),
-		"classification":   "CONFIDENTIAL — INTERNAL",
-		"executive_summary": "12 active remediation tasks across 5 teams. 2 items are overdue. SLA compliance is 94.2% this period. Mean time to remediate is 8.4 days, down from 12.1 days last month.",
-		"key_metrics": map[string]interface{}{
-			"total_active": 12, "overdue": 2, "closed_this_period": 18,
-			"sla_compliance": "94.2%", "mttr_days": 8.4,
+		"title":             title + " — " + time.Now().Format("January 2006"),
+		"generated_at":      time.Now().Format(time.RFC3339),
+		"classification":    "CONFIDENTIAL — INTERNAL",
+		"executive_summary": summary,
+		"key_metrics": gin.H{
+			"total_active":       totalActive,
+			"overdue":            overdue,
+			"closed_this_period": closedThisPeriod,
+			"sla_compliance":     fmt.Sprintf("%.1f%%", slaCompliance),
+			"mttr_days":          mttr,
 		},
-		"overdue_items": []interface{}{
-			map[string]interface{}{"queue_id": "VQ-2026-001", "cve": "CVE-2024-3400", "asset": "VPN-GW-01", "team": "Network Team", "days_overdue": 3},
-			map[string]interface{}{"queue_id": "VQ-2026-006", "cve": "CVE-2021-44228", "asset": "EKS-CLUSTER-01", "team": "DevOps Team", "days_overdue": 1},
-		},
-		"team_performance": []interface{}{
-			map[string]interface{}{"team": "Network Team", "closed": 2, "avg_days": 6.2, "sla_pct": 75},
-			map[string]interface{}{"team": "Windows Team", "closed": 3, "avg_days": 4.1, "sla_pct": 100},
-			map[string]interface{}{"team": "Linux Team", "closed": 1, "avg_days": 12.3, "sla_pct": 50},
-		},
-		"recommendations": []interface{}{
-			"Escalate VQ-2026-001 (CVE-2024-3400) to Network Team management — 3 days overdue",
-			"Schedule maintenance window for EKS-CLUSTER-01 Log4Shell remediation",
-			"Review SLA policy for Low severity findings — 88.6% compliance below target",
-			"Enable automatic assignment rules for Cloud Team findings",
-		},
+		"overdue_items":   overdueItems,
+		"recommendations": recommendations,
 	})
 }
-
-// unused import guard
-var _ = strconv.Itoa

@@ -181,6 +181,8 @@ func main() {
 	seedApprovalQueue(db)
 	log.Println("Seeding vulnerability management (vm_*)…")
 	seedVulnerabilityManagement(db)
+	log.Println("Seeding vulnerability remediation queue (vq_*)…")
+	seedVulnQueue(db)
 	log.Println("Demo seed complete.")
 }
 
@@ -8323,4 +8325,97 @@ func ifThen(cond bool, a, b string) string {
 		return a
 	}
 	return b
+}
+
+// seedVulnQueue seeds api/vuln_queue_enterprise.go's vq_* tables — the
+// remediation-workflow queue, distinct from vm_* (raw scan findings).
+func seedVulnQueue(db *sql.DB) {
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vq_items (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, queue_id TEXT NOT NULL, cve_id TEXT NOT NULL,
+		asset_name TEXT NOT NULL, asset_ip TEXT, asset_owner TEXT, business_unit TEXT,
+		priority TEXT DEFAULT 'medium', risk_score REAL DEFAULT 0, status TEXT DEFAULT 'unassigned',
+		assigned_team TEXT, assigned_to TEXT, due_date TIMESTAMPTZ, sla_hours INTEGER DEFAULT 168,
+		remediation_action TEXT, notes TEXT, blocker_type TEXT, blocker_notes TEXT,
+		verified_at TIMESTAMPTZ, closed_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(),
+		updated_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vq_exceptions (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, vq_item_id INTEGER, cve_id TEXT,
+		exception_type TEXT NOT NULL, reason TEXT NOT NULL, compensating_control TEXT, approver TEXT,
+		expiration_date TIMESTAMPTZ, review_schedule TEXT, status TEXT DEFAULT 'pending',
+		created_by TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`)
+	mustExec(db, `CREATE TABLE IF NOT EXISTS vq_dependencies (
+		id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, vq_item_id INTEGER NOT NULL,
+		blocker_type TEXT NOT NULL, notes TEXT, status TEXT DEFAULT 'open', created_at TIMESTAMPTZ DEFAULT NOW())`)
+
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM vq_items WHERE tenant_id=9999`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
+	now := time.Now()
+
+	items := []struct {
+		cve, asset, ip, owner, priority, team, assignee, status string
+		riskScore                                               float64
+		slaHours                                                int
+		createdDaysAgo                                          int
+		dueInHoursFromCreate                                    float64 // negative in effect if createdDaysAgo pushes it into the past
+		closedDaysAgo                                           int     // 0 = not closed
+	}{
+		{"CVE-2024-3400", "vpn-gw-01", "203.0.113.42", "network-team", "critical", "Network Team", "admin", "in_progress", 98.4, 24, 5, 24, 0},
+		{"CVE-2024-21887", "web-app-01", "203.0.113.55", "app-team", "critical", "DevOps Team", "", "unassigned", 91.2, 24, 14, 24, 0},
+		{"CVE-2021-44228", "web-app-01", "203.0.113.55", "app-team", "high", "DevOps Team", "admin", "blocked", 84.2, 168, 180, 168, 0},
+		{"CVE-2023-36025", "win-laptop-042", "10.0.9.12", "jsmith", "high", "Windows Team", "admin", "awaiting_verification", 61.3, 168, 40, 168, 0},
+		{"CVE-2024-26198", "db-prod-01", "10.0.5.20", "data-team", "medium", "Linux Team", "admin", "assigned", 55.0, 720, 10, 720, 0},
+		{"CVE-2022-1234", "db-prod-01", "10.0.5.20", "data-team", "medium", "Linux Team", "admin", "closed", 30.0, 720, 100, 720, 40},
+		{"CVE-2023-4863", "web-app-01", "203.0.113.55", "app-team", "high", "Cloud Team", "admin", "verified", 40.0, 168, 60, 168, 5},
+		{"CVE-2023-9999", "win-laptop-042", "10.0.9.12", "jsmith", "low", "Windows Team", "", "unassigned", 15.0, 2160, 20, 2160, 0},
+	}
+	itemIDs := []int{}
+	for i, it := range items {
+		createdAt := now.AddDate(0, 0, -it.createdDaysAgo)
+		dueDate := createdAt.Add(time.Duration(it.dueInHoursFromCreate) * time.Hour)
+		var closedAt interface{}
+		if it.closedDaysAgo > 0 {
+			closedAt = now.AddDate(0, 0, -it.closedDaysAgo)
+		}
+		var verifiedAt interface{}
+		if it.status == "verified" || it.status == "closed" {
+			verifiedAt = createdAt.Add(time.Duration(it.dueInHoursFromCreate*0.8) * time.Hour)
+		}
+		remediation := ""
+		if it.status == "closed" || it.status == "verified" {
+			remediation = "apply_patch"
+		}
+		var blockerType, blockerNotes interface{}
+		if it.status == "blocked" {
+			blockerType = "change_freeze"
+			blockerNotes = "Change freeze in effect until quarter-end; app owner sign-off required before patching production."
+		}
+		queueID := fmt.Sprintf("VQ-%d-%03d", now.Year(), i+1)
+		var id int
+		err := db.QueryRow(`
+			INSERT INTO vq_items (tenant_id,queue_id,cve_id,asset_name,asset_ip,asset_owner,priority,risk_score,status,assigned_team,assigned_to,due_date,sla_hours,remediation_action,blocker_type,blocker_notes,verified_at,closed_at,created_at,updated_at)
+			VALUES (9999,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$18)
+			RETURNING id`,
+			queueID, it.cve, it.asset, it.ip, it.owner, it.priority, it.riskScore, it.status, it.team, it.assignee,
+			dueDate, it.slaHours, remediation, blockerType, blockerNotes, verifiedAt, closedAt, createdAt,
+		).Scan(&id)
+		if err != nil {
+			log.Printf("vq_items: %v", err)
+			continue
+		}
+		itemIDs = append(itemIDs, id)
+		if it.status == "blocked" {
+			mustExec(db, `INSERT INTO vq_dependencies (tenant_id,vq_item_id,blocker_type,notes) VALUES (9999,$1,'change_freeze',$2)`,
+				id, "Change freeze in effect until quarter-end; app owner sign-off required before patching production.")
+		}
+	}
+
+	if len(itemIDs) > 7 {
+		mustExec(db, `INSERT INTO vq_exceptions (tenant_id,vq_item_id,cve_id,exception_type,reason,compensating_control,status,created_by,expiration_date) VALUES (9999,$1,'CVE-2023-9999','risk_acceptance','Low severity, no known exploitation, patch requires a maintenance window','EDR monitoring in place','pending','admin',$2)`,
+			itemIDs[7], now.AddDate(0, 3, 0))
+	}
+
+	log.Printf("VQ seed: %d items, 1 dependency, 1 exception", len(itemIDs))
 }

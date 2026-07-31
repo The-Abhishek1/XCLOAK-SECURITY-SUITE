@@ -205,37 +205,57 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
 
   const doAssign = async () => {
     if (!selected) return;
-    await vqAPI.assign(selected.id, assignForm);
-    setShowAssignForm(false);
-    onRefresh();
+    try {
+      await vqAPI.assign(selected.id, assignForm);
+      setShowAssignForm(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to assign');
+    }
   };
 
   const doAction = async () => {
     if (!selected) return;
-    await vqAPI.action(selected.id, actionForm);
-    setShowActionForm(false);
-    onRefresh();
+    try {
+      await vqAPI.action(selected.id, actionForm);
+      setShowActionForm(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record action');
+    }
   };
 
   const doVerify = async (pass: boolean) => {
     if (!selected) return;
-    await vqAPI.verify(selected.id, { pass, notes: '' });
-    onRefresh();
+    try {
+      await vqAPI.verify(selected.id, { pass, notes: '' });
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to record verification');
+    }
   };
 
   const doAddBlocker = async () => {
     if (!selected) return;
-    await vqAPI.addDependency(selected.id, blockerForm);
-    setShowBlocker(false);
-    loadDeps(selected.id);
-    onRefresh();
+    try {
+      await vqAPI.addDependency(selected.id, blockerForm);
+      setShowBlocker(false);
+      loadDeps(selected.id);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to add blocker');
+    }
   };
 
   const doBulk = async () => {
-    await vqAPI.bulk({ ids: [...selectedIds], ...bulkForm });
-    setSelectedIds(new Set());
-    setShowBulk(false);
-    onRefresh();
+    try {
+      await vqAPI.bulk({ ids: [...selectedIds], ...bulkForm });
+      setSelectedIds(new Set());
+      setShowBulk(false);
+      onRefresh();
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Bulk action failed');
+    }
   };
 
   return (
@@ -615,8 +635,8 @@ function QueueTab({ items, onRefresh, selected, onSelect }: {
 }
 
 // ─── Exceptions Tab ───────────────────────────────────────────────────────────
-function ExceptionsTab({ exceptions, onApprove, onDelete }: {
-  exceptions: any[]; onApprove: (id: number) => void; onDelete: (id: number) => void;
+function ExceptionsTab({ exceptions, onApprove, onDelete, onCreate }: {
+  exceptions: any[]; onApprove: (id: number) => void; onDelete: (id: number) => void; onCreate: (form: any) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ cve_id: '', exception_type: 'temporary', reason: '', compensating_control: '', review_schedule: 'monthly' });
@@ -661,7 +681,7 @@ function ExceptionsTab({ exceptions, onApprove, onDelete }: {
             </select>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <ActionButton variant="primary" onClick={async () => { await vqAPI.createException(form); setShowForm(false); }} style={{ fontSize: 12 }}>Submit</ActionButton>
+            <ActionButton variant="primary" onClick={() => { onCreate(form); setShowForm(false); }} style={{ fontSize: 12 }}>Submit</ActionButton>
             <ActionButton variant="ghost" onClick={() => setShowForm(false)} style={{ fontSize: 12 }}>Cancel</ActionButton>
           </div>
         </SectionCard>
@@ -744,8 +764,8 @@ function AnalyticsTab({ analytics, sla }: { analytics: any; sla: any }) {
 
       {analytics.top_delayed_assets?.length > 0 && (
         <SectionCard title="Top Delayed Assets">
-          {analytics.top_delayed_assets.map((a: any) => (
-            <div key={a.asset} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+          {analytics.top_delayed_assets.map((a: any, i: number) => (
+            <div key={`${a.asset}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
               <span style={{ fontFamily: 'monospace', fontWeight: 600, flex: 1 }}>{a.asset}</span>
               <span style={{ color: '#f97316' }}>{a.assigned_team}</span>
               <span style={{ color: '#ef4444', fontWeight: 700 }}>{a.overdue_days}d overdue</span>
@@ -917,7 +937,33 @@ export default function VulnQueuePage() {
         </div>
         <div style={{ display: tab === 'exceptions' ? 'block' : 'none' }}>
           {loaded.current['exceptions'] && (
-            <ExceptionsTab exceptions={exceptions} onApprove={async id => { await vqAPI.updateException(id, { status: 'approved' }); vqAPI.getExceptions().then(r => setExceptions(r.data || [])); }} onDelete={async id => { await vqAPI.deleteException(id); setExceptions(ex => ex.filter(e => e.id !== id)); }} />
+            <ExceptionsTab
+              exceptions={exceptions}
+              onApprove={async id => {
+                try {
+                  await vqAPI.updateException(id, { status: 'approved' });
+                  vqAPI.getExceptions().then(r => setExceptions(r.data || []));
+                } catch (err: any) {
+                  alert(err?.response?.data?.error || 'Failed to approve exception');
+                }
+              }}
+              onDelete={async id => {
+                try {
+                  await vqAPI.deleteException(id);
+                  setExceptions(ex => ex.filter(e => e.id !== id));
+                } catch (err: any) {
+                  alert(err?.response?.data?.error || 'Failed to delete exception');
+                }
+              }}
+              onCreate={async form => {
+                try {
+                  await vqAPI.createException(form);
+                  vqAPI.getExceptions().then(r => setExceptions(r.data || []));
+                } catch (err: any) {
+                  alert(err?.response?.data?.error || 'Failed to create exception');
+                }
+              }}
+            />
           )}
         </div>
         <div style={{ display: tab === 'analytics' ? 'block' : 'none' }}>
