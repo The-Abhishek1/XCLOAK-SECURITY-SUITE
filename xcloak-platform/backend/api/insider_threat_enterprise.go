@@ -239,13 +239,13 @@ func GetInsiderPolicies(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 
 	type Policy struct {
-		ID          int       `json:"id"`
-		Name        string    `json:"name"`
-		EventType   string    `json:"event_type"`
-		Threshold   int       `json:"threshold"`
-		Severity    string    `json:"severity"`
-		Enabled     bool      `json:"enabled"`
-		CreatedAt   time.Time `json:"created_at"`
+		ID        int       `json:"id"`
+		Name      string    `json:"name"`
+		EventType string    `json:"event_type"`
+		Threshold int       `json:"threshold"`
+		Severity  string    `json:"severity"`
+		Enabled   bool      `json:"enabled"`
+		CreatedAt time.Time `json:"created_at"`
 	}
 	policies := []Policy{}
 	if rows, err := database.DB.Query(`SELECT id,name,event_type,threshold,severity,enabled,created_at FROM insider_threat_policies WHERE tenant_id=$1 ORDER BY created_at DESC`, tenantID); err == nil {
@@ -302,11 +302,11 @@ func GetInsiderWatchlist(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 
 	type WatchEntry struct {
-		Username  string    `json:"username"`
-		Category  string    `json:"category"`
-		AddedAt   time.Time `json:"added_at"`
-		AddedBy   string    `json:"added_by"`
-		Score     int       `json:"score"`
+		Username string    `json:"username"`
+		Category string    `json:"category"`
+		AddedAt  time.Time `json:"added_at"`
+		AddedBy  string    `json:"added_by"`
+		Score    int       `json:"score"`
 	}
 	entries := []WatchEntry{}
 	if rows, err := database.DB.Query(`SELECT w.username,w.category,w.added_at,w.added_by,COALESCE(s.score,0) FROM ueba_watchlist w LEFT JOIN insider_threat_scores s ON s.username=w.username AND s.tenant_id=w.tenant_id AND s.score_date=CURRENT_DATE WHERE w.tenant_id=$1 ORDER BY COALESCE(s.score,0) DESC`, tenantID); err == nil {
@@ -439,7 +439,13 @@ func InsiderThreatResponseAction(c *gin.Context) {
 		return
 	}
 
-	database.DB.Exec(`UPDATE sessions SET revoked=true WHERE tenant_id=$1 AND username=$2`, tenantID, username)
+	// Revokes in the DB and blacklists each session's real token hash in
+	// Redis — a DB-only revoke leaves those sessions' JWTs working until
+	// they naturally expire (previously the only step taken here).
+	revoked, _ := repositories.RevokeSessionsByUsername(tenantID, username)
+	for _, s := range revoked {
+		services.RevokeTokenHash(s.Hash, s.ExpiresAt)
+	}
 	result := fmt.Sprintf("All active sessions revoked for %s", username)
 
 	database.DB.Exec(`INSERT INTO ueba_events (tenant_id,username,event_type,severity,description,source_ip,detected_at) VALUES ($1,$2,'analyst_action','info',$3,'',$4)`,

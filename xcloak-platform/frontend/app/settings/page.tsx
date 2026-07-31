@@ -201,29 +201,43 @@ export default function SettingsEnterprise() {
   }
 
   // ── savers ─────────────────────────────────────────────────────────────────
+  function fail(err: any, fallback: string) {
+    flash(err?.response?.data?.error || fallback);
+  }
+
   async function saveOrg() {
     setSaving(true);
-    try { await stteAPI.updateOrg(org); flash('Organization settings saved.'); } finally { setSaving(false); }
+    try { await stteAPI.updateOrg(org); flash('Organization settings saved.'); }
+    catch (err: any) { fail(err, 'Failed to save organization settings.'); }
+    finally { setSaving(false); }
   }
 
   async function saveSecPolicy() {
     setSaving(true);
-    try { await securityPolicyAPI.update(secPolicy); flash('Security policy saved.'); } finally { setSaving(false); }
+    try { await securityPolicyAPI.update(secPolicy); flash('Security policy saved.'); }
+    catch (err: any) { fail(err, 'Failed to save security policy.'); }
+    finally { setSaving(false); }
   }
 
   async function saveAgentCfg() {
     setSaving(true);
-    try { await stteAPI.updateAgentsConfig(agentCfg); flash('Agent configuration saved.'); } finally { setSaving(false); }
+    try { await stteAPI.updateAgentsConfig(agentCfg); flash('Agent configuration saved.'); }
+    catch (err: any) { fail(err, 'Failed to save agent configuration.'); }
+    finally { setSaving(false); }
   }
 
   async function saveAIGuardrails() {
     setSaving(true);
-    try { await stteAPI.updateAIConfig(aiGuard); flash('AI guardrails saved.'); } finally { setSaving(false); }
+    try { await stteAPI.updateAIConfig(aiGuard); flash('AI guardrails saved.'); }
+    catch (err: any) { fail(err, 'Failed to save AI guardrails.'); }
+    finally { setSaving(false); }
   }
 
   async function saveBackupCfg() {
     setSaving(true);
-    try { await stteAPI.updateBackupConfig(backupCfg); flash('Backup configuration saved.'); } finally { setSaving(false); }
+    try { await stteAPI.updateBackupConfig(backupCfg); flash('Backup configuration saved.'); }
+    catch (err: any) { fail(err, 'Failed to save backup configuration.'); }
+    finally { setSaving(false); }
   }
 
   async function doInvite() {
@@ -233,7 +247,8 @@ export default function SettingsEnterprise() {
       await usersAPI.invite(inviteUser, inviteEmail, inviteRole);
       setInviteUser(''); setInviteEmail('');
       flash('Invitation sent.'); loadAll();
-    } finally { setInviting(false); }
+    } catch (err: any) { fail(err, 'Failed to send invitation.'); }
+    finally { setInviting(false); }
   }
 
   async function createKey() {
@@ -242,7 +257,7 @@ export default function SettingsEnterprise() {
       const res = await apiKeysAPI.create(keyLabel, keyRole);
       setNewKey(res?.data?.key ?? res?.data?.raw_key ?? '');
       setKeyLabel(''); loadAll();
-    } catch { flash('Error creating API key.'); }
+    } catch (err: any) { fail(err, 'Error creating API key.'); }
   }
 
   async function activateLicense() {
@@ -252,19 +267,22 @@ export default function SettingsEnterprise() {
       const res = await stteAPI.activateLicense({ license_key: licKey });
       flash(`License activated — tier: ${res?.data?.tier ?? 'enterprise'}`);
       setLicKey(''); loadAll();
-    } finally { setActivating(false); }
+    } catch (err: any) { fail(err, 'License activation failed.'); }
+    finally { setActivating(false); }
   }
 
   async function triggerBackup() {
     try {
       await stteAPI.triggerBackup();
-      flash('Backup started.'); loadAll();
-    } catch { flash('Error starting backup.'); }
+      flash('Backup completed.'); loadAll();
+    } catch (err: any) { fail(err, 'Backup failed.'); }
   }
 
   async function checkUpdates() {
-    const res = await stteAPI.checkUpdates();
-    flash(res?.data?.message ?? 'Update check complete.');
+    try {
+      const res = await stteAPI.checkUpdates();
+      flash(res?.data?.message ?? 'Update check complete.');
+    } catch (err: any) { fail(err, 'Failed to check for updates.'); }
   }
 
   async function testIntegration(name: string) {
@@ -387,7 +405,7 @@ export default function SettingsEnterprise() {
                         { key: 'email', header: 'Email', render: (u: any) => <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{u.email}</span> },
                         { key: 'role', header: 'Role', render: (u: any) => (
                           <select className="g-input" value={u.role} style={{ fontSize: 12, padding: '2px 6px' }}
-                            onChange={e => usersAPI.updateRole(u.id, e.target.value).then(loadAll)}>
+                            onChange={e => usersAPI.updateRole(u.id, e.target.value).then(loadAll).catch((err: any) => fail(err, 'Failed to update role.'))}>
                             <option value="viewer">viewer</option>
                             <option value="analyst">analyst</option>
                             <option value="manager">manager</option>
@@ -398,12 +416,12 @@ export default function SettingsEnterprise() {
                         { key: 'actions', header: 'Actions', render: (u: any) => (
                           <div style={{ display: 'flex', gap: 6 }}>
                             <ActionButton variant="ghost" icon={u.is_active ? UserX : UserCheck} style={{ fontSize: 11, padding: '4px 10px' }}
-                              onClick={() => usersAPI.toggle(u.id, !u.is_active).then(loadAll)}>
+                              onClick={() => usersAPI.toggle(u.id, !u.is_active).then(loadAll).catch((err: any) => fail(err, 'Failed to update user status.'))}>
                               {u.is_active ? 'Deactivate' : 'Activate'}
                             </ActionButton>
                             {u.username !== user?.username && (
                               <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
-                                onClick={() => { if (window.confirm(`Delete ${u.username}?`)) usersAPI.delete(u.id).then(loadAll); }}>
+                                onClick={() => { if (window.confirm(`Delete ${u.username}?`)) usersAPI.delete(u.id).then(loadAll).catch((err: any) => fail(err, 'Failed to delete user.')); }}>
                                 Delete
                               </ActionButton>
                             )}
@@ -432,7 +450,7 @@ export default function SettingsEnterprise() {
                         ) },
                         { key: 'actions', header: 'Actions', render: (r: any) => (
                           <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => { if (window.confirm(`Delete role ${r.name}?`)) customRolesAPI.delete(r.id).then(loadAll); }}>
+                            onClick={() => { if (window.confirm(`Delete role ${r.name}?`)) customRolesAPI.delete(r.id).then(loadAll).catch((err: any) => fail(err, 'Failed to delete role.')); }}>
                             Delete
                           </ActionButton>
                         ) },
@@ -458,7 +476,7 @@ export default function SettingsEnterprise() {
                       </Field>
                       <div style={{ borderBottom: 'none' }}>
                         <Field label="Max Concurrent Sessions" hint="Maximum active sessions per user account">
-                          <input className="g-input" type="number" min={1} max={20} value={secPolicy.max_sessions ?? 5} onChange={e => setSecPolicy({ ...secPolicy, max_sessions: parseInt(e.target.value) })} style={{ width: 100 }} />
+                          <input className="g-input" type="number" min={1} max={20} value={secPolicy.max_concurrent_sessions ?? 10} onChange={e => setSecPolicy({ ...secPolicy, max_concurrent_sessions: parseInt(e.target.value) })} style={{ width: 100 }} />
                         </Field>
                       </div>
                     </div>
@@ -507,7 +525,7 @@ export default function SettingsEnterprise() {
                         { key: 'created_at', header: 'Created', render: (s: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.created_at ? new Date(s.created_at).toLocaleString() : ''}</span> },
                         { key: 'actions', header: 'Actions', render: (s: any) => (
                           <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => sessionsAPI.revoke(s.id).then(loadAll)}>Revoke</ActionButton>
+                            onClick={() => sessionsAPI.revoke(s.id).then(loadAll).catch((err: any) => fail(err, 'Failed to revoke session.'))}>Revoke</ActionButton>
                         ) },
                       ]}
                     />
@@ -625,11 +643,11 @@ export default function SettingsEnterprise() {
                         { key: 'min_severity', header: 'Severity', render: (r: any) => r.min_severity ? pill(r.min_severity) : null },
                         { key: 'enabled', header: 'Status', render: (r: any) => (
                           <Toggle value={r.enabled ?? false}
-                            onChange={(v) => notificationsAPI.toggleEmailRule(r.id, v).then(loadAll)} />
+                            onChange={(v) => notificationsAPI.toggleEmailRule(r.id, v).then(loadAll).catch((err: any) => fail(err, 'Failed to update rule.'))} />
                         ) },
                         { key: 'actions', header: 'Actions', render: (r: any) => (
                           <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => { if (window.confirm('Delete rule?')) notificationsAPI.deleteEmailRule(r.id).then(loadAll); }}>
+                            onClick={() => { if (window.confirm('Delete rule?')) notificationsAPI.deleteEmailRule(r.id).then(loadAll).catch((err: any) => fail(err, 'Failed to delete rule.')); }}>
                             Delete
                           </ActionButton>
                         ) },
@@ -664,9 +682,14 @@ export default function SettingsEnterprise() {
                           )}
                           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                             <input className="g-input" placeholder="API Key" type="password" style={{ flex: 1, fontSize: 12 }}
-                              onChange={e => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, api_key: e.target.value, enabled: true })} />
+                              onBlur={e => {
+                                if (!e.target.value) return;
+                                stteAPI.updateAIConfig({ provider: p.provider, model: p.model, api_key: e.target.value, enabled: true })
+                                  .then(() => { flash(`${p.label} API key saved.`); loadAll(); })
+                                  .catch((err: any) => fail(err, `Failed to save ${p.label} API key.`));
+                              }} />
                             <ActionButton variant="ghost" icon={Power} style={{ fontSize: 11 }}
-                              onClick={() => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, enabled: !(existing?.enabled) }).then(loadAll)}>
+                              onClick={() => stteAPI.updateAIConfig({ provider: p.provider, model: p.model, enabled: !(existing?.enabled) }).then(loadAll).catch((err: any) => fail(err, 'Failed to update provider.'))}>
                               {existing?.enabled ? 'Disable' : 'Enable'}
                             </ActionButton>
                           </div>
@@ -730,6 +753,9 @@ export default function SettingsEnterprise() {
                 <div style={{ maxWidth: 700 }}>
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Usage Limits</h2>
                   <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Set per-role message limits and monthly token budgets.</p>
+                  <p style={{ color: 'var(--text-3)', fontSize: 12, marginTop: -12, marginBottom: 'var(--space-4)', fontStyle: 'italic' }}>
+                    Example values for illustration — no per-role usage metering exists yet, so these are not live-configured or enforced.
+                  </p>
                   <SectionCard padded={false}>
                     <DataTable<any>
                       rows={[
@@ -747,7 +773,7 @@ export default function SettingsEnterprise() {
                       ]}
                     />
                   </SectionCard>
-                  <SectionCard title="Model Routing by Mode" padded={false} className="mt-4">
+                  <SectionCard title="Model Routing by Mode" subtitle="Example values — no per-mode fallback routing exists yet" padded={false} className="mt-4">
                     <DataTable<any>
                       rows={[
                         { mode: 'General Chat',          primary: 'claude-sonnet-4-6',  fallback: 'gpt-4o-mini' },
@@ -824,7 +850,10 @@ export default function SettingsEnterprise() {
                           </div>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                             {pill(b.status)}
-                            <ActionButton variant="ghost" icon={RotateCcw} style={{ fontSize: 11, padding: '4px 10px' }}>Restore</ActionButton>
+                            <ActionButton variant="ghost" icon={RotateCcw} style={{ fontSize: 11, padding: '4px 10px' }}
+                              onClick={() => alert('Restore is not available: running pg_restore against the live shared database from this UI would be destructive and is not supported. Contact an operator to restore from a backup file directly.')}>
+                              Restore
+                            </ActionButton>
                           </div>
                         </div>
                       ))}
@@ -889,7 +918,7 @@ export default function SettingsEnterprise() {
                         { key: 'expires_at', header: 'Expires', render: (k: any) => <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never'}</span> },
                         { key: 'actions', header: 'Actions', render: (k: any) => (
                           <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => { if (window.confirm('Revoke this API key?')) apiKeysAPI.revoke(k.id).then(loadAll); }}>
+                            onClick={() => { if (window.confirm('Revoke this API key?')) apiKeysAPI.revoke(k.id).then(loadAll).catch((err: any) => fail(err, 'Failed to revoke API key.')); }}>
                             Revoke
                           </ActionButton>
                         ) },
@@ -897,7 +926,7 @@ export default function SettingsEnterprise() {
                     />
                   </SectionCard>
 
-                  <SectionCard title="Rate Limits" padded={false}>
+                  <SectionCard title="Rate Limits" subtitle="Example values — only Authentication (10/min) and a single general API tier (120/min) are actually enforced; the per-group breakdown below is illustrative" padded={false}>
                     <DataTable<any>
                       rows={[
                         { group: 'Authentication', limit: 10, burst: 20, auth: false },
@@ -928,7 +957,7 @@ export default function SettingsEnterprise() {
                   <SectionCard className="mb-5">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--text-1)' }}>v{d.updates?.current_version ?? '2.14.3'}</div>
+                        <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--text-1)' }}>v{d.updates?.current_version ?? '1.0.0'}</div>
                         <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>Current Version — {pill(d.updates?.channel ?? 'stable')}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>

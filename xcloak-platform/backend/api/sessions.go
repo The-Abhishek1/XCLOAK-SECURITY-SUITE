@@ -40,6 +40,9 @@ func GetAllSessions(c *gin.Context) {
 }
 
 // RevokeSession — DELETE /api/sessions/:id
+// Marks the session revoked in the DB and blacklists its real token hash in
+// Redis (the actual per-request enforcement point in middleware.RequireAuth)
+// — a DB-only revoke leaves the session's live JWT working until it expires.
 func RevokeSession(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 	id, err := strconv.Atoi(c.Param("id"))
@@ -47,9 +50,13 @@ func RevokeSession(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid id"})
 		return
 	}
-	if err := repositories.RevokeSessionByID(id, tenantID); err != nil {
+	hash, expiresAt, err := repositories.RevokeSessionByID(id, tenantID)
+	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
+	}
+	if hash != "" {
+		services.RevokeTokenHash(hash, expiresAt)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "session revoked"})
 }
@@ -80,13 +87,30 @@ func UpdateSecurityPolicy(c *gin.Context) {
 	if body.MaxConcurrentSessions < 1 {
 		body.MaxConcurrentSessions = 1
 	}
+	if body.MinPasswordLength < 8 {
+		body.MinPasswordLength = 8
+	}
+	if body.MaxFailedLogins < 3 {
+		body.MaxFailedLogins = 3
+	}
+	if body.LockoutDurationMins < 1 {
+		body.LockoutDurationMins = 1
+	}
+	if body.PasswordExpiryDays < 0 {
+		body.PasswordExpiryDays = 0
+	}
+	if _, err := services.ParseIPAllowlist(body.IPAllowlist); err != nil {
+		c.JSON(400, gin.H{"error": "invalid IP allowlist: " + err.Error()})
+		return
+	}
 	if err := repositories.UpsertSecurityPolicy(body); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 	username, _ := c.Get("username")
-	detail := fmt.Sprintf("session_timeout=%dm max_sessions=%d mfa_required=%v",
-		body.SessionTimeoutMins, body.MaxConcurrentSessions, body.MFARequired)
+	detail := fmt.Sprintf("session_timeout=%dm max_sessions=%d mfa_required=%v min_pwd_len=%d max_failed_logins=%d lockout=%dm",
+		body.SessionTimeoutMins, body.MaxConcurrentSessions, body.MFARequired,
+		body.MinPasswordLength, body.MaxFailedLogins, body.LockoutDurationMins)
 	services.LogEvent("SECURITY_POLICY_UPDATE", detail, fmt.Sprintf("%v", username))
 	c.JSON(http.StatusOK, gin.H{"message": "security policy updated"})
 }
@@ -133,6 +157,20 @@ func CreateSessionOnLogin(tokenStr, username, ip, ua string, userID, tenantID in
 		TokenHash: tokenStr,
 		ExpiresAt: expiresAt,
 	})
+
+	// Enforce the tenant's max_concurrent_sessions policy — previously this
+	// was a real, saved, displayed security policy field with zero code
+	// path anywhere that ever called the (otherwise correctly-written)
+	// enforcement function. Revoked-in-DB sessions are also blacklisted in
+	// Redis so their JWTs stop working immediately, not just at natural
+	// expiry.
+	policy, err := repositories.GetSecurityPolicy(tenantID)
+	if err == nil && policy.MaxConcurrentSessions > 0 {
+		revoked, _ := repositories.EnforceConcurrentSessionLimit(tenantID, userID, policy.MaxConcurrentSessions)
+		for _, s := range revoked {
+			services.RevokeTokenHash(s.Hash, s.ExpiresAt)
+		}
+	}
 }
 
 // StartSessionPurger removes expired sessions once per day.

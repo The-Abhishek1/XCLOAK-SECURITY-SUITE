@@ -19,9 +19,9 @@ func GetUEBAAnalytics(c *gin.Context) {
 
 	// High-risk users (score >= 60)
 	type RiskRow struct {
-		Username  string  `json:"username"`
-		Source    string  `json:"source"`
-		RiskScore int     `json:"risk_score"`
+		Username  string   `json:"username"`
+		Source    string   `json:"source"`
+		RiskScore int      `json:"risk_score"`
 		Flags     []string `json:"flags"`
 	}
 	highRisk := []RiskRow{}
@@ -116,13 +116,13 @@ func GetUEBAAnalytics(c *gin.Context) {
 	database.DB.QueryRow(`SELECT COALESCE(AVG(risk_score),0) FROM user_risk_profiles WHERE tenant_id=$1`, tenantID).Scan(&avgScore)
 
 	c.JSON(http.StatusOK, gin.H{
-		"high_risk_users":       highRisk,
-		"top_anomalies":         topAnomalies,
-		"risk_distribution":     buckets,
-		"trend":                 trend,
-		"total_users":           totalUsers,
-		"total_events_7d":       totalEvents,
-		"insider_threat_score":  int(avgScore),
+		"high_risk_users":      highRisk,
+		"top_anomalies":        topAnomalies,
+		"risk_distribution":    buckets,
+		"trend":                trend,
+		"total_users":          totalUsers,
+		"total_events_7d":      totalEvents,
+		"insider_threat_score": int(avgScore),
 	})
 }
 
@@ -221,13 +221,13 @@ func GetUEBAPeerComparison(c *gin.Context) {
 
 	// Aggregate stats for all users in tenant (peer group = all)
 	type PeerStats struct {
-		AvgRiskScore          float64 `json:"avg_risk_score"`
-		AvgTotalEvents        float64 `json:"avg_total_events"`
-		AvgFailedLogins       float64 `json:"avg_failed_logins"`
-		AvgOffHours           float64 `json:"avg_off_hours"`
-		AvgUniqueIPs          float64 `json:"avg_unique_ips"`
-		AvgPrivEscalations    float64 `json:"avg_priv_escalations"`
-		TotalPeers            int     `json:"total_peers"`
+		AvgRiskScore       float64 `json:"avg_risk_score"`
+		AvgTotalEvents     float64 `json:"avg_total_events"`
+		AvgFailedLogins    float64 `json:"avg_failed_logins"`
+		AvgOffHours        float64 `json:"avg_off_hours"`
+		AvgUniqueIPs       float64 `json:"avg_unique_ips"`
+		AvgPrivEscalations float64 `json:"avg_priv_escalations"`
+		TotalPeers         int     `json:"total_peers"`
 	}
 	var ps PeerStats
 	database.DB.QueryRow(`
@@ -245,12 +245,12 @@ func GetUEBAPeerComparison(c *gin.Context) {
 
 	// User's actual stats
 	type UserSnap struct {
-		RiskScore         int `json:"risk_score"`
-		TotalEvents       int `json:"total_events"`
-		FailedLogins      int `json:"failed_logins"`
-		OffHoursEvents    int `json:"off_hours_events"`
-		UniqueIPs         int `json:"unique_ips"`
-		PrivEscalations   int `json:"privilege_escalations"`
+		RiskScore       int `json:"risk_score"`
+		TotalEvents     int `json:"total_events"`
+		FailedLogins    int `json:"failed_logins"`
+		OffHoursEvents  int `json:"off_hours_events"`
+		UniqueIPs       int `json:"unique_ips"`
+		PrivEscalations int `json:"privilege_escalations"`
 	}
 	var us UserSnap
 	database.DB.QueryRow(`
@@ -469,8 +469,13 @@ func UEBAResponseAction(c *gin.Context) {
 		return
 	}
 
-	database.DB.Exec(
-		`UPDATE sessions SET revoked=true WHERE tenant_id=$1 AND username=$2`, tenantID, username)
+	// Revokes in the DB and blacklists each session's real token hash in
+	// Redis — a DB-only revoke leaves those sessions' JWTs working until
+	// they naturally expire (previously the only step taken here).
+	revoked, _ := repositories.RevokeSessionsByUsername(tenantID, username)
+	for _, s := range revoked {
+		services.RevokeTokenHash(s.Hash, s.ExpiresAt)
+	}
 	result := fmt.Sprintf("All sessions for %s revoked", username)
 
 	// Log as UEBA event

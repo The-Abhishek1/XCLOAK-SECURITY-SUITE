@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"xcloak-platform/auth"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -42,6 +43,11 @@ func Logout(c *gin.Context) {
 	}
 
 	services.RevokeToken(tokenString, expiry)
+	// Also mark the DB session row revoked — previously only the Redis
+	// blacklist was updated on logout, so a logged-out session (correctly
+	// unable to make API calls) kept showing as "active" in Settings'
+	// Active Sessions list until it naturally expired.
+	repositories.RevokeSessionByHash(tokenString)
 	clearAuthCookies(c)
 
 	username, _ := c.Get("username")

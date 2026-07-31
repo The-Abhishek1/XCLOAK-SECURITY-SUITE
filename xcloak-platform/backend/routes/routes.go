@@ -1438,19 +1438,25 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/mdme/audit", middleware.RequireAuth(), api.GetMDMEAudit)
 
 	// ── Settings Enterprise (/api/stte/) ───────────────────────────────────
+	// Mutating routes require admin — previously every /api/stte/* route was
+	// RequireAuth()-only, so any authenticated user of any role (including
+	// viewer) could change org settings, activate a license, or trigger a
+	// full database backup. Read routes stay auth-only, matching this
+	// codebase's existing convention elsewhere (e.g. GetSecurityPolicy vs.
+	// UpdateSecurityPolicy in api/sessions.go).
 	router.GET("/api/stte/org", middleware.RequireAuth(), api.GetSTTEOrg)
-	router.PATCH("/api/stte/org", middleware.RequireAuth(), api.PatchSTTEOrg)
+	router.PATCH("/api/stte/org", middleware.RequireAuth(), middleware.RequireRole("admin"), api.PatchSTTEOrg)
 	router.GET("/api/stte/ai", middleware.RequireAuth(), api.GetSTTEAIConfig)
-	router.PATCH("/api/stte/ai", middleware.RequireAuth(), api.PatchSTTEAIConfig)
+	router.PATCH("/api/stte/ai", middleware.RequireAuth(), middleware.RequireRole("admin"), api.PatchSTTEAIConfig)
 	router.GET("/api/stte/backups", middleware.RequireAuth(), api.GetSTTEBackups)
-	router.POST("/api/stte/backups/trigger", middleware.RequireAuth(), api.PostSTTEBackupTrigger)
-	router.PATCH("/api/stte/backups/config", middleware.RequireAuth(), api.PatchSTTEBackupConfig)
+	router.POST("/api/stte/backups/trigger", middleware.RequireAuth(), middleware.RequireRole("admin"), api.PostSTTEBackupTrigger)
+	router.PATCH("/api/stte/backups/config", middleware.RequireAuth(), middleware.RequireRole("admin"), api.PatchSTTEBackupConfig)
 	router.GET("/api/stte/updates", middleware.RequireAuth(), api.GetSTTEUpdates)
 	router.POST("/api/stte/updates/check", middleware.RequireAuth(), api.PostSTTECheckUpdates)
 	router.GET("/api/stte/license", middleware.RequireAuth(), api.GetSTTELicense)
-	router.POST("/api/stte/license/activate", middleware.RequireAuth(), api.PostSTTELicenseActivate)
+	router.POST("/api/stte/license/activate", middleware.RequireAuth(), middleware.RequireRole("admin"), api.PostSTTELicenseActivate)
 	router.GET("/api/stte/agents-config", middleware.RequireAuth(), api.GetSTTEAgentsConfig)
-	router.PATCH("/api/stte/agents-config", middleware.RequireAuth(), api.PatchSTTEAgentsConfig)
+	router.PATCH("/api/stte/agents-config", middleware.RequireAuth(), middleware.RequireRole("admin"), api.PatchSTTEAgentsConfig)
 	router.GET("/api/stte/audit", middleware.RequireAuth(), api.GetSTTEAudit)
 
 	// ── AI Assistant Enterprise (/api/aia/) ────────────────────────────────

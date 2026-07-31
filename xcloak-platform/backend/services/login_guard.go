@@ -5,18 +5,30 @@ import (
 	"time"
 )
 
+// loginFailWindow is fixed (not tenant-configurable — Settings only exposes
+// the failure threshold and lockout duration, not this counting window).
+const loginFailWindow = 15 * time.Minute
+
+// defaultLoginFailLimit/defaultLoginLockMins back the legacy no-tenant call
+// path (RecordLoginFailure/IsUsernameLocked without a policy) so any
+// existing caller that hasn't been updated keeps its original behavior.
 const (
-	loginFailWindow = 15 * time.Minute
-	loginLockWindow = 15 * time.Minute
-	loginFailLimit  = 5
+	defaultLoginFailLimit = 5
+	defaultLoginLockMins  = 15
 )
 
 // RecordLoginFailure increments the per-username failed-attempt counter.
-// After loginFailLimit failures within loginFailWindow the account is locked.
-// Failures in Redis are non-fatal — if Redis is unavailable the counter is
-// skipped and lockout is not enforced (fail-open to avoid locking every user
-// out when Redis is down).
-func RecordLoginFailure(username string) {
+// After maxFails failures within loginFailWindow the account is locked for
+// lockMins. Failures in Redis are non-fatal — if Redis is unavailable the
+// counter is skipped and lockout is not enforced (fail-open to avoid
+// locking every user out when Redis is down).
+func RecordLoginFailure(username string, maxFails, lockMins int) {
+	if maxFails <= 0 {
+		maxFails = defaultLoginFailLimit
+	}
+	if lockMins <= 0 {
+		lockMins = defaultLoginLockMins
+	}
 	ctx := context.Background()
 	failKey := "login:fail:" + username
 	lockKey := "login:locked:" + username
@@ -29,8 +41,8 @@ func RecordLoginFailure(username string) {
 	// the window by spreading attempts across the TTL boundary.
 	RDB.Expire(ctx, failKey, loginFailWindow)
 
-	if count >= loginFailLimit {
-		RDB.Set(ctx, lockKey, "1", loginLockWindow)
+	if count >= int64(maxFails) {
+		RDB.Set(ctx, lockKey, "1", time.Duration(lockMins)*time.Minute)
 	}
 }
 

@@ -61,5 +61,12 @@ type TenantSecurityPolicy struct {
 	SessionTimeoutMins    int       `json:"session_timeout_mins"`
 	MaxConcurrentSessions int       `json:"max_concurrent_sessions"`
 	MFARequired           bool      `json:"mfa_required"`
+	MinPasswordLength     int       `json:"min_password_length"`
+	RequireSpecialChars   bool      `json:"require_special_chars"`
+	RequireNumbers        bool      `json:"require_numbers"`
+	PasswordExpiryDays    int       `json:"password_expiry_days"`
+	MaxFailedLogins       int       `json:"max_failed_logins"`
+	LockoutDurationMins   int       `json:"lockout_duration_mins"`
+	IPAllowlist           string    `json:"ip_allowlist"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }

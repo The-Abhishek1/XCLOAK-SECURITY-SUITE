@@ -5,10 +5,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/auth"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -136,6 +138,33 @@ func TestRequireAuth_RejectsQueryParamToken(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("?token= query param should be rejected, got %d (want 401)", w.Code)
+	}
+}
+
+// TestRequireAuth_RejectsHashRevokedSession exercises the admin-initiated
+// revocation path (Settings' "Revoke Session", force_logout,
+// concurrent-session-limit enforcement) — these never have the raw JWT on
+// hand, only its sha256 hash (sessions.token_hash), so they blacklist by
+// hash via services.RevokeTokenHash rather than the raw-token path
+// services.RevokeToken (self-logout) uses. A valid token must be accepted
+// before revocation and rejected immediately after — without needing the
+// token to expire naturally.
+func TestRequireAuth_RejectsHashRevokedSession(t *testing.T) {
+	tokenStr, err := auth.GenerateJWT(4, "dana", "analyst", 1, false)
+	if err != nil {
+		t.Fatalf("GenerateJWT: %v", err)
+	}
+
+	if w := runRequireAuth("Bearer " + tokenStr); w.Code != http.StatusOK {
+		t.Fatalf("before revocation: status = %d, want 200", w.Code)
+	}
+
+	hash := repositories.HashToken(tokenStr)
+	services.RevokeTokenHash(hash, time.Now().Add(time.Hour))
+
+	w := runRequireAuth("Bearer " + tokenStr)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("after revocation: status = %d, want 401", w.Code)
 	}
 }
 

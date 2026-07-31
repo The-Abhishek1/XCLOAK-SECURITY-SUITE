@@ -13,13 +13,18 @@ import (
 	"xcloak-platform/repositories"
 )
 
-
-// ValidatePasswordComplexity returns an error when a password fails minimum
-// requirements: ≥8 chars, at least one uppercase, lowercase, digit, and
-// special character. Call this at every registration and password-reset path.
-func ValidatePasswordComplexity(password string) error {
-	if len(password) < 8 {
-		return errors.New("password must be at least 8 characters")
+// ValidatePasswordComplexity returns an error when a password fails a
+// tenant's configured requirements (Settings' Authentication page —
+// min_password_length/require_special_chars/require_numbers). Uppercase and
+// lowercase are always required regardless of policy; length, digit, and
+// special-character requirements are tenant-configurable.
+func ValidatePasswordComplexity(password string, policy models.TenantSecurityPolicy) error {
+	minLen := policy.MinPasswordLength
+	if minLen < 8 {
+		minLen = 8
+	}
+	if len(password) < minLen {
+		return fmt.Errorf("password must be at least %d characters", minLen)
 	}
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, ch := range password {
@@ -34,8 +39,14 @@ func ValidatePasswordComplexity(password string) error {
 			hasSpecial = true
 		}
 	}
-	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
-		return errors.New("password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character")
+	if !hasUpper || !hasLower {
+		return errors.New("password must contain at least one uppercase letter and one lowercase letter")
+	}
+	if policy.RequireNumbers && !hasDigit {
+		return errors.New("password must contain at least one digit")
+	}
+	if policy.RequireSpecialChars && !hasSpecial {
+		return errors.New("password must contain at least one special character")
 	}
 	return nil
 }
@@ -115,9 +126,10 @@ func LoginUser(username, password string) (string, bool, error) {
 // ChangePassword updates a user's password after verifying the current one.
 func ChangePassword(userID int, currentPassword, newPassword string) error {
 	var hash string
+	var tenantID int
 	err := database.DB.QueryRow(
-		`SELECT password_hash FROM users WHERE id=$1`, userID,
-	).Scan(&hash)
+		`SELECT password_hash, tenant_id FROM users WHERE id=$1`, userID,
+	).Scan(&hash, &tenantID)
 	if err != nil {
 		return errors.New("user not found")
 	}
@@ -126,7 +138,8 @@ func ChangePassword(userID int, currentPassword, newPassword string) error {
 		return errors.New("current password is incorrect")
 	}
 
-	if err := ValidatePasswordComplexity(newPassword); err != nil {
+	policy, _ := repositories.GetSecurityPolicy(tenantID)
+	if err := ValidatePasswordComplexity(newPassword, policy); err != nil {
 		return err
 	}
 
@@ -136,7 +149,7 @@ func ChangePassword(userID int, currentPassword, newPassword string) error {
 	}
 
 	_, err = database.DB.Exec(
-		`UPDATE users SET password_hash=$1 WHERE id=$2`, newHash, userID,
+		`UPDATE users SET password_hash=$1, password_changed_at=NOW() WHERE id=$2`, newHash, userID,
 	)
 	LogEvent("PASSWORD_CHANGE", "User changed password", fmt.Sprintf("user_id:%d", userID))
 	return err
@@ -314,19 +327,18 @@ func RequestPasswordReset(email string) error {
 	return SendPasswordResetEmail(cfg, email, username, token)
 }
 
-// ResetPassword validates the reset token and sets the new password.
+// ResetPassword validates the reset token and sets the new password. The
+// token is looked up first so the tenant's own password policy (not a
+// fixed global one) governs complexity — password_reset_token doesn't
+// reveal which tenant issued it without this lookup.
 func ResetPassword(token, newPassword string) error {
-	if err := ValidatePasswordComplexity(newPassword); err != nil {
-		return err
-	}
-
-	var userID int
+	var userID, tenantID int
 	var expiry time.Time
 	err := database.DB.QueryRow(`
-		SELECT id, password_reset_expiry
+		SELECT id, tenant_id, password_reset_expiry
 		FROM users
 		WHERE password_reset_token=$1
-	`, token).Scan(&userID, &expiry)
+	`, token).Scan(&userID, &tenantID, &expiry)
 
 	if err != nil {
 		return errors.New("invalid or expired reset token")
@@ -336,6 +348,11 @@ func ResetPassword(token, newPassword string) error {
 		return errors.New("reset token has expired — please request a new one")
 	}
 
+	policy, _ := repositories.GetSecurityPolicy(tenantID)
+	if err := ValidatePasswordComplexity(newPassword, policy); err != nil {
+		return err
+	}
+
 	newHash, err := auth.HashPassword(newPassword)
 	if err != nil {
 		return err
@@ -343,7 +360,7 @@ func ResetPassword(token, newPassword string) error {
 
 	database.DB.Exec(`
 		UPDATE users
-		SET password_hash=$1, password_reset_token=NULL, password_reset_expiry=NULL
+		SET password_hash=$1, password_reset_token=NULL, password_reset_expiry=NULL, password_changed_at=NOW()
 		WHERE id=$2
 	`, newHash, userID)
 
@@ -395,7 +412,6 @@ func GetUserProfile(userID int) (map[string]interface{}, error) {
 		"tenant_slug":       tenantSlug,
 	}, nil
 }
-
 
 // RegisterUserFromAPI is called from the API handler with plain fields.
 func RegisterUserFromAPI(username, email, password string) error {

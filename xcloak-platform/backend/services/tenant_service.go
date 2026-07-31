@@ -65,7 +65,11 @@ func SelfServeSignup(orgName, slug, username, email, password string) (string, e
 	if orgName == "" || slug == "" || username == "" || email == "" {
 		return "", errors.New("all fields are required")
 	}
-	if err := ValidatePasswordComplexity(password); err != nil {
+	// The tenant this password belongs to doesn't exist yet — validate
+	// against the built-in default policy, same as the /auth/register
+	// bootstrap path.
+	defaultPolicy, _ := repositories.GetSecurityPolicy(0)
+	if err := ValidatePasswordComplexity(password, defaultPolicy); err != nil {
 		return "", err
 	}
 	if !isValidSlug(slug) {

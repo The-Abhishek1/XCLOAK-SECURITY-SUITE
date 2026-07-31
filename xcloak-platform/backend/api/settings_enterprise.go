@@ -1,18 +1,28 @@
 package api
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/database"
+	"xcloak-platform/services"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+// currentAppVersion is a static build marker — see GetSTTEUpdates for why
+// this isn't backed by a real build-stamped version anywhere in this repo.
+const currentAppVersion = "1.0.0"
 
 func stteID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()+int64(rand.Intn(9999)))
@@ -253,19 +263,22 @@ func PatchSTTEOrg(c *gin.Context) {
 	for _, f := range stringFields {
 		if v, ok := body[f]; ok {
 			setClauses = append(setClauses, fmt.Sprintf("%s=$%d", f, i))
-			args = append(args, v); i++
+			args = append(args, v)
+			i++
 		}
 	}
 	for _, f := range intFields {
 		if v, ok := body[f]; ok {
 			setClauses = append(setClauses, fmt.Sprintf("%s=$%d", f, i))
-			args = append(args, v); i++
+			args = append(args, v)
+			i++
 		}
 	}
 	for _, f := range boolFields {
 		if v, ok := body[f]; ok {
 			setClauses = append(setClauses, fmt.Sprintf("%s=$%d", f, i))
-			args = append(args, v); i++
+			args = append(args, v)
+			i++
 		}
 	}
 	if len(setClauses) > 0 {
@@ -354,11 +367,11 @@ func PatchSTTEAIConfig(c *gin.Context) {
 		RPMLimit  int     `json:"rate_limit_rpm"`
 		Budget    float64 `json:"monthly_budget_usd"`
 		// guardrails
-		RequireApproval    *bool `json:"require_approval_for_actions"`
-		RBACEnabled        *bool `json:"rbac_enabled"`
-		DataMasking        *bool `json:"data_masking_enabled"`
-		HallucinationWarn  *bool `json:"hallucination_warnings"`
-		AuditAllQueries    *bool `json:"audit_all_queries"`
+		RequireApproval   *bool `json:"require_approval_for_actions"`
+		RBACEnabled       *bool `json:"rbac_enabled"`
+		DataMasking       *bool `json:"data_masking_enabled"`
+		HallucinationWarn *bool `json:"hallucination_warnings"`
+		AuditAllQueries   *bool `json:"audit_all_queries"`
 	}
 	c.BindJSON(&body)
 
@@ -476,6 +489,15 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
+// PostSTTEBackupTrigger runs a real pg_dump of the database. The Go backend
+// process runs on the host (not inside a container) and no pg_dump binary
+// is installed there, so it shells out to the postgres container itself via
+// `docker exec` — no shell interpolation of user input is involved (every
+// arg is a fixed slice element, docker/pg_dump/DB name/user only), so
+// there's no injection surface. This is a real, unscoped pg_dump of the
+// whole shared database (this deployment's tables aren't partitioned per
+// tenant at the database level), matching what an actual ops backup would
+// capture — not something that could reasonably be scoped to one tenant.
 func PostSTTEBackupTrigger(c *gin.Context) {
 	db := database.DB
 	tid := tenantIDFromContext(c)
@@ -483,13 +505,69 @@ func PostSTTEBackupTrigger(c *gin.Context) {
 	actor := usernameFromContext(c)
 
 	id := stteID("STTE-BKP")
-	size := int64(50*1024*1024 + rand.Int63n(500*1024*1024))
-	dur := 30 + rand.Intn(120)
-	db.Exec(`INSERT INTO stte_backups (tenant_id,backup_id,backup_type,status,size_bytes,duration_secs,triggered_by)
-		VALUES ($1,$2,'full','completed',$3,$4,$5)`, tidStr, id, size, dur, actor)
+	start := time.Now()
+
+	container := os.Getenv("POSTGRES_CONTAINER")
+	if container == "" {
+		container = "xcloak-postgres"
+	}
+	dbUser := os.Getenv("DB_USER")
+	dbName := os.Getenv("DB_NAME")
+	if dbUser == "" || dbName == "" {
+		msg := "backup failed: DB_USER/DB_NAME not configured in the backend environment"
+		db.Exec(`INSERT INTO stte_backups (tenant_id,backup_id,backup_type,status,triggered_by,error_message)
+			VALUES ($1,$2,'full','failed',$3,$4)`, tidStr, id, actor, msg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		return
+	}
+
+	if err := os.MkdirAll("backups", 0750); err != nil {
+		msg := "backup failed: could not create backups directory: " + err.Error()
+		db.Exec(`INSERT INTO stte_backups (tenant_id,backup_id,backup_type,status,triggered_by,error_message)
+			VALUES ($1,$2,'full','failed',$3,$4)`, tidStr, id, actor, msg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		return
+	}
+	path := fmt.Sprintf("backups/%s.sql", id)
+	f, err := os.Create(path)
+	if err != nil {
+		msg := "backup failed: could not create dump file: " + err.Error()
+		db.Exec(`INSERT INTO stte_backups (tenant_id,backup_id,backup_type,status,triggered_by,error_message)
+			VALUES ($1,$2,'full','failed',$3,$4)`, tidStr, id, actor, msg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		return
+	}
+	defer f.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "exec", container, "pg_dump", "-U", dbUser, "-d", dbName)
+	cmd.Stdout = f
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	dur := int(time.Since(start).Seconds())
+
+	if runErr != nil {
+		os.Remove(path)
+		msg := fmt.Sprintf("pg_dump failed: %v: %s", runErr, strings.TrimSpace(stderr.String()))
+		db.Exec(`INSERT INTO stte_backups (tenant_id,backup_id,backup_type,status,duration_secs,triggered_by,error_message)
+			VALUES ($1,$2,'full','failed',$3,$4,$5)`, tidStr, id, dur, actor, msg)
+		stteAudit(tid, "backup_failed", "system", actor, msg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		return
+	}
+
+	var size int64
+	if info, statErr := os.Stat(path); statErr == nil {
+		size = info.Size()
+	}
+
+	db.Exec(`INSERT INTO stte_backups (tenant_id,backup_id,backup_type,status,size_bytes,duration_secs,storage_path,triggered_by)
+		VALUES ($1,$2,'full','completed',$3,$4,$5,$6)`, tidStr, id, size, dur, path, actor)
 	db.Exec(`UPDATE stte_backup_config SET last_run_at=NOW() WHERE tenant_id=$1`, tidStr)
-	stteAudit(tid, "backup_triggered", "system", actor, fmt.Sprintf("backup_id:%s", id))
-	c.JSON(http.StatusOK, gin.H{"backup_id": id, "status": "completed", "size_bytes": size})
+	stteAudit(tid, "backup_triggered", "system", actor, fmt.Sprintf("backup_id:%s size:%d", id, size))
+	c.JSON(http.StatusOK, gin.H{"backup_id": id, "status": "completed", "size_bytes": size, "duration_secs": dur})
 }
 
 func PatchSTTEBackupConfig(c *gin.Context) {
@@ -541,23 +619,29 @@ func GetSTTEUpdates(c *gin.Context) {
 			}
 		}
 	}
+	// current_version is a static build marker — this codebase has no build
+	// pipeline stamping a real semver anywhere (checked: no VERSION file, no
+	// version in go.mod, only frontend/package.json's unmaintained "1.0.0").
+	// No real update-manifest URL or changelog service exists either (this
+	// is a self-hosted appliance, not something with an upstream release
+	// channel to poll) — "last_checked" was previously `time.Now()`-relative
+	// on every request, an ever-refreshing fake timestamp implying a real
+	// check that never happened. Dropped rather than faked further.
 	c.JSON(http.StatusOK, gin.H{
-		"current_version": "2.14.3",
-		"latest_version":  "2.14.3",
+		"current_version":  currentAppVersion,
+		"latest_version":   currentAppVersion,
 		"update_available": false,
-		"last_checked":    time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-		"channel":         "stable",
-		"history":         history,
+		"channel":          "stable",
+		"history":          history,
 	})
 }
 
 func PostSTTECheckUpdates(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"update_available": false,
-		"current_version":  "2.14.3",
-		"latest_version":   "2.14.3",
-		"message":          "You are running the latest version.",
-		"checked_at":       time.Now().Format(time.RFC3339),
+		"current_version":  currentAppVersion,
+		"latest_version":   currentAppVersion,
+		"message":          "No update channel is configured for this self-hosted deployment.",
 	})
 }
 
@@ -596,38 +680,75 @@ func GetSTTELicense(c *gin.Context) {
 	})
 }
 
+// PostSTTELicenseActivate validates a real, cryptographically-signed license
+// token against services.ValidateLicenseToken (the same ed25519 verification
+// the public /api/license/check endpoint uses for self-hosted enforcement —
+// tokens are minted via the platform-admin flow at POST
+// /api/platform/license/keys). This previously accepted literally any
+// string and unconditionally claimed "enterprise" activation — and its
+// INSERT was additionally broken SQL (doubled single-quotes inside a Go
+// backtick string are not valid Postgres syntax: `INTERVAL ”1 year”`
+// instead of `INTERVAL '1 year'`), so activation silently never persisted
+// anything at all despite returning a 200 with fake enterprise numbers.
 func PostSTTELicenseActivate(c *gin.Context) {
 	db := database.DB
 	tid := tenantIDFromContext(c)
 	tidStr := fmt.Sprintf("%d", tid)
 	actor := usernameFromContext(c)
 
-	var body struct{ LicenseKey string `json:"license_key"` }
+	var body struct {
+		LicenseKey string `json:"license_key"`
+	}
 	if err := c.BindJSON(&body); err != nil || body.LicenseKey == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "license_key required"})
 		return
 	}
 
-	// Demo: accept any key and set enterprise tier
+	claim, err := services.ValidateLicenseToken(body.LicenseKey)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	masked := body.LicenseKey
 	if len(masked) > 8 {
 		masked = masked[:4] + "-****-****-" + masked[len(masked)-4:]
 	}
-	db.Exec(`INSERT INTO stte_license (tenant_id,license_key,tier,seats_total,seats_used,
+	featuresJSON, _ := json.Marshal(featuresForTier(claim.Tier))
+
+	_, err = db.Exec(`INSERT INTO stte_license (tenant_id,license_key,tier,seats_total,seats_used,
 		agents_total,agents_used,features,valid_from,valid_until,issued_to,support_tier,activated_at)
-		VALUES ($1,$2,'enterprise',250,0,10000,0,
-		'["siem","edr","soar","cmdb","mdm","ai_assistant","threat_intel","compliance","executive_reports","api_access","sso","mfa","backup","custom_roles","unlimited_agents"]',
-		CURRENT_DATE, CURRENT_DATE + INTERVAL ''1 year'',''Demo Organization'',''enterprise'',NOW())
+		VALUES ($1,$2,$3,$4,0,$5,0,$6,$7,$8,$9,$3,NOW())
 		ON CONFLICT (tenant_id) DO UPDATE SET
-			license_key=$2,tier=''enterprise'',seats_total=250,agents_total=10000,
-			features=''["siem","edr","soar","cmdb","mdm","ai_assistant","threat_intel","compliance","executive_reports","api_access","sso","mfa","backup","custom_roles","unlimited_agents"]'',
-			valid_until=CURRENT_DATE+INTERVAL ''1 year'',activated_at=NOW()`, tidStr, masked)
-	stteAudit(tid, "license_activated", "system", actor, fmt.Sprintf("key:%s tier:enterprise", masked))
+			license_key=$2,tier=$3,seats_total=$4,agents_total=$5,
+			features=$6,valid_from=$7,valid_until=$8,issued_to=$9,support_tier=$3,activated_at=NOW()`,
+		tidStr, masked, claim.Tier, claim.UserLimit, claim.AgentLimit, string(featuresJSON),
+		claim.IssuedAt, claim.ExpiresAt, claim.CustomerName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist license: " + err.Error()})
+		return
+	}
+	stteAudit(tid, "license_activated", "system", actor, fmt.Sprintf("key:%s tier:%s", masked, claim.Tier))
 	c.JSON(http.StatusOK, gin.H{
-		"status": "activated", "tier": "enterprise",
-		"seats_total": 250, "agents_total": 10000,
-		"valid_until": time.Now().AddDate(1, 0, 0).Format("2006-01-02"),
+		"status": "activated", "tier": claim.Tier,
+		"seats_total": claim.UserLimit, "agents_total": claim.AgentLimit,
+		"valid_until": claim.ExpiresAt.Format("2006-01-02"),
 	})
+}
+
+// featuresForTier is a fixed feature-entitlement reference per tier — a
+// policy classification, not tenant data, the same pattern used for
+// risk-factor weights and MITRE tactic sizes elsewhere in this codebase.
+func featuresForTier(tier string) []string {
+	switch tier {
+	case "enterprise":
+		return []string{"siem", "edr", "soar", "cmdb", "mdm", "ai_assistant", "threat_intel",
+			"compliance", "executive_reports", "api_access", "sso", "mfa", "backup", "custom_roles", "unlimited_agents"}
+	case "professional":
+		return []string{"siem", "edr", "soar", "cmdb", "mdm", "ai_assistant", "threat_intel", "compliance", "api_access", "mfa", "backup"}
+	default:
+		return []string{"siem", "edr"}
+	}
 }
 
 // ── Agent Config ──────────────────────────────────────────────────────────────

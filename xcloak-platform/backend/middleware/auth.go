@@ -9,6 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"xcloak-platform/auth"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -61,6 +62,19 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
+		// 3b. Check admin-initiated revocation (Settings' "Revoke Session",
+		// force_logout, concurrent-session-limit enforcement). These paths
+		// only ever have the session's sha256 hash on hand — never the raw
+		// JWT — since that's all sessions.token_hash stores, so they can't
+		// use the raw-token blacklist above. Without this check, revoking
+		// someone else's session from the UI wrote a real DB row but never
+		// actually stopped their live JWT from working.
+		if services.IsHashRevoked(repositories.HashToken(tokenString)) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "session has been revoked — please log in again"})
+			c.Abort()
+			return
+		}
+
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return auth.JwtSecret(), nil
 		})
@@ -98,13 +112,13 @@ func RequireAuth() gin.HandlerFunc {
 		isPlatformAdmin, _ := claims["is_platform_admin"].(bool)
 		isDemo, _ := claims["demo"].(bool)
 
-		c.Set("user_id",           claims["user_id"])
-		c.Set("username",          claims["username"])
-		c.Set("role",              claims["role"])
-		c.Set("tenant_id",         claims["tenant_id"])
+		c.Set("user_id", claims["user_id"])
+		c.Set("username", claims["username"])
+		c.Set("role", claims["role"])
+		c.Set("tenant_id", claims["tenant_id"])
 		c.Set("is_platform_admin", isPlatformAdmin)
-		c.Set("is_demo",           isDemo)
-		c.Set("token_string",      tokenString) // stored for logout
+		c.Set("is_demo", isDemo)
+		c.Set("token_string", tokenString) // stored for logout
 
 		c.Next()
 	}

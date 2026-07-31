@@ -34,14 +34,30 @@ func Login(c *gin.Context) {
 		req.Username = req.Email
 	}
 
+	// Resolve the tenant early (before the password check) so the tenant's
+	// own lockout threshold/duration and IP allowlist apply — previously
+	// these were fixed platform-wide constants and Settings' Authentication
+	// page's per-tenant fields for them silently did nothing. If the
+	// username doesn't exist, policy is left at repositories' defaults
+	// (effectively unrestricted) rather than erroring differently, so this
+	// lookup can't be used to enumerate valid usernames.
+	var policyTenantID int
+	database.DB.QueryRow(`SELECT tenant_id FROM users WHERE username=$1 OR email=$1`, req.Username).Scan(&policyTenantID)
+	policy, _ := repositories.GetSecurityPolicy(policyTenantID)
+
+	if allowlist, err := services.ParseIPAllowlist(policy.IPAllowlist); err == nil && !services.IsIPAllowed(c.ClientIP(), allowlist) {
+		c.JSON(403, gin.H{"error": "login denied — your IP address is not on this organization's allowlist"})
+		return
+	}
+
 	if services.IsUsernameLocked(req.Username) {
-		c.JSON(429, gin.H{"error": "account temporarily locked due to too many failed login attempts — try again in 15 minutes"})
+		c.JSON(429, gin.H{"error": fmt.Sprintf("account temporarily locked due to too many failed login attempts — try again in %d minutes", policy.LockoutDurationMins)})
 		return
 	}
 
 	token, needs2FA, err := services.LoginUser(req.Username, req.Password)
 	if err != nil {
-		services.RecordLoginFailure(req.Username)
+		services.RecordLoginFailure(req.Username, policy.MaxFailedLogins, policy.LockoutDurationMins)
 		c.JSON(401, gin.H{"error": "invalid credentials"})
 		return
 	}
@@ -49,9 +65,20 @@ func Login(c *gin.Context) {
 
 	var userID, tenantID int
 	var role string
+	var passwordChangedAt time.Time
 	database.DB.QueryRow(
-		`SELECT id, role, tenant_id FROM users WHERE username=$1 OR email=$1`, req.Username,
-	).Scan(&userID, &role, &tenantID)
+		`SELECT id, role, tenant_id, password_changed_at FROM users WHERE username=$1 OR email=$1`, req.Username,
+	).Scan(&userID, &role, &tenantID, &passwordChangedAt)
+
+	// Password expiry — a tenant that requires periodic password rotation
+	// (password_expiry_days > 0) rejects login once that window has passed,
+	// directing the user through the existing forgot-password email flow
+	// rather than a new in-line "change password now" screen this build
+	// doesn't have.
+	if policy.PasswordExpiryDays > 0 && time.Since(passwordChangedAt) > time.Duration(policy.PasswordExpiryDays)*24*time.Hour {
+		c.JSON(401, gin.H{"error": "your password has expired and must be reset — use \"Forgot password\" to set a new one"})
+		return
+	}
 
 	if needs2FA {
 		tempToken, _ := auth.GenerateTempToken(userID, req.Username, role, tenantID)
@@ -186,7 +213,11 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	if err := services.ValidatePasswordComplexity(user.Password); err != nil {
+	// No tenant exists yet at self-registration time (this is the bootstrap
+	// "first user becomes admin" path) — validate against the built-in
+	// default policy rather than a real tenant's configured one.
+	defaultPolicy, _ := repositories.GetSecurityPolicy(0)
+	if err := services.ValidatePasswordComplexity(user.Password, defaultPolicy); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
