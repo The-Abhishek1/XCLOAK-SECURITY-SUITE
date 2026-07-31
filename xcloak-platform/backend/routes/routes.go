@@ -1314,6 +1314,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.PATCH("/api/rpe/reports/:id", middleware.RequireAuth(), api.PatchRPEReport)
 	router.DELETE("/api/rpe/reports/:id", middleware.RequireAuth(), api.DeleteRPEReport)
 	router.POST("/api/rpe/generate/:id", middleware.RequireAuth(), api.PostRPEGenerate)
+	router.GET("/api/rpe/download/:execution_id", middleware.RequireAuth(), api.GetRPEDownload)
 	router.GET("/api/rpe/reports/:id/versions", middleware.RequireAuth(), api.GetRPEVersions)
 	router.POST("/api/rpe/reports/:id/share", middleware.RequireAuth(), api.PostRPEShare)
 	router.GET("/api/rpe/templates", middleware.RequireAuth(), api.GetRPETemplates)

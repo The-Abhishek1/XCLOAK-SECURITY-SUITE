@@ -26,6 +26,7 @@ func StartScheduler() {
 				RunDueScriptSchedules()
 				RunDueSTETasks()
 				SyncAllRunningSTEExecutions()
+				RunDueRPESchedules()
 			})
 		}
 	}()

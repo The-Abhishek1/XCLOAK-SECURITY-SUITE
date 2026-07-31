@@ -4473,6 +4473,21 @@ func seedFirewallEnterprise(db *sql.DB) {
 
 func seedReportsEnterprise(db *sql.DB) {
 	const tid = 9999
+
+	// rpe_reports/rpe_templates/rpe_schedules have real UNIQUE constraints
+	// so their own inserts are genuinely idempotent, but rpe_executions/
+	// rpe_exports/rpe_notifications/rpe_audit have no unique key at all —
+	// each represents a historical event, not a config row — so without a
+	// guard here those four tables accumulate a full duplicate batch on
+	// every reseed. Confirmed live: 661 rpe_executions / 353 rpe_exports /
+	// 353 rpe_notifications / 573 rpe_audit rows had piled up (vs. the
+	// intended handful) before this guard was added, same root cause as
+	// Scheduled Tasks' and Firewall's seeders.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM rpe_reports WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
 	now := time.Now()
 
 	// ── tables ──────────────────────────────────────────────────────────────

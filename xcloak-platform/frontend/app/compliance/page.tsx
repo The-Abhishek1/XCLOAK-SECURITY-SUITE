@@ -171,7 +171,8 @@ function LibraryTab({ reports, onRefresh }: { reports: any[]; onRefresh: () => v
   };
 
   const del = async (id: number, name: string) => {
-    await rpeAPI.deleteReport(id); onRefresh(); notify(`'${name}' deleted`);
+    try { await rpeAPI.deleteReport(id); onRefresh(); notify(`'${name}' deleted`); }
+    catch { notify('Failed to delete report'); }
   };
 
   return (
@@ -315,7 +316,8 @@ function BuilderTab({ templates, onRefresh }: { templates: any[]; onRefresh: () 
   };
 
   const delTemplate = async (id: number, name: string) => {
-    await rpeAPI.deleteTemplate(id); onRefresh(); notify(`Template '${name}' deleted`);
+    try { await rpeAPI.deleteTemplate(id); onRefresh(); notify(`Template '${name}' deleted`); }
+    catch { notify('Failed to delete template'); }
   };
 
   return (
@@ -464,9 +466,13 @@ function ScheduledTab({ schedules, reports, onRefresh }: { schedules: any[]; rep
   };
 
   const toggle = async (id: number, current: string) => {
-    await rpeAPI.updateSchedule(id, { status: current === 'active' ? 'paused' : 'active' }); onRefresh();
+    try { await rpeAPI.updateSchedule(id, { status: current === 'active' ? 'paused' : 'active' }); onRefresh(); }
+    catch { notify('Failed to update schedule'); }
   };
-  const del = async (id: number) => { await rpeAPI.deleteSchedule(id); onRefresh(); notify('Schedule deleted'); };
+  const del = async (id: number) => {
+    try { await rpeAPI.deleteSchedule(id); onRefresh(); notify('Schedule deleted'); }
+    catch { notify('Failed to delete schedule'); }
+  };
 
   const FREQ_COLOR: Record<string, string> = { one_time: '#6b7280', hourly: '#3b82f6', daily: '#22c55e', weekly: '#a855f7', monthly: '#f97316', quarterly: '#eab308', yearly: '#06b6d4', cron: '#ef4444' };
 
@@ -777,8 +783,10 @@ export default function CompliancePage() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const markRead = async () => {
-    await rpeAPI.markNotificationsRead();
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      await rpeAPI.markNotificationsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch { /* non-critical, next load will reflect real state */ }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;

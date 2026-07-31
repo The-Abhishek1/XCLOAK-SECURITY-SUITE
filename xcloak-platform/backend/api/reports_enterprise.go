@@ -137,6 +137,10 @@ func createRPETables() {
 			panic("rpe table: " + err.Error())
 		}
 	}
+	// content holds the real generated report text/JSON/CSV so
+	// GetRPEDownload can serve it back — added after the initial CREATE
+	// TABLE since existing rows/tables predate this fix.
+	db.Exec(`ALTER TABLE rpe_exports ADD COLUMN IF NOT EXISTS content TEXT`)
 }
 
 func InitRPETables() { createRPETables() }
@@ -188,14 +192,14 @@ func GetRPEDashboard(c *gin.Context) {
 	db.QueryRow(`SELECT COALESCE(SUM(file_size_bytes),0) FROM rpe_exports WHERE tenant_id=$1`, tid).Scan(&storageBytes)
 
 	dash := map[string]interface{}{
-		"total_reports":      totalReports,
-		"scheduled_reports":  scheduledReports,
-		"generated_today":    generatedToday,
-		"failed_reports":     failedReports,
-		"report_templates":   reportTemplates,
-		"shared_reports":     sharedReports,
-		"export_history":     exportHistory,
-		"storage_bytes":      storageBytes,
+		"total_reports":     totalReports,
+		"scheduled_reports": scheduledReports,
+		"generated_today":   generatedToday,
+		"failed_reports":    failedReports,
+		"report_templates":  reportTemplates,
+		"shared_reports":    sharedReports,
+		"export_history":    exportHistory,
+		"storage_bytes":     storageBytes,
 	}
 
 	// recent executions
@@ -351,13 +355,27 @@ func PostRPEReport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
-	if body.Category == "" { body.Category = "security" }
-	if body.ReportType == "" { body.ReportType = "custom" }
-	if body.DataSources == "" { body.DataSources = "[]" }
-	if body.Filters == "" { body.Filters = "{}" }
-	if body.Sections == "" { body.Sections = "[]" }
-	if body.Tags == "" { body.Tags = "[]" }
-	if body.Owner == "" { body.Owner = actor }
+	if body.Category == "" {
+		body.Category = "security"
+	}
+	if body.ReportType == "" {
+		body.ReportType = "custom"
+	}
+	if body.DataSources == "" {
+		body.DataSources = "[]"
+	}
+	if body.Filters == "" {
+		body.Filters = "{}"
+	}
+	if body.Sections == "" {
+		body.Sections = "[]"
+	}
+	if body.Tags == "" {
+		body.Tags = "[]"
+	}
+	if body.Owner == "" {
+		body.Owner = actor
+	}
 
 	rid := rpeID("RPT")
 	var id int
@@ -429,17 +447,17 @@ func GetRPETemplates(c *gin.Context) {
 	}
 	defer rows.Close()
 	type Row struct {
-		ID             int       `json:"id"`
-		TemplateID     string    `json:"template_id"`
-		Name           string    `json:"name"`
-		Description    *string   `json:"description"`
-		Category       string    `json:"category"`
-		IsBuiltin      bool      `json:"is_builtin"`
-		Sections       string    `json:"sections"`
-		DataSources    string    `json:"default_data_sources"`
-		Owner          *string   `json:"owner"`
-		UseCount       int       `json:"use_count"`
-		CreatedAt      time.Time `json:"created_at"`
+		ID          int       `json:"id"`
+		TemplateID  string    `json:"template_id"`
+		Name        string    `json:"name"`
+		Description *string   `json:"description"`
+		Category    string    `json:"category"`
+		IsBuiltin   bool      `json:"is_builtin"`
+		Sections    string    `json:"sections"`
+		DataSources string    `json:"default_data_sources"`
+		Owner       *string   `json:"owner"`
+		UseCount    int       `json:"use_count"`
+		CreatedAt   time.Time `json:"created_at"`
 	}
 	result := []Row{}
 	for rows.Next() {
@@ -465,9 +483,15 @@ func PostRPETemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
-	if body.Category == "" { body.Category = "security" }
-	if body.Sections == "" { body.Sections = "[]" }
-	if body.DataSources == "" { body.DataSources = "[]" }
+	if body.Category == "" {
+		body.Category = "security"
+	}
+	if body.Sections == "" {
+		body.Sections = "[]"
+	}
+	if body.DataSources == "" {
+		body.DataSources = "[]"
+	}
 	tid2 := rpeID("TPL")
 	var id int
 	database.DB.QueryRow(
@@ -554,13 +578,25 @@ func PostRPESchedule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "report_id required"})
 		return
 	}
-	if body.Frequency == "" { body.Frequency = "weekly" }
-	if body.DeliveryMethod == "" { body.DeliveryMethod = "email" }
-	if body.ExportFormat == "" { body.ExportFormat = "pdf" }
-	if body.Recipients == "" { body.Recipients = "[]" }
+	if body.Frequency == "" {
+		body.Frequency = "weekly"
+	}
+	if body.DeliveryMethod == "" {
+		body.DeliveryMethod = "email"
+	}
+	if body.ExportFormat == "" {
+		body.ExportFormat = "pdf"
+	}
+	if body.Recipients == "" {
+		body.Recipients = "[]"
+	}
 
-	// compute next_run
-	nextRun := time.Now().Add(24 * time.Hour)
+	// This used to always be "now + 24h" regardless of the selected
+	// frequency, so e.g. a "monthly" schedule would silently be treated as
+	// daily by anything that read next_run_at. NextRPERunTime computes it
+	// per the real chosen frequency (and is also what the scheduler tick
+	// uses to advance it after each real dispatch).
+	nextRun := services.NextRPERunTime(body.Frequency, body.CronExpr)
 
 	sid := rpeID("SCH")
 	var id int
@@ -614,6 +650,13 @@ func DeleteRPESchedule(c *gin.Context) {
 
 // ── generate ─────────────────────────────────────────────────────────────────
 
+// PostRPEGenerate used to be a "// Simulate execution" stub: duration_ms
+// and file_size_bytes were pure random numbers, no real report content was
+// ever produced, and the download_url it returned pointed at
+// /api/rpe/download/:id — a route that was never registered anywhere, so
+// every "Download" link this page ever showed (Dashboard quick-actions and
+// the History tab) 404'd. Now delegates to services.GenerateRPEReport,
+// which produces real content and stores it for GetRPEDownload to serve.
 func PostRPEGenerate(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actor := usernameFromContext(c)
@@ -623,7 +666,9 @@ func PostRPEGenerate(c *gin.Context) {
 		Format string `json:"format"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.Format == "" { body.Format = "pdf" }
+	if body.Format == "" {
+		body.Format = "pdf"
+	}
 
 	var reportName string
 	database.DB.QueryRow(`SELECT name FROM rpe_reports WHERE report_id=$1 AND tenant_id=$2`, reportID, tid).Scan(&reportName)
@@ -631,39 +676,49 @@ func PostRPEGenerate(c *gin.Context) {
 		reportName = "Report " + reportID
 	}
 
-	// Simulate execution
-	execID := rpeID("EXC")
-	durMs := 800 + rand.Intn(3200)
-	fileSize := int64(50000 + rand.Intn(500000))
+	execID, err := services.GenerateRPEReport(tid, reportID, reportName, actor, body.Format, "manual")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-	database.DB.Exec(
-		`INSERT INTO rpe_executions (tenant_id, execution_id, report_id, report_name, started_at, completed_at, duration_ms, status, export_format, triggered_by, executed_by, file_size_bytes, download_url)
-		 VALUES ($1,$2,$3,$4,NOW(),NOW(),$5,'completed',$6,'manual',$7,$8,$9)`,
-		tid, execID, reportID, reportName, durMs, body.Format, actor, fileSize,
-		fmt.Sprintf("/api/rpe/download/%s", execID),
-	)
-	database.DB.Exec(
-		`UPDATE rpe_reports SET last_generated_at=NOW(), last_generated_by=$1, generation_count=generation_count+1, updated_at=NOW() WHERE report_id=$2 AND tenant_id=$3`,
-		actor, reportID, tid,
-	)
-	// Export record
-	expID := rpeID("EXP")
-	database.DB.Exec(
-		`INSERT INTO rpe_exports (tenant_id, export_id, report_id, report_name, execution_id, format, file_size_bytes, exported_by, download_url)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		tid, expID, reportID, reportName, execID, body.Format, fileSize, actor,
-		fmt.Sprintf("/api/rpe/download/%s", execID),
-	)
-	rpeAudit(tid, "report_generated", "report", reportID, reportName, actor, fmt.Sprintf("Format: %s, Size: %d bytes", body.Format, fileSize))
-	rpeNotify(tid, "report_generated", "Report Generated", fmt.Sprintf("'%s' generated successfully (%s)", reportName, body.Format), "info", reportID, reportName)
+	var durMs int
+	var fileSize int64
+	var downloadURL string
+	database.DB.QueryRow(`SELECT duration_ms, file_size_bytes, download_url FROM rpe_executions WHERE execution_id=$1 AND tenant_id=$2`, execID, tid).
+		Scan(&durMs, &fileSize, &downloadURL)
 
 	c.JSON(http.StatusOK, gin.H{
 		"execution_id": execID,
 		"status":       "completed",
 		"duration_ms":  durMs,
 		"file_size":    fileSize,
-		"download_url": fmt.Sprintf("/api/rpe/download/%s", execID),
+		"download_url": downloadURL,
 	})
+}
+
+// GET /api/rpe/download/:execution_id
+func GetRPEDownload(c *gin.Context) {
+	tid := tenantIDFromContext(c)
+	execID := c.Param("execution_id")
+
+	var content, format, reportName string
+	err := database.DB.QueryRow(`SELECT content, format, report_name FROM rpe_exports WHERE execution_id=$1 AND tenant_id=$2`, execID, tid).
+		Scan(&content, &format, &reportName)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "export not found"})
+		return
+	}
+	contentType := "text/plain"
+	switch format {
+	case "json":
+		contentType = "application/json"
+	case "csv":
+		contentType = "text/csv"
+	}
+	filename := fmt.Sprintf("%s.%s", strings.ReplaceAll(reportName, " ", "_"), format)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, contentType, []byte(content))
 }
 
 // ── executions ───────────────────────────────────────────────────────────────
@@ -680,21 +735,21 @@ func GetRPEExecutions(c *gin.Context) {
 	}
 	defer rows.Close()
 	type Row struct {
-		ID           int        `json:"id"`
-		ExecutionID  string     `json:"execution_id"`
-		ReportID     string     `json:"report_id"`
-		ReportName   string     `json:"report_name"`
-		ScheduleID   *string    `json:"schedule_id"`
-		StartedAt    time.Time  `json:"started_at"`
-		CompletedAt  *time.Time `json:"completed_at"`
-		DurationMs   *int       `json:"duration_ms"`
-		Status       string     `json:"status"`
-		Format       string     `json:"export_format"`
-		TriggeredBy  string     `json:"triggered_by"`
-		ExecutedBy   string     `json:"executed_by"`
-		FileSizeBytes int64     `json:"file_size_bytes"`
-		ErrorMessage *string    `json:"error_message"`
-		DownloadURL  *string    `json:"download_url"`
+		ID            int        `json:"id"`
+		ExecutionID   string     `json:"execution_id"`
+		ReportID      string     `json:"report_id"`
+		ReportName    string     `json:"report_name"`
+		ScheduleID    *string    `json:"schedule_id"`
+		StartedAt     time.Time  `json:"started_at"`
+		CompletedAt   *time.Time `json:"completed_at"`
+		DurationMs    *int       `json:"duration_ms"`
+		Status        string     `json:"status"`
+		Format        string     `json:"export_format"`
+		TriggeredBy   string     `json:"triggered_by"`
+		ExecutedBy    string     `json:"executed_by"`
+		FileSizeBytes int64      `json:"file_size_bytes"`
+		ErrorMessage  *string    `json:"error_message"`
+		DownloadURL   *string    `json:"download_url"`
 	}
 	result := []Row{}
 	for rows.Next() {
@@ -815,7 +870,9 @@ func PostRPEShare(c *gin.Context) {
 		Password     string `json:"password"`
 	}
 	c.ShouldBindJSON(&body)
-	if body.ShareType == "" { body.ShareType = "internal" }
+	if body.ShareType == "" {
+		body.ShareType = "internal"
+	}
 
 	var expAt *time.Time
 	if body.ExpiresHours > 0 {
@@ -923,14 +980,14 @@ func GetRPEAnalytics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_executions":       totalExecs,
-		"success_executions":     successExecs,
-		"failed_executions":      failedExecs,
-		"success_rate":           fmt.Sprintf("%.1f", successRate),
-		"avg_duration_ms":        int(avgDurationMs),
-		"storage_bytes":          storageBytes,
-		"most_generated":         mostGenerated,
-		"by_export_format":       byFormat,
+		"total_executions":   totalExecs,
+		"success_executions": successExecs,
+		"failed_executions":  failedExecs,
+		"success_rate":       fmt.Sprintf("%.1f", successRate),
+		"avg_duration_ms":    int(avgDurationMs),
+		"storage_bytes":      storageBytes,
+		"most_generated":     mostGenerated,
+		"by_export_format":   byFormat,
 	})
 }
 
