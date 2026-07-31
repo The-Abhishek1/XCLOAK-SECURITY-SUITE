@@ -194,6 +194,21 @@ func main() {
 
 func seedScheduledTasksEnterprise(db *sql.DB) {
 	const tid = 9999
+
+	// ste_tasks has no unique constraint on task_id, so the ON CONFLICT DO
+	// NOTHING clauses below (on every INSERT in this function) never
+	// actually had anything to conflict on — every fresh seed run added
+	// another full duplicate batch of all 18 tasks (and their executions/
+	// approvals/notifications/audit rows) rather than skipping already-
+	// seeded ones. Confirmed live: this dev DB had accumulated 720 ste_tasks
+	// rows (18 × 40 reseeds) before this guard was added. Matches the
+	// idempotency-guard pattern every other table's seeder in this file
+	// already uses.
+	var existing int
+	db.QueryRow(`SELECT COUNT(*) FROM ste_tasks WHERE tenant_id='9999'`).Scan(&existing)
+	if existing > 0 {
+		return
+	}
 	now := time.Now()
 
 	mustExec(db, `CREATE TABLE IF NOT EXISTS ste_tasks (

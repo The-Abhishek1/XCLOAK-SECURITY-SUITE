@@ -11,8 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"xcloak-platform/database"
-	"xcloak-platform/models"
-	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -190,19 +188,19 @@ func GetSTEDashboard(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_tasks":            count(``),
-		"active_tasks":           count(` AND status='active' AND enabled=TRUE`),
-		"paused_tasks":           count(` AND enabled=FALSE`),
-		"running_tasks":          countExec(` AND status='running'`),
-		"failed_tasks":           count(` AND failure_count>0`),
-		"completed_executions":   countExec(` AND status='completed'`),
-		"failed_executions":      countExec(` AND status='failed'`),
-		"total_executions":       countExec(``),
-		"avg_execution_time":     avgDuration,
-		"pending_approvals":      pendingApprovals,
-		"unread_notifications":   unreadNotifications,
-		"upcoming_executions":    upcomingList,
-		"recent_failures":        recentFails,
+		"total_tasks":          count(``),
+		"active_tasks":         count(` AND status='active' AND enabled=TRUE`),
+		"paused_tasks":         count(` AND enabled=FALSE`),
+		"running_tasks":        countExec(` AND status='running'`),
+		"failed_tasks":         count(` AND failure_count>0`),
+		"completed_executions": countExec(` AND status='completed'`),
+		"failed_executions":    countExec(` AND status='failed'`),
+		"total_executions":     countExec(``),
+		"avg_execution_time":   avgDuration,
+		"pending_approvals":    pendingApprovals,
+		"unread_notifications": unreadNotifications,
+		"upcoming_executions":  upcomingList,
+		"recent_failures":      recentFails,
 	})
 }
 
@@ -229,26 +227,39 @@ func GetSTETasks(c *gin.Context) {
 	i := 2
 
 	if category != "" {
-		q += fmt.Sprintf(` AND category=$%d`, i); args = append(args, category); i++
+		q += fmt.Sprintf(` AND category=$%d`, i)
+		args = append(args, category)
+		i++
 	}
 	if status != "" {
-		q += fmt.Sprintf(` AND status=$%d`, i); args = append(args, status); i++
+		q += fmt.Sprintf(` AND status=$%d`, i)
+		args = append(args, status)
+		i++
 	}
 	if taskType != "" {
-		q += fmt.Sprintf(` AND task_type=$%d`, i); args = append(args, taskType); i++
+		q += fmt.Sprintf(` AND task_type=$%d`, i)
+		args = append(args, taskType)
+		i++
 	}
 	if owner != "" {
-		q += fmt.Sprintf(` AND owner ILIKE $%d`, i); args = append(args, "%"+owner+"%"); i++
+		q += fmt.Sprintf(` AND owner ILIKE $%d`, i)
+		args = append(args, "%"+owner+"%")
+		i++
 	}
 	if scheduleType != "" {
-		q += fmt.Sprintf(` AND schedule_type=$%d`, i); args = append(args, scheduleType); i++
+		q += fmt.Sprintf(` AND schedule_type=$%d`, i)
+		args = append(args, scheduleType)
+		i++
 	}
 	if tag != "" {
-		q += fmt.Sprintf(` AND tags LIKE $%d`, i); args = append(args, "%"+tag+"%"); i++
+		q += fmt.Sprintf(` AND tags LIKE $%d`, i)
+		args = append(args, "%"+tag+"%")
+		i++
 	}
 	if search != "" {
 		q += fmt.Sprintf(` AND (name ILIKE $%d OR task_id ILIKE $%d OR description ILIKE $%d OR owner ILIKE $%d)`, i, i, i, i)
-		args = append(args, "%"+search+"%"); i++
+		args = append(args, "%"+search+"%")
+		i++
 	}
 	q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d`, i)
 	args = append(args, limit)
@@ -265,12 +276,12 @@ func GetSTETasks(c *gin.Context) {
 			id, maxRuntime, retryAttempts, retryDelay, timeout, concurrencyLimit int
 			runCount, successCount, failureCount, avgDuration                    int
 			parallel, requiresApproval, enabled                                  bool
-			taskID, name, category2, taskType2, scriptLang, status2, owner2     string
-			priority, schedType, cronExpr, schedCfg, targetType                 string
+			taskID, name, category2, taskType2, scriptLang, status2, owner2      string
+			priority, schedType, cronExpr, schedCfg, targetType                  string
 			targetIDs, triggerConds, deps, approvalPolicy, tags, createdBy       string
-			description                                                           string
-			lastRunAt, nextRunAt                                                  *time.Time
-			createdAt, updatedAt                                                  time.Time
+			description                                                          string
+			lastRunAt, nextRunAt                                                 *time.Time
+			createdAt, updatedAt                                                 time.Time
 		)
 		rows.Scan(
 			&id, &taskID, &name, &description, &category2, &taskType2, &scriptLang, &status2, &owner2, &priority,
@@ -320,10 +331,10 @@ func GetSTETask(c *gin.Context) {
 		dbID, maxRuntime, retryAttempts, retryDelay, timeout, concurrencyLimit int
 		runCount, successCount, failureCount, avgDuration                      int
 		parallel, requiresApproval, enabled                                    bool
-		taskID, name, cat, tt, sl, st, own, pri, sched, cron, scfg, tgt      string
-		tids, trig, deps, apol, tags, cb, desc                                string
-		lr, nr                                                                  *time.Time
-		ca                                                                      time.Time
+		taskID, name, cat, tt, sl, st, own, pri, sched, cron, scfg, tgt        string
+		tids, trig, deps, apol, tags, cb, desc                                 string
+		lr, nr                                                                 *time.Time
+		ca                                                                     time.Time
 	)
 	err := r.Scan(&dbID, &taskID, &name, &desc, &cat, &tt, &sl, &st, &own, &pri,
 		&sched, &cron, &scfg, &tgt, &tids, &trig,
@@ -361,30 +372,30 @@ func PostSTETask(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 	actor := usernameFromContext(c)
 	var b struct {
-		Name               string `json:"name"`
-		Description        string `json:"description"`
-		Category           string `json:"category"`
-		TaskType           string `json:"task_type"`
-		ScriptLanguage     string `json:"script_language"`
-		Owner              string `json:"owner"`
-		Priority           string `json:"priority"`
-		ScheduleType       string `json:"schedule_type"`
-		CronExpr           string `json:"cron_expr"`
-		ScheduleConfig     string `json:"schedule_config"`
-		TargetType         string `json:"target_type"`
-		TargetIDs          string `json:"target_ids"`
-		TriggerConditions  string `json:"trigger_conditions"`
-		MaxRuntime         int    `json:"max_runtime"`
-		RetryAttempts      int    `json:"retry_attempts"`
-		RetryDelay         int    `json:"retry_delay"`
-		Timeout            int    `json:"timeout"`
-		Parallel           bool   `json:"parallel"`
-		ConcurrencyLimit   int    `json:"concurrency_limit"`
-		Dependencies       string `json:"dependencies"`
-		RequiresApproval   bool   `json:"requires_approval"`
-		ApprovalPolicy     string `json:"approval_policy"`
-		Tags               string `json:"tags"`
-		Enabled            bool   `json:"enabled"`
+		Name              string `json:"name"`
+		Description       string `json:"description"`
+		Category          string `json:"category"`
+		TaskType          string `json:"task_type"`
+		ScriptLanguage    string `json:"script_language"`
+		Owner             string `json:"owner"`
+		Priority          string `json:"priority"`
+		ScheduleType      string `json:"schedule_type"`
+		CronExpr          string `json:"cron_expr"`
+		ScheduleConfig    string `json:"schedule_config"`
+		TargetType        string `json:"target_type"`
+		TargetIDs         string `json:"target_ids"`
+		TriggerConditions string `json:"trigger_conditions"`
+		MaxRuntime        int    `json:"max_runtime"`
+		RetryAttempts     int    `json:"retry_attempts"`
+		RetryDelay        int    `json:"retry_delay"`
+		Timeout           int    `json:"timeout"`
+		Parallel          bool   `json:"parallel"`
+		ConcurrencyLimit  int    `json:"concurrency_limit"`
+		Dependencies      string `json:"dependencies"`
+		RequiresApproval  bool   `json:"requires_approval"`
+		ApprovalPolicy    string `json:"approval_policy"`
+		Tags              string `json:"tags"`
+		Enabled           bool   `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -427,11 +438,13 @@ func PostSTETask(c *gin.Context) {
 	}
 
 	taskID := fmt.Sprintf("ST-%06d", rand.Intn(999999))
-	var nextRun *time.Time
-	if b.CronExpr != "" {
-		t := time.Now().Add(time.Hour)
-		nextRun = &t
-	}
+	// This used to only compute next_run_at when cron_expr was non-empty —
+	// meaning every non-cron schedule_type (one_time/hourly/daily/weekly/
+	// monthly/yearly, the vast majority of the SCHEDULE_TYPES the create
+	// form offers) got next_run_at=NULL at creation, so those tasks never
+	// appeared in "Upcoming Executions" and (now that a real scheduler
+	// exists) would never be picked up for dispatch either.
+	nextRun := services.NextSTERunTime(b.ScheduleType, b.CronExpr)
 
 	var id int
 	err := database.DB.QueryRow(`INSERT INTO ste_tasks
@@ -521,209 +534,6 @@ func DeleteSTETask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-// resolveSTETargetAgents resolves a task's target_type/target_ids to real
-// agent IDs registered for the tenant. Never invents a target — returns an
-// empty slice if nothing matches, so the caller can fail honestly instead of
-// fabricating a dispatched execution.
-func resolveSTETargetAgents(tid int, targetType, targetIDs string) []int {
-	agentIDs := []int{}
-	switch targetType {
-	case "all", "":
-		rows, err := database.DB.Query(`SELECT id FROM agents WHERE tenant_id=$1`, tid)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var id int
-				if rows.Scan(&id) == nil {
-					agentIDs = append(agentIDs, id)
-				}
-			}
-		}
-	default:
-		// target_ids holds a JSON array of hostnames/IPs picked when the
-		// task was created (target_type e.g. "specific", "group").
-		var hostnames []string
-		if json.Unmarshal([]byte(targetIDs), &hostnames) == nil {
-			for _, h := range hostnames {
-				var id int
-				if database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND (hostname=$2 OR ip_address=$2)`, tid, h).Scan(&id) == nil {
-					agentIDs = append(agentIDs, id)
-				}
-			}
-		}
-	}
-	return agentIDs
-}
-
-// dispatchSTETask resolves the task's real targets and dispatches a real
-// agent_tasks row (task_type = the task's own task_type, e.g.
-// "vulnerability_scan", "fim_scan", "collect_processes" — real types the
-// agent executor understands) to each. Destructive task types go through
-// the same pending_approval gate as every other dispatcher in this codebase.
-// Returns the execution's initial status honestly — "failed" if no target
-// agent could be resolved or nothing dispatched, never a fabricated success.
-func dispatchSTETask(tid int, taskType, scheduleConfig, targetType, targetIDs string) (status string, agentTaskIDs []int, failReason string) {
-	agentIDs := resolveSTETargetAgents(tid, targetType, targetIDs)
-	if len(agentIDs) == 0 {
-		return "failed", nil, "no registered agent matches this task's target configuration"
-	}
-	payload := json.RawMessage(scheduleConfig)
-	if len(payload) == 0 {
-		payload = json.RawMessage("{}")
-	}
-	destructive := services.IsDestructiveTask(taskType)
-	for _, agentID := range agentIDs {
-		task := models.AgentTask{AgentID: agentID, TaskType: taskType, Payload: payload}
-		var err error
-		if destructive {
-			err = repositories.CreateTaskPendingApproval(task)
-		} else {
-			err = repositories.CreateTask(task)
-		}
-		if err != nil {
-			continue
-		}
-		var atID int
-		database.DB.QueryRow(`SELECT id FROM agent_tasks WHERE agent_id=$1 AND task_type=$2 ORDER BY id DESC LIMIT 1`, agentID, taskType).Scan(&atID)
-		if atID != 0 {
-			agentTaskIDs = append(agentTaskIDs, atID)
-		}
-	}
-	if len(agentTaskIDs) == 0 {
-		return "failed", nil, "failed to dispatch task to any resolved agent"
-	}
-	if destructive {
-		return "pending_agent_approval", agentTaskIDs, ""
-	}
-	return "running", agentTaskIDs, ""
-}
-
-// executeSTETaskNow dispatches a real execution for a task (bypassing the
-// ste_approvals workflow, since the caller already confirmed approval was
-// either not required or has just been granted). Used by both the direct
-// manual-run path and the approval-decision path so an approved task
-// actually runs instead of just flipping a status flag.
-func executeSTETaskNow(tid int, dbID, taskID, name, trigger, actor string) (execID string, status string, err error) {
-	var taskType, scheduleConfig, targetType, targetIDs string
-	err = database.DB.QueryRow(`SELECT task_type,schedule_config,target_type,target_ids FROM ste_tasks WHERE tenant_id=$1 AND id=$2`, tid, dbID).
-		Scan(&taskType, &scheduleConfig, &targetType, &targetIDs)
-	if err != nil {
-		return "", "", fmt.Errorf("task not found")
-	}
-
-	dispatchStatus, agentTaskIDs, failReason := dispatchSTETask(tid, taskType, scheduleConfig, targetType, targetIDs)
-	agentTaskIDsJSON, _ := json.Marshal(agentTaskIDs)
-
-	execID = fmt.Sprintf("EX-%08d", rand.Intn(99999999))
-	var eid int
-	execStatus := dispatchStatus
-	if execStatus == "pending_agent_approval" {
-		execStatus = "running" // shown as running in history; agent_tasks rows are pending_approval underneath
-	}
-	dbErr := database.DB.QueryRow(`INSERT INTO ste_executions
-		(tenant_id,execution_id,task_id,task_name,status,trigger,executed_by,target_count,error_message,agent_task_ids)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-		tid, execID, taskID, name, execStatus, trigger, actor, len(agentTaskIDs), failReason, string(agentTaskIDsJSON)).Scan(&eid)
-	if dbErr != nil {
-		return "", "", dbErr
-	}
-
-	database.DB.Exec(`UPDATE ste_tasks SET run_count=run_count+1, last_run_at=NOW(), updated_at=NOW() WHERE tenant_id=$1 AND id=$2`, tid, dbID)
-	steAudit(tid, taskID, name, "executed", actor, fmt.Sprintf("trigger=%s targets=%d", trigger, len(agentTaskIDs)))
-
-	if dispatchStatus == "failed" {
-		database.DB.Exec(`UPDATE ste_executions SET status='failed',end_time=NOW() WHERE id=$1`, eid)
-		database.DB.Exec(`UPDATE ste_tasks SET failure_count=failure_count+1 WHERE id=$1`, dbID)
-		steNotify(tid, taskID, name, "task_failed", fmt.Sprintf("Task '%s' failed to dispatch: %s", name, failReason), "critical")
-		return execID, "failed", nil
-	}
-
-	steNotify(tid, taskID, name, "task_started", fmt.Sprintf("Task '%s' dispatched to %d agent(s) by %s", name, len(agentTaskIDs), actor), "info")
-	return execID, "running", nil
-}
-
-// syncSTEExecutions reflects the real status of every agent_tasks row a
-// still-"running" execution is waiting on. An execution only turns
-// "completed" once ALL of its dispatched tasks genuinely completed; it turns
-// "failed" as soon as any of them fails or expires. Never fabricates
-// completion via a timer.
-func syncSTEExecutions(tid int, ids []int) {
-	if len(ids) == 0 {
-		return
-	}
-	rows, err := database.DB.Query(`SELECT id,execution_id,task_id,task_name,agent_task_ids,start_time FROM ste_executions WHERE tenant_id=$1 AND status='running' AND id = ANY($2)`,
-		tid, pqIntArray(ids))
-	if err != nil || rows == nil {
-		return
-	}
-	type pending struct {
-		id                        int
-		execID, taskID, taskName  string
-		agentTaskIDs              []int
-		startTime                 time.Time
-	}
-	list := []pending{}
-	for rows.Next() {
-		var p pending
-		var atJSON string
-		if rows.Scan(&p.id, &p.execID, &p.taskID, &p.taskName, &atJSON, &p.startTime) == nil {
-			json.Unmarshal([]byte(atJSON), &p.agentTaskIDs)
-			list = append(list, p)
-		}
-	}
-	rows.Close()
-
-	for _, p := range list {
-		if len(p.agentTaskIDs) == 0 {
-			continue
-		}
-		allDone, anyFailed := true, false
-		for _, atID := range p.agentTaskIDs {
-			var st string
-			database.DB.QueryRow(`SELECT status FROM agent_tasks WHERE id=$1`, atID).Scan(&st)
-			if st != "completed" && st != "failed" && st != "expired" && st != "rejected" {
-				allDone = false
-			}
-			if st == "failed" || st == "expired" || st == "rejected" {
-				anyFailed = true
-			}
-		}
-		if !allDone {
-			continue
-		}
-		finalStatus := "completed"
-		if anyFailed {
-			finalStatus = "failed"
-		}
-		dur := int(time.Since(p.startTime).Milliseconds())
-		exitCode := 0
-		if anyFailed {
-			exitCode = 1
-		}
-		database.DB.Exec(`UPDATE ste_executions SET status=$1,end_time=NOW(),duration=$2,exit_code=$3 WHERE id=$4 AND status='running'`,
-			finalStatus, dur, exitCode, p.id)
-		var dbTaskID string
-		database.DB.QueryRow(`SELECT id FROM ste_tasks WHERE tenant_id=$1 AND task_id=$2`, tid, p.taskID).Scan(&dbTaskID)
-		if finalStatus == "completed" {
-			database.DB.Exec(`UPDATE ste_tasks SET success_count=success_count+1 WHERE tenant_id=$1 AND task_id=$2`, tid, p.taskID)
-			steNotify(tid, p.taskID, p.taskName, "task_completed", fmt.Sprintf("Task '%s' completed successfully", p.taskName), "info")
-		} else {
-			database.DB.Exec(`UPDATE ste_tasks SET failure_count=failure_count+1 WHERE tenant_id=$1 AND task_id=$2`, tid, p.taskID)
-			steNotify(tid, p.taskID, p.taskName, "task_failed", fmt.Sprintf("Task '%s' failed", p.taskName), "critical")
-		}
-	}
-}
-
-// pqIntArray formats a Go int slice as a Postgres integer array literal for
-// use with = ANY($n) — avoids pulling in lib/pq's pq.Array just for this.
-func pqIntArray(ids []int) string {
-	parts := make([]string, len(ids))
-	for i, id := range ids {
-		parts[i] = strconv.Itoa(id)
-	}
-	return "{" + strings.Join(parts, ",") + "}"
-}
-
 // POST /api/ste/tasks/:id/run
 func PostSTERunTask(c *gin.Context) {
 	tid := tenantIDFromContext(c)
@@ -750,7 +560,7 @@ func PostSTERunTask(c *gin.Context) {
 		return
 	}
 
-	execID, status, err := executeSTETaskNow(tid, id, taskID, name, "manual", actor)
+	execID, status, err := services.ExecuteSTETaskNow(tid, id, taskID, name, "manual", actor)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -772,13 +582,19 @@ func GetSTEExecutions(c *gin.Context) {
 	args := []any{tid}
 	i := 2
 	if taskID != "" {
-		q += fmt.Sprintf(` AND task_id=$%d`, i); args = append(args, taskID); i++
+		q += fmt.Sprintf(` AND task_id=$%d`, i)
+		args = append(args, taskID)
+		i++
 	}
 	if status != "" {
-		q += fmt.Sprintf(` AND status=$%d`, i); args = append(args, status); i++
+		q += fmt.Sprintf(` AND status=$%d`, i)
+		args = append(args, status)
+		i++
 	}
 	if trigger != "" {
-		q += fmt.Sprintf(` AND trigger=$%d`, i); args = append(args, trigger); i++
+		q += fmt.Sprintf(` AND trigger=$%d`, i)
+		args = append(args, trigger)
+		i++
 	}
 	q += fmt.Sprintf(` ORDER BY start_time DESC LIMIT $%d`, i)
 	args = append(args, limit)
@@ -790,6 +606,7 @@ func GetSTEExecutions(c *gin.Context) {
 	}
 	defer rows.Close()
 	execs := []map[string]any{}
+	runningIdx := map[int]int{} // db row id -> index into execs
 	for rows.Next() {
 		var (
 			id, targetCount, successCount, failureCount int
@@ -824,6 +641,43 @@ func GetSTEExecutions(c *gin.Context) {
 			e["error_message"] = *errMsg
 		}
 		execs = append(execs, e)
+		if status2 == "running" {
+			runningIdx[id] = len(execs) - 1
+		}
+	}
+	rows.Close()
+
+	// syncSTEExecutions used to exist in this file with zero callers
+	// anywhere in the codebase — every dispatched execution stayed
+	// "running" forever regardless of real agent completion. Sync on read
+	// so a user viewing this tab sees fresh state immediately; the
+	// scheduler tick's SyncAllRunningSTEExecutions covers it in the
+	// background even when nobody's looking.
+	if len(runningIdx) > 0 {
+		ids := make([]int, 0, len(runningIdx))
+		for id := range runningIdx {
+			ids = append(ids, id)
+		}
+		services.SyncSTEExecutions(tid, ids)
+		for id, idx := range runningIdx {
+			var st, statusOut string
+			var duration, exitCode *int
+			var endTime *time.Time
+			if database.DB.QueryRow(`SELECT status,duration,exit_code,end_time FROM ste_executions WHERE id=$1`, id).
+				Scan(&st, &duration, &exitCode, &endTime) == nil {
+				statusOut = st
+				execs[idx]["status"] = statusOut
+				if duration != nil {
+					execs[idx]["duration"] = *duration
+				}
+				if exitCode != nil {
+					execs[idx]["exit_code"] = *exitCode
+				}
+				if endTime != nil {
+					execs[idx]["end_time"] = endTime.Format(time.RFC3339)
+				}
+			}
+		}
 	}
 	c.JSON(http.StatusOK, execs)
 }
@@ -935,6 +789,23 @@ func PostSTEApprovalDecide(c *gin.Context) {
 		severity = "warning"
 	}
 	steNotify(tid, taskID, taskName, "approval_"+b.Decision, fmt.Sprintf("Task '%s' %s by %s", taskName, b.Decision, actor), severity)
+
+	// Approving used to only flip ste_approvals.status — it never actually
+	// dispatched the task, and PostSTERunTask unconditionally re-checks
+	// requires_approval on every "Run Now" click regardless of any existing
+	// decision, so a task with requires_approval=true could never run at
+	// all: approving it did nothing, and running it again just filed
+	// another pending approval request. Dispatch for real once approved.
+	if b.Decision == "approved" {
+		var dbID int
+		if database.DB.QueryRow(`SELECT id FROM ste_tasks WHERE tenant_id=$1 AND task_id=$2`, tid, taskID).Scan(&dbID) == nil {
+			execID, status, execErr := services.ExecuteSTETaskNow(tid, strconv.Itoa(dbID), taskID, taskName, "manual", actor)
+			if execErr == nil {
+				c.JSON(http.StatusOK, gin.H{"ok": true, "execution_id": execID, "status": status})
+				return
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -981,17 +852,25 @@ func GetSTEAnalytics(c *gin.Context) {
 	tid := tenantIDFromContext(c)
 
 	type catStat struct {
-		Category     string  `json:"category"`
-		Total        int     `json:"total"`
-		SuccessRate  float64 `json:"success_rate"`
-		AvgDuration  float64 `json:"avg_duration"`
+		Category    string  `json:"category"`
+		Total       int     `json:"total"`
+		SuccessRate float64 `json:"success_rate"`
+		AvgDuration float64 `json:"avg_duration"`
 	}
-	rows, _ := database.DB.Query(`SELECT category,
-		COUNT(*) as total,
-		COALESCE(AVG(CASE WHEN status='completed' THEN 1.0 ELSE 0.0 END)*100,0) as success_rate,
-		COALESCE(AVG(duration),0) as avg_duration
-		FROM ste_executions WHERE tenant_id=$1
-		GROUP BY category ORDER BY total DESC LIMIT 10`, tid)
+	// ste_executions itself has no category column — it only exists on
+	// ste_tasks. This query used to select category directly from
+	// ste_executions, which fails outright (undefined column) on every
+	// call, silently discarded via the ignored Query error — by_category
+	// was permanently empty regardless of how much real execution data
+	// existed. Joined to ste_tasks for the real category, mirroring the
+	// by_task_type query just below, which already does this correctly.
+	rows, _ := database.DB.Query(`SELECT t.category,
+		COUNT(e.id) as total,
+		COALESCE(AVG(CASE WHEN e.status='completed' THEN 1.0 ELSE 0.0 END)*100,0) as success_rate,
+		COALESCE(AVG(e.duration),0) as avg_duration
+		FROM ste_executions e JOIN ste_tasks t ON t.task_id=e.task_id AND t.tenant_id=e.tenant_id
+		WHERE e.tenant_id=$1
+		GROUP BY t.category ORDER BY total DESC LIMIT 10`, tid)
 	catStats := []catStat{}
 	if rows != nil {
 		for rows.Next() {
@@ -1003,8 +882,8 @@ func GetSTEAnalytics(c *gin.Context) {
 	}
 
 	type typeStat struct {
-		TaskType  string `json:"task_type"`
-		Executions int   `json:"executions"`
+		TaskType   string `json:"task_type"`
+		Executions int    `json:"executions"`
 	}
 	trows, _ := database.DB.Query(`SELECT t.task_type, COUNT(e.id) as executions
 		FROM ste_tasks t LEFT JOIN ste_executions e ON e.task_id=t.task_id AND e.tenant_id=t.tenant_id
@@ -1031,13 +910,13 @@ func GetSTEAnalytics(c *gin.Context) {
 	automationHours := float64(totalCompleted) * (totalDuration / 1000) / 3600
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_completed":    totalCompleted,
-		"total_failed":       totalFailed,
-		"success_rate":       successRate,
-		"avg_duration_ms":    totalDuration,
-		"automation_hours":   automationHours,
-		"by_category":        catStats,
-		"by_task_type":       typeStats,
+		"total_completed":  totalCompleted,
+		"total_failed":     totalFailed,
+		"success_rate":     successRate,
+		"avg_duration_ms":  totalDuration,
+		"automation_hours": automationHours,
+		"by_category":      catStats,
+		"by_task_type":     typeStats,
 	})
 }
 
@@ -1175,12 +1054,87 @@ func PostSTEReport(c *gin.Context) {
 		ReportType string `json:"report_type"`
 	}
 	c.ShouldBindJSON(&b)
+
+	titles := map[string]string{
+		"scheduled_task": "Scheduled Task Report", "execution": "Execution Report",
+		"failure": "Failure Report", "automation": "Automation Report",
+		"audit": "Audit Report", "compliance": "Compliance Report",
+	}
+	title := titles[b.ReportType]
+	if title == "" {
+		title = "Scheduled Tasks Report"
+	}
+
+	row := func(q string) int {
+		var n int
+		database.DB.QueryRow(q, tid).Scan(&n)
+		return n
+	}
+	totalTasks := row(`SELECT COUNT(*) FROM ste_tasks WHERE tenant_id=$1`)
+	activeTasks := row(`SELECT COUNT(*) FROM ste_tasks WHERE tenant_id=$1 AND enabled=TRUE`)
+	totalExecs := row(`SELECT COUNT(*) FROM ste_executions WHERE tenant_id=$1`)
+	completedExecs := row(`SELECT COUNT(*) FROM ste_executions WHERE tenant_id=$1 AND status='completed'`)
+	failedExecs := row(`SELECT COUNT(*) FROM ste_executions WHERE tenant_id=$1 AND status='failed'`)
+	pendingApprovals := row(`SELECT COUNT(*) FROM ste_approvals WHERE tenant_id=$1 AND status='pending'`)
+	successRate := 0
+	if totalExecs > 0 {
+		successRate = completedExecs * 100 / totalExecs
+	}
+
+	// This used to return zero real numbers at all — not even a fabricated
+	// snapshot, the single most minimal fake response on this page ("X
+	// report generated successfully. Download will begin shortly."), with
+	// no key_metrics field for the frontend to render even if it wanted to.
+	prompt := fmt.Sprintf(`You are a SOC automation reporting assistant writing a %s. Real metrics for this tenant: %d total scheduled tasks (%d currently enabled), %d total executions, %d completed, %d failed (%d%% success rate), %d approvals currently pending. Respond as a JSON object with fields: executive_summary (2-3 sentences grounded only in these numbers, no invented incidents), recommendations (a JSON array of up to 4 short actionable strings based only on the real data given — if there isn't enough data, say so instead of inventing findings).`,
+		title, totalTasks, activeTasks, totalExecs, completedExecs, failedExecs, successRate, pendingApprovals)
+	var summary string
+	var recommendations []string
+	if raw, err := services.CallLLM(prompt); err == nil {
+		clean := raw
+		if idx := strings.Index(clean, "```json"); idx != -1 {
+			clean = clean[idx+7:]
+		} else if idx := strings.Index(clean, "```"); idx != -1 {
+			clean = clean[idx+3:]
+		}
+		if idx := strings.LastIndex(clean, "```"); idx != -1 {
+			clean = clean[:idx]
+		}
+		var parsed struct {
+			ExecutiveSummary string   `json:"executive_summary"`
+			Recommendations  []string `json:"recommendations"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(clean)), &parsed) == nil {
+			summary = parsed.ExecutiveSummary
+			recommendations = parsed.Recommendations
+		}
+	}
+	if summary == "" {
+		if totalTasks == 0 {
+			summary = "No scheduled tasks have been configured for this tenant."
+		} else {
+			summary = fmt.Sprintf("%d scheduled tasks configured (%d enabled), %d executions recorded with a %d%% success rate. %d approval(s) currently pending.", totalTasks, activeTasks, totalExecs, successRate, pendingApprovals)
+		}
+		recommendations = []string{}
+	}
+
 	steAudit(tid, "", "", "report_generated", actor, fmt.Sprintf("Report type: %s", b.ReportType))
 	c.JSON(http.StatusOK, gin.H{
-		"ok":          true,
-		"report_type": b.ReportType,
-		"generated_at": time.Now().Format(time.RFC3339),
-		"summary":     fmt.Sprintf("%s report generated successfully. Download will begin shortly.", b.ReportType),
+		"ok":                true,
+		"title":             title,
+		"report_type":       b.ReportType,
+		"generated_at":      time.Now().Format(time.RFC3339),
+		"generated_by":      actor,
+		"classification":    "CONFIDENTIAL",
+		"executive_summary": summary,
+		"key_metrics": gin.H{
+			"total_tasks":       totalTasks,
+			"active_tasks":      activeTasks,
+			"total_executions":  totalExecs,
+			"success_rate":      successRate,
+			"failed_executions": failedExecs,
+			"pending_approvals": pendingApprovals,
+		},
+		"recommendations": recommendations,
 	})
 }
 

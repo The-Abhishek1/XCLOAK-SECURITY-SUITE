@@ -24,6 +24,8 @@ func StartScheduler() {
 				ExpireStaleTasks()
 				ExpireStaleApprovals()
 				RunDueScriptSchedules()
+				RunDueSTETasks()
+				SyncAllRunningSTEExecutions()
 			})
 		}
 	}()

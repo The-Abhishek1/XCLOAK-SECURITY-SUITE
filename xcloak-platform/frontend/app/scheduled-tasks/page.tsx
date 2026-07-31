@@ -171,8 +171,10 @@ function TasksTab({ tasks, onRefresh, onNew }: { tasks: any[]; onRefresh: () => 
   }), [tasks, filterCat, filterStatus, filterSched, search]);
 
   const toggle = async (t: any) => {
-    await steAPI.updateTask(t.id, { enabled: !t.enabled });
-    onRefresh();
+    try {
+      await steAPI.updateTask(t.id, { enabled: !t.enabled });
+      onRefresh();
+    } catch { notify('Failed to update task'); }
   };
   const runNow = async (t: any) => {
     setRunning(t.id);
@@ -188,8 +190,10 @@ function TasksTab({ tasks, onRefresh, onNew }: { tasks: any[]; onRefresh: () => 
     finally { setRunning(null); }
   };
   const del = async (t: any) => {
-    await steAPI.deleteTask(t.id);
-    onRefresh();
+    try {
+      await steAPI.deleteTask(t.id);
+      onRefresh();
+    } catch { notify('Failed to delete task'); }
   };
 
   return (
@@ -525,14 +529,20 @@ function AuditTab({ items }: { items: any[] }) {
 }
 
 // ─── Reports ───────────────────────────────────────────────────────────────
-function ReportsTab({ onGenerate }: { onGenerate: (type: string) => void }) {
+function ReportsTab({ onGenerate }: { onGenerate: (type: string) => Promise<any> }) {
   const [generating, setGenerating] = useState('');
   const [toast, setToast] = useState('');
+  const [result, setResult] = useState<any>(null);
   const notify = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
   const gen = async (type: string) => {
     setGenerating(type);
-    await onGenerate(type);
-    notify(`${type.replace(/_/g,' ')} report generated`);
+    try {
+      const data = await onGenerate(type);
+      setResult(data);
+      notify(`${type.replace(/_/g,' ')} report generated`);
+    } catch {
+      notify('Failed to generate report');
+    }
     setGenerating('');
   };
   const reports = [
@@ -558,6 +568,35 @@ function ReportsTab({ onGenerate }: { onGenerate: (type: string) => void }) {
           </SectionCard>
         ))}
       </div>
+      {result && (
+        <div className="g-card" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{result.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Generated {new Date(result.generated_at).toLocaleString()} · {result.classification}</div>
+            </div>
+          </div>
+          <div className="g-card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--accent)' }}>
+            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Executive Summary</div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>{result.executive_summary}</div>
+          </div>
+          {result.key_metrics && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {Object.entries(result.key_metrics).map(([k, v]) => <MetricCard key={k} label={k.replace(/_/g, ' ')} value={String(v)} />)}
+            </div>
+          )}
+          {result.recommendations?.length > 0 && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8 }}>Recommendations</div>
+              {result.recommendations.map((r: string, i: number) => (
+                <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--text-2)', marginBottom: 5 }}>
+                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{i + 1}.</span><span>{r}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -809,12 +848,15 @@ export default function ScheduledTasksPage() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const markRead = async () => {
-    await steAPI.markNotificationsRead();
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      await steAPI.markNotificationsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch { /* non-critical, next load will reflect real state */ }
   };
 
   const genReport = async (type: string) => {
-    await steAPI.report({ report_type: type });
+    const r = await steAPI.report({ report_type: type });
+    return r.data;
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
