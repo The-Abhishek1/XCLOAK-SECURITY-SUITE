@@ -6,7 +6,7 @@ import { MetricCard, DataTable, EmptyState, SectionCard, TabBar, ActionButton } 
 import {
   LayoutDashboard, Building2, KeyRound, BarChart3, FileBarChart2,
   Plus, X, CheckCircle2, Ban, Pencil, Blocks, Gauge, CreditCard,
-  Save, RotateCcw, Power, Wand2, Send,
+  Save, RotateCcw, Power, Wand2, Send, Trash2, Globe,
 } from 'lucide-react';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -54,6 +54,7 @@ const TABS = [
 const SIDEBAR: Record<string, { key: string; label: string }[]> = {
   dashboard: [{ key: 'overview',     label: 'Tenant Dashboard' }],
   tenants:   [{ key: 'directory',    label: 'Tenant Directory' }, { key: 'config', label: 'Tenant Configuration' },
+              { key: 'live',         label: 'Live Tenants' },
               { key: 'isolation',    label: 'Data Isolation' }, { key: 'deployment', label: 'Deployment Mode' }],
   licenses:  [{ key: 'rbac',         label: 'Users & RBAC' }, { key: 'modules', label: 'Module Management' }],
   usage:     [{ key: 'resources',    label: 'Resource Allocation' },
@@ -106,6 +107,13 @@ const RESOURCE_FIELDS = [
   { key: 'max_integrations',           label: 'Max Integrations' },
 ];
 
+// Sections backed by the seeded tne_* reference dataset, not this deployment's
+// real tenants — see the "Live Tenants" section for those.
+const DEMO_SECTIONS = new Set([
+  'overview', 'directory', 'config', 'rbac', 'modules', 'resources',
+  'subscription', 'billing', 'analytics', 'health', 'ai', 'audit',
+]);
+
 const AI_PROMPTS = [
   { action: 'health_summary',           label: 'Platform Health Summary' },
   { action: 'license_recommendations',  label: 'License Recommendations' },
@@ -154,6 +162,77 @@ export default function PlatformPage() {
 
   const [capabilities, setCapabilities] = useState<any>(null);
   const [modeToggling, setModeToggling] = useState<'saas' | 'license' | null>(null);
+
+  // Live tenants — this deployment's real tenants (distinct from the demo
+  // Tenant Directory above, which runs on seeded reference data).
+  const [realTenants, setRealTenants]     = useState<any[]>([]);
+  const [showCreateReal, setShowCreateReal] = useState(false);
+  const [newRealTenant, setNewRealTenant] = useState({ name: '', slug: '', admin_username: '', admin_email: '' });
+  const [realMsg, setRealMsg]             = useState('');
+  const [selectedRealTenant, setSelectedRealTenant] = useState<any>(null);
+  const [realTenantDomains, setRealTenantDomains]   = useState<any[]>([]);
+  const [newDomain, setNewDomain]         = useState('');
+
+  const realFail = (err: any, fallback: string) => {
+    setRealMsg(err?.response?.data?.error || fallback);
+    setTimeout(() => setRealMsg(''), 4000);
+  };
+
+  const loadRealTenants = useCallback(() => {
+    platformAPI.getTenants()
+      .then(r => setRealTenants(Array.isArray(r.data) ? r.data : []))
+      .catch((err: any) => realFail(err, 'Failed to load live tenants.'));
+  }, []);
+
+  useEffect(() => { if (section === 'live') loadRealTenants(); }, [section, loadRealTenants]);
+
+  const createRealTenant = () => {
+    platformAPI.createTenant(newRealTenant.name, newRealTenant.slug, newRealTenant.admin_username, newRealTenant.admin_email)
+      .then(r => {
+        setShowCreateReal(false);
+        setNewRealTenant({ name: '', slug: '', admin_username: '', admin_email: '' });
+        setRealMsg(r.data?.message ?? 'Tenant created.');
+        setTimeout(() => setRealMsg(''), 5000);
+        loadRealTenants();
+      })
+      .catch((err: any) => realFail(err, 'Failed to create tenant.'));
+  };
+
+  const toggleRealTenant = (t: any) => {
+    platformAPI.toggleTenant(t.id, !t.is_active)
+      .then(() => loadRealTenants())
+      .catch((err: any) => realFail(err, 'Failed to update tenant status.'));
+  };
+
+  const deleteRealTenant = (t: any) => {
+    if (!window.confirm(`Delete tenant "${t.name}"? This permanently removes all of its users, agents, and data.`)) return;
+    platformAPI.deleteTenant(t.id)
+      .then(() => { if (selectedRealTenant?.id === t.id) setSelectedRealTenant(null); loadRealTenants(); })
+      .catch((err: any) => realFail(err, 'Failed to delete tenant.'));
+  };
+
+  const selectRealTenant = (t: any) => {
+    setSelectedRealTenant(t);
+    platformAPI.getTenantDomains(t.id)
+      .then(r => setRealTenantDomains(Array.isArray(r.data) ? r.data : []))
+      .catch((err: any) => realFail(err, 'Failed to load domains.'));
+  };
+
+  const addRealDomain = () => {
+    if (!selectedRealTenant || !newDomain.trim()) return;
+    platformAPI.addTenantDomain(selectedRealTenant.id, newDomain.trim())
+      .then(() => { setNewDomain(''); return platformAPI.getTenantDomains(selectedRealTenant.id); })
+      .then(r => setRealTenantDomains(Array.isArray(r.data) ? r.data : []))
+      .catch((err: any) => realFail(err, 'Failed to add domain (it may already be mapped to a tenant).'));
+  };
+
+  const deleteRealDomain = (domainId: number) => {
+    if (!selectedRealTenant) return;
+    platformAPI.deleteTenantDomain(selectedRealTenant.id, domainId)
+      .then(() => platformAPI.getTenantDomains(selectedRealTenant.id))
+      .then(r => setRealTenantDomains(Array.isArray(r.data) ? r.data : []))
+      .catch((err: any) => realFail(err, 'Failed to remove domain.'));
+  };
 
   const loadAll = useCallback(async () => {
     const [dash, tList, anal, ph, aud, rpts, caps] = await Promise.all([
@@ -578,30 +657,122 @@ export default function PlatformPage() {
         </div>
       );
 
+      // ── LIVE TENANTS ────────────────────────────────────────────────────────
+      case 'live': return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Live Tenants</h2>
+              <p style={{ margin: '2px 0 0', color: 'var(--text-3)', fontSize: 12 }}>
+                This deployment&apos;s actual tenants — real accounts with real data, isolated by tenant_id.
+                Suspending or deleting here takes effect immediately.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {realMsg && <span style={{ color: 'var(--text-2)', fontSize: 12 }}>{realMsg}</span>}
+              <ActionButton variant="primary" icon={Plus} onClick={() => setShowCreateReal(true)}>New Tenant</ActionButton>
+            </div>
+          </div>
+
+          {showCreateReal && (
+            <SectionCard title="Create Tenant">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {([['name','Name'],['slug','Slug'],['admin_username','Admin Username'],['admin_email','Admin Email']] as [string,string][]).map(([k, l]) => (
+                  <div key={k}>
+                    <label style={{ color: 'var(--text-2)', fontSize: 12 }}>{l}</label>
+                    <input className="g-input" style={{ width: '100%', marginTop: 4 }}
+                      value={(newRealTenant as any)[k] ?? ''}
+                      onChange={e => setNewRealTenant(p => ({ ...p, [k]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <ActionButton variant="primary" icon={Plus}
+                  disabled={!newRealTenant.name || !newRealTenant.slug || !newRealTenant.admin_username || !newRealTenant.admin_email}
+                  onClick={createRealTenant}>Create Tenant</ActionButton>
+                <ActionButton variant="ghost" icon={X} onClick={() => setShowCreateReal(false)}>Cancel</ActionButton>
+              </div>
+            </SectionCard>
+          )}
+
+          <SectionCard padded={false}>
+            <DataTable<any>
+              rows={realTenants}
+              rowKey={(t: any) => t.id}
+              onRowClick={t => selectRealTenant(t)}
+              rowStyle={(t: any) => selectedRealTenant?.id === t.id ? { background: 'var(--accent-glow)' } : undefined}
+              emptyState={<EmptyState title="No tenants" />}
+              columns={[
+                { key: 'name', header: 'Tenant', render: (t: any) => (
+                  <div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-1)' }}>{t.name}</div>
+                    <div style={{ color: 'var(--text-3)', fontSize: 11, fontFamily: 'monospace' }}>{t.slug}</div>
+                  </div>
+                ) },
+                { key: 'user_count', header: 'Users', render: (t: any) => <span>{t.user_count ?? 0}</span> },
+                { key: 'is_active', header: 'Status', render: (t: any) => t.is_active ? pill('active') : pill('suspended') },
+                { key: 'created_at', header: 'Created', render: (t: any) => <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{t.created_at?.slice(0, 10)}</span> },
+                { key: 'actions', header: 'Actions', render: (t: any) => (
+                  <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                    {t.is_active ? (
+                      <ActionButton variant="danger" icon={Ban} style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => toggleRealTenant(t)}>Suspend</ActionButton>
+                    ) : (
+                      <ActionButton variant="ghost" icon={CheckCircle2} style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => toggleRealTenant(t)}>Activate</ActionButton>
+                    )}
+                    {t.id !== 1 && (
+                      <ActionButton variant="danger" icon={Trash2} style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => deleteRealTenant(t)}>Delete</ActionButton>
+                    )}
+                  </div>
+                ) },
+              ]}
+            />
+          </SectionCard>
+
+          {selectedRealTenant && (
+            <SectionCard title={`Domains — ${selectedRealTenant.name}`} subtitle="Mapping a domain routes logins from that domain to this tenant.">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {realTenantDomains.length === 0 && (
+                  <div style={{ color: 'var(--text-3)', fontSize: 12 }}>No domains mapped.</div>
+                )}
+                {realTenantDomains.map((d: any) => (
+                  <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}><Globe size={13} /> {d.domain}</span>
+                    <ActionButton variant="ghost" icon={X} style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={() => deleteRealDomain(d.id)}>Remove</ActionButton>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <input className="g-input" placeholder="acme.com" style={{ flex: 1 }}
+                    value={newDomain} onChange={e => setNewDomain(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addRealDomain(); }} />
+                  <ActionButton variant="primary" icon={Plus} onClick={addRealDomain}>Add Domain</ActionButton>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+        </div>
+      );
+
       // ── DATA ISOLATION ─────────────────────────────────────────────────────
       case 'isolation': return (
-        <SectionCard title="Data Isolation Policies" subtitle="Platform-wide tenant data isolation configuration. These controls apply to all tenants.">
+        <SectionCard title="Data Isolation Policies" subtitle="What this deployment actually enforces today — not an aspirational architecture diagram.">
           {[
-            ['Database Isolation Mode',    'Row-Level Security (PostgreSQL RLS) — tenant_id enforced on every query'],
-            ['Storage Namespace',          'Per-tenant MinIO prefix: /tenants/{ref}/ — cross-prefix access denied'],
-            ['Encryption at Rest',         'AES-256-GCM with per-tenant data key (HSM-backed KMS)'],
-            ['Network Isolation',          'Tenant VPC tagging + security group per region'],
-            ['Log Isolation',              'Elasticsearch index-per-tenant: .xcloak-{ref}-*'],
-            ['API Namespace Enforcement',  'JWT tenant_id claim verified on every authenticated request'],
-            ['Cross-Tenant Access',        'Blocked — zero cross-tenant data reads at any layer'],
-            ['Data Residency',             'Per-tenant region pinning — data never egresses region boundary'],
-            ['Backup Isolation',           'Per-tenant encrypted snapshot — separate S3 bucket per tenant'],
-            ['Audit Log Isolation',        'Platform admin audit and tenant audit are separate, non-overlapping'],
+            ['Database Scoping',           'Application-level tenant_id filter on every query, across all 286 tenant-scoped tables'],
+            ['Row-Level Security (RLS)',   'Enabled on 6 sensitive tables (alerts, incidents, iocs, sigma_rules, …); the rest rely on the app-level filter above, not DB-enforced RLS'],
+            ['API Namespace Enforcement',  'JWT tenant_id claim set by RequireAuth/RequireAgentAuth and read on every handler via tenantIDFromContext'],
+            ['Log Storage',                'Shared Elasticsearch index (xcloak-logs-*) — isolation is by tenant_id field filter, not a separate index per tenant'],
+            ['Audit Log Storage',          'Written to MinIO object storage (shared bucket, not per-tenant)'],
+            ['Backups',                    'Single pg_dump of the shared database — not a per-tenant snapshot; a restore affects every tenant'],
+            ['Encryption at Rest',         'Not implemented — no per-tenant data key or KMS integration exists in this deployment'],
           ].map(([label, value]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ color: 'var(--text-2)', fontSize: 13, width: '35%' }}>{label}</div>
-              <div style={{ color: 'var(--text-1)', fontSize: 12, fontFamily: 'monospace', width: '62%', textAlign: 'right', lineHeight: 1.5 }}>{value}</div>
+              <div style={{ color: 'var(--text-2)', fontSize: 13, width: '30%' }}>{label}</div>
+              <div style={{ color: 'var(--text-1)', fontSize: 12, width: '67%', textAlign: 'right', lineHeight: 1.5 }}>{value}</div>
             </div>
           ))}
-          <div className="flex items-center gap-2" style={{ marginTop: 20, padding: 14, background: 'var(--green-bg)', borderRadius: 'var(--radius-md)', color: 'var(--green)', fontSize: 13 }}>
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            All data isolation controls active. No cross-tenant leakage detected in last 30 days.
-          </div>
         </SectionCard>
       );
 
@@ -944,15 +1115,12 @@ export default function PlatformPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <h2 style={{ margin: 0, color: 'var(--text-1)', fontSize: 16 }}>Tenant Health Monitoring</h2>
           {platformHealth?.platform && (
-            <SectionCard title="Platform Infrastructure">
+            <SectionCard title="Platform Infrastructure" subtitle="Live signals only — availability/log-ingestion/API-latency have no probe wired up on this deployment, so they're omitted rather than shown as invented numbers.">
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <MetricCard label="Availability"        value={`${platformHealth.platform.availability}%`} />
                 <MetricCard label="Database"            value={platformHealth.platform.database_health} />
-                <MetricCard label="Log Ingestion"       value={platformHealth.platform.log_ingestion} />
-                <MetricCard label="API"                 value={platformHealth.platform.api_health} />
                 <MetricCard label="Storage Used"        value={`${platformHealth.platform.storage_capacity_pct}%`} />
                 <MetricCard label="Total EPS"           value={(platformHealth.platform.total_eps ?? 0).toLocaleString()} />
-                <MetricCard label="Agent Connectivity"  value={`${platformHealth.platform.agent_connectivity_pct}%`} />
+                <MetricCard label="Agent Connectivity"  value={`${(platformHealth.platform.agent_connectivity_pct ?? 0).toFixed(1)}%`} />
               </div>
             </SectionCard>
           )}
@@ -1068,6 +1236,18 @@ export default function PlatformPage() {
         {/* Sub-section tabs */}
         {sidebarItems.length > 1 && (
           <TabBar tabs={sidebarItems} active={section} onChange={setSection} />
+        )}
+
+        {DEMO_SECTIONS.has(section) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '8px 14px', background: 'var(--bg-2)', borderRadius: 'var(--radius-md)',
+            color: 'var(--text-3)', fontSize: 12, border: '1px solid var(--border)',
+          }}>
+            <span>Reference data — a seeded demo dataset showcasing a multi-tenant console, not this deployment&apos;s real tenants.</span>
+            <ActionButton variant="ghost" icon={Building2} style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
+              onClick={() => { switchTab('tenants'); setSection('live'); }}>View Live Tenants</ActionButton>
+          </div>
         )}
 
         {renderSection()}

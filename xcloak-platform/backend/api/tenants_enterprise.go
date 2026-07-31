@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -24,6 +25,11 @@ func tneNull(s string) interface{} {
 		return nil
 	}
 	return s
+}
+
+// planPricing is a fixed reference price sheet, not a live billing integration.
+var planPricing = map[string]float64{
+	"community": 0, "professional": 1200, "enterprise": 4500, "enterprise_plus": 9000,
 }
 
 func tneAudit(action, objectType, objectID, actor, details string) {
@@ -149,6 +155,49 @@ func InitTNETables() {
 	for _, s := range stmts {
 		db.Exec(s)
 	}
+	fixTNESchema(db)
+}
+
+// fixTNESchema runs on every startup, after the tne_* tables are guaranteed
+// to exist. tne_usage and tne_health originally had no uniqueness constraint
+// on the columns cmd/seed/demo's ON CONFLICT DO NOTHING clauses target
+// (tenant_ref+period and tenant_ref+check_type), so every reseed silently
+// duplicated their rows instead of being a no-op — the same disease fixed
+// for log_sources in migration 000071. None of tne_modules/tne_resources/
+// tne_health/tne_usage/tne_billing had a foreign key back to tne_tenants
+// either, so a lost tne_tenants row left orphaned child rows with no way to
+// detect or clean them up. All statements here are idempotent — safe to run
+// on every InitTNETables() call.
+func fixTNESchema(db *sql.DB) {
+	// Dedupe (keep the lowest id per key) before the unique index can be added.
+	db.Exec(`DELETE FROM tne_usage a USING tne_usage b
+		WHERE a.tenant_ref = b.tenant_ref AND a.period = b.period AND a.id > b.id`)
+	db.Exec(`DELETE FROM tne_health a USING tne_health b
+		WHERE a.tenant_ref = b.tenant_ref AND a.check_type = b.check_type AND a.id > b.id`)
+
+	// Drop any rows left orphaned by a tne_tenants row that no longer exists —
+	// a FK can't be added over rows that would violate it.
+	for _, t := range []string{"tne_modules", "tne_resources", "tne_health", "tne_usage", "tne_billing"} {
+		db.Exec(fmt.Sprintf(`DELETE FROM %s WHERE tenant_ref NOT IN (SELECT tenant_ref FROM tne_tenants)`, t))
+	}
+
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS tne_usage_tenant_period_key ON tne_usage (tenant_ref, period)`)
+	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS tne_health_tenant_checktype_key ON tne_health (tenant_ref, check_type)`)
+
+	fkeys := map[string]string{
+		"tne_modules_tenant_ref_fkey":   "ALTER TABLE tne_modules ADD CONSTRAINT tne_modules_tenant_ref_fkey FOREIGN KEY (tenant_ref) REFERENCES tne_tenants(tenant_ref) ON DELETE CASCADE",
+		"tne_resources_tenant_ref_fkey": "ALTER TABLE tne_resources ADD CONSTRAINT tne_resources_tenant_ref_fkey FOREIGN KEY (tenant_ref) REFERENCES tne_tenants(tenant_ref) ON DELETE CASCADE",
+		"tne_health_tenant_ref_fkey":    "ALTER TABLE tne_health ADD CONSTRAINT tne_health_tenant_ref_fkey FOREIGN KEY (tenant_ref) REFERENCES tne_tenants(tenant_ref) ON DELETE CASCADE",
+		"tne_usage_tenant_ref_fkey":     "ALTER TABLE tne_usage ADD CONSTRAINT tne_usage_tenant_ref_fkey FOREIGN KEY (tenant_ref) REFERENCES tne_tenants(tenant_ref) ON DELETE CASCADE",
+		"tne_billing_tenant_ref_fkey":   "ALTER TABLE tne_billing ADD CONSTRAINT tne_billing_tenant_ref_fkey FOREIGN KEY (tenant_ref) REFERENCES tne_tenants(tenant_ref) ON DELETE CASCADE",
+	}
+	for name, ddl := range fkeys {
+		var exists bool
+		db.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname=$1)`, name).Scan(&exists)
+		if !exists {
+			db.Exec(ddl)
+		}
+	}
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -216,16 +265,42 @@ func GetTNEDashboard(c *gin.Context) {
 		}
 	}
 
+	// real platform EPS + license utilization, aggregated from current usage/resources
+	var platformEPS float64
+	db.QueryRow(`SELECT COALESCE(SUM(events_per_second),0) FROM tne_usage WHERE period='current'`).Scan(&platformEPS)
+
+	var sumActiveUsers, sumMaxUsers int
+	db.QueryRow(`SELECT COALESCE(SUM(u.active_users),0), COALESCE(SUM(r.max_users),0)
+		FROM tne_usage u JOIN tne_resources r ON r.tenant_ref=u.tenant_ref WHERE u.period='current'`).
+		Scan(&sumActiveUsers, &sumMaxUsers)
+	licenseUtilizationPct := 0
+	if sumMaxUsers > 0 {
+		licenseUtilizationPct = sumActiveUsers * 100 / sumMaxUsers
+	}
+
+	// monthly revenue: reference-price-sheet sum over currently active tenants (not a live billing feed)
+	var monthlyRevenue float64
+	prows2, _ := db.Query(`SELECT plan, COUNT(*) FROM tne_tenants WHERE status='active' GROUP BY plan`)
+	if prows2 != nil {
+		defer prows2.Close()
+		for prows2.Next() {
+			var p string
+			var cnt int
+			if prows2.Scan(&p, &cnt) == nil {
+				monthlyRevenue += planPricing[p] * float64(cnt)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_tenants": total, "active_tenants": active, "suspended_tenants": suspended,
 		"trial_tenants": trial, "enterprise_tenants": enterprise,
 		"total_users": totalUsers, "total_agents": totalAgents,
-		"total_assets": 14847, "total_storage_used_tb": 2.4,
-		"license_utilization_pct": 67,
-		"healthy_tenants": healthy, "degraded_tenants": degraded, "critical_tenants": critical,
+		"license_utilization_pct": licenseUtilizationPct,
+		"healthy_tenants":         healthy, "degraded_tenants": degraded, "critical_tenants": critical,
 		"recent_tenants": recent, "plan_breakdown": plans,
-		"platform_eps": 24750, "platform_api_rps": 847,
-		"monthly_revenue_usd": 187400, "renewal_value_usd": 94200,
+		"platform_eps":        int64(platformEPS),
+		"monthly_revenue_usd": monthlyRevenue,
 	})
 }
 
@@ -243,15 +318,18 @@ func GetTNETenants(c *gin.Context) {
 	i := 1
 	if status != "" {
 		where = append(where, fmt.Sprintf("status=$%d", i))
-		args = append(args, status); i++
+		args = append(args, status)
+		i++
 	}
 	if plan != "" {
 		where = append(where, fmt.Sprintf("plan=$%d", i))
-		args = append(args, plan); i++
+		args = append(args, plan)
+		i++
 	}
 	if search != "" {
 		where = append(where, fmt.Sprintf("(tenant_name ILIKE $%d OR org_name ILIKE $%d OR domain ILIKE $%d)", i, i, i))
-		args = append(args, "%"+search+"%"); i++
+		args = append(args, "%"+search+"%")
+		i++
 	}
 	args = append(args, limit)
 
@@ -451,7 +529,8 @@ func PatchTNETenant(c *gin.Context) {
 	for _, f := range stringFields {
 		if v, ok := body[f]; ok {
 			sets = append(sets, fmt.Sprintf("%s=$%d", f, i))
-			args = append(args, v); i++
+			args = append(args, v)
+			i++
 		}
 	}
 	if len(sets) > 0 {
@@ -469,7 +548,9 @@ func PatchTNETenantStatus(c *gin.Context) {
 	ref := c.Param("ref")
 	actor := usernameFromContext(c)
 
-	var body struct{ Status string `json:"status"` }
+	var body struct {
+		Status string `json:"status"`
+	}
 	c.BindJSON(&body)
 	if body.Status == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status required"})
@@ -641,11 +722,34 @@ func GetTNEPlatformHealth(c *gin.Context) {
 			}
 		}
 	}
+	databaseHealth := "healthy"
+	if err := db.Ping(); err != nil {
+		databaseHealth = "degraded"
+	}
+
+	var totalEPS, sumStorageGb, sumMaxStorageGb float64
+	db.QueryRow(`SELECT COALESCE(SUM(u.events_per_second),0), COALESCE(SUM(u.storage_used_gb),0), COALESCE(SUM(r.max_storage_gb),0)
+		FROM tne_usage u JOIN tne_resources r ON r.tenant_ref=u.tenant_ref WHERE u.period='current'`).
+		Scan(&totalEPS, &sumStorageGb, &sumMaxStorageGb)
+	storageCapacityPct := 0
+	if sumMaxStorageGb > 0 {
+		storageCapacityPct = int(sumStorageGb * 100 / sumMaxStorageGb)
+	}
+
+	var totalAgents, connectedAgents int
+	database.DB.QueryRow(`SELECT COUNT(*), COUNT(*) FILTER (WHERE last_seen > NOW() - INTERVAL '5 minutes') FROM agents`).
+		Scan(&totalAgents, &connectedAgents)
+	agentConnectivityPct := 0.0
+	if totalAgents > 0 {
+		agentConnectivityPct = float64(connectedAgents) * 100 / float64(totalAgents)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"platform": gin.H{
-			"availability": 99.97, "database_health": "healthy", "log_ingestion": "healthy",
-			"api_health": "healthy", "storage_capacity_pct": 44,
-			"total_eps": 24750, "agent_connectivity_pct": 97.2,
+			"database_health":        databaseHealth,
+			"storage_capacity_pct":   storageCapacityPct,
+			"total_eps":              int64(totalEPS),
+			"agent_connectivity_pct": agentConnectivityPct,
 		},
 		"tenants": tenantHealth,
 	})
@@ -728,24 +832,47 @@ func GetTNEPlatformAnalytics(c *gin.Context) {
 		}
 	}
 
-	// monthly trend
+	// monthly trend — aggregated from real historical tne_usage/tne_billing rows
 	trend := []map[string]interface{}{}
-	for i := 5; i >= 0; i-- {
-		m := time.Now().AddDate(0, -i, 0)
-		trend = append(trend, map[string]interface{}{
-			"month":        m.Format("Jan 2006"),
-			"tenants":      8 + (5-i)*2,
-			"agents":       240 + (5-i)*37,
-			"storage_tb":   1.2 + float64(5-i)*0.24,
-			"revenue_usd":  120000 + (5-i)*12500,
-		})
+	trows, _ := db.Query(`SELECT u.period,
+			COUNT(DISTINCT u.tenant_ref) as tenants,
+			COALESCE(SUM(u.active_agents),0) as agents,
+			COALESCE(SUM(u.storage_used_gb),0)/1024.0 as storage_tb,
+			COALESCE((SELECT SUM(b.amount_usd) FROM tne_billing b WHERE b.period=u.period),0) as revenue
+		FROM tne_usage u
+		WHERE u.period ~ '^[0-9]{4}-[0-9]{2}$'
+		GROUP BY u.period ORDER BY u.period ASC`)
+	if trows != nil {
+		defer trows.Close()
+		for trows.Next() {
+			var period string
+			var tCount, agents int
+			var storageTb, revenue float64
+			if err := trows.Scan(&period, &tCount, &agents, &storageTb, &revenue); err == nil {
+				label := period
+				if pt, perr := time.Parse("2006-01", period); perr == nil {
+					label = pt.Format("Jan 2006")
+				}
+				trend = append(trend, map[string]interface{}{
+					"month": label, "tenants": tCount, "agents": agents,
+					"storage_tb": storageTb, "revenue_usd": revenue,
+				})
+			}
+		}
 	}
+
+	var totUsers, totAgents, totAiReq int
+	var totEps, totStorageGb float64
+	db.QueryRow(`SELECT COALESCE(SUM(active_users),0), COALESCE(SUM(active_agents),0),
+		COALESCE(SUM(ai_requests),0), COALESCE(SUM(events_per_second),0), COALESCE(SUM(storage_used_gb),0)
+		FROM tne_usage WHERE period='current'`).
+		Scan(&totUsers, &totAgents, &totAiReq, &totEps, &totStorageGb)
 
 	c.JSON(http.StatusOK, gin.H{
 		"tenants": tenants, "monthly_trend": trend,
 		"totals": gin.H{
-			"active_users": 847, "active_agents": 4127, "total_eps": 24750,
-			"total_storage_tb": 2.4, "total_ai_requests_month": 18420,
+			"active_users": totUsers, "active_agents": totAgents, "total_eps": int64(totEps),
+			"total_storage_tb": totStorageGb / 1024.0, "total_ai_requests_month": totAiReq,
 		},
 	})
 }
@@ -774,20 +901,30 @@ func GetTNEBilling(c *gin.Context) {
 		}
 	}
 
-	// get tenant plan
-	var plan string
-	db.QueryRow(`SELECT plan FROM tne_tenants WHERE tenant_ref=$1`, ref).Scan(&plan)
+	// get tenant plan/contact
+	var plan, licenseType, adminEmail string
+	db.QueryRow(`SELECT plan, license_type, COALESCE(admin_email,'') FROM tne_tenants WHERE tenant_ref=$1`, ref).
+		Scan(&plan, &licenseType, &adminEmail)
 
-	planPricing := map[string]float64{
-		"community": 0, "professional": 1200, "enterprise": 4500, "enterprise_plus": 9000,
+	billingContact := adminEmail
+	if billingContact == "" {
+		billingContact = "not set"
 	}
+
+	nextInvoiceDate := time.Now().AddDate(0, 1, 0).Format("2006-01-02")
+	if len(invoices) > 0 {
+		if due, ok := invoices[0]["due_date"].(*string); ok && due != nil {
+			nextInvoiceDate = *due
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"invoices": invoices, "plan": plan,
 		"monthly_amount_usd": planPricing[plan],
-		"next_invoice_date":  time.Now().AddDate(0, 1, 0).Format("2006-01-02"),
-		"payment_method":     "Credit Card ****4242",
-		"billing_contact":    "billing@corp.example.com",
-		"auto_renew":         true,
+		"next_invoice_date":  nextInvoiceDate,
+		"payment_method":     "not on file — no payment integration configured",
+		"billing_contact":    billingContact,
+		"auto_renew":         licenseType == "subscription",
 	})
 }
 
@@ -913,13 +1050,13 @@ Base your answer strictly on the data above — do not invent tenant names, doll
 func GetTNEReports(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"available": []map[string]interface{}{
-			{"id": "tenant_summary",       "title": "Tenant Summary",           "description": "Overview of all tenants and their current state"},
-			{"id": "license_usage",        "title": "License Usage",            "description": "License utilization and overage analysis across all tenants"},
-			{"id": "resource_utilization", "title": "Resource Utilization",     "description": "CPU, memory, storage, and agent resource usage per tenant"},
-			{"id": "security_overview",    "title": "Security Overview",        "description": "Threat landscape and security posture across the platform"},
-			{"id": "compliance_status",    "title": "Compliance Status",        "description": "Compliance framework adherence per tenant"},
-			{"id": "storage_report",       "title": "Storage Report",           "description": "Storage consumption trends and growth projections"},
-			{"id": "billing_report",       "title": "Billing Report",           "description": "Revenue, invoices, and payment status across all tenants"},
+			{"id": "tenant_summary", "title": "Tenant Summary", "description": "Overview of all tenants and their current state"},
+			{"id": "license_usage", "title": "License Usage", "description": "License utilization and overage analysis across all tenants"},
+			{"id": "resource_utilization", "title": "Resource Utilization", "description": "CPU, memory, storage, and agent resource usage per tenant"},
+			{"id": "security_overview", "title": "Security Overview", "description": "Threat landscape and security posture across the platform"},
+			{"id": "compliance_status", "title": "Compliance Status", "description": "Compliance framework adherence per tenant"},
+			{"id": "storage_report", "title": "Storage Report", "description": "Storage consumption trends and growth projections"},
+			{"id": "billing_report", "title": "Billing Report", "description": "Revenue, invoices, and payment status across all tenants"},
 		},
 	})
 }
