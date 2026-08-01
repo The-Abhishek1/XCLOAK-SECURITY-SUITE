@@ -153,11 +153,18 @@ test.describe('Network Map — node detail: real actions only', () => {
     // suspected, to let the backdrop actually mount before we stop clicking).
     outer: for (let gx = 0.08; gx <= 0.92 && !drawerOpened; gx += 0.06) {
       for (let gy = 0.1; gy <= 0.9 && !drawerOpened; gy += 0.1) {
+        // Node hit-areas now have deliberate click padding (see
+        // nodePointerAreaPaint in page.tsx — previously hit-testing used a
+        // tight default circle decoupled from what was actually drawn,
+        // which was the root cause of nodes being unclickable in dense
+        // clusters). That makes an early grid position land on a node far
+        // more often, so a too-short detection window here becomes a real
+        // race: if the drawer's mount isn't caught in time, the next grid
+        // click lands on the now-open drawer's fixed backdrop instead of
+        // the canvas. 250ms was cutting it close even before that; widened
+        // for a safer margin.
         await canvas.click({ position: { x: box!.width * gx, y: box!.height * gy }, timeout: 5_000 });
-        // waitFor resolves as soon as the drawer mounts (fast on a real hit)
-        // but still bounds the cost of a miss to this timeout, unlike a bare
-        // .count() check which can race the click's React state update.
-        drawerOpened = await drawer.first().waitFor({ state: 'visible', timeout: 250 })
+        drawerOpened = await drawer.first().waitFor({ state: 'visible', timeout: 600 })
           .then(() => true).catch(() => false);
       }
     }

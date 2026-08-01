@@ -1132,6 +1132,8 @@ export default function NetworkMapPage() {
   const [zoneFilter, setZoneFilter]     = useState('all');
   const [search, setSearch]             = useState('');
   const [selected, setSelected]         = useState<NetworkMapNode | null>(null);
+  const [hoverNode, setHoverNode]       = useState<any>(null);
+  const [mousePos, setMousePos]         = useState({ x: 0, y: 0 });
   const [showOffline, setShowOffline]   = useState(true);
   const [zoneColors, setZoneColors]     = useState<Record<string, string>>({});
   const [enrichMap, setEnrichMap]       = useState<Map<string, string>>(new Map());
@@ -1312,6 +1314,18 @@ export default function NetworkMapPage() {
     return { nodes, links };
   }, [graph, filteredNodeIds]);
 
+  // Spread nodes out further so dense clusters (a hub agent with several
+  // connections) don't collapse into an overlapping, unclickable knot —
+  // stronger mutual repulsion plus longer link rest-length than the
+  // library's defaults (charge -30, link distance ~30-ish).
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg || data.nodes.length === 0) return;
+    fg.d3Force('charge')?.strength(-180).distanceMax(400);
+    fg.d3Force('link')?.distance(90);
+    fg.d3ReheatSimulation?.();
+  }, [data]);
+
   const edgesForSelected = useMemo(() => {
     if (!graph || !selected) return [];
     return graph.edges.filter(e => e.source === selected.id || e.target === selected.id);
@@ -1348,12 +1362,38 @@ export default function NetworkMapPage() {
   };
 
   const drawNode = useCallback((n: any, ctx: CanvasRenderingContext2D) => {
-    const isAgent = n.type === 'agent';
-    const isExt   = n.type === 'external_ip';
-    const r       = Math.max(4, n.val || 4);
-    const fill    = nodeColor(n);
-    const ring    = zoneColors[n.zone] || '#64748b';
-    const offline = n.status === 'offline';
+    const isAgent   = n.type === 'agent';
+    const isExt     = n.type === 'external_ip';
+    const r         = Math.max(4, n.val || 4);
+    const fill      = nodeColor(n);
+    const ring      = zoneColors[n.zone] || '#64748b';
+    const offline   = n.status === 'offline';
+    const isHovered = hoverNode?.id === n.id;
+    const isActive  = isHovered || selected?.id === n.id;
+    // Labels are hover/selected-only — always-on labels were the main
+    // source of the clutter this redesign fixes; showing every node's name
+    // at once made dense clusters unreadable and made adjacent nodes'
+    // labels overlap each other's icons.
+    const showLabel = isActive;
+
+    // Soft ambient shadow under every node for depth — replaces the flat,
+    // dated look of plain filled shapes with no elevation. Drawn as a single
+    // blurred blob *underneath* everything else, then shadow is switched
+    // off before the real shape/ring/badge/label draw — applying shadowBlur
+    // across a whole multi-stroke draw sequence compounds on every
+    // overlapping fill/stroke and reads as a solid dark blob instead of a
+    // subtle lift.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur  = isActive ? 12 : 5;
+    ctx.shadowOffsetY = 1.5;
+    ctx.fillStyle = 'rgba(0,0,0,0.001)'; // effectively invisible; only the shadow should render
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
 
     if (isAgent) {
       // Glow for high/critical risk online agents
@@ -1388,28 +1428,31 @@ export default function NetworkMapPage() {
         ctx.lineWidth = 0.8;
         ctx.stroke();
       }
-      // Hostname label
-      const label    = n.hostname ? (n.hostname.length > 16 ? n.hostname.slice(0, 14) + '…' : n.hostname) : (n.ip || n.id);
-      const fontSize = Math.max(6, Math.min(r * 0.95, 9));
-      ctx.font = `600 ${fontSize}px sans-serif`;
-      const tw = ctx.measureText(label).width;
-      const ly = n.y + r + 4;
-      const pad = 3;
-      ctx.fillStyle = 'rgba(15,23,42,0.72)';
-      ctx.beginPath();
-      const bx = n.x - tw / 2 - pad;
-      const bw = tw + pad * 2;
-      const bh = fontSize + pad * 1.5;
-      const br = 3;
-      ctx.moveTo(bx + br, ly); ctx.lineTo(bx + bw - br, ly);
-      ctx.arcTo(bx + bw, ly, bx + bw, ly + bh, br); ctx.lineTo(bx + bw, ly + bh - br);
-      ctx.arcTo(bx + bw, ly + bh, bx + bw - br, ly + bh, br); ctx.lineTo(bx + br, ly + bh);
-      ctx.arcTo(bx, ly + bh, bx, ly + bh - br, br); ctx.lineTo(bx, ly + br);
-      ctx.arcTo(bx, ly, bx + br, ly, br); ctx.closePath();
-      ctx.fill();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = offline ? 'rgba(148,163,184,0.5)' : 'rgba(226,232,240,0.95)';
-      ctx.fillText(label, n.x, ly + pad * 0.75);
+      // Hostname label — hover/selected only (see showLabel above)
+      if (showLabel) {
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; // crisp text, no blur
+        const label    = n.hostname ? (n.hostname.length > 16 ? n.hostname.slice(0, 14) + '…' : n.hostname) : (n.ip || n.id);
+        const fontSize = Math.max(6, Math.min(r * 0.95, 9));
+        ctx.font = `600 ${fontSize}px sans-serif`;
+        const tw = ctx.measureText(label).width;
+        const ly = n.y + r + 4;
+        const pad = 3;
+        ctx.fillStyle = 'rgba(15,23,42,0.85)';
+        ctx.beginPath();
+        const bx = n.x - tw / 2 - pad;
+        const bw = tw + pad * 2;
+        const bh = fontSize + pad * 1.5;
+        const br = 3;
+        ctx.moveTo(bx + br, ly); ctx.lineTo(bx + bw - br, ly);
+        ctx.arcTo(bx + bw, ly, bx + bw, ly + bh, br); ctx.lineTo(bx + bw, ly + bh - br);
+        ctx.arcTo(bx + bw, ly + bh, bx + bw - br, ly + bh, br); ctx.lineTo(bx + br, ly + bh);
+        ctx.arcTo(bx, ly + bh, bx, ly + bh - br, br); ctx.lineTo(bx, ly + br);
+        ctx.arcTo(bx, ly, bx + br, ly, br); ctx.closePath();
+        ctx.fill();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillStyle = offline ? 'rgba(148,163,184,0.5)' : 'rgba(226,232,240,0.95)';
+        ctx.fillText(label, n.x, ly + pad * 0.75);
+      }
 
     } else if (isExt) {
       const threat  = n.is_ioc || (n.ip && enrichMap.get(n.ip) && enrichMap.get(n.ip) !== 'none');
@@ -1435,7 +1478,11 @@ export default function NetworkMapPage() {
         ctx.arc(n.x + dr * 0.65, n.y - dr * 0.65, 2.5, 0, 2 * Math.PI);
         ctx.fillStyle = '#e879f9'; ctx.fill();
       }
-      if (threat && n.ip) {
+      // Threat (IOC/enriched) nodes keep their IP label always visible —
+      // rare and important enough not to hide behind a hover; everything
+      // else follows the same hover/selected rule as agent nodes.
+      if ((threat || showLabel) && n.ip) {
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
         const parts  = (n.ip as string).split('.');
         const abbrev = parts.length === 4 ? `${parts[0]}.*.${parts[3]}` : (n.ip.length > 12 ? n.ip.slice(0, 10) + '…' : n.ip);
         ctx.font = `500 ${Math.max(5, dr * 0.85)}px sans-serif`;
@@ -1693,19 +1740,36 @@ export default function NetworkMapPage() {
         }
       }
 
-      // Label for all infra types — fall back to the node's IP before its
-      // generic type, otherwise every unnamed cloud/external node renders
-      // the identical literal text "cloud" with no way to tell them apart.
-      const rawLbl   = n.hostname || n.ip || n.type;
-      const lbl      = rawLbl.length > 14 ? rawLbl.slice(0, 12) + '…' : rawLbl;
-      const fontSize = 7;
-      ctx.font       = `500 ${fontSize}px sans-serif`;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle  = 'rgba(226,232,240,0.85)';
-      ctx.fillText(lbl, n.x, n.y + r + 4);
+      // Label for all infra types — hover/selected only. Falls back to the
+      // node's IP before its generic type, otherwise every unnamed
+      // cloud/external node renders the identical literal text "cloud"
+      // with no way to tell them apart.
+      if (showLabel) {
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        const rawLbl   = n.hostname || n.ip || n.type;
+        const lbl      = rawLbl.length > 14 ? rawLbl.slice(0, 12) + '…' : rawLbl;
+        const fontSize = 7;
+        ctx.font       = `500 ${fontSize}px sans-serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle  = 'rgba(226,232,240,0.85)';
+        ctx.fillText(lbl, n.x, n.y + r + 4);
+      }
     }
-  }, [zoneColors, nodeColor, enrichMap]);
+
+    ctx.restore(); // drop the ambient shadow before the highlight ring below
+
+    // Hover/selected highlight ring — a single, consistent "this node is
+    // active" indicator across every node type/shape, drawn on top of
+    // whatever icon was rendered above.
+    if (isActive) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 5, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(96,165,250,0.9)';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+  }, [zoneColors, nodeColor, enrichMap, hoverNode, selected]);
 
   const exportPNG = () => {
     const canvas = containerRef.current?.querySelector('canvas');
@@ -2051,7 +2115,11 @@ export default function NetworkMapPage() {
             </div>
           </div>
         ) : (
-          <div ref={containerRef} className="g-panel overflow-hidden" style={{ height: 580 }}>
+          <div ref={containerRef} className="g-panel overflow-hidden" style={{ height: 580, position: 'relative' }}
+            onMouseMove={e => {
+              const rect = containerRef.current?.getBoundingClientRect();
+              if (rect) setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            }}>
             <ForceGraph2D
               ref={graphRef}
               width={dims.width}
@@ -2059,19 +2127,6 @@ export default function NetworkMapPage() {
               graphData={data}
               nodeId="id"
               nodeVal="val"
-              nodeLabel={(n: any) => {
-                const parts = [n.hostname || n.ip || n.id];
-                if (n.type === 'agent') parts.push(`Risk: ${n.risk_level} (${n.risk_score})`);
-                if (n.role) parts.push(n.role);
-                if (n.vlan) parts.push(`VLAN: ${n.vlan}`);
-                if (n.alert_count > 0) parts.push(`⚠ ${n.alert_count} alert${n.alert_count !== 1 ? 's' : ''}`);
-                if (n.is_ioc) parts.push(`🚨 IOC (${n.ioc_severity})`);
-                const enriched = n.ip ? enrichMap.get(n.ip) : null;
-                if (enriched && enriched !== 'none') parts.push(`Threat: ${enriched}`);
-                if (n.country) parts.push(n.country);
-                if (n.status) parts.push(n.status);
-                return parts.join('\n');
-              }}
               nodeColor={nodeColor}
               linkColor={linkColor}
               linkWidth={(l: any) => Math.min(4, 1 + Math.log2(1 + (l.count || 1)))}
@@ -2085,11 +2140,105 @@ export default function NetworkMapPage() {
               linkDirectionalParticleColor={linkColor}
               onNodeClick={(n: any) => setSelected(n)}
               onLinkClick={(l: any) => setSelectedEdge(l as NetworkMapEdge)}
+              onNodeHover={(n: any) => {
+                setHoverNode(n);
+                if (containerRef.current) containerRef.current.style.cursor = n ? 'pointer' : 'grab';
+              }}
               nodeCanvasObjectMode={() => 'replace'}
               nodeCanvasObject={drawNode}
+              // Hit-testing was previously decoupled from what's actually
+              // drawn (diamonds, badges, custom icon shapes) — the library's
+              // default pointer-area paint uses a plain val-sized circle
+              // with no margin, which is exactly what made densely-packed
+              // clusters unclickable: whichever node's tiny hit-circle
+              // happened to be on top ate the click, and the rest were dead
+              // zones. This paints a generously-padded circle per node that
+              // actually matches (and slightly exceeds) the visual size.
+              nodePointerAreaPaint={(n: any, color: string, ctx: CanvasRenderingContext2D) => {
+                const r = Math.max(4, n.val || 4);
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, r + 6, 0, 2 * Math.PI);
+                ctx.fillStyle = color;
+                ctx.fill();
+              }}
               cooldownTicks={120}
               backgroundColor="transparent"
             />
+            {/* Custom hover card — replaces the browser's native title
+                tooltip, which visually clashed with the on-canvas hover
+                label (two stacked dark boxes) and can't be styled. */}
+            {hoverNode && (() => {
+              const n = hoverNode;
+              const enriched = n.ip ? enrichMap.get(n.ip) : null;
+              const cardW = 220;
+              const left = Math.min(mousePos.x + 16, dims.width - cardW - 8);
+              const top  = Math.min(mousePos.y + 16, 580 - 150);
+              return (
+                <div
+                  className="pointer-events-none absolute z-10 rounded-lg shadow-xl"
+                  style={{
+                    left, top, width: cardW,
+                    background: 'rgba(15,23,42,0.96)',
+                    border: '1px solid rgba(148,163,184,0.25)',
+                    padding: '10px 12px',
+                  }}
+                >
+                  <p className="text-xs font-semibold truncate" style={{ color: '#f1f5f9' }}>
+                    {n.hostname || n.ip || n.id}
+                  </p>
+                  <div className="mt-1.5 space-y-1">
+                    {n.type === 'agent' && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>Risk</span>
+                        <span style={{ color: RISK_FILL[n.risk_level] || '#94a3b8' }}>{n.risk_level} ({n.risk_score})</span>
+                      </div>
+                    )}
+                    {n.role && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>Role</span>
+                        <span style={{ color: '#e2e8f0' }}>{n.role}</span>
+                      </div>
+                    )}
+                    {n.vlan && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>VLAN</span>
+                        <span style={{ color: '#e2e8f0' }}>{n.vlan}</span>
+                      </div>
+                    )}
+                    {n.alert_count > 0 && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>Alerts</span>
+                        <span style={{ color: '#f87171' }}>⚠ {n.alert_count}</span>
+                      </div>
+                    )}
+                    {n.is_ioc && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>IOC</span>
+                        <span style={{ color: '#e879f9' }}>🚨 {n.ioc_severity}</span>
+                      </div>
+                    )}
+                    {enriched && enriched !== 'none' && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>Threat</span>
+                        <span style={{ color: '#fb923c' }}>{enriched}</span>
+                      </div>
+                    )}
+                    {n.country && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>Country</span>
+                        <span style={{ color: '#e2e8f0' }}>{n.country}</span>
+                      </div>
+                    )}
+                    {n.status && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span style={{ color: '#94a3b8' }}>Status</span>
+                        <span style={{ color: n.status === 'offline' ? '#94a3b8' : '#4ade80' }}>{n.status}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
         {/* Analytics panel */}
