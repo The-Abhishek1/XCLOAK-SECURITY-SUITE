@@ -76,6 +76,11 @@ class SecureStore {
       _storage.delete(key: _keyAdminCookie),
       _storage.delete(key: _keyAdminEmail),
       _storage.delete(key: _keyAdminRole),
+      // The stored API key is a valid, independent admin credential
+      // (createFromSession() falls back to it when the cookie is absent) —
+      // leaving it behind after "Sign out" let the session silently resume
+      // on the next admin-console entry instead of requiring re-login.
+      _storage.delete(key: _keyApiKey),
     ]);
   }
 

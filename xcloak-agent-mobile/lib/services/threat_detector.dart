@@ -59,17 +59,23 @@ class ThreatDetector {
   // com.android.vending; sideloads report an empty string.
   static String _resolveInstaller(AppInfo app) {
     if (app.isSystemApp) return 'system';
-    // installed_apps doesn't expose installerPackageName directly —
-    // we use the isSystemApp flag as a proxy. Enterprise builds can
-    // enrich this via PackageManager.getInstallSourceInfo() method channel.
+    // installed_apps doesn't expose installerPackageName directly, and
+    // there's no other real signal available here — this always returns
+    // empty for every non-system app. _isSideloaded() below must NOT treat
+    // "empty" as "confirmed sideloaded": that previously flagged every
+    // single user-installed app on the device, including ones from the Play
+    // Store, as a threat — a 100% false-positive rate that made the finding
+    // pure noise. Real sideload detection needs PackageManager
+    // .getInstallSourceInfo() via a native Android method channel, which
+    // this build doesn't have.
     return '';
   }
 
-  static bool _isSideloaded(AppInventoryItem app) =>
-      !app.isSystemApp &&
-      app.installer.isEmpty &&
-      !app.installer.contains('vending') &&
-      !app.installer.startsWith('com.android');
+  // Always false: no real installer signal exists yet (see _resolveInstaller).
+  // Reporting "not sideloaded" for everything is the honest default until
+  // real detection is built — the alternative (flagging every app) is worse
+  // than reporting nothing, since it can't be trusted or acted on.
+  static bool _isSideloaded(AppInventoryItem app) => false;
 
   // Returns package names of apps that appear to be sideloaded.
   static Future<List<String>> sideloadedPackages() async {

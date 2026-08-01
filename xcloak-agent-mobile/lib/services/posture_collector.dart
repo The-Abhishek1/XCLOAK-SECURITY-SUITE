@@ -24,7 +24,7 @@ class PostureCollector {
       androidSdkVersion:   androidInfo.version.sdkInt,
       manufacturer:        androidInfo.manufacturer,
       hardware:            androidInfo.hardware,
-      isEncrypted:         true, // Android 6+ enforces FBE; treat as true
+      isEncrypted:         null, // requires StorageManager method channel — not guessed
       hasPasscode:         null, // requires DevicePolicyManager method channel
       passcodeCompliant:   null,
       biometricEnrolled:   null,

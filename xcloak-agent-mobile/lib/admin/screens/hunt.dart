@@ -954,45 +954,93 @@ class _DeceptionState extends State<DeceptionScreen> {
     setState(() { _traps = list as List; _loading = false; });
   }
 
+  void _createTrap() {
+    final agentCtrl = TextEditingController();
+    final portCtrl  = TextEditingController();
+    final descCtrl  = TextEditingController();
+    String protocol = 'tcp', severity = 'high';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Honeypot'),
+          xField(agentCtrl, 'Agent ID', keyboardType: TextInputType.number),
+          const SizedBox(height: 10),
+          xField(portCtrl, 'Port', keyboardType: TextInputType.number),
+          const SizedBox(height: 10),
+          xDropdown('Protocol', protocol, ['tcp','udp'], (v) => ss(() => protocol = v!)),
+          const SizedBox(height: 10),
+          xDropdown('Alert Severity', severity, ['critical','high','medium','low'], (v) => ss(() => severity = v!)),
+          const SizedBox(height: 10),
+          xField(descCtrl, 'Description'),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              final agentId = int.tryParse(agentCtrl.text.trim());
+              final port    = int.tryParse(portCtrl.text.trim());
+              if (agentId == null || port == null) { xSnack(ctx, 'Agent ID and Port must be numbers', error: true); return; }
+              Navigator.pop(ctx);
+              await widget.api.createHoneyport({
+                'agent_id': agentId, 'port': port, 'protocol': protocol,
+                'description': descCtrl.text.trim(), 'alert_severity': severity,
+              });
+              _load();
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      )),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-        child: SectionTitle('Honeypots & Deception Traps  (${_traps.length})'),
-      ),
-      Expanded(child: _loading ? xLoading() : _traps.isEmpty
-        ? const XEmptyState('No deception traps configured', icon: Icons.pest_control)
-        : RefreshIndicator(
-            onRefresh: _load,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
-              itemCount: _traps.length,
-              itemBuilder: (_, i) {
-                final t = _traps[i] as Map<String,dynamic>;
-                final active = t['active'] == true || t['enabled'] == true;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(Icons.pest_control,
-                      color: active ? const Color(0xFF6366F1) : Colors.grey),
-                    title: Text(str(t['name'] ?? t['hostname']),
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('Type: ${str(t['type'] ?? t['trap_type'])}  ·  '
-                      'Interactions: ${t['interactions'] ?? t['hit_count'] ?? 0}'),
-                    trailing: Switch(
-                      value: active,
-                      onChanged: (v) async {
-                        // honeyports have no toggle endpoint — create/delete to enable/disable
-                        _load();
-                      },
+    return Scaffold(
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+          child: SectionTitle('Honeypots & Deception Traps  (${_traps.length})'),
+        ),
+        Expanded(child: _loading ? xLoading() : _traps.isEmpty
+          ? const XEmptyState('No deception traps configured', icon: Icons.pest_control)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
+                itemCount: _traps.length,
+                itemBuilder: (_, i) {
+                  final t = _traps[i] as Map<String,dynamic>;
+                  final id     = t['id'] as int? ?? 0;
+                  final active = t['active'] == true || t['enabled'] == true;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Icon(Icons.pest_control,
+                        color: active ? const Color(0xFF6366F1) : Colors.grey),
+                      title: Text(str(t['name'] ?? t['hostname']),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text('Type: ${str(t['type'] ?? t['trap_type'])}  ·  '
+                        'Interactions: ${t['interactions'] ?? t['hit_count'] ?? 0}'),
+                      // No toggle endpoint exists on the backend — a honeypot
+                      // is either live or gone, so "disable" means delete.
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        tooltip: 'Delete honeypot',
+                        onPressed: () async {
+                          if (!await xConfirm(context, 'Delete Honeypot', 'Stop and remove this trap?')) return;
+                          await widget.api.deleteHoneyport(id);
+                          _load();
+                        },
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
-          )),
-    ]);
+                  );
+                },
+              ),
+            )),
+      ]),
+      floatingActionButton: FloatingActionButton(onPressed: _createTrap, child: const Icon(Icons.add)),
+    );
   }
 }
 
@@ -1254,11 +1302,58 @@ class _FirewallState extends State<FirewallScreen> {
     _                           => const Color(0xFFF59E0B),
   };
 
+  void _createRule() {
+    final nameCtrl = TextEditingController();
+    final srcCtrl  = TextEditingController(text: '*');
+    final dstCtrl  = TextEditingController(text: '*');
+    final portCtrl = TextEditingController();
+    String action = 'block', protocol = 'tcp';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Firewall Rule'),
+          xField(nameCtrl, 'Name'),
+          const SizedBox(height: 10),
+          xField(srcCtrl, 'Source IP (or *)'),
+          const SizedBox(height: 10),
+          xField(dstCtrl, 'Destination IP (or *)'),
+          const SizedBox(height: 10),
+          xField(portCtrl, 'Port / Range (e.g. 443 or 8000-9000)'),
+          const SizedBox(height: 10),
+          xDropdown('Protocol', protocol, ['tcp','udp','icmp','any'], (v) => ss(() => protocol = v!)),
+          const SizedBox(height: 10),
+          xDropdown('Action', action, ['block','allow'], (v) => ss(() => action = v!)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              if (nameCtrl.text.trim().isEmpty) { xSnack(ctx, 'Name is required', error: true); return; }
+              Navigator.pop(ctx);
+              await widget.api.createFirewallRule({
+                'name': nameCtrl.text.trim(),
+                'source_ip': srcCtrl.text.trim(),
+                'destination_ip': dstCtrl.text.trim(),
+                'port_range': portCtrl.text.trim(),
+                'protocol': protocol,
+                'action': action,
+                'direction': 'in',
+                'enabled': true,
+              });
+              _load();
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      )),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: () => xSnack(context, 'Rule creation coming soon'),
+        onPressed: _createRule,
         child: const Icon(Icons.add),
       ),
       body: _loading ? xLoading() : _rules.isEmpty
@@ -1288,9 +1383,9 @@ class _FirewallState extends State<FirewallScreen> {
                     title: Text(str(rule['name'] ?? rule['description'] ?? 'Rule ${rule['id']}'),
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
-                      '${str(rule['src_ip'] ?? rule['source'] ?? '*')} → '
-                      '${str(rule['dst_ip'] ?? rule['destination'] ?? '*')}  '
-                      'Port: ${rule['port'] ?? rule['dst_port'] ?? '*'}',
+                      '${str(rule['source_ip'] ?? '*')} → '
+                      '${str(rule['destination_ip'] ?? '*')}  '
+                      'Port: ${str(rule['port_range'] ?? '').isNotEmpty ? rule['port_range'] : (rule['port'] ?? '*')}',
                       style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace')),
                     trailing: Switch(
                       value: enabled,
@@ -1326,18 +1421,49 @@ class _ScriptRunnerState extends State<ScriptRunnerScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final scripts = await widget.api.get('/api/sigma/rules');
-    final history = await widget.api.get('/api/hunt/runs');
+    final scripts = await widget.api.scriptTemplates();
+    final history = await widget.api.scriptHistory();
     if (!mounted) return;
-    final sl = scripts is List ? scripts : (scripts is Map ? (scripts['data'] ?? scripts['rules'] ?? []) : []);
-    final hl = history is List ? history : (history is Map ? (history['data'] ?? history['runs'] ?? []) : []);
-    setState(() { _scripts = sl as List; _history = hl as List; _loading = false; });
+    setState(() { _scripts = scripts; _history = history; _loading = false; });
   }
 
   Future<void> _run(Map<String,dynamic> script) async {
-    xSnack(context, 'Running ${str(script['name'])}…');
-    final ok = await widget.api.post('/api/hunt/execute', {'rule_id': script['id'], 'agent_ids': []});
-    if (mounted) xSnack(context, ok == null ? 'Execution failed' : 'Hunt started', error: ok == null);
+    final agents = await widget.api.agents();
+    if (!mounted) return;
+    if (agents.isEmpty) { xSnack(context, 'No agents available to target', error: true); return; }
+
+    final target = await showDialog<Map<String,dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Run "${str(script['label'])}" on…'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: agents.length,
+            itemBuilder: (_, i) {
+              final a = agents[i] as Map<String,dynamic>;
+              return ListTile(
+                leading: const Icon(Icons.computer),
+                title: Text(str(a['hostname'] ?? a['name'] ?? 'Agent ${a['id']}')),
+                onTap: () => Navigator.pop(ctx, a),
+              );
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+      ),
+    );
+    if (target == null || !mounted) return;
+
+    xSnack(context, 'Running ${str(script['label'])}…');
+    final result = await widget.api.runScript(
+      [target['id'] as int],
+      str(script['script']),
+      label: str(script['label']),
+      shell: str(script['shell']).isEmpty ? 'bash' : str(script['shell']),
+    );
+    if (mounted) xSnack(context, result == null || result['error'] != null ? 'Execution failed' : 'Script dispatched', error: result == null || result['error'] != null);
     _load();
   }
 
@@ -1374,9 +1500,9 @@ class _ScriptRunnerState extends State<ScriptRunnerScreen> {
                           borderRadius: BorderRadius.circular(8)),
                         child: const Icon(Icons.terminal, color: Color(0xFF6366F1), size: 20),
                       ),
-                      title: Text(str(s['name']),
+                      title: Text(str(s['label']),
                         style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text(str(s['description'] ?? s['language'] ?? ''),
+                      subtitle: Text(str(s['category'] ?? ''),
                         style: const TextStyle(fontSize: 12)),
                       trailing: FilledButton(
                         onPressed: () => _run(s),
@@ -1404,9 +1530,9 @@ class _ScriptRunnerState extends State<ScriptRunnerScreen> {
                   child: ListTile(
                     leading: Icon(ok ? Icons.check_circle : Icons.error_outline,
                       color: ok ? const Color(0xFF22C55E) : const Color(0xFFEF4444)),
-                    title: Text(str(h['script_name'] ?? h['name']),
+                    title: Text(str(h['label']),
                       style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${str(h['executed_by'] ?? h['user'] ?? 'system')}  ·  ${timeAgo(h['executed_at'] ?? h['created_at'])}'),
+                    subtitle: Text('${str(h['hostname'] ?? 'unknown host')}  ·  ${timeAgo(h['created_at'])}'),
                     trailing: StatusChip(status),
                   ),
                 );

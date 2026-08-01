@@ -129,7 +129,10 @@ class CommandService {
         throw Exception('wipe rejected — Device Owner mode required');
 
       default:
-        return 'unknown command type: $type';
+        // Throw, not return — an unrecognized command type must acknowledge
+        // as 'failed' so operators can detect misconfigured policies,
+        // matching this file's own stated goal (see header comment).
+        throw Exception('unknown command type: $type');
     }
   }
 }

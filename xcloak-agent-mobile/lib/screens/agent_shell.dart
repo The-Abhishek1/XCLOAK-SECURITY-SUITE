@@ -996,14 +996,18 @@ class _PostureTabState extends State<_PostureTab>
 
             // Data Protection
             _GroupHeader(label: 'Data Protection', score: _dataScore),
-            _CheckRow(label: 'Disk Encryption', pass: p.isEncrypted ?? true,
-              detail: (p.isEncrypted ?? true)
-                ? 'Full-disk encryption is active'
-                : 'Disk encryption not confirmed'),
-            _CheckRow(label: 'Screen Lock', pass: p.hasPasscode ?? true,
-              detail: (p.hasPasscode ?? true)
-                ? 'Screen lock is configured'
-                : 'No screen lock — unauthorized access risk'),
+            _CheckRow(label: 'Disk Encryption', pass: p.isEncrypted,
+              detail: p.isEncrypted == null
+                ? 'Not verified on this device'
+                : p.isEncrypted!
+                  ? 'Full-disk encryption is active'
+                  : 'Disk encryption not confirmed'),
+            _CheckRow(label: 'Screen Lock', pass: p.hasPasscode,
+              detail: p.hasPasscode == null
+                ? 'Not verified on this device'
+                : p.hasPasscode!
+                  ? 'Screen lock is configured'
+                  : 'No screen lock — unauthorized access risk'),
             const SizedBox(height: 16),
 
             // Hardware & Environment
@@ -1894,12 +1898,16 @@ class _GroupHeader extends StatelessWidget {
 
 class _CheckRow extends StatelessWidget {
   final String label, detail;
-  final bool   pass;
+  // null = not verified on this device (no real signal available), shown
+  // distinctly from a genuine pass/fail rather than silently defaulting to
+  // "pass" — that previously made unverified controls (disk encryption,
+  // screen lock) look confirmed-good when they were never actually checked.
+  final bool?  pass;
   const _CheckRow({required this.label, required this.pass, required this.detail});
 
   @override
   Widget build(BuildContext context) {
-    final color = pass ? _kGreen : _kRed;
+    final color = pass == null ? Colors.grey : (pass! ? _kGreen : _kRed);
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
@@ -1908,14 +1916,14 @@ class _CheckRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: .2))),
       child: Row(children: [
-        Icon(pass ? Icons.check_circle_outline : Icons.cancel_outlined,
+        Icon(pass == null ? Icons.help_outline : (pass! ? Icons.check_circle_outline : Icons.cancel_outlined),
           color: color, size: 20),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           Text(detail, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
         ])),
-        _Pill(label: pass ? 'PASS' : 'FAIL', color: color),
+        _Pill(label: pass == null ? 'UNKNOWN' : (pass! ? 'PASS' : 'FAIL'), color: color),
       ]),
     );
   }

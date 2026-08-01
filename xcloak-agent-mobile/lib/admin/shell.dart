@@ -164,7 +164,7 @@ class _AdminAppState extends State<AdminApp> {
   Widget _body() {
     final api = widget.api;
     return switch (_sel) {
-      0  => DashboardScreen(api: api),
+      0  => DashboardScreen(api: api, onNavigate: (id) => setState(() => _sel = id)),
       1  => AgentsScreen(api: api),
       2  => NetworkMapScreen(api: api),
       3  => AttackPathsScreen(api: api),
@@ -323,6 +323,7 @@ class _AdminAppState extends State<AdminApp> {
         sel: _sel,
         adminEmail: _adminEmail,
         adminRole: _adminRole,
+        isPlatformAdmin: _adminRole == 'Platform Admin',
         onNavigate: _navigate,
         onSignOut: _signOut,
         onAgentMode: _switchToAgent,
@@ -358,6 +359,7 @@ class _AdminDrawer extends StatefulWidget {
   final int sel;
   final String? adminEmail;
   final String? adminRole;
+  final bool isPlatformAdmin;
   final void Function(int) onNavigate;
   final VoidCallback onSignOut;
   final VoidCallback onAgentMode;
@@ -366,6 +368,7 @@ class _AdminDrawer extends StatefulWidget {
     required this.sel,
     required this.adminEmail,
     required this.adminRole,
+    required this.isPlatformAdmin,
     required this.onNavigate,
     required this.onSignOut,
     required this.onAgentMode,
@@ -404,9 +407,12 @@ class _AdminDrawerState extends State<_AdminDrawer> {
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
   List<_NavGroup> get _filtered {
+    final visible = widget.isPlatformAdmin
+        ? _nav
+        : _nav.where((g) => !g.platformOnly).toList();
     final q = _query.toLowerCase().trim();
-    if (q.isEmpty) return _nav;
-    return _nav
+    if (q.isEmpty) return visible;
+    return visible
       .map((g) => _NavGroup(g.label, g.icon,
           g.items.where((i) => i.label.toLowerCase().contains(q)).toList(),
           platformOnly: g.platformOnly))

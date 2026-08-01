@@ -10,7 +10,12 @@ package api
 //     - PUT  /api/mdm/devices/:id/checkin        (posture + heartbeat)
 //     - GET  /api/mdm/devices/:id/commands/pending
 //     - POST /api/mdm/commands/:id/acknowledge  (existing endpoint)
-//     - POST /api/logs/ingest                   (existing endpoint)
+//     - POST /api/mdm/devices/:id/apps          (app inventory)
+//     - POST /api/mdm/devices/:id/threat-scan   (sideload scan summary)
+//     - POST /api/mdm/devices/:id/logs          (log batch — own auth scheme,
+//                                                 distinct from /api/ingest's
+//                                                 X-Api-Key/log_sources one)
+//     - POST /api/mdm/devices/:id/rotate-token  (self-service token rotation)
 //     - POST /api/agents/heartbeat              (existing endpoint)
 
 import (
@@ -21,6 +26,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/middleware"
+	"xcloak-platform/models"
 	"xcloak-platform/services"
 )
 
@@ -99,18 +105,18 @@ func RevokeEnrollmentToken(c *gin.Context) {
 // that the device stores in secure storage and uses for all future calls.
 func SelfEnrollDevice(c *gin.Context) {
 	var req struct {
-		EnrollToken  string  `json:"enroll_token"`
-		UDID         string  `json:"udid"`
-		DeviceName   string  `json:"device_name"`
-		Model        string  `json:"model"`
-		OSVersion    string  `json:"os_version"`
-		BuildVersion string  `json:"build_version"`
-		OwnerEmail   string  `json:"owner_email"`
-		PushToken    string  `json:"push_token"` // FCM token for push delivery
-		IsEncrypted  *bool   `json:"is_encrypted"`
-		HasPasscode  *bool   `json:"has_passcode"`
-		IsRooted     bool    `json:"is_rooted"`
-		DevModeOn    bool    `json:"developer_mode_on"`
+		EnrollToken  string `json:"enroll_token"`
+		UDID         string `json:"udid"`
+		DeviceName   string `json:"device_name"`
+		Model        string `json:"model"`
+		OSVersion    string `json:"os_version"`
+		BuildVersion string `json:"build_version"`
+		OwnerEmail   string `json:"owner_email"`
+		PushToken    string `json:"push_token"` // FCM token for push delivery
+		IsEncrypted  *bool  `json:"is_encrypted"`
+		HasPasscode  *bool  `json:"has_passcode"`
+		IsRooted     bool   `json:"is_rooted"`
+		DevModeOn    bool   `json:"developer_mode_on"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -126,18 +132,18 @@ func SelfEnrollDevice(c *gin.Context) {
 	}
 
 	device := services.MDMDevice{
-		UDID:           req.UDID,
-		DeviceName:     req.DeviceName,
-		Model:          req.Model,
-		Platform:       "android",
-		OSVersion:      req.OSVersion,
-		BuildVersion:   req.BuildVersion,
-		OwnerEmail:     req.OwnerEmail,
-		PushToken:      req.PushToken,
-		EnrollmentType: "byod",
-		IsEncrypted:    req.IsEncrypted,
-		HasPasscode:    req.HasPasscode,
-		IsJailbroken:   req.IsRooted,
+		UDID:            req.UDID,
+		DeviceName:      req.DeviceName,
+		Model:           req.Model,
+		Platform:        "android",
+		OSVersion:       req.OSVersion,
+		BuildVersion:    req.BuildVersion,
+		OwnerEmail:      req.OwnerEmail,
+		PushToken:       req.PushToken,
+		EnrollmentType:  "byod",
+		IsEncrypted:     req.IsEncrypted,
+		HasPasscode:     req.HasPasscode,
+		IsJailbroken:    req.IsRooted,
 		DeveloperModeOn: req.DevModeOn,
 	}
 
@@ -278,4 +284,149 @@ func SubmitAppInventory(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"received": len(req.Apps)})
+}
+
+// PostMDMThreatScan — POST /api/mdm/devices/:id/threat-scan
+// The mobile agent posts its periodic on-device threat-scan summary
+// (sideloaded app count etc.) here every ~15 minutes.
+func PostMDMThreatScan(c *gin.Context) {
+	deviceID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid device id"})
+		return
+	}
+
+	tenantID, _ := c.Get("tenant_id")
+	tid := int(tenantID.(int))
+
+	linkedDeviceID, err := services.LookupDeviceByAgent(c.GetInt("agent_id"), tid)
+	if err != nil || linkedDeviceID != deviceID {
+		c.JSON(403, gin.H{"error": "device does not belong to this agent"})
+		return
+	}
+
+	var req struct {
+		TotalApps       int `json:"total_apps"`
+		SideloadedCount int `json:"sideloaded_count"`
+		SystemAppCount  int `json:"system_app_count"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := services.RecordThreatScan(deviceID, tid, req.TotalApps, req.SideloadedCount); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
+// PostMDMDeviceLogs — POST /api/mdm/devices/:id/logs
+// The mobile agent forwards a batch of security-relevant log lines here
+// every ~10 minutes, authenticated with its own agent token (distinct from
+// the X-Api-Key/log_sources scheme POST /api/ingest uses for external log
+// shippers — a mobile agent already has a real per-device credential).
+func PostMDMDeviceLogs(c *gin.Context) {
+	deviceID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid device id"})
+		return
+	}
+
+	tenantID, _ := c.Get("tenant_id")
+	tid := int(tenantID.(int))
+	agentID := c.GetInt("agent_id")
+
+	linkedDeviceID, err := services.LookupDeviceByAgent(agentID, tid)
+	if err != nil || linkedDeviceID != deviceID {
+		c.JSON(403, gin.H{"error": "device does not belong to this agent"})
+		return
+	}
+
+	var req struct {
+		LogSource string `json:"log_source"`
+		Logs      []struct {
+			LogSource   string `json:"log_source"`
+			LogMessage  string `json:"log_message"`
+			Severity    string `json:"severity"`
+			CollectedAt string `json:"collected_at"`
+		} `json:"logs"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Logs) > 1000 {
+		req.Logs = req.Logs[:1000]
+	}
+
+	source := req.LogSource
+	if source == "" {
+		source = "android_agent"
+	}
+
+	logs := make([]models.Log, 0, len(req.Logs))
+	for _, l := range req.Logs {
+		if l.LogMessage == "" {
+			continue
+		}
+		collectedAt := time.Now()
+		if parsed, err := time.Parse(time.RFC3339, l.CollectedAt); err == nil {
+			collectedAt = parsed
+		}
+		logSrc := l.LogSource
+		if logSrc == "" {
+			logSrc = source
+		}
+		logs = append(logs, models.Log{
+			AgentID:     agentID,
+			TenantID:    tid,
+			LogSource:   logSrc,
+			LogMessage:  l.LogMessage,
+			CollectedAt: collectedAt,
+		})
+	}
+
+	if len(logs) == 0 {
+		c.JSON(200, gin.H{"received": 0})
+		return
+	}
+	if err := services.SaveLogs(logs); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"received": len(logs)})
+}
+
+// PostMDMRotateToken — POST /api/mdm/devices/:id/rotate-token
+// Self-service token rotation, distinct from the admin-only
+// POST /api/agents/:id/rotate-token — the device rotates its own credential
+// (e.g. on a periodic hygiene schedule) using its current, still-valid token
+// to authenticate the request. The new token is returned in the response
+// body so the device can update its own secure storage immediately; the old
+// token stops working the instant this call succeeds.
+func PostMDMRotateToken(c *gin.Context) {
+	deviceID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid device id"})
+		return
+	}
+
+	tenantID, _ := c.Get("tenant_id")
+	tid := int(tenantID.(int))
+	agentID := c.GetInt("agent_id")
+
+	linkedDeviceID, err := services.LookupDeviceByAgent(agentID, tid)
+	if err != nil || linkedDeviceID != deviceID {
+		c.JSON(403, gin.H{"error": "device does not belong to this agent"})
+		return
+	}
+
+	newToken, err := services.RotateAgentToken(agentID, tid, "self-service:mobile-agent")
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"agent_token": newToken})
 }

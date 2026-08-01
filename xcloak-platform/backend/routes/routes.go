@@ -907,6 +907,9 @@ func SetupRoutes(router *gin.Engine) {
 	router.PUT("/api/mdm/devices/:id/checkin", middleware.RequireAgentAuth(), api.MobileDeviceCheckIn)
 	router.GET("/api/mdm/devices/:id/commands/pending", middleware.RequireAgentAuth(), api.GetPendingMobileCommands)
 	router.POST("/api/mdm/devices/:id/apps", middleware.RequireAgentAuth(), api.SubmitAppInventory)
+	router.POST("/api/mdm/devices/:id/threat-scan", middleware.RequireAgentAuth(), api.PostMDMThreatScan)
+	router.POST("/api/mdm/devices/:id/logs", middleware.RequireAgentAuth(), api.PostMDMDeviceLogs)
+	router.POST("/api/mdm/devices/:id/rotate-token", middleware.RequireAgentAuth(), api.PostMDMRotateToken)
 
 	// ── Detection Engineering Dashboard ─────────────────────────────────────
 	router.GET("/api/detection/overview", middleware.RequireAuth(), api.GetDetectionOverview)

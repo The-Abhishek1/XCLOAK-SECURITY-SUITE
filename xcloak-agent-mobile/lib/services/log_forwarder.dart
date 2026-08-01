@@ -30,13 +30,12 @@ class LogForwarder {
     final logs = await _collectLogs();
     if (logs.isEmpty) return;
 
-    final client  = await ApiClient.fromStorage();
-    final agentId = await SecureStore.agentId();
-    if (agentId == null) return;
+    final client   = await ApiClient.fromStorage();
+    final deviceId = await SecureStore.deviceId();
+    if (deviceId == null) return;
 
     try {
-      await client.post('/api/logs/ingest', {
-        'agent_id': agentId,
+      await client.post('/api/mdm/devices/$deviceId/logs', {
         'log_source': 'android_agent',
         'logs': logs,
       });

@@ -29,11 +29,21 @@ class DashboardApi {
       body: jsonEncode({'email': email, 'password': password}),
     ).timeout(const Duration(seconds: 15));
 
-    if (loginRes.statusCode == 401 || loginRes.statusCode == 403) {
-      throw const AdminUnauthorizedException('Invalid credentials');
-    }
     if (loginRes.statusCode < 200 || loginRes.statusCode >= 300) {
-      throw ApiException(loginRes.statusCode, 'Login failed (${loginRes.statusCode})');
+      // Surface the backend's real message — a 403 here can mean either bad
+      // credentials or an IP-allowlist rejection, and a 429 means the
+      // account is temporarily locked (with the real lockout duration in
+      // the message). Collapsing all of these into "Invalid credentials"
+      // hid the actual reason and made lockouts look like a typo'd password.
+      String msg = 'Login failed (${loginRes.statusCode})';
+      try {
+        final body = jsonDecode(loginRes.body) as Map<String, dynamic>;
+        if (body['error'] is String && (body['error'] as String).isNotEmpty) msg = body['error'];
+      } catch (_) {}
+      if (loginRes.statusCode == 401 || loginRes.statusCode == 403) {
+        throw AdminUnauthorizedException(msg);
+      }
+      throw ApiException(loginRes.statusCode, msg);
     }
 
     // 2 — Extract token from JSON body (backend returns it for Dart/mobile clients)
@@ -171,13 +181,22 @@ class DashboardApi {
   final ApiClient c;
 
   // ── helpers ───────────────────────────────────────────────────────────────
-  Future<Map<String,dynamic>> _g(String p) async => (await c.get(p)) as Map<String,dynamic>;
+  // _g deliberately returns `dynamic`, not `Map<String,dynamic>` — many list
+  // endpoints respond with a bare JSON array rather than an object, and a
+  // forced cast here would throw before _list() ever got a chance to look at
+  // it. Every call site already runs inside try/catch, so an unexpected
+  // shape on a single-object endpoint still fails safely, same as before.
+  Future<dynamic> _g(String p) async => await c.get(p);
   Future<Map<String,dynamic>> _po(String p, Map<String,dynamic> b) async => (await c.post(p, b)) as Map<String,dynamic>;
   Future<Map<String,dynamic>> _pu(String p, Map<String,dynamic> b) async => (await c.put(p, b)) as Map<String,dynamic>;
   Future<Map<String,dynamic>> _pa(String p, Map<String,dynamic> b) async => (await c.patch(p, b)) as Map<String,dynamic>;
   Future<Map<String,dynamic>> _d(String p) async => (await c.delete(p)) as Map<String,dynamic>;
 
-  List<dynamic> _list(Map<String,dynamic> r, List<String> keys) {
+  // Tolerates both response shapes: a bare JSON array, or an object with the
+  // list nested under one of `keys` (or any key, as a last resort).
+  List<dynamic> _list(dynamic r, List<String> keys) {
+    if (r is List) return r;
+    if (r is! Map<String,dynamic>) return [];
     for (final k in keys) { if (r[k] is List) return r[k] as List; }
     for (final v in r.values) { if (v is List) return v; }
     return [];
@@ -358,17 +377,15 @@ class DashboardApi {
 
   // ── Quarantine ────────────────────────────────────────────────────────────
   Future<List> quarantine() async { try { final r = await _g('/api/quarantine'); return _list(r, ['files','data']); } catch (_) { return []; } }
-  // /api/quarantine/stats does not exist — derive stats from the list instead
-  Future<Map<String,dynamic>?> quarantineStats() async => null;
+  Future<Map<String,dynamic>?> quarantineStats() async { try { return await _g('/api/quarantine/stats') as Map<String,dynamic>; } catch (_) { return null; } }
   Future<bool> releaseQuarantine(int id) async { try { await _d('/api/quarantine/$id'); return true; } catch (_) { return false; } }
 
   // ── Firewall ──────────────────────────────────────────────────────────────
   Future<List> firewallRules({String group=''}) async {
     try { final r = await _g('/api/firewall/rules${group.isNotEmpty ? "?group=$group" : ""}'); return _list(r, ['rules','data']); } catch (_) { return []; }
   }
-  // /api/firewall/groups and /api/firewall/stats don't exist in backend
-  Future<List> firewallGroups() async => [];
-  Future<Map<String,dynamic>?> firewallStats() async => null;
+  Future<List> firewallGroups() async { try { final r = await _g('/api/firewall/groups'); return _list(r, ['groups','data']); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> firewallStats() async { try { return await _g('/api/firewall/stats') as Map<String,dynamic>; } catch (_) { return null; } }
   Future<bool> createFirewallRule(Map<String,dynamic> b) async { try { await _po('/api/firewall/rules', b); return true; } catch (_) { return false; } }
   Future<bool> updateFirewallRule(int id, Map<String,dynamic> b) async { try { await _pu('/api/firewall/rules/$id', b); return true; } catch (_) { return false; } }
   Future<bool> deleteFirewallRule(int id) async { try { await _d('/api/firewall/rules/$id'); return true; } catch (_) { return false; } }
@@ -386,13 +403,13 @@ class DashboardApi {
   Future<bool> triggerDfir(int agentId, String type) async { try { await _po('/api/dfir/collections', {'agent_id': agentId, 'collection_type': type, 'options': {}}); return true; } catch (_) { return false; } }
   Future<List> dfirArtifacts(int id) async { try { final r = await _g('/api/dfir/collections/$id/artifacts'); return _list(r, ['artifacts','data']); } catch (_) { return []; } }
 
-  // ── Scripts (via Sigma rules — no dedicated scripts API) ─────────────────
-  Future<List> scriptTemplates() async { try { final r = await _g('/api/sigma/rules'); return _list(r, ['rules','data']); } catch (_) { return []; } }
-  Future<List> scriptHistory() async { try { final r = await _g('/api/hunt/runs'); return _list(r, ['runs','data']); } catch (_) { return []; } }
-  Future<Map<String,dynamic>?> runScript(int agentId, String script, String interpreter) async {
-    try { return await _po('/api/scripts/run', {'agent_id': agentId, 'script': script, 'interpreter': interpreter}); } catch (e) { return {'error': e.toString()}; }
+  // ── Scripts ───────────────────────────────────────────────────────────────
+  Future<List> scriptTemplates() async { try { final r = await _g('/api/scripts/templates'); return _list(r, ['templates','data']); } catch (_) { return []; } }
+  Future<List> scriptHistory() async { try { final r = await _g('/api/scripts/history'); return _list(r, ['history','data']); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> runScript(List<int> agentIds, String script, {String label = '', String shell = 'bash'}) async {
+    try { return await _po('/api/scripts/run', {'agent_ids': agentIds, 'script': script, 'label': label, 'shell': shell}); } catch (e) { return {'error': e.toString()}; }
   }
-  Future<Map<String,dynamic>?> scriptResult(String taskId) async { try { return await _g('/api/agents/$taskId/tasks'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> scriptResult(String taskId) async { try { return await _g('/api/scripts/result/$taskId') as Map<String,dynamic>; } catch (_) { return null; } }
 
   // ── Assets ────────────────────────────────────────────────────────────────
   Future<List> assets() async { try { final r = await _g('/api/assets'); return _list(r, ['assets','data']); } catch (_) { return []; } }
@@ -479,7 +496,8 @@ class DashboardApi {
 
   // ── Settings ──────────────────────────────────────────────────────────────
   Future<List> users() async { try { final r = await _g('/api/users'); return _list(r, ['users','data']); } catch (_) { return []; } }
-  Future<bool> createUser(Map<String,dynamic> b) async { try { await _po('/api/users', b); return true; } catch (_) { return false; } }
+  // No POST /api/users route exists — user creation goes through the real
+  // invite flow below (email a reset-password link) instead.
   Future<bool> inviteUser(String email, String role) async { try { await _po('/api/users/invite', {'email': email, 'role': role}); return true; } catch (_) { return false; } }
   // No admin password reset endpoint — trigger forgot-password flow by email instead
   Future<bool> resetUserPassword(int id) async { try { await _po('/api/auth/forgot-password', {'user_id': id}); return true; } catch (_) { return false; } }

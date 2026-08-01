@@ -46,11 +46,13 @@ func Login(c *gin.Context) {
 	policy, _ := repositories.GetSecurityPolicy(policyTenantID)
 
 	if allowlist, err := services.ParseIPAllowlist(policy.IPAllowlist); err == nil && !services.IsIPAllowed(c.ClientIP(), allowlist) {
+		go repositories.CreateAuditLog("login_denied_ip_allowlist", "ip:"+c.ClientIP(), req.Username)
 		c.JSON(403, gin.H{"error": "login denied — your IP address is not on this organization's allowlist"})
 		return
 	}
 
 	if services.IsUsernameLocked(req.Username) {
+		go repositories.CreateAuditLog("login_denied_locked", "ip:"+c.ClientIP(), req.Username)
 		c.JSON(429, gin.H{"error": fmt.Sprintf("account temporarily locked due to too many failed login attempts — try again in %d minutes", policy.LockoutDurationMins)})
 		return
 	}
@@ -58,6 +60,7 @@ func Login(c *gin.Context) {
 	token, needs2FA, err := services.LoginUser(req.Username, req.Password)
 	if err != nil {
 		services.RecordLoginFailure(req.Username, policy.MaxFailedLogins, policy.LockoutDurationMins)
+		go repositories.CreateAuditLog("login_failed", "ip:"+c.ClientIP(), req.Username)
 		c.JSON(401, gin.H{"error": "invalid credentials"})
 		return
 	}
@@ -91,6 +94,7 @@ func Login(c *gin.Context) {
 
 	// Persist session record (async — never delays the login response).
 	go CreateSessionOnLogin(token, req.Username, c.ClientIP(), c.GetHeader("User-Agent"), userID, tenantID)
+	go repositories.CreateAuditLog("login_success", "ip:"+c.ClientIP()+" user_agent:"+c.GetHeader("User-Agent"), req.Username)
 
 	setAuthCookie(c, token)
 

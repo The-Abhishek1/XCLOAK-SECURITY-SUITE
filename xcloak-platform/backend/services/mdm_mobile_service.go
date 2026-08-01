@@ -317,3 +317,17 @@ func SubmitAppInventory(deviceID, tenantID int, apps []AppInfo) error {
 	}
 	return tx.Commit()
 }
+
+// ── Threat scan ──────────────────────────────────────────────────────────────
+
+// RecordThreatScan stores the mobile agent's periodic on-device scan summary.
+func RecordThreatScan(deviceID, tenantID, totalApps, sideloadedApps int) error {
+	_, err := database.DB.Exec(`
+		UPDATE mdm_devices SET
+			last_threat_scan_at  = NOW(),
+			total_app_count      = $3,
+			sideloaded_app_count = $4
+		WHERE id=$1 AND tenant_id=$2`,
+		deviceID, tenantID, totalApps, sideloadedApps)
+	return err
+}

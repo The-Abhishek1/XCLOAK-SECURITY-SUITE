@@ -9,7 +9,8 @@ import '../widgets.dart';
 
 class DashboardScreen extends StatefulWidget {
   final DashboardApi api;
-  const DashboardScreen({super.key, required this.api});
+  final void Function(int)? onNavigate;
+  const DashboardScreen({super.key, required this.api, this.onNavigate});
   @override State<DashboardScreen> createState() => _DashboardState();
 }
 
@@ -177,7 +178,7 @@ class _DashboardState extends State<DashboardScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 SectionTitle('Critical Alerts',
                   trailing: TextButton(
-                    onPressed: () {},
+                    onPressed: widget.onNavigate == null ? null : () => widget.onNavigate!(5),
                     child: const Text('View All', style: TextStyle(fontSize: 12)))),
                 ..._critAlerts.take(3).map((a) {
                   final alert = a as Map<String,dynamic>;
@@ -602,11 +603,6 @@ class _AgentCard extends StatelessWidget {
       ('Last Seen',   timeAgo(agent['last_seen'])),
       ('Enrolled',    timeAgo(agent['created_at'])),
       ('Tenant ID',   str(agent['tenant_id'])),
-    ], actions: [
-      IconButton(
-        icon: const Icon(Icons.more_vert),
-        onPressed: () {},
-      ),
     ]);
   }
 
