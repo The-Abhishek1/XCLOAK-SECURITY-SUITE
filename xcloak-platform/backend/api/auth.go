@@ -106,15 +106,27 @@ func Login(c *gin.Context) {
 		setRefreshCookie(c, refreshToken)
 	}
 
+	// The tenant's "Require MFA for All Users" policy previously did
+	// nothing — saved to tenant_security_policy and never read anywhere in
+	// the login path. Hard-blocking login here would self-lock every user
+	// (including whoever just flipped the toggle) the moment it's enabled,
+	// since nobody has enrolled yet — so this is soft enforcement: login
+	// still succeeds, but the response flags that MFA setup is required,
+	// and the client is expected to route the user to enrollment
+	// (Settings → Security → Authentication) before letting them past it.
+	// needs2FA is false here (the true case already returned above), so it
+	// doubles as "this account has not enrolled in TOTP yet".
+	mfaSetupRequired := policy.MFARequired && !needs2FA
+
 	// Native mobile clients (Dart / okhttp) cannot reliably read httpOnly
 	// Set-Cookie headers — return the raw token in the body so they can use
 	// it as a Bearer token. Browser clients ignore this extra field.
 	ua := c.GetHeader("User-Agent")
 	if strings.Contains(ua, "Dart") || strings.Contains(ua, "okhttp") {
-		c.JSON(http.StatusOK, gin.H{"ok": true, "token": token})
+		c.JSON(http.StatusOK, gin.H{"ok": true, "token": token, "mfa_setup_required": mfaSetupRequired})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "mfa_setup_required": mfaSetupRequired})
 }
 
 // RefreshToken — POST /api/auth/refresh

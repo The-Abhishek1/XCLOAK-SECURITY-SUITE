@@ -3,11 +3,13 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"xcloak-platform/auth"
 	"xcloak-platform/database"
+	"xcloak-platform/repositories"
 	"xcloak-platform/services"
 )
 
@@ -42,8 +44,8 @@ func Setup2FA(c *gin.Context) {
 	qrURL := services.GenerateTOTPQRURL(fmt.Sprintf("%v", username), secret)
 
 	c.JSON(200, gin.H{
-		"secret": secret,
-		"qr_url": qrURL,
+		"secret":       secret,
+		"qr_url":       qrURL,
 		"instructions": "Scan the QR code with Google Authenticator, Authy, or any TOTP app. Then verify with a code to enable 2FA.",
 	})
 }
@@ -150,54 +152,6 @@ func Get2FAStatus(c *gin.Context) {
 	c.JSON(200, gin.H{"enabled": enabled})
 }
 
-// LoginWith2FA — POST /api/auth/login
-// Extended login: if 2FA enabled, returns needs_2fa=true and a temp token.
-// Client then calls /api/auth/login/2fa with the TOTP code.
-func LoginWith2FA(c *gin.Context) {
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	token, needs2FA, err := services.LoginUser(req.Username, req.Password)
-	if err != nil {
-		c.JSON(401, gin.H{"error": "invalid credentials"})
-		return
-	}
-
-	if !needs2FA {
-		// Normal login — LoginUser already issued a real token.
-		c.JSON(http.StatusOK, gin.H{"token": token})
-		return
-	}
-
-	// 2FA required — LoginUser returned needs2FA=true (the authoritative
-	// signal) but no token; fetch the user/role/tenant fields needed to
-	// build the temp token. If this lookup fails, fail closed rather than
-	// falling through to a normal-login response with an empty token.
-	var userID, tenantID int
-	var role string
-	if err := database.DB.QueryRow(
-		`SELECT id, role, tenant_id FROM users WHERE username=$1`, req.Username,
-	).Scan(&userID, &role, &tenantID); err != nil {
-		c.JSON(401, gin.H{"error": "invalid credentials"})
-		return
-	}
-
-	// 2FA required — return a short-lived temp token
-	// Client must call /api/auth/login/2fa to exchange for real token
-	tempToken, _ := auth.GenerateTempToken(userID, req.Username, role, tenantID)
-	c.JSON(200, gin.H{
-		"needs_2fa":  true,
-		"temp_token": tempToken,
-		"message":    "Enter your authenticator code to complete login",
-	})
-}
-
 // CompleteTOTPLogin — POST /api/auth/login/2fa
 // Validates the TOTP code against the temp token and returns the real JWT.
 func CompleteTOTPLogin(c *gin.Context) {
@@ -244,6 +198,28 @@ func CompleteTOTPLogin(c *gin.Context) {
 	}
 
 	services.LogEvent("LOGIN_2FA", "2FA login completed", username)
+
+	// Bring this in line with Login's success path — previously a
+	// 2FA-completed login never created a sessions row (invisible to
+	// Settings' Active Sessions / admin revocation), never got a refresh
+	// token (forced re-auth every 8h instead of silently extending like a
+	// non-2FA login), and never hit the audit log.
+	go CreateSessionOnLogin(token, username, c.ClientIP(), c.GetHeader("User-Agent"), userID, tenantID)
+	go repositories.CreateAuditLog("login_success", "ip:"+c.ClientIP()+" user_agent:"+c.GetHeader("User-Agent")+" via:2fa", username)
+
 	setAuthCookie(c, token)
-	c.JSON(200, gin.H{"ok": true})
+	if refreshToken, err := auth.GenerateRefreshToken(userID, username, dbRole, tenantID); err == nil {
+		setRefreshCookie(c, refreshToken)
+	}
+
+	// Native mobile clients (Dart / okhttp) can't reliably read httpOnly
+	// Set-Cookie headers — same special-case Login uses, previously missing
+	// here, which meant a 2FA-completing mobile login had no way to obtain
+	// a usable token at all even with a correct client-side 2FA UI.
+	ua := c.GetHeader("User-Agent")
+	if strings.Contains(ua, "Dart") || strings.Contains(ua, "okhttp") {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "token": token})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

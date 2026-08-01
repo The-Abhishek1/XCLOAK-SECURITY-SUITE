@@ -1,6 +1,27 @@
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
+import { createHmac } from 'crypto';
 import { SHARED_STORAGE_STATE } from './global-setup';
+
+// RFC 6238 TOTP, matching the backend's algorithm/digits/period exactly
+// (services/totp_service.go: SHA1, 6 digits, 30s). Used to compute real
+// codes for the MFA regression guards below — no external OTP library.
+function totp(base32Secret: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const c of base32Secret.toUpperCase().replace(/=+$/, '')) {
+    const idx = alphabet.indexOf(c);
+    if (idx === -1) continue;
+    bits += idx.toString(2).padStart(5, '0');
+  }
+  const bytes = Buffer.from(bits.match(/.{1,8}/g)!.filter(b => b.length === 8).map(b => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000 / 30)));
+  const hmac = createHmac('sha1', bytes).update(counter).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const code = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
+  return code.toString().padStart(6, '0');
+}
 
 // Live-data integrity tests for the Settings page (route /settings). This
 // page is a large collection of mostly-pre-existing, already-real
@@ -82,6 +103,21 @@ async function extractTokenCookie(res: any): Promise<string> {
   const tokenHeader = setCookies.find(h => h.value.startsWith('token='));
   if (!tokenHeader) throw new Error('no token cookie in login response');
   return tokenHeader.value.split(';')[0];
+}
+
+// /api/auth/login is rate-limited at 10/min per IP+path — a real, working
+// anti-brute-force control, not a bug — and this file alone makes enough
+// real login calls across its other regression guards (revocation,
+// max-sessions x3, lockout up to x3, etc.) to sit right at that edge before
+// the MFA tests below even start. A short bounded retry on 429 here is
+// waiting out a real, intentional rate limiter, not masking a product bug.
+async function loginRetrying(page: any, data: Record<string, string>, path = `${API_BASE}/auth/login`) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await page.request.post(path, { data });
+    if (res.status() !== 429) return res;
+    await new Promise(r => setTimeout(r, 15_000));
+  }
+  return page.request.post(path, { data });
 }
 
 async function createRealTestUser(page: any, username: string, password: string): Promise<void> {
@@ -358,6 +394,126 @@ test.describe('Settings — regression guard: mutating /api/stte/* routes requir
 
     const res = await page.request.post(`${API_BASE}/stte/backups/trigger`, { headers: { Cookie: tokenCookie } });
     expect(res.status()).toBe(403);
+
+    deleteTestUser(username);
+  });
+});
+
+// 2026-08-01: MFA had a real backend (setup/verify/disable/status, a
+// correct 2-step login flow) but zero self-service UI on web (the API
+// client methods existed and were never called from any page) and a
+// mobile login flow that couldn't complete at all for a 2FA-enabled
+// account (needs_2fa/temp_token wasn't handled — indistinguishable from
+// "server didn't return a token"). Also fixed: CompleteTOTPLogin never
+// created a sessions row, issued a refresh token, or wrote an audit log
+// like Login does; and the tenant's "Require MFA for All Users" toggle
+// was saved and never read anywhere in the login path.
+test.describe('Settings — regression guard: MFA self-enrollment actually works end to end', () => {
+  test('setup -> verify -> status -> 2FA login -> disable, using a real computed TOTP code', async ({ page }) => {
+    // Up to two real /api/auth/login calls, each possibly retrying through
+    // loginRetrying()'s 15s backoff against this file's own cumulative
+    // rate-limit budget — can exceed the 30s default in the worst case.
+    test.setTimeout(120_000);
+    const username = 'e2e-mfa-guard';
+    await createRealTestUser(page, username, 'GuardTest1!Pw');
+
+    const loginRes = await loginRetrying(page, { username, password: 'GuardTest1!Pw' });
+    expect(loginRes.ok()).toBeTruthy();
+    const cookie = await extractTokenCookie(loginRes);
+
+    // Not enrolled yet.
+    const before = await page.request.get(`${API_BASE}/auth/2fa/status`, { headers: { Cookie: cookie } });
+    expect((await before.json()).enabled).toBe(false);
+
+    const setupRes = await page.request.post(`${API_BASE}/auth/2fa/setup`, { headers: { Cookie: cookie } });
+    expect(setupRes.ok()).toBeTruthy();
+    const { secret, qr_url } = await setupRes.json();
+    expect(secret).toBeTruthy();
+    expect(qr_url).toContain('otpauth://totp/');
+
+    const verifyRes = await page.request.post(`${API_BASE}/auth/2fa/verify`, {
+      headers: { Cookie: cookie }, data: { code: totp(secret) },
+    });
+    expect(verifyRes.ok()).toBeTruthy();
+
+    const after = await page.request.get(`${API_BASE}/auth/2fa/status`, { headers: { Cookie: cookie } });
+    expect((await after.json()).enabled).toBe(true);
+
+    // A fresh login must now stop at the 2FA step, not issue a session.
+    const login2 = await loginRetrying(page, { username, password: 'GuardTest1!Pw' });
+    const login2Body = await login2.json();
+    expect(login2Body.needs_2fa).toBe(true);
+    expect(login2Body.temp_token).toBeTruthy();
+
+    const completeRes = await page.request.post(`${API_BASE}/auth/login/2fa`, {
+      data: { temp_token: login2Body.temp_token, code: totp(secret) },
+    });
+    expect(completeRes.ok()).toBeTruthy();
+    const completeCookie = await extractTokenCookie(completeRes);
+
+    // Regression guard: CompleteTOTPLogin previously skipped session
+    // creation and audit logging that plain Login always did.
+    await expect.poll(() =>
+      Number(PSQL(`SELECT COUNT(*) FROM sessions WHERE tenant_id='9999' AND username='${username}' AND NOT revoked;`))
+    ).toBeGreaterThan(0);
+    const auditCount = Number(PSQL(
+      `SELECT COUNT(*) FROM audit_logs WHERE username='${username}' AND action='login_success' AND details LIKE '%via:2fa%';`
+    ));
+    expect(auditCount).toBeGreaterThan(0);
+
+    const disableRes = await page.request.delete(`${API_BASE}/auth/2fa`, {
+      headers: { Cookie: completeCookie }, data: { code: totp(secret) },
+    });
+    expect(disableRes.ok()).toBeTruthy();
+    const finalStatus = await page.request.get(`${API_BASE}/auth/2fa/status`, { headers: { Cookie: completeCookie } });
+    expect((await finalStatus.json()).enabled).toBe(false);
+
+    deleteTestUser(username);
+  });
+
+  test('the Settings UI actually renders the enrollment step, not just the API', async ({ page }) => {
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle', { timeout: 20_000 });
+    await page.getByRole('main').getByRole('button', { name: /^Security\b/ }).first().click();
+    await page.getByRole('main').getByRole('button', { name: /^Authentication\b/ }).click();
+    // Under full-suite load this section's own data fetch (2FA status +
+    // the rest of loadAll) can outrun the default 5s assertion timeout,
+    // independent of any product bug — same shape as other pages' guards.
+    await expect(page.getByText('Your Account MFA')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Set Up MFA' })).toBeVisible();
+    await page.getByRole('button', { name: 'Set Up MFA' }).click();
+    // A real setup2FA round trip + client-side QR generation, not instant.
+    await expect(page.getByText('Manual entry key')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByPlaceholder('123456')).toBeVisible();
+    // Cancel rather than complete — this is the shared admin session and a
+    // real enrollment here would require every other spec file that logs
+    // in as admin to also solve a TOTP challenge.
+    await page.getByRole('button', { name: 'Cancel' }).click();
+  });
+});
+
+test.describe('Settings — regression guard: "Require MFA for All Users" is no longer a dead toggle', () => {
+  test('a non-enrolled user is soft-flagged to set up MFA on login, and stops being flagged once enrolled', async ({ page }) => {
+    const username = 'e2e-mfa-required-guard';
+    await createRealTestUser(page, username, 'GuardTest1!Pw');
+
+    // Narrow, immediately-restored window — mfa_required is a per-tenant
+    // policy shared with every other user, including the shared admin
+    // session other spec files use.
+    PSQL(`UPDATE tenant_security_policy SET mfa_required=true WHERE tenant_id='9999';`);
+    let loginRes;
+    try {
+      loginRes = await page.request.post(`${API_BASE}/auth/login`, {
+        data: { username, password: 'GuardTest1!Pw' },
+      });
+    } finally {
+      PSQL(`UPDATE tenant_security_policy SET mfa_required=false WHERE tenant_id='9999';`);
+    }
+    expect(loginRes.ok()).toBeTruthy();
+    const body = await loginRes.json();
+    // Soft enforcement, not a lockout: login still succeeds.
+    expect(body.ok).toBe(true);
+    expect(body.mfa_setup_required).toBe(true);
 
     deleteTestUser(username);
   });

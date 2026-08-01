@@ -1,10 +1,12 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { RootLayout } from '@/components/layout/RootLayout';
 import {
   stteAPI, usersAPI, auditAPI, apiKeysAPI, customRolesAPI,
-  sessionsAPI, securityPolicyAPI, integrationsAPI, notificationsAPI,
+  sessionsAPI, securityPolicyAPI, integrationsAPI, notificationsAPI, authAPI,
 } from '@/lib/api';
+import QRCode from 'qrcode';
 import { useUser } from '@/context/UserContext';
 import {
   DataTable, EmptyState, SectionCard, TabBar, ActionButton, MetricCard, LoadingSkeleton,
@@ -109,9 +111,19 @@ const DEFAULT_SECTION: Record<string, string> = {
 
 /* ── main component ───────────────────────────────────────────────────────── */
 export default function SettingsEnterprise() {
+  return (
+    <Suspense>
+      <SettingsEnterpriseInner />
+    </Suspense>
+  );
+}
+
+function SettingsEnterpriseInner() {
   const { profile: user } = useUser();
-  const [topTab, setTopTab]   = useState('general');
-  const [section, setSection] = useState('organization');
+  const searchParams = useSearchParams();
+  const [topTab, setTopTab]   = useState(() => searchParams.get('mfa_setup') === '1' ? 'security' : 'general');
+  const [section, setSection] = useState(() => searchParams.get('mfa_setup') === '1' ? 'authentication' : 'organization');
+  const [mfaSetupBanner, setMfaSetupBanner] = useState(() => searchParams.get('mfa_setup') === '1');
   const [data, setData]       = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -145,12 +157,20 @@ export default function SettingsEnterprise() {
   // integration test
   const [testingIntg, setTestingIntg] = useState('');
 
+  const [myMfaEnabled, setMyMfaEnabled] = useState<boolean | null>(null);
+  const [mfaStep, setMfaStep] = useState<'idle' | 'enrolling'>('idle');
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaQr, setMfaQr] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaDisableCode, setMfaDisableCode] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
+
   function flash(m: string) { setMsg(m); setTimeout(() => setMsg(''), 3000); }
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     const [orgRes, spRes, agCfgRes, liRes, intgRes, usersRes, rolesRes, keysRes,
-      sessRes, auditRes, backupRes, updRes, aiRes, notifRes, stteAuditRes] = await Promise.all([
+      sessRes, auditRes, backupRes, updRes, aiRes, notifRes, stteAuditRes, mfaStatusRes] = await Promise.all([
       stteAPI.getOrg(),
       securityPolicyAPI.get().catch(() => ({ data: null })),
       stteAPI.getAgentsConfig(),
@@ -166,7 +186,9 @@ export default function SettingsEnterprise() {
       stteAPI.getAIConfig(),
       notificationsAPI.getEmailRules().catch(() => ({ data: [] })),
       stteAPI.getAudit(),
+      authAPI.get2FAStatus().catch(() => ({ data: null })),
     ]);
+    setMyMfaEnabled(mfaStatusRes?.data?.enabled ?? false);
     const orgData = orgRes?.data ?? {};
     const spData  = spRes?.data ?? {};
     const agData  = agCfgRes?.data ?? {};
@@ -203,6 +225,50 @@ export default function SettingsEnterprise() {
   // ── savers ─────────────────────────────────────────────────────────────────
   function fail(err: any, fallback: string) {
     flash(err?.response?.data?.error || fallback);
+  }
+
+  // ── MFA self-enrollment (this user's own account) ────────────────────────
+  async function startMfaSetup() {
+    setMfaBusy(true);
+    try {
+      const res = await authAPI.setup2FA();
+      const secret = res?.data?.secret ?? '';
+      const qrUrl  = res?.data?.qr_url ?? '';
+      setMfaSecret(secret);
+      setMfaQr(qrUrl ? await QRCode.toDataURL(qrUrl) : '');
+      setMfaCode('');
+      setMfaStep('enrolling');
+    } catch (err: any) { fail(err, 'Failed to start MFA setup.'); }
+    finally { setMfaBusy(false); }
+  }
+
+  async function confirmMfaSetup() {
+    if (mfaCode.trim().length !== 6) { flash('Enter the 6-digit code from your authenticator app.'); return; }
+    setMfaBusy(true);
+    try {
+      await authAPI.verify2FA(mfaCode.trim());
+      setMyMfaEnabled(true);
+      setMfaStep('idle');
+      setMfaSecret(''); setMfaQr(''); setMfaCode('');
+      flash('MFA enabled on your account.');
+    } catch (err: any) { fail(err, 'Invalid code — try again.'); }
+    finally { setMfaBusy(false); }
+  }
+
+  function cancelMfaSetup() {
+    setMfaStep('idle'); setMfaSecret(''); setMfaQr(''); setMfaCode('');
+  }
+
+  async function disableMyMfa() {
+    if (mfaDisableCode.trim().length !== 6) { flash('Enter your current 6-digit code to disable MFA.'); return; }
+    setMfaBusy(true);
+    try {
+      await authAPI.disable2FA(mfaDisableCode.trim());
+      setMyMfaEnabled(false);
+      setMfaDisableCode('');
+      flash('MFA disabled on your account.');
+    } catch (err: any) { fail(err, 'Invalid code — could not disable MFA.'); }
+    finally { setMfaBusy(false); }
   }
 
   async function saveOrg() {
@@ -466,6 +532,20 @@ export default function SettingsEnterprise() {
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Authentication</h2>
                   <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 'var(--space-6)' }}>Configure MFA, sessions, password policy, and SSO.</p>
 
+                  {mfaSetupBanner && myMfaEnabled === false && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      background: 'var(--yellow-bg, #78350f22)', border: '1px solid #d9770655',
+                      borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-5)',
+                    }}>
+                      <ShieldCheck size={16} color="#d97706" />
+                      <span style={{ fontSize: 13, color: 'var(--text-1)' }}>
+                        Your organization requires MFA for all users — set it up below to continue using your account without interruption.
+                      </span>
+                      <button onClick={() => setMfaSetupBanner(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                    </div>
+                  )}
+
                   <SectionCard title="MFA & Session" padded={false} className="mb-5">
                     <div className="px-4">
                       <Field label="Require MFA for All Users" hint="Enforce multi-factor authentication organization-wide">
@@ -479,6 +559,68 @@ export default function SettingsEnterprise() {
                           <input className="g-input" type="number" min={1} max={20} value={secPolicy.max_concurrent_sessions ?? 10} onChange={e => setSecPolicy({ ...secPolicy, max_concurrent_sessions: parseInt(e.target.value) })} style={{ width: 100 }} />
                         </Field>
                       </div>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard title="Your Account MFA" subtitle="Personal enrollment — separate from the org-wide policy above, which applies once you (or every user) has set this up." padded={false} className="mb-5">
+                    <div className="px-4" style={{ paddingBottom: 16 }}>
+                      {myMfaEnabled === null ? (
+                        <div style={{ color: 'var(--text-3)', fontSize: 13, padding: '8px 0' }}>Loading…</div>
+                      ) : mfaStep === 'idle' ? (
+                        myMfaEnabled ? (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                              {pill('enabled', '#16a34a')}
+                              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>MFA is active on your account.</span>
+                            </div>
+                            <Field label="Enter current code to disable">
+                              <input className="g-input" placeholder="123456" maxLength={6} style={{ width: 100 }}
+                                value={mfaDisableCode} onChange={e => setMfaDisableCode(e.target.value.replace(/\D/g, ''))} />
+                            </Field>
+                            <ActionButton variant="danger" icon={Power} disabled={mfaBusy} onClick={disableMyMfa} style={{ marginTop: 8 }}>
+                              {mfaBusy ? 'Disabling…' : 'Disable MFA'}
+                            </ActionButton>
+                          </div>
+                        ) : (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                              {pill('disabled', '#6b7280')}
+                              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>MFA is not set up on your account.</span>
+                            </div>
+                            <ActionButton variant="primary" icon={ShieldCheck} disabled={mfaBusy} onClick={startMfaSetup}>
+                              {mfaBusy ? 'Starting…' : 'Set Up MFA'}
+                            </ActionButton>
+                          </div>
+                        )
+                      ) : (
+                        <div>
+                          <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
+                            Scan with Google Authenticator, Authy, or any TOTP app — or enter the key manually.
+                          </p>
+                          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            {mfaQr && (
+                              <img src={mfaQr} alt="MFA QR code" width={160} height={160}
+                                style={{ borderRadius: 8, border: '1px solid var(--border)' }} />
+                            )}
+                            <div style={{ flex: 1, minWidth: 220 }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 4 }}>Manual entry key</div>
+                              <div style={{ fontFamily: 'monospace', fontSize: 13, background: 'var(--bg-2)', padding: '8px 10px', borderRadius: 6, marginBottom: 14, wordBreak: 'break-all' }}>
+                                {mfaSecret}
+                              </div>
+                              <Field label="Enter the 6-digit code to confirm">
+                                <input className="g-input" placeholder="123456" maxLength={6} style={{ width: 100 }}
+                                  value={mfaCode} onChange={e => setMfaCode(e.target.value.replace(/\D/g, ''))} />
+                              </Field>
+                              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                <ActionButton variant="primary" icon={CheckCircle2} disabled={mfaBusy} onClick={confirmMfaSetup}>
+                                  {mfaBusy ? 'Verifying…' : 'Confirm & Enable'}
+                                </ActionButton>
+                                <ActionButton variant="ghost" onClick={cancelMfaSetup}>Cancel</ActionButton>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </SectionCard>
 

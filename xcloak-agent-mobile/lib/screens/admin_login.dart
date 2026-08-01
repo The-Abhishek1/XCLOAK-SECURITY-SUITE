@@ -30,6 +30,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
   bool    _obscure    = true;
   String? _error;
 
+  // 2FA step — shown in place of the tabs after a password login returns
+  // needs_2fa. _totpServerUrl is captured at that point since the user
+  // could edit the Server URL field again while this step is showing.
+  bool    _needsTOTP     = false;
+  String  _totpServerUrl = '';
+  String  _totpToken     = '';
+  final _totpCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +60,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
     _serverCtrl.dispose();
     _keyCtrl.dispose();
     _keyServerCtrl.dispose();
+    _totpCtrl.dispose();
     super.dispose();
   }
 
@@ -80,6 +89,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
         context,
         MaterialPageRoute(builder: (_) => AdminApp(api: api)),
       );
+    } on Needs2FAException catch (e) {
+      setState(() {
+        _needsTOTP     = true;
+        _totpServerUrl = serverUrl;
+        _totpToken     = e.tempToken;
+        _loading       = false;
+        _error         = null;
+      });
     } on AdminUnauthorizedException catch (e) {
       setState(() { _error = e.message; _loading = false; });
     } on ApiException catch (e) {
@@ -91,6 +108,33 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
     }
+  }
+
+  Future<void> _completeTOTP() async {
+    final code = _totpCtrl.text.trim();
+    if (code.length != 6) { setState(() => _error = 'Enter the 6-digit code from your authenticator app.'); return; }
+    setState(() { _loading = true; _error = null; });
+    try {
+      final api = await DashboardApi.completeTOTPLogin(_totpServerUrl, _totpToken, code);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => AdminApp(api: api)),
+      );
+    } on AdminUnauthorizedException catch (e) {
+      setState(() { _error = e.message; _loading = false; });
+    } catch (e) {
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  void _cancelTOTP() {
+    setState(() {
+      _needsTOTP = false;
+      _totpToken = '';
+      _totpCtrl.clear();
+      _error = null;
+    });
   }
 
   Future<void> _signInWithApiKey() async {
@@ -119,6 +163,46 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
     }
+  }
+
+  Widget _buildTOTPHeader() {
+    return Row(children: [
+      const Icon(Icons.gpp_maybe_outlined, size: 20, color: Color(0xFF1565C0)),
+      const SizedBox(width: 8),
+      const Expanded(
+        child: Text('Two-factor authentication required',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+      ),
+    ]);
+  }
+
+  Widget _buildTOTPCodeField() {
+    return Column(children: [
+      Text('Enter the 6-digit code from your authenticator app.',
+        style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .6))),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _totpCtrl,
+        decoration: const InputDecoration(labelText: 'Authenticator Code', hintText: '123456'),
+        keyboardType: TextInputType.number,
+        maxLength: 6,
+        autofocus: true,
+        onFieldSubmitted: (_) => _completeTOTP(),
+      ),
+      const SizedBox(height: 12),
+      FilledButton.icon(
+        onPressed: _loading ? null : _completeTOTP,
+        icon: _loading
+            ? const SizedBox(width: 16, height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.login, size: 18),
+        label: Text(_loading ? 'Verifying…' : 'Verify & Sign In'),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF1565C0),
+          minimumSize: const Size(double.infinity, 48),
+        ),
+      ),
+    ]);
   }
 
   @override
@@ -196,6 +280,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
               child: Column(children: [
 
+                if (_needsTOTP) ...[
+                  _buildTOTPHeader(),
+                  const SizedBox(height: 20),
+                ] else ...[
+
                 // Tab bar
                 Container(
                   decoration: BoxDecoration(
@@ -222,6 +311,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                 ),
 
                 const SizedBox(height: 20),
+                ],
 
                 // Error banner
                 if (_error != null) ...[
@@ -248,6 +338,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                   const SizedBox(height: 16),
                 ],
 
+                if (_needsTOTP) ...[
+                  _buildTOTPCodeField(),
+                ] else ...[
                 SizedBox(
                   height: 360,
                   child: TabBarView(
@@ -385,12 +478,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
                     ],
                   ),
                 ),
+                ],
 
                 const SizedBox(height: 8),
                 TextButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: _needsTOTP ? _cancelTOTP : () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back, size: 16),
-                  label: const Text('Back to Mode Selection'),
+                  label: Text(_needsTOTP ? 'Back to Sign In' : 'Back to Mode Selection'),
                   style: TextButton.styleFrom(foregroundColor: cs.onSurface.withValues(alpha: .5)),
                 ),
               ]),

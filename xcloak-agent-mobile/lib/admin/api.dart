@@ -9,6 +9,16 @@ class AdminUnauthorizedException implements Exception {
   @override String toString() => message;
 }
 
+/// Thrown by [DashboardApi.login] when the account has TOTP enabled —
+/// credentials were correct, but login isn't complete yet. Callers should
+/// prompt for the 6-digit code and call [DashboardApi.completeTOTPLogin]
+/// with [tempToken].
+class Needs2FAException implements Exception {
+  final String tempToken;
+  const Needs2FAException(this.tempToken);
+  @override String toString() => 'MFA code required to complete login';
+}
+
 class DashboardApi {
   /// Legacy: create from stored API key (backward compat).
   static Future<DashboardApi?> create() async {
@@ -46,13 +56,24 @@ class DashboardApi {
       throw ApiException(loginRes.statusCode, msg);
     }
 
-    // 2 — Extract token from JSON body (backend returns it for Dart/mobile clients)
-    //     Fall back to parsing Set-Cookie header if the field is absent.
-    String rawToken = '';
-    try {
-      final json = jsonDecode(loginRes.body) as Map<String, dynamic>;
-      rawToken = (json['token'] ?? '').toString();
-    } catch (_) {}
+    // 2 — Extract token from JSON body (backend returns it for Dart/mobile
+    //     clients), or detect that this account needs a second 2FA step —
+    //     the backend responds 200 with needs_2fa+temp_token and no token
+    //     at all in that case, previously indistinguishable from "server
+    //     didn't return a token" and blocking 2FA accounts from mobile
+    //     login entirely.
+    Map<String, dynamic> json = {};
+    try { json = jsonDecode(loginRes.body) as Map<String, dynamic>; } catch (_) {}
+
+    if (json['needs_2fa'] == true) {
+      final tempToken = (json['temp_token'] ?? '').toString();
+      if (tempToken.isEmpty) {
+        throw Exception('Server requested 2FA but returned no temp_token.');
+      }
+      throw Needs2FAException(tempToken);
+    }
+
+    String rawToken = (json['token'] ?? '').toString();
 
     if (rawToken.isEmpty) {
       final setCookie = loginRes.headers['set-cookie'] ?? '';
@@ -66,9 +87,50 @@ class DashboardApi {
         'Verify the server URL is reachable: $serverUrl',
       );
     }
+
+    return _finishLogin(serverUrl, rawToken, fallbackEmail: email);
+  }
+
+  /// Second step of a 2FA login — exchanges [tempToken] + the 6-digit
+  /// authenticator [code] for a real session, same as [login]'s tail.
+  static Future<DashboardApi> completeTOTPLogin(String serverUrl, String tempToken, String code) async {
+    final res = await http.post(
+      Uri.parse('$serverUrl/api/auth/login/2fa'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'temp_token': tempToken, 'code': code}),
+    ).timeout(const Duration(seconds: 15));
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      String msg = 'Invalid code';
+      try {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        if (body['error'] is String && (body['error'] as String).isNotEmpty) msg = body['error'];
+      } catch (_) {}
+      throw AdminUnauthorizedException(msg);
+    }
+
+    String rawToken = '';
+    try {
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      rawToken = (json['token'] ?? '').toString();
+    } catch (_) {}
+    if (rawToken.isEmpty) {
+      final setCookie = res.headers['set-cookie'] ?? '';
+      final m = RegExp(r'(?:^|[\s,])token=([^;,\s]+)').firstMatch(setCookie);
+      rawToken = m?.group(1) ?? '';
+    }
+    if (rawToken.isEmpty) {
+      throw Exception('Server did not return an auth token after 2FA.');
+    }
+
+    return _finishLogin(serverUrl, rawToken);
+  }
+
+  /// Shared tail of both login paths: verify admin role via the profile
+  /// endpoint, persist the session, and return a ready-to-use client.
+  static Future<DashboardApi> _finishLogin(String serverUrl, String rawToken, {String? fallbackEmail}) async {
     final cookie = 'token=$rawToken';
 
-    // 3 — Fetch user profile & verify admin role
     final meRes = await http.get(
       Uri.parse('$serverUrl/api/auth/profile'),
       headers: {'Cookie': cookie},
@@ -88,8 +150,7 @@ class DashboardApi {
           'Access denied — admin or platform_admin role required');
     }
 
-    // 4 — Persist session
-    final displayEmail = (profile['email'] ?? email).toString();
+    final displayEmail = (profile['email'] ?? fallbackEmail ?? '').toString();
     await SecureStore.saveAdminSession(
       cookie: cookie,
       email: displayEmail,

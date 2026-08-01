@@ -260,7 +260,9 @@ function LoginContent() {
       }
 
       if (!data.ok) throw new Error('Login failed');
-      window.location.href = '/dashboard';
+      window.location.href = data.mfa_setup_required
+        ? '/settings?mfa_setup=1'
+        : '/dashboard';
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -279,7 +281,9 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid code');
-      window.location.href = '/dashboard';
+      window.location.href = data.mfa_setup_required
+        ? '/settings?mfa_setup=1'
+        : '/dashboard';
     } catch (err: any) {
       setError(err.message);
       setTotpCode('');

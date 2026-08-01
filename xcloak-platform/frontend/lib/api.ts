@@ -118,6 +118,7 @@ export const authAPI = {
   setup2FA:       ()                                   => api.post('/auth/2fa/setup'),
   verify2FA:      (code: string)                       => api.post('/auth/2fa/verify', { code }),
   disable2FA:     (code: string)                       => api.delete('/auth/2fa', { data: { code } }),
+  get2FAStatus:   ()                                   => api.get('/auth/2fa/status'),
 };
 export const notificationsAPI = {
   getEmailRules:    ()              => api.get('/notifications/email'),
