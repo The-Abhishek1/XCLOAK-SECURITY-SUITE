@@ -645,7 +645,9 @@ func GetSCAnalytics(c *gin.Context) {
 		defer prows.Close()
 		for prows.Next() {
 			var p projRow
-			if prows.Scan(&p.Name, &p.CVECount, &p.Critical, &p.Risk) == nil {
+			var risk float64
+			if prows.Scan(&p.Name, &p.CVECount, &p.Critical, &risk) == nil {
+				p.Risk = int(risk)
 				mostVulnerableProjects = append(mostVulnerableProjects, p)
 			}
 		}

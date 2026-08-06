@@ -414,10 +414,14 @@ class _CloudSecurityState extends State<CloudSecurityScreen> with SingleTickerPr
   Future<void> _respond(String action, Map<String,dynamic> t) async {
     final res = await widget.api.cloudRespond({
       'action': action,
-      'resource_id': str(t['resource_id']),
-      'provider': str(t['provider']),
-      'source_user': str(t['source_user']),
-      'source_ip': str(t['source_ip']),
+      // '' fallback, not str()'s default '—' — PostCloudResponse's block_ip
+      // branch treats a non-empty source_ip as real and writes it straight
+      // into the iocs table. A threat row with no source IP would otherwise
+      // get "blocked" as the literal string '—', creating a garbage IOC.
+      'resource_id': str(t['resource_id'], ''),
+      'provider': str(t['provider'], ''),
+      'source_user': str(t['source_user'], ''),
+      'source_ip': str(t['source_ip'], ''),
     });
     if (!mounted) return;
     final err = res?['error'];

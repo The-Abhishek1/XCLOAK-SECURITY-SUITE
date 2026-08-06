@@ -290,9 +290,13 @@ class _ProcessInjectionState extends State<ProcessInjectionScreen> with SingleTi
   Future<void> _respond(String action, Map<String,dynamic> m) async {
     final res = await widget.api.piRespond({
       'action': action,
-      'target': str(m['dst_name']),
+      // '' fallback, not str()'s default '—' — the backend treats an empty
+      // hostname/target as "not provided" and returns a real validation
+      // error; sending the placeholder glyph instead masks that check and
+      // surfaces a confusing "no agent found with hostname '—'" error.
+      'target': str(m['dst_name'], ''),
       'pid': m['dst_pid'] as int? ?? 0,
-      'hostname': str(m['hostname']),
+      'hostname': str(m['hostname'], ''),
       'reason': 'Process injection: ${str(m['technique'])}',
     });
     if (!mounted) return;

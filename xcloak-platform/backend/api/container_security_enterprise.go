@@ -651,7 +651,7 @@ func GetAdmissionControl(c *gin.Context) {
 func GetContainerCompliance(c *gin.Context) {
 	createContainerSecurityTables()
 	tid := tenantIDFromContext(c)
-	var avgCompliance int
+	var avgCompliance float64
 	database.DB.QueryRow(`SELECT COALESCE(AVG(compliance_score),75) FROM k8s_clusters WHERE tenant_id=$1`, tid).Scan(&avgCompliance)
 
 	var total, denied, allowed int
@@ -680,7 +680,7 @@ func GetContainerCompliance(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"overall_score":    avgCompliance,
+		"overall_score":    int(avgCompliance),
 		"total_violations": total,
 		"denied":           denied,
 		"allowed":          allowed,

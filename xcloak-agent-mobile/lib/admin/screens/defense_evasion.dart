@@ -89,7 +89,7 @@ class _DefenseEvasionState extends State<DefenseEvasionScreen> with SingleTicker
     final action = name.contains('defender') ? 'reenable_defender'
                  : name.contains('firewall') ? 'restore_firewall'
                  : 'restart_security_services';
-    await _respond(action, hostname: str(m['hostname']));
+    await _respond(action, hostname: str(m['hostname'], ''));
   }
 
   @override
@@ -226,12 +226,12 @@ class _DefenseEvasionState extends State<DefenseEvasionScreen> with SingleTicker
             const SizedBox(height: 8),
             Wrap(spacing: 4, children: [
               TextButton(
-                onPressed: () => _respond('isolate_endpoint', hostname: str(m['hostname']),
+                onPressed: () => _respond('isolate_endpoint', hostname: str(m['hostname'], ''),
                   reason: 'Tamper: ${str(m['action'])} on ${str(m['target'])}'),
                 child: const Text('Isolate Host', style: TextStyle(fontSize: 11))),
               if (actorPid > 0)
                 TextButton(
-                  onPressed: () => _respond('kill_process', hostname: str(m['hostname']), target: '$actorPid',
+                  onPressed: () => _respond('kill_process', hostname: str(m['hostname'], ''), target: '$actorPid',
                     reason: 'Tamper: ${str(m['action'])} on ${str(m['target'])}'),
                   child: const Text('Kill Actor Process', style: TextStyle(fontSize: 11))),
               TextButton(
@@ -246,10 +246,16 @@ class _DefenseEvasionState extends State<DefenseEvasionScreen> with SingleTicker
   }
 
   Widget _eventsTab() {
-    const categories = ['', 'process', 'script', 'file', 'network', 'cred', 'persistence', 'container'];
+    // Must match the real de_events.category values the backend actually
+    // writes (see cmd/seed/demo/main.go's seedDefenseEvasion) — the previous
+    // list ('process'/'file'/'persistence'/'container' etc.) never matched
+    // any real row, so every filter chip except "All" silently returned zero
+    // events, the same wrong-taxonomy bug class this whole nav group was
+    // rebuilt to get away from.
+    const categories = ['', 'log_evasion', 'process_evasion', 'script_evasion', 'credential_bypass', 'network_evasion'];
     const labels = {
-      '': 'All', 'process': 'Process', 'script': 'Script', 'file': 'File',
-      'network': 'Network', 'cred': 'Credential', 'persistence': 'Persistence', 'container': 'Container',
+      '': 'All', 'log_evasion': 'Log', 'process_evasion': 'Process', 'script_evasion': 'Script',
+      'credential_bypass': 'Credential', 'network_evasion': 'Network',
     };
     return RefreshIndicator(onRefresh: _load, child: ListView(padding: const EdgeInsets.all(12), children: [
       SectionTitle('Log Evasion'),
