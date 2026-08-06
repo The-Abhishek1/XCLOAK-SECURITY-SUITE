@@ -285,6 +285,15 @@ class DashboardApi {
   Future<bool> memoryDump(int id) async { try { await _po('/api/agents/$id/memory-dump', {}); return true; } catch (_) { return false; } }
   Future<bool> processSnapshot(int id) async { try { await _po('/api/agents/$id/process-snapshot', {}); return true; } catch (_) { return false; } }
 
+  // ── Install Tokens (Deploy Agent) ────────────────────────────────────────
+  // Success body: {token, expires_in, label}. Surfaces the backend's error
+  // message on failure (e.g. missing manage_integrations permission) instead
+  // of a bare bool, since the wizard needs to show it verbatim.
+  Future<Map<String,dynamic>?> generateInstallToken(String label) async {
+    try { return await _po('/api/integrations/install-tokens', {'label': label}); } catch (e) { return {'error': e.toString()}; }
+  }
+  Future<List> installTokens() async { try { final r = await _g('/api/integrations/install-tokens'); return _list(r, ['tokens','data']); } catch (_) { return []; } }
+
   // ── Network ───────────────────────────────────────────────────────────────
   Future<Map<String,dynamic>?> networkMap() async { try { return await _g('/api/network-map'); } catch (_) { return null; } }
   Future<Map<String,dynamic>?> attackPaths() async { try { return await _g('/api/attack-path'); } catch (_) { return null; } }
@@ -316,6 +325,7 @@ class DashboardApi {
     } catch (_) { return []; }
   }
   Future<bool> updateIncidentStatus(int id, String status) async { try { await _pu('/api/incidents/$id/status', {'status': status}); return true; } catch (_) { return false; } }
+  Future<bool> updateIncidentSeverity(int id, String severity) async { try { await _pa('/api/incidents/$id/severity', {'severity': severity}); return true; } catch (_) { return false; } }
   Future<bool> addIncidentNote(int id, String note) async { try { await _po('/api/incidents/$id/notes', {'note': note}); return true; } catch (_) { return false; } }
   Future<List> incidentEvents(int id) async { try { final r = await _g('/api/incidents/$id/events'); return _list(r, ['events','data']); } catch (_) { return []; } }
 
@@ -325,10 +335,41 @@ class DashboardApi {
   // ueba/events → threat audit events are the closest real-time equivalent
   Future<List> uebaEvents() async { try { final r = await _g('/api/audit-events/threats'); return _list(r, ['events','data']); } catch (_) { return []; } }
   Future<bool> triggerUEBA() async { try { await _po('/api/ueba/analyze', {}); return true; } catch (_) { return false; } }
+  // Only "force_logout" has a real effect — every other action string is
+  // explicitly rejected server-side (UEBAResponseAction, ueba_enterprise.go)
+  // to avoid faking disable_user/isolate_endpoint/etc with zero backend effect.
+  Future<bool> forceLogoutUebaUser(String username) async { try { await _po('/api/ueba/users/$username/response-action', {'action': 'force_logout'}); return true; } catch (_) { return false; } }
+  Future<bool> addUebaWatchlist(String username, {String category = 'general'}) async { try { await _po('/api/ueba/watchlist', {'username': username, 'category': category}); return true; } catch (_) { return false; } }
+  Future<bool> removeUebaWatchlist(String username) async { try { await _d('/api/ueba/watchlist/$username'); return true; } catch (_) { return false; } }
 
   // ── Insider Threat ────────────────────────────────────────────────────────
   Future<List> insiderThreat() async { try { final r = await _g('/api/insider-threat'); return _list(r, ['scores','users','data']); } catch (_) { return []; } }
-  Future<Map<String,dynamic>?> insiderSummary() async { try { return await _g('/api/insider-threat/summary'); } catch (_) { return null; } }
+  // GetInsiderThreatSummary (api/insider_threat.go:74) returns a bare array
+  // of {username, score, risk_level} rows, not a {high_risk,medium_risk,
+  // low_risk} object — the implicit Map cast used to throw here every time
+  // (silently caught), so the summary was always null and the UI's KPI
+  // cards always showed 0. Bucket the real rows by risk_level ourselves.
+  Future<Map<String,dynamic>> insiderSummary() async {
+    try {
+      final r = await _g('/api/insider-threat/summary');
+      final rows = _list(r, []);
+      int high = 0, medium = 0, low = 0;
+      for (final row in rows) {
+        switch ((row['risk_level'] ?? '').toString().toLowerCase()) {
+          case 'high':     high++;   break;
+          case 'medium':   medium++; break;
+          default:         low++;
+        }
+      }
+      return {'high_risk': high, 'medium_risk': medium, 'low_risk': low};
+    } catch (_) {
+      return {'high_risk': 0, 'medium_risk': 0, 'low_risk': 0};
+    }
+  }
+  // Same real-effect-only restriction as UEBA's response-action.
+  Future<bool> forceLogoutInsiderUser(String username) async { try { await _po('/api/insider-threat/users/$username/response-action', {'action': 'force_logout'}); return true; } catch (_) { return false; } }
+  Future<bool> addInsiderWatchlist(String username, {String category = 'general'}) async { try { await _po('/api/insider-threat/watchlist', {'username': username, 'category': category}); return true; } catch (_) { return false; } }
+  Future<bool> removeInsiderWatchlist(String username) async { try { await _d('/api/insider-threat/watchlist/$username'); return true; } catch (_) { return false; } }
 
   // ── ITDR (AD Attacks / Cloud / etc.) ──────────────────────────────────────
   Future<List> itdrFindings({String category=''}) async {
@@ -339,12 +380,22 @@ class DashboardApi {
     } catch (_) { return []; }
   }
   Future<bool> updateItdrStatus(int id, String status) async { try { await _pa('/api/itdr/findings/$id/status', {'status': status}); return true; } catch (_) { return false; } }
-  Future<Map<String,dynamic>?> itdrSummary() async { try { return await _g('/api/itdr/summary'); } catch (_) { return null; } }
 
   // ── Net Behavior ──────────────────────────────────────────────────────────
   Future<List> nbaAnomalies() async { try { final r = await _g('/api/nba/anomalies'); return _list(r, ['anomalies','data']); } catch (_) { return []; } }
   Future<bool> ackNbaAnomaly(int id) async { try { await _po('/api/nba/anomalies/$id/acknowledge', {}); return true; } catch (_) { return false; } }
   Future<bool> triggerNBA() async { try { await _po('/api/nba/analyze', {}); return true; } catch (_) { return false; } }
+
+  // ── DPI (Deep Inspection) ────────────────────────────────────────────────
+  Future<Map<String,dynamic>?> dpiOverview({int hours = 24}) async { try { return await _g('/api/dpi/overview?hours=$hours') as Map<String,dynamic>; } catch (_) { return null; } }
+  Future<List> dpiSessions({int hours = 1, int limit = 100}) async { try { final r = await _g('/api/dpi/sessions?hours=$hours&limit=$limit'); return _list(r, ['sessions']); } catch (_) { return []; } }
+  Future<List> dpiFiles({int hours = 24}) async { try { final r = await _g('/api/dpi/files?hours=$hours'); return _list(r, ['files']); } catch (_) { return []; } }
+  // DLPFinding's real column is `category` (aliased in SQL from finding_type) — not `finding_type`.
+  Future<List> dpiDlp({int hours = 24}) async { try { final r = await _g('/api/dpi/dlp?hours=$hours'); return _list(r, ['findings']); } catch (_) { return []; } }
+  Future<List> dpiProtocolAnomalies({int hours = 24}) async { try { final r = await _g('/api/dpi/protocol-anomalies?hours=$hours'); return _list(r, ['findings']); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> dpiAiInspect({String context = ''}) async {
+    try { return await _po('/api/dpi/ai-inspect', {'context': context}); } catch (e) { return {'error': e.toString()}; }
+  }
 
   // ── Behavioral ────────────────────────────────────────────────────────────
   Future<List> threatScores() async { try { final r = await _g('/api/threat/scores'); return _list(r, ['scores','data']); } catch (_) { return []; } }
@@ -369,6 +420,32 @@ class DashboardApi {
   Future<bool> saveSearch(String name, String query) async { try { await _po('/api/logs/searches', {'name': name, 'query': query, 'filters': {}}); return true; } catch (_) { return false; } }
   Future<bool> deleteSavedSearch(int id) async { try { await _d('/api/logs/searches/$id'); return true; } catch (_) { return false; } }
   Future<List> runSavedSearch(int id) async { try { final r = await _po('/api/logs/searches/$id/run', {}); return _list(r, ['logs','results','data']); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> aiLogQuery(String question, {String language = 'kql'}) async {
+    try { return await _po('/api/logs/ai-query', {'question': question, 'language': language}); } catch (e) { return {'error': e.toString()}; }
+  }
+  Future<Map<String,dynamic>?> aiLogExplain(String query, int hitCount, List<String> samples) async {
+    try { return await _po('/api/logs/ai-explain', {'query': query, 'hit_count': hitCount, 'samples': samples}); } catch (e) { return {'error': e.toString()}; }
+  }
+  Future<Map<String,dynamic>?> buildDetection(String type, String query, String name, List<String> samples) async {
+    try { return await _po('/api/logs/build-detection', {'type': type, 'query': query, 'name': name, 'samples': samples}); } catch (e) { return {'error': e.toString()}; }
+  }
+
+  // ── Elastic (ES Query) ───────────────────────────────────────────────────
+  // Every method here degrades gracefully when ELASTICSEARCH_URL isn't set:
+  // the backend answers 503 (or, for health, a 200 {enabled:false}), which
+  // _g/_po turn into a thrown ApiException that these catch into an empty
+  // list / null — never a crash.
+  Future<Map<String,dynamic>?> esHealth() async { try { return await _g('/api/elastic/health') as Map<String,dynamic>; } catch (_) { return null; } }
+  Future<List> esIndices() async { try { final r = await _g('/api/elastic/indices'); return _list(r, ['indices']); } catch (_) { return []; } }
+  // Surfaces the backend's error message (invalid DSL, ES not configured,
+  // etc.) as a {'error': ...} map instead of null so the query screen can
+  // show the analyst exactly why the query failed.
+  Future<Map<String,dynamic>?> esQuery(String index, Map<String,dynamic> dsl) async {
+    try { return await _po('/api/elastic/query', {'index': index, 'dsl': dsl}); } catch (e) { return {'error': e.toString()}; }
+  }
+  Future<Map<String,dynamic>?> esExplain(String index, Map<String,dynamic> dsl) async {
+    try { return await _po('/api/elastic/explain', {'index': index, 'dsl': dsl}); } catch (e) { return {'error': e.toString()}; }
+  }
 
   // ── Log Sources ───────────────────────────────────────────────────────────
   Future<List> logSources() async { try { final r = await _g('/api/log-sources'); return _list(r, ['sources','data']); } catch (_) { return []; } }
@@ -398,10 +475,13 @@ class DashboardApi {
   Future<List> correlationMatches() async { try { final r = await _g('/api/correlation/matches'); return _list(r, ['matches','data']); } catch (_) { return []; } }
 
   // ── Suppression ───────────────────────────────────────────────────────────
-  Future<List> suppressionRules() async { try { final r = await _g('/api/suppression/rules'); return _list(r, ['rules','data']); } catch (_) { return []; } }
-  Future<bool> createSuppressionRule(Map<String,dynamic> b) async { try { await _po('/api/suppression/rules', b); return true; } catch (_) { return false; } }
-  Future<bool> toggleSuppression(int id) async { try { await _pa('/api/suppression/rules/$id/toggle', {}); return true; } catch (_) { return false; } }
-  Future<bool> deleteSuppression(int id) async { try { await _d('/api/suppression/rules/$id'); return true; } catch (_) { return false; } }
+  // Migrated to /api/sup/* (sup_rules) — the real system of record the web
+  // Suppression page uses; the legacy /api/suppression/rules endpoints
+  // still work but write to a separate, disconnected table.
+  Future<List> suppressionRules() async { try { final r = await _g('/api/sup/rules'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createSuppressionRule(Map<String,dynamic> b) async { try { await _po('/api/sup/rules', b); return true; } catch (_) { return false; } }
+  Future<bool> updateSuppressionStatus(int id, String status) async { try { await _pa('/api/sup/rules/$id', {'status': status}); return true; } catch (_) { return false; } }
+  Future<bool> deleteSuppression(int id) async { try { await _d('/api/sup/rules/$id'); return true; } catch (_) { return false; } }
 
   // ── Cases ─────────────────────────────────────────────────────────────────
   Future<List> cases({String status=''}) async {
@@ -409,37 +489,64 @@ class DashboardApi {
   }
   Future<Map<String,dynamic>?> caseDetail(int id) async { try { return await _g('/api/cases/$id'); } catch (_) { return null; } }
   Future<bool> createCase(Map<String,dynamic> b) async { try { await _po('/api/cases', b); return true; } catch (_) { return false; } }
-  Future<bool> updateCase(int id, Map<String,dynamic> b) async { try { await _pu('/api/cases/$id', b); return true; } catch (_) { return false; } }
+  Future<bool> updateCase(int id, Map<String,dynamic> b) async { try { await _pa('/api/cases/$id', b); return true; } catch (_) { return false; } }
   Future<bool> deleteCase(int id) async { try { await _d('/api/cases/$id'); return true; } catch (_) { return false; } }
-  Future<bool> addCaseComment(int id, String body) async { try { await _po('/api/cases/$id/comments', {'body': body}); return true; } catch (_) { return false; } }
+  Future<bool> addCaseComment(int id, String body) async { try { await _po('/api/cases/$id/comments', {'content': body}); return true; } catch (_) { return false; } }
   Future<bool> linkAlertToCase(int caseId, int alertId) async { try { await _po('/api/cases/$caseId/alerts', {'alert_id': alertId}); return true; } catch (_) { return false; } }
+  Future<List> caseTasks(int id) async { try { final r = await _g('/api/cases/$id/tasks'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createCaseTask(int id, Map<String,dynamic> b) async { try { await _po('/api/cases/$id/tasks', b); return true; } catch (_) { return false; } }
+  Future<bool> updateCaseTask(int id, int taskId, Map<String,dynamic> b) async { try { await _pa('/api/cases/$id/tasks/$taskId', b); return true; } catch (_) { return false; } }
+  Future<List> caseEvidence(int id) async { try { final r = await _g('/api/cases/$id/evidence'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> addCaseEvidence(int id, Map<String,dynamic> b) async { try { await _po('/api/cases/$id/evidence', b); return true; } catch (_) { return false; } }
+  Future<List> caseNotes(int id) async { try { final r = await _g('/api/cases/$id/notes'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> addCaseNote(int id, String content) async { try { await _po('/api/cases/$id/notes', {'content': content}); return true; } catch (_) { return false; } }
 
   // ── Playbooks ─────────────────────────────────────────────────────────────
-  Future<List> playbooks() async { try { final r = await _g('/api/playbooks'); return _list(r, ['playbooks','data']); } catch (_) { return []; } }
-  Future<bool> createPlaybook(Map<String,dynamic> b) async { try { await _po('/api/playbooks', b); return true; } catch (_) { return false; } }
+  // Migrated to /api/pb/* (pb_playbooks) — the real system of record the
+  // web Playbooks page uses. Also fixes a pre-existing bug: triggerPlaybook
+  // called the /enable endpoint instead of executing anything, so "Run"
+  // never actually ran a playbook, only silently re-enabled it.
+  Future<List> playbooks() async { try { final r = await _g('/api/pb/library'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createPlaybook(Map<String,dynamic> b) async { try { await _po('/api/pb/library', b); return true; } catch (_) { return false; } }
   Future<bool> updatePlaybook(int id, Map<String,dynamic> b) async { try { await _pu('/api/playbooks/$id', b); return true; } catch (_) { return false; } }
-  Future<bool> deletePlaybook(int id) async { try { await _d('/api/playbooks/$id'); return true; } catch (_) { return false; } }
-  Future<bool> enablePlaybook(int id) async { try { await _pa('/api/playbooks/$id/enable', {}); return true; } catch (_) { return false; } }
-  Future<bool> disablePlaybook(int id) async { try { await _pa('/api/playbooks/$id/disable', {}); return true; } catch (_) { return false; } }
-  // /api/playbooks/:id/execute doesn't exist — enable the playbook as the trigger action
-  Future<bool> triggerPlaybook(int id, Map<String,dynamic> payload) async { try { await _pa('/api/playbooks/$id/enable', {}); return true; } catch (_) { return false; } }
-  Future<List> playbookExecutions() async { try { final r = await _g('/api/playbook-executions'); return _list(r, ['executions','data']); } catch (_) { return []; } }
+  Future<bool> deletePlaybook(int id) async { try { await _d('/api/pb/library/$id'); return true; } catch (_) { return false; } }
+  Future<bool> enablePlaybook(int id) async { try { await _po('/api/pb/library/$id/publish', {}); return true; } catch (_) { return false; } }
+  Future<bool> disablePlaybook(int id) async { try { await _pa('/api/pb/library/$id', {'status': 'archived'}); return true; } catch (_) { return false; } }
+  Future<bool> triggerPlaybook(int id, Map<String,dynamic> payload) async { try { await _po('/api/pb/library/$id/execute', {'trigger_type': 'manual', 'variables': payload}); return true; } catch (_) { return false; } }
+  Future<List> playbookExecutions() async { try { final r = await _g('/api/pb/executions'); return r is List ? r : []; } catch (_) { return []; } }
 
   // ── Approvals ─────────────────────────────────────────────────────────────
-  Future<List> pendingApprovals() async { try { final r = await _g('/api/tasks/pending-approval'); return _list(r, ['tasks','data']); } catch (_) { return []; } }
-  Future<bool> approveTask(int id) async { try { await _po('/api/tasks/$id/approve', {}); return true; } catch (_) { return false; } }
-  Future<bool> rejectTask(int id, String reason) async { try { await _po('/api/tasks/$id/reject', {'reason': reason}); return true; } catch (_) { return false; } }
+  // Migrated to /api/aq/* (aq_requests) — the real SOAR approval queue web
+  // users work from. The legacy /api/tasks/pending-approval endpoint is a
+  // different concept entirely (agent-task approvals, not SOAR change
+  // requests) and still works, but isn't what "Approval Queue" means on web.
+  Future<List> pendingApprovals() async { try { final r = await _g('/api/aq/queue?status=pending'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> approveTask(int id) async { try { await _po('/api/aq/queue/$id/decision', {'decision': 'approve'}); return true; } catch (_) { return false; } }
+  Future<bool> rejectTask(int id, String reason) async { try { await _po('/api/aq/queue/$id/decision', {'decision': 'reject', 'notes': reason}); return true; } catch (_) { return false; } }
 
   // ── Vulnerabilities ───────────────────────────────────────────────────────
-  Future<List> vulnQueue() async { try { final r = await _g('/api/vulns/priority-queue'); return _list(r, ['vulns','vulnerabilities','data']); } catch (_) { return []; } }
-  Future<bool> updatePatchStatus(int id, String status) async { try { await _pa('/api/vulns/$id/patch-status', {'status': status}); return true; } catch (_) { return false; } }
-  Future<bool> refreshVulnPriorities() async { try { await _po('/api/vulns/refresh-priorities', {}); return true; } catch (_) { return false; } }
-  Future<List> agentVulnerabilities(int agentId) async { try { final r = await _g('/api/agents/$agentId/vulnerabilities'); return _list(r, ['vulnerabilities','data']); } catch (_) { return []; } }
+  // Migrated to /api/vq/* (vq_items) — the real system of record the web
+  // Vuln Queue page uses. vq_items has no severity/cvss_score field — it's
+  // a remediation-workflow item keyed on priority/risk_score, distinct
+  // from vm_findings (the raw vulnerability data VulnerabilitiesScreen
+  // shows). Lifecycle actions are 'complete'/'block'/'close', not a
+  // free-form patch-status string.
+  Future<List> vulnQueue() async { try { final r = await _g('/api/vq/queue'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> vqAction(int id, String action) async { try { await _po('/api/vq/items/$id/action', {'action': action}); return true; } catch (_) { return false; } }
 
   // ── Quarantine ────────────────────────────────────────────────────────────
-  Future<List> quarantine() async { try { final r = await _g('/api/quarantine'); return _list(r, ['files','data']); } catch (_) { return []; } }
-  Future<Map<String,dynamic>?> quarantineStats() async { try { return await _g('/api/quarantine/stats') as Map<String,dynamic>; } catch (_) { return null; } }
-  Future<bool> releaseQuarantine(int id) async { try { await _d('/api/quarantine/$id'); return true; } catch (_) { return false; } }
+  // Migrated to /api/qe/* (qe_items) — the real system of record the web
+  // Quarantine page uses; legacy /api/quarantine still works but targets a
+  // separate, disconnected file-only table.
+  Future<List> quarantine() async { try { final r = await _g('/api/qe/queue'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> quarantineStats() async { try { return await _g('/api/qe/dashboard'); } catch (_) { return null; } }
+  Future<bool> releaseQuarantine(int id) async { try { await _po('/api/qe/items/$id/action', {'action': 'release'}); return true; } catch (_) { return false; } }
+
+  // ── Vulnerabilities (/api/vm/*, vm_findings) ────────────────────────────
+  Future<List> vmFindings({String severity = ''}) async {
+    try { final r = await _g('/api/vm/inventory${severity.isNotEmpty ? "?severity=$severity" : ""}'); return r is List ? r : []; } catch (_) { return []; }
+  }
+  Future<bool> vmFindingAction(int id, String action) async { try { await _po('/api/vm/findings/$id/action', {'action': action}); return true; } catch (_) { return false; } }
 
   // ── Firewall ──────────────────────────────────────────────────────────────
   Future<List> firewallRules({String group=''}) async {
@@ -452,16 +559,40 @@ class DashboardApi {
   Future<bool> deleteFirewallRule(int id) async { try { await _d('/api/firewall/rules/$id'); return true; } catch (_) { return false; } }
   Future<bool> syncFirewall() async { try { await _po('/api/firewall/sync', {}); return true; } catch (_) { return false; } }
 
+  // ── Firewall Enterprise (zones / NAT / policies / approvals) ───────────────
+  Future<List> fweZones() async { try { final r = await _g('/api/fwe/zones'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createFweZone(Map<String,dynamic> b) async { try { await _po('/api/fwe/zones', b); return true; } catch (_) { return false; } }
+  Future<List> fweNAT() async { try { final r = await _g('/api/fwe/nat'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createFweNAT(Map<String,dynamic> b) async { try { await _po('/api/fwe/nat', b); return true; } catch (_) { return false; } }
+  Future<bool> deleteFweNAT(int id) async { try { await _d('/api/fwe/nat/$id'); return true; } catch (_) { return false; } }
+  Future<List> fwePolicies() async { try { final r = await _g('/api/fwe/policies'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createFwePolicy(Map<String,dynamic> b) async { try { await _po('/api/fwe/policies', b); return true; } catch (_) { return false; } }
+  Future<bool> updateFwePolicy(int id, Map<String,dynamic> b) async { try { await _pa('/api/fwe/policies/$id', b); return true; } catch (_) { return false; } }
+  Future<bool> deleteFwePolicy(int id) async { try { await _d('/api/fwe/policies/$id'); return true; } catch (_) { return false; } }
+  Future<List> fweApprovals({String status = ''}) async {
+    try { final r = await _g('/api/fwe/approvals${status.isNotEmpty ? "?status=$status" : ""}'); return r is List ? r : []; } catch (_) { return []; }
+  }
+  Future<bool> decideFweApproval(int id, String decision, {String note = ''}) async {
+    try { await _po('/api/fwe/approvals/$id/decide', {'decision': decision, 'note': note}); return true; } catch (_) { return false; }
+  }
+
   // ── Scheduled Tasks ───────────────────────────────────────────────────────
-  Future<List> scheduledTasks() async { try { final r = await _g('/api/scheduler/tasks'); return _list(r, ['tasks','data']); } catch (_) { return []; } }
-  Future<bool> createScheduledTask(Map<String,dynamic> b) async { try { await _po('/api/scheduler/tasks', b); return true; } catch (_) { return false; } }
-  Future<bool> toggleScheduledTask(int id) async { try { await _pa('/api/scheduler/tasks/$id/toggle', {}); return true; } catch (_) { return false; } }
-  Future<bool> runScheduledTask(int id) async { try { await _po('/api/scheduler/tasks/$id/run', {}); return true; } catch (_) { return false; } }
-  Future<bool> deleteScheduledTask(int id) async { try { await _d('/api/scheduler/tasks/$id'); return true; } catch (_) { return false; } }
+  // Migrated to /api/ste/* (ste_tasks) — the real system of record the web
+  // Scheduled Tasks page uses; legacy /api/scheduler/tasks still works but
+  // targets a separate, disconnected table.
+  Future<List> scheduledTasks() async { try { final r = await _g('/api/ste/tasks'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> createScheduledTask(Map<String,dynamic> b) async { try { await _po('/api/ste/tasks', b); return true; } catch (_) { return false; } }
+  Future<bool> toggleScheduledTask(int id, bool enabled) async { try { await _pa('/api/ste/tasks/$id', {'enabled': enabled}); return true; } catch (_) { return false; } }
+  Future<bool> runScheduledTask(int id) async { try { await _po('/api/ste/tasks/$id/run', {}); return true; } catch (_) { return false; } }
+  Future<bool> deleteScheduledTask(int id) async { try { await _d('/api/ste/tasks/$id'); return true; } catch (_) { return false; } }
 
   // ── DFIR ──────────────────────────────────────────────────────────────────
   Future<List> dfirCollections() async { try { final r = await _g('/api/dfir/collections'); return _list(r, ['collections','data']); } catch (_) { return []; } }
-  Future<bool> triggerDfir(int agentId, String type) async { try { await _po('/api/dfir/collections', {'agent_id': agentId, 'collection_type': type, 'options': {}}); return true; } catch (_) { return false; } }
+  // TriggerForensicCollection (api/dfir.go:25) binds agent_id/label/
+  // artifact_types — it never read collection_type/options, so every
+  // "start collection" request previously bound to zero artifact types and
+  // a blank label regardless of the type the user picked.
+  Future<bool> triggerDfir(int agentId, String type) async { try { await _po('/api/dfir/collections', {'agent_id': agentId, 'label': type, 'artifact_types': [type]}); return true; } catch (_) { return false; } }
   Future<List> dfirArtifacts(int id) async { try { final r = await _g('/api/dfir/collections/$id/artifacts'); return _list(r, ['artifacts','data']); } catch (_) { return []; } }
 
   // ── Scripts ───────────────────────────────────────────────────────────────
@@ -473,10 +604,14 @@ class DashboardApi {
   Future<Map<String,dynamic>?> scriptResult(String taskId) async { try { return await _g('/api/scripts/result/$taskId') as Map<String,dynamic>; } catch (_) { return null; } }
 
   // ── Assets ────────────────────────────────────────────────────────────────
-  Future<List> assets() async { try { final r = await _g('/api/assets'); return _list(r, ['assets','data']); } catch (_) { return []; } }
-  Future<bool> createAsset(Map<String,dynamic> b) async { try { await _po('/api/assets', b); return true; } catch (_) { return false; } }
-  Future<bool> updateAsset(int id, Map<String,dynamic> b) async { try { await _pu('/api/assets/$id', b); return true; } catch (_) { return false; } }
-  Future<bool> deleteAsset(int id) async { try { await _d('/api/assets/$id'); return true; } catch (_) { return false; } }
+  // Migrated to /api/ace/assets (ace_assets) — the real system of record
+  // the web Assets/CMDB page uses. Unlike the legacy /api/assets table,
+  // ace_assets has no create/delete endpoint at all — assets arrive via
+  // discovery (GET /api/ace/discovery) and only a fixed metadata subset
+  // (owner/business_unit/department/criticality/location/tags/status) is
+  // editable, matching real CMDB semantics rather than free-form CRUD.
+  Future<List> assets() async { try { final r = await _g('/api/ace/assets'); return r is List ? r : []; } catch (_) { return []; } }
+  Future<bool> updateAsset(String assetId, Map<String,dynamic> b) async { try { await _pa('/api/ace/assets/$assetId', b); return true; } catch (_) { return false; } }
   Future<Map<String,dynamic>?> platformSummary() async { try { return await _g('/api/assets/platform-summary'); } catch (_) { return null; } }
 
   // ── MDM ───────────────────────────────────────────────────────────────────
@@ -524,36 +659,66 @@ class DashboardApi {
   // ── Threat Actors ─────────────────────────────────────────────────────────
   Future<List> threatActors() async { try { final r = await _g('/api/threat-actors'); return _list(r, ['actors','data']); } catch (_) { return []; } }
   Future<bool> createThreatActor(Map<String,dynamic> b) async { try { await _po('/api/threat-actors', b); return true; } catch (_) { return false; } }
+  Future<bool> updateThreatActor(int id, Map<String,dynamic> b) async { try { await _pa('/api/threat-actors/$id', b); return true; } catch (_) { return false; } }
   Future<bool> deleteThreatActor(int id) async { try { await _d('/api/threat-actors/$id'); return true; } catch (_) { return false; } }
 
   // ── Compliance/Reports ────────────────────────────────────────────────────
-  Future<List> complianceReports() async { try { final r = await _g('/api/compliance/reports'); return _list(r, ['reports','data']); } catch (_) { return []; } }
+  // Migrated to /api/rpe/* (rpe_reports) — the real system of record the web
+  // Reports page uses. rpe treats a "report" as a saved, re-runnable
+  // definition (status active/archived + last_generated_at/generation_count)
+  // rather than the legacy model's one-shot pending→generating→completed
+  // request, so generate is always available, not gated on status.
+  Future<List> complianceReports() async { try { final r = await _g('/api/rpe/reports'); return r is List ? r : []; } catch (_) { return []; } }
   Future<List> reports() => complianceReports();
-  Future<bool> createReport(Map<String,dynamic> b) async { try { await _po('/api/compliance/reports', b); return true; } catch (_) { return false; } }
-  // /api/compliance/reports/:id/generate doesn't exist — create a fresh report for same type
-  Future<bool> generateReport(int id) async { try { await _po('/api/compliance/reports', {'regenerate_from_id': id}); return true; } catch (_) { return false; } }
-  Future<bool> deleteReport(int id) async { try { await _d('/api/compliance/reports/$id'); return true; } catch (_) { return false; } }
-  Future<List> frameworkAssessments() async { try { final r = await _g('/api/framework-compliance'); return _list(r, ['assessments','frameworks','data']); } catch (_) { return []; } }
+  Future<bool> createReport(Map<String,dynamic> b) async { try { await _po('/api/rpe/reports', b); return true; } catch (_) { return false; } }
+  Future<bool> generateReport(String reportId) async { try { await _po('/api/rpe/generate/$reportId', {}); return true; } catch (_) { return false; } }
+  Future<bool> deleteReport(int id) async { try { await _d('/api/rpe/reports/$id'); return true; } catch (_) { return false; } }
+  // Migrated to /api/fce/frameworks (fce_frameworks) — the real system of
+  // record the web Frameworks page uses.
+  Future<List> frameworkAssessments() async { try { final r = await _g('/api/fce/frameworks'); return r is List ? r : []; } catch (_) { return []; } }
   Future<List> frameworks() => frameworkAssessments();
   // No framework-compliance refresh endpoint — refresh risk posture as proxy
   Future<bool> refreshFrameworks() async { try { await _po('/api/risk-posture/refresh', {}); return true; } catch (_) { return false; } }
-  Future<Map<String,dynamic>?> executiveMetrics() async { try { return await _g('/api/executive/metrics'); } catch (_) { return null; } }
+  // Migrated to /api/exe/dashboard (exe_snapshots) — the real system of
+  // record the web Executive page uses.
+  Future<Map<String,dynamic>?> executiveMetrics() async { try { return await _g('/api/exe/dashboard'); } catch (_) { return null; } }
   Future<Map<String,dynamic>?> executiveSummary() => executiveMetrics();
-  Future<Map<String,dynamic>?> socMetrics() async { try { return await _g('/api/soc/metrics'); } catch (_) { return null; } }
+  // Migrated to /api/sme/dashboard (sme_snapshots) — the real system of
+  // record the web SOC Metrics page uses. Unwrapped here (response nests
+  // the flat metrics under "latest") so existing callers reading top-level
+  // keys don't need to know about the wrapper.
+  Future<Map<String,dynamic>?> socMetrics() async {
+    try {
+      final r = await _g('/api/sme/dashboard');
+      return (r is Map ? r['latest'] : null) as Map<String,dynamic>?;
+    } catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> socAlertMetrics() async { try { return await _g('/api/sme/alerts'); } catch (_) { return null; } }
+  Future<List> socAnalysts() async { try { final r = await _g('/api/sme/analysts'); return _list(r, ['analysts']); } catch (_) { return []; } }
   Future<Map<String,dynamic>?> riskPosture() async { try { return await _g('/api/risk-posture'); } catch (_) { return null; } }
   Future<bool> refreshRiskPosture() async { try { await _po('/api/risk-posture/refresh', {}); return true; } catch (_) { return false; } }
 
   // ── AI ────────────────────────────────────────────────────────────────────
-  Future<Map<String,dynamic>?> aiChat(String message, {String? sessionId}) async {
+  // AIChatHandler (api/ai.go:130) is stateless per-request — it takes the
+  // full prior turn history in the body and returns the updated history in
+  // the response; there is no session_id/context field anywhere. Previously
+  // sent an empty 'context' string and a 'session_id' the handler never
+  // read, and never sent 'history' at all — every message was answered with
+  // zero memory of earlier turns in the same conversation.
+  Future<Map<String,dynamic>?> aiChat(String message, List<Map<String,dynamic>> history) async {
     try {
-      final body = <String,dynamic>{'message': message, 'context': ''};
-      if (sessionId != null) body['session_id'] = sessionId;
-      return await _po('/api/ai/chat', body);
+      return await _po('/api/ai/chat', {'message': message, 'history': history});
     } catch (_) { return null; }
   }
   Future<List> chatHistory() async { try { final r = await _g('/api/ai/chat/history'); return _list(r, ['messages','history','data']); } catch (_) { return []; } }
   Future<bool> clearChatHistory() async { try { await _d('/api/ai/chat/history'); return true; } catch (_) { return false; } }
   Future<bool> triageAlert(int id) async { try { await _po('/api/ai/triage/$id', {}); return true; } catch (_) { return false; } }
+
+  // ── AI Assistant Enterprise (recommendations + prompt library) ─────────────
+  Future<List> aiaRecommendations() async { try { final r = await _g('/api/aia/recommendations'); return _list(r, ['recommendations','data']); } catch (_) { return []; } }
+  Future<bool> updateAiaRecommendation(String recId, String status) async { try { await _pa('/api/aia/recommendations/$recId', {'status': status}); return true; } catch (_) { return false; } }
+  Future<List> aiaPrompts() async { try { final r = await _g('/api/aia/prompts'); return _list(r, ['prompts','data']); } catch (_) { return []; } }
+  Future<bool> createAiaPrompt(Map<String,dynamic> b) async { try { await _po('/api/aia/prompts', b); return true; } catch (_) { return false; } }
 
   // ── Settings ──────────────────────────────────────────────────────────────
   Future<List> users() async { try { final r = await _g('/api/users'); return _list(r, ['users','data']); } catch (_) { return []; } }
@@ -579,6 +744,26 @@ class DashboardApi {
 
   Future<List> customRoles() async { try { final r = await _g('/api/custom-roles'); return _list(r, ['roles','data']); } catch (_) { return []; } }
   Future<bool> createCustomRole(Map<String,dynamic> b) async { try { await _po('/api/custom-roles', b); return true; } catch (_) { return false; } }
+
+  // ── Security Policy & Sessions ──────────────────────────────────────────
+  Future<Map<String,dynamic>?> securityPolicy() async { try { return await _g('/api/security-policy'); } catch (_) { return null; } }
+  Future<bool> updateSecurityPolicy(Map<String,dynamic> b) async { try { await _pu('/api/security-policy', b); return true; } catch (_) { return false; } }
+  Future<List> allSessions() async { try { final r = await _g('/api/sessions'); return _list(r, ['sessions']); } catch (_) { return []; } }
+  Future<bool> revokeSession(int id) async { try { await _d('/api/sessions/$id'); return true; } catch (_) { return false; } }
+
+  // ── System Settings (/api/stte/*) ───────────────────────────────────────
+  Future<Map<String,dynamic>?> stteOrg() async { try { return await _g('/api/stte/org'); } catch (_) { return null; } }
+  Future<bool> updateStteOrg(Map<String,dynamic> b) async { try { await _pa('/api/stte/org', b); return true; } catch (_) { return false; } }
+  Future<Map<String,dynamic>?> stteBackups() async { try { return await _g('/api/stte/backups'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> triggerBackup() async { try { return await _po('/api/stte/backups/trigger', {}); } catch (e) { return {'error': e.toString()}; } }
+  Future<bool> updateBackupConfig(Map<String,dynamic> b) async { try { await _pa('/api/stte/backups/config', b); return true; } catch (_) { return false; } }
+  Future<Map<String,dynamic>?> stteUpdates() async { try { return await _g('/api/stte/updates'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> checkUpdates() async { try { return await _po('/api/stte/updates/check', {}); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> stteLicense() async { try { return await _g('/api/stte/license'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> activateLicense(String key) async { try { return await _po('/api/stte/license/activate', {'license_key': key}); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> stteAgentsConfig() async { try { return await _g('/api/stte/agents-config'); } catch (_) { return null; } }
+  Future<bool> updateStteAgentsConfig(Map<String,dynamic> b) async { try { await _pa('/api/stte/agents-config', b); return true; } catch (_) { return false; } }
+  Future<List> stteAudit() async { try { final r = await _g('/api/stte/audit'); return r is List ? r : []; } catch (_) { return []; } }
   Future<bool> deleteCustomRole(int id) async { try { await _d('/api/custom-roles/$id'); return true; } catch (_) { return false; } }
 
   // ── Deception (Canary + Honeyport) ────────────────────────────────────────
@@ -604,4 +789,422 @@ class DashboardApi {
   Future<List> tenants() async { try { final r = await _g('/api/platform/tenants'); return _list(r, ['tenants','data']); } catch (_) { return []; } }
   Future<bool> createTenant(Map<String,dynamic> b) async { try { await _po('/api/platform/tenants', b); return true; } catch (_) { return false; } }
   Future<bool> toggleTenant(int id) async { try { await _pa('/api/platform/tenants/$id/toggle', {}); return true; } catch (_) { return false; } }
+
+  // ── Cloud Security (api/cloud_security_enterprise.go) ─────────────────────
+  // Previously this whole category (and 7 siblings under Cloud & Infra) was
+  // backed by a single generic ItdrScreen filtering /api/itdr/findings?type=
+  // <category> — but itdr_findings.finding_type only ever holds values like
+  // brute_force/credential_theft/mfa_gap, never "cloud"/"ad"/"email", so that
+  // filter matched zero rows for every one of these 8 tabs, always. Each
+  // category has its own real, much richer backend (this one: /api/cloud/*)
+  // that was never wired to any mobile screen at all.
+  Future<Map<String,dynamic>?> cloudDashboard() async { try { return await _g('/api/cloud/dashboard'); } catch (_) { return null; } }
+  Future<List> cloudAccounts() async { try { final r = await _g('/api/cloud/accounts'); return _list(r, []); } catch (_) { return []; } }
+  Future<bool> createCloudAccount(Map<String,dynamic> b) async { try { await _po('/api/cloud/accounts', b); return true; } catch (_) { return false; } }
+  Future<bool> deleteCloudAccount(int id) async { try { await _d('/api/cloud/accounts/$id'); return true; } catch (_) { return false; } }
+  Future<List> cloudInventory({String provider='', String resourceType=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (provider.isNotEmpty) qs['provider'] = provider;
+      if (resourceType.isNotEmpty) qs['resource_type'] = resourceType;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/cloud/inventory$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> cloudCSPMFindings({String category='', String severity=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (category.isNotEmpty) qs['category'] = category;
+      if (severity.isNotEmpty) qs['severity'] = severity;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/cloud/cspm/findings$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> cloudCSPMSummary() async { try { final r = await _g('/api/cloud/cspm/summary'); return _list(r, []); } catch (_) { return []; } }
+  Future<bool> patchCloudFinding(int id, String status) async { try { await _pa('/api/cloud/cspm/findings/$id', {'status': status}); return true; } catch (_) { return false; } }
+  Future<List> cloudIdentities({String type='', String riskLevel=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (type.isNotEmpty) qs['type'] = type;
+      if (riskLevel.isNotEmpty) qs['risk_level'] = riskLevel;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/cloud/ciem/identities$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> cloudCIEMRisks() async { try { return await _g('/api/cloud/ciem/risks'); } catch (_) { return null; } }
+  Future<List> cloudThreats({String threatType='', String provider=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (threatType.isNotEmpty) qs['threat_type'] = threatType;
+      if (provider.isNotEmpty) qs['provider'] = provider;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/cloud/threats$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> cloudExposure() async { try { return await _g('/api/cloud/exposure'); } catch (_) { return null; } }
+  Future<List> cloudCompliance() async { try { final r = await _g('/api/cloud/compliance'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> cloudTimeline() async { try { final r = await _g('/api/cloud/timeline'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> cloudAttackPaths() async { try { return await _g('/api/cloud/attack-paths'); } catch (_) { return null; } }
+  Future<List> cloudDrift() async { try { final r = await _g('/api/cloud/drift'); return _list(r, []); } catch (_) { return []; } }
+  Future<bool> ackCloudDrift(int id) async { try { await _pa('/api/cloud/drift/$id', {}); return true; } catch (_) { return false; } }
+  Future<List> cloudVulnerabilities() async { try { final r = await _g('/api/cloud/vulnerabilities'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> cloudThreatIntel() async { try { return await _g('/api/cloud/threat-intel'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> cloudAnalytics() async { try { return await _g('/api/cloud/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> cloudAI(String question, {String mode='', String resourceId='', int findingId=0}) async {
+    try { return await _po('/api/cloud/ai', {'question': question, 'mode': mode, 'resource_id': resourceId, 'finding_id': findingId}); }
+    catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> cloudRespond(Map<String,dynamic> body) async { try { return await _po('/api/cloud/response', body); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> cloudReport(String reportType) async { try { return await _po('/api/cloud/report', {'report_type': reportType}); } catch (_) { return null; } }
+
+  // ── Email Security (api/email_security_enterprise.go) ─────────────────────
+  // This nav item ("Cloud & Infra" group) was backed by the shared ItdrScreen
+  // filtering /api/itdr/findings?type=email — but itdr_findings.finding_type
+  // only ever holds values like brute_force/credential_theft/mfa_gap, never
+  // "email", so that filter always matched zero rows. The real backend at
+  // /api/email/* is a much richer mail-flow/threat/campaign/policy system
+  // that had never been wired to any mobile screen at all.
+  Future<Map<String,dynamic>?> emailDashboard() async { try { return await _g('/api/email/dashboard'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> emailMailFlow() async { try { return await _g('/api/email/mail-flow'); } catch (_) { return null; } }
+  Future<List> emailMessages({String sender='', String recipient='', String subject='', String status='', String threatType='', String messageId=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (sender.isNotEmpty) qs['sender'] = sender;
+      if (recipient.isNotEmpty) qs['recipient'] = recipient;
+      if (subject.isNotEmpty) qs['subject'] = subject;
+      if (status.isNotEmpty) qs['status'] = status;
+      if (threatType.isNotEmpty) qs['threat_type'] = threatType;
+      if (messageId.isNotEmpty) qs['message_id'] = messageId;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/email/messages$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> emailThreats({String type=''}) async {
+    try {
+      final r = await _g('/api/email/threats${type.isNotEmpty ? "?type=$type" : ""}');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> emailAttachments({String verdict='', String fileType=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (verdict.isNotEmpty) qs['verdict'] = verdict;
+      if (fileType.isNotEmpty) qs['file_type'] = fileType;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/email/attachments$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> emailUrls({String verdict=''}) async {
+    try {
+      final r = await _g('/api/email/urls${verdict.isNotEmpty ? "?verdict=$verdict" : ""}');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> emailAuthResults() async { try { return await _g('/api/email/auth-results'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> emailSenderIntel({String domain='', String email=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (domain.isNotEmpty) qs['domain'] = domain;
+      if (email.isNotEmpty) qs['email'] = email;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      return await _g('/api/email/sender-intel$q');
+    } catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> emailThreatIntel() async { try { return await _g('/api/email/threat-intel'); } catch (_) { return null; } }
+  Future<List> emailCampaigns() async { try { final r = await _g('/api/email/campaigns'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> emailTimeline() async { try { final r = await _g('/api/email/timeline'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> emailUserRisk() async { try { final r = await _g('/api/email/user-risk'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> emailAnalytics() async { try { return await _g('/api/email/analytics'); } catch (_) { return null; } }
+  Future<List> emailPolicies() async { try { final r = await _g('/api/email/policies'); return _list(r, []); } catch (_) { return []; } }
+  Future<bool> createEmailPolicy(Map<String,dynamic> b) async { try { await _po('/api/email/policies', b); return true; } catch (_) { return false; } }
+  Future<bool> updateEmailPolicy(int id, Map<String,dynamic> b) async { try { await _pa('/api/email/policies/$id', b); return true; } catch (_) { return false; } }
+  Future<bool> deleteEmailPolicy(int id) async { try { await _d('/api/email/policies/$id'); return true; } catch (_) { return false; } }
+  Future<List> emailReported() async { try { final r = await _g('/api/email/reported'); return _list(r, []); } catch (_) { return []; } }
+  Future<bool> patchEmailReported(int id, {String triageStatus='', String analystNotes=''}) async {
+    try { await _pa('/api/email/reported/$id', {'triage_status': triageStatus, 'analyst_notes': analystNotes}); return true; } catch (_) { return false; }
+  }
+  Future<Map<String,dynamic>?> emailRespond(Map<String,dynamic> body) async { try { return await _po('/api/email/response', body); } catch (e) { return {'error': e.toString()}; } }
+
+  // ── Container Security (api/container_security_enterprise.go) ─────────────
+  // This was one of 8 "Cloud & Infra" nav tabs sharing a single generic
+  // ItdrScreen filtering /api/itdr/findings?type=container — but that
+  // column never actually holds "container" as a value (only things like
+  // brute_force/credential_theft/mfa_gap), so it always returned zero rows.
+  // The real backend lives entirely under /api/containers/*, keyed on
+  // k8s_clusters/k8s_nodes/k8s_pods/k8s_images/k8s_runtime_alerts/
+  // k8s_rbac_findings/k8s_network_policies/k8s_admission_violations, and was
+  // never wired to any mobile screen at all.
+  Future<Map<String,dynamic>?> containerDashboard() async { try { return await _g('/api/containers/dashboard'); } catch (_) { return null; } }
+  Future<List> containerClusters() async { try { final r = await _g('/api/containers/clusters'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> containerNodes({String clusterId=''}) async {
+    try {
+      final q = clusterId.isNotEmpty ? '?cluster_id=$clusterId' : '';
+      final r = await _g('/api/containers/nodes$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> containerNamespaces() async { try { final r = await _g('/api/containers/namespaces'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> containerPods({String namespace='', bool privilegedOnly=false, String clusterId=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (namespace.isNotEmpty) qs['namespace'] = namespace;
+      if (privilegedOnly) qs['privileged'] = 'true';
+      if (clusterId.isNotEmpty) qs['cluster_id'] = clusterId;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/containers/pods$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> containerImages({String registry=''}) async {
+    try {
+      final q = registry.isNotEmpty ? '?registry=$registry' : '';
+      final r = await _g('/api/containers/images$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> containerSupplyChain() async { try { return await _g('/api/containers/supply-chain'); } catch (_) { return null; } }
+  Future<List> containerRuntimeAlerts({String severity='', String alertType=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (severity.isNotEmpty) qs['severity'] = severity;
+      if (alertType.isNotEmpty) qs['alert_type'] = alertType;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/containers/runtime-alerts$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  // GetK8sRBAC returns an object {findings, total, cluster_roles, bindings,
+  // excessive, wildcard} — not a bare array.
+  Future<Map<String,dynamic>?> containerRBAC() async { try { return await _g('/api/containers/rbac'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> containerSecrets() async { try { return await _g('/api/containers/secrets'); } catch (_) { return null; } }
+  Future<List> containerNetworkPolicies() async { try { final r = await _g('/api/containers/network-policies'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> containerAdmission() async { try { final r = await _g('/api/containers/admission'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> containerCompliance() async { try { return await _g('/api/containers/compliance'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> containerThreatIntel() async { try { return await _g('/api/containers/threat-intel'); } catch (_) { return null; } }
+  Future<List> containerTimeline({int limit=50}) async { try { final r = await _g('/api/containers/timeline?limit=$limit'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> containerVulnerabilities() async { try { final r = await _g('/api/containers/vulnerabilities'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> containerAttackPaths() async { try { return await _g('/api/containers/attack-paths'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> containerAnalytics() async { try { return await _g('/api/containers/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> containerRespond(Map<String,dynamic> body) async { try { return await _po('/api/containers/response', body); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> containerReport(String reportType) async { try { return await _po('/api/containers/report', {'report_type': reportType}); } catch (_) { return null; } }
+
+  // ── AD Security (api/ad_security_enterprise.go) ────────────────────────────
+  // This "AD Attacks" tab used to run through the shared ItdrScreen, filtered
+  // on /api/itdr/findings?type=ad — but itdr_findings.finding_type only ever
+  // holds values like brute_force/credential_theft/mfa_gap, never literally
+  // "ad", so it always returned zero rows. The real backend at /api/ad/* is
+  // much richer (dashboard/inventory/identity-risk/auth-monitor/attacks/
+  // gpo-changes/changes/attack-paths/tiering/exposure/threat-intel/timeline/
+  // graph/analytics/assessment) and was never wired to mobile at all.
+  Future<Map<String,dynamic>?> adDashboard() async { try { return await _g('/api/ad/dashboard'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adInventory() async { try { return await _g('/api/ad/inventory'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adIdentityRisk({String filter=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (filter.isNotEmpty) qs['filter'] = filter;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      return await _g('/api/ad/identity-risk$q');
+    } catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> adAuthMonitor() async { try { return await _g('/api/ad/auth-monitor'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adAttacks({String category='', String attackType=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (category.isNotEmpty) qs['category'] = category;
+      if (attackType.isNotEmpty) qs['attack_type'] = attackType;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      return await _g('/api/ad/attacks$q');
+    } catch (_) { return null; }
+  }
+  Future<List> adGPOChanges() async { try { final r = await _g('/api/ad/gpo-changes'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> adChanges() async { try { final r = await _g('/api/ad/changes'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> adAttackPaths() async { try { return await _g('/api/ad/attack-paths'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adTiering() async { try { return await _g('/api/ad/tiering'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adExposure() async { try { return await _g('/api/ad/exposure'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adThreatIntel() async { try { return await _g('/api/ad/threat-intel'); } catch (_) { return null; } }
+  Future<List> adTimeline() async { try { final r = await _g('/api/ad/timeline'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> adGraph() async { try { return await _g('/api/ad/graph'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adAnalytics() async { try { return await _g('/api/ad/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adAssessment() async { try { return await _g('/api/ad/assessment'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> adRespond(Map<String,dynamic> body) async { try { return await _po('/api/ad/response', body); } catch (e) { return {'error': e.toString()}; } }
+
+  // ── OT/ICS (api/ot_ics_enterprise.go) ──────────────────────────────────────
+  // Same bug as every other Cloud & Infra tab: this whole category rode on
+  // the generic ItdrScreen filtering /api/itdr/findings?type=ot_ics — a value
+  // that column never actually holds (only brute_force/credential_theft/
+  // mfa_gap etc.) — so it always returned zero rows. Real backend: /api/ot/*.
+  Future<Map<String,dynamic>?> otDashboard() async { try { return await _g('/api/ot/dashboard'); } catch (_) { return null; } }
+  Future<List> otAssets({String type='', String zone='', String site=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (type.isNotEmpty) qs['type'] = type;
+      if (zone.isNotEmpty) qs['zone'] = zone;
+      if (site.isNotEmpty) qs['site'] = site;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/ot/assets$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> otTopology() async { try { return await _g('/api/ot/topology'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otProtocols() async { try { return await _g('/api/ot/protocols'); } catch (_) { return null; } }
+  Future<List> otTraffic({String protocol='', bool unauthorizedOnly=false}) async {
+    try {
+      final qs = <String,String>{};
+      if (protocol.isNotEmpty) qs['protocol'] = protocol;
+      if (unauthorizedOnly) qs['unauthorized'] = 'true';
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/ot/traffic$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> otAlerts({String severity=''}) async {
+    try { return await _g('/api/ot/alerts${severity.isNotEmpty ? "?severity=$severity" : ""}'); } catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> otDevices() async { try { return await _g('/api/ot/devices'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otThreats() async { try { return await _g('/api/ot/threats'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otDPI() async { try { return await _g('/api/ot/dpi'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otRisk() async { try { return await _g('/api/ot/risk'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otVulnerabilities() async { try { return await _g('/api/ot/vulnerabilities'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otZones() async { try { return await _g('/api/ot/zones'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otBaseline() async { try { return await _g('/api/ot/baseline'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otThreatIntel() async { try { return await _g('/api/ot/threat-intel'); } catch (_) { return null; } }
+  Future<List> otTimeline() async { try { final r = await _g('/api/ot/timeline'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> otCompliance() async { try { return await _g('/api/ot/compliance'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otAttackPaths() async { try { return await _g('/api/ot/attack-paths'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otAnalytics() async { try { return await _g('/api/ot/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> otRespond(Map<String,dynamic> body) async { try { return await _po('/api/ot/response', body); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> otReport(String reportType) async { try { return await _po('/api/ot/report', {'report_type': reportType}); } catch (_) { return null; } }
+
+  // ── Supply Chain (api/supply_chain_enterprise.go) ──────────────────────────
+  // One of the 8 "Cloud & Infra" tabs previously backed by the shared generic
+  // ItdrScreen filtering /api/itdr/findings?type=supply_chain — that column
+  // only ever holds values like brute_force/credential_theft/mfa_gap, never
+  // "supply_chain", so it always returned zero rows. Real backend below.
+  Future<Map<String,dynamic>?> supplyChainDashboard() async { try { return await _g('/api/supply-chain/dashboard'); } catch (_) { return null; } }
+  Future<List> supplyChainRepositories() async { try { final r = await _g('/api/supply-chain/repositories'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> supplyChainDependencies({String ecosystem='', bool hasCves=false}) async {
+    try {
+      final qs = <String,String>{};
+      if (ecosystem.isNotEmpty) qs['ecosystem'] = ecosystem;
+      if (hasCves) qs['has_cves'] = 'true';
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/supply-chain/dependencies$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> supplyChainVulnerabilities({String severity='', bool kev=false}) async {
+    try {
+      final qs = <String,String>{};
+      if (severity.isNotEmpty) qs['severity'] = severity;
+      if (kev) qs['kev'] = 'true';
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      return await _g('/api/supply-chain/vulnerabilities$q');
+    } catch (_) { return null; }
+  }
+  Future<List> supplyChainSBOMs() async { try { final r = await _g('/api/supply-chain/sboms'); return _list(r, []); } catch (_) { return []; } }
+  Future<List> supplyChainPipelines() async { try { final r = await _g('/api/supply-chain/pipelines'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> supplyChainSecrets() async { try { return await _g('/api/supply-chain/secrets'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> supplyChainCodeIntegrity() async { try { return await _g('/api/supply-chain/code-integrity'); } catch (_) { return null; } }
+  Future<List> supplyChainArtifacts() async { try { final r = await _g('/api/supply-chain/artifacts'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> supplyChainThirdParty() async { try { return await _g('/api/supply-chain/third-party'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> supplyChainProvenance() async { try { return await _g('/api/supply-chain/provenance'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> supplyChainThreatIntel() async { try { return await _g('/api/supply-chain/threat-intel'); } catch (_) { return null; } }
+  Future<List> supplyChainTimeline() async { try { final r = await _g('/api/supply-chain/timeline'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> supplyChainAnalytics() async { try { return await _g('/api/supply-chain/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> supplyChainCompliance() async { try { return await _g('/api/supply-chain/compliance'); } catch (_) { return null; } }
+  Future<List> supplyChainPolicies() async { try { final r = await _g('/api/supply-chain/policies'); return _list(r, []); } catch (_) { return []; } }
+  Future<bool> createSupplyChainPolicy(Map<String,dynamic> b) async { try { await _po('/api/supply-chain/policies', b); return true; } catch (_) { return false; } }
+  Future<bool> patchSupplyChainPolicy(int id, Map<String,dynamic> b) async { try { await _pa('/api/supply-chain/policies/$id', b); return true; } catch (_) { return false; } }
+  Future<bool> deleteSupplyChainPolicy(int id) async { try { await _d('/api/supply-chain/policies/$id'); return true; } catch (_) { return false; } }
+  Future<Map<String,dynamic>?> supplyChainRespond(Map<String,dynamic> body) async { try { return await _po('/api/supply-chain/response', body); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> supplyChainReport(String reportType) async { try { return await _po('/api/supply-chain/report', {'report_type': reportType}); } catch (_) { return null; } }
+
+  // ── Process Injection (api/process_injection_enterprise.go) ────────────────
+  // Nav id 14 ("Process Injection") was one of 8 "Cloud & Infra" tabs sharing
+  // ItdrScreen's /api/itdr/findings?type=process_inject filter — finding_type
+  // never actually holds that literal value, so it always returned zero
+  // rows. This wires the real, dedicated /api/pi/* backend instead.
+  Future<Map<String,dynamic>?> piDashboard() async { try { return await _g('/api/pi/dashboard'); } catch (_) { return null; } }
+  Future<List> piProcesses({String hostname='', bool suspiciousOnly=false}) async {
+    try {
+      final qs = <String,String>{};
+      if (hostname.isNotEmpty) qs['hostname'] = hostname;
+      if (suspiciousOnly) qs['suspicious'] = 'true';
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/pi/processes$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<List> piProcessTree({String hostname=''}) async {
+    try {
+      final q = hostname.isEmpty ? '' : '?${Uri(queryParameters: {'hostname': hostname}).query}';
+      final r = await _g('/api/pi/process-tree$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> piInjections({String technique='', String severity=''}) async {
+    try {
+      final qs = <String,String>{};
+      if (technique.isNotEmpty) qs['technique'] = technique;
+      if (severity.isNotEmpty) qs['severity'] = severity;
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      return await _g('/api/pi/injections$q');
+    } catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> piMemory() async { try { return await _g('/api/pi/memory'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piModules() async { try { return await _g('/api/pi/modules'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piHandles() async { try { return await _g('/api/pi/handles'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piApiCalls() async { try { return await _g('/api/pi/api-calls'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piBehavioral() async { try { return await _g('/api/pi/behavioral'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piThreatIntel() async { try { return await _g('/api/pi/threat-intel'); } catch (_) { return null; } }
+  Future<List> piTimeline() async { try { final r = await _g('/api/pi/timeline'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> piMitreMap() async { try { return await _g('/api/pi/mitre'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piAnalytics() async { try { return await _g('/api/pi/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> piRespond(Map<String,dynamic> body) async { try { return await _po('/api/pi/response', body); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> piReport(String reportType) async { try { return await _po('/api/pi/report', {'report_type': reportType}); } catch (_) { return null; } }
+
+  // ── Defense Evasion (api/defense_evasion_enterprise.go) ────────────────────
+  // Nav id 15 ("Defense Evasion") was one of 8 "Cloud & Infra" tabs sharing
+  // ItdrScreen's /api/itdr/findings?type=defense_evasion filter —
+  // finding_type never actually holds that literal value, so it always
+  // returned zero rows. This wires the real, dedicated /api/de/* backend.
+  Future<Map<String,dynamic>?> deDashboard() async { try { return await _g('/api/de/dashboard'); } catch (_) { return null; } }
+  // controls/tamper respond with a wrapped object ({controls|events, plus
+  // counts}), so these stay on the Map-returning _g — the screen reads both
+  // the list and the counts back out of the same response.
+  Future<Map<String,dynamic>?> deControls({int limit=0}) async {
+    try { return await _g('/api/de/controls${limit>0 ? '?limit=$limit' : ''}'); } catch (_) { return null; }
+  }
+  Future<Map<String,dynamic>?> deTamper({int limit=0}) async {
+    try { return await _g('/api/de/tamper${limit>0 ? '?limit=$limit' : ''}'); } catch (_) { return null; }
+  }
+  Future<List> deLogEvasion({int limit=0}) async {
+    try { final r = await _g('/api/de/log-evasion${limit>0 ? '?limit=$limit' : ''}'); return _list(r, []); } catch (_) { return []; }
+  }
+  Future<List> deEvasionEvents({String category='', int limit=0}) async {
+    try {
+      final qs = <String,String>{};
+      if (category.isNotEmpty) qs['category'] = category;
+      if (limit>0) qs['limit'] = '$limit';
+      final q = qs.isEmpty ? '' : '?${Uri(queryParameters: qs).query}';
+      final r = await _g('/api/de/evasion-events$q');
+      return _list(r, []);
+    } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> deBehavioral() async { try { return await _g('/api/de/behavioral'); } catch (_) { return null; } }
+  Future<List> deCorrelation() async { try { final r = await _g('/api/de/correlation'); return _list(r, []); } catch (_) { return []; } }
+  Future<Map<String,dynamic>?> deMITRE() async { try { return await _g('/api/de/mitre'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> deThreatIntel() async { try { return await _g('/api/de/threat-intel'); } catch (_) { return null; } }
+  Future<List> deTimeline({int limit=0}) async {
+    try { final r = await _g('/api/de/timeline${limit>0 ? '?limit=$limit' : ''}'); return _list(r, []); } catch (_) { return []; }
+  }
+  Future<Map<String,dynamic>?> deAnalytics() async { try { return await _g('/api/de/analytics'); } catch (_) { return null; } }
+  Future<Map<String,dynamic>?> deRespond(Map<String,dynamic> body) async { try { return await _po('/api/de/response', body); } catch (e) { return {'error': e.toString()}; } }
+  Future<Map<String,dynamic>?> deReport(String reportType) async { try { return await _po('/api/de/report', {'report_type': reportType}); } catch (_) { return null; } }
 }

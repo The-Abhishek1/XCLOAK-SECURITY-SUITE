@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"xcloak-platform/database"
 )
 
@@ -222,6 +224,21 @@ func DeviceCheckIn(deviceID, tenantID int, d MDMDevice) error {
 			is_jailbroken      = $8,
 			developer_mode_on  = $9,
 			push_token         = COALESCE(NULLIF($10,''), push_token),
+			manufacturer            = COALESCE(NULLIF($11,''), manufacturer),
+			hardware                = COALESCE(NULLIF($12,''), hardware),
+			security_patch_level    = COALESCE(NULLIF($13,''), security_patch_level),
+			android_sdk_version     = COALESCE($14, android_sdk_version),
+			usb_debugging_enabled   = COALESCE($15, usb_debugging_enabled),
+			unknown_sources_enabled = COALESCE($16, unknown_sources_enabled),
+			vpn_active              = COALESCE($17, vpn_active),
+			battery_level           = COALESCE($18, battery_level),
+			battery_charging        = COALESCE($19, battery_charging),
+			network_type            = COALESCE(NULLIF($20,''), network_type),
+			wifi_ssid               = COALESCE(NULLIF($21,''), wifi_ssid),
+			storage_total_gb        = COALESCE($22, storage_total_gb),
+			storage_free_gb         = COALESCE($23, storage_free_gb),
+			ram_total_mb            = COALESCE($24, ram_total_mb),
+			biometric_enrolled      = COALESCE($25, biometric_enrolled),
 			last_check_in      = NOW(),
 			status             = 'enrolled'
 		WHERE id=$1 AND tenant_id=$2
@@ -229,6 +246,10 @@ func DeviceCheckIn(deviceID, tenantID int, d MDMDevice) error {
 		d.OSVersion, d.BuildVersion,
 		d.IsEncrypted, d.HasPasscode, d.PasscodeCompliant,
 		d.IsJailbroken, d.DeveloperModeOn, d.PushToken,
+		d.Manufacturer, d.Hardware, d.SecurityPatchLevel, d.AndroidSDKVersion,
+		d.USBDebuggingEnabled, d.UnknownSourcesEnabled, d.VPNActive,
+		d.BatteryLevel, d.BatteryCharging, d.NetworkType, d.WifiSSID,
+		d.StorageTotalGB, d.StorageFreeGB, d.RAMTotalMB, d.BiometricEnrolled,
 	)
 	return err
 }
@@ -286,14 +307,19 @@ func LookupDeviceByAgent(agentID, tenantID int) (int, error) {
 // ── App inventory ─────────────────────────────────────────────────────────────
 
 type AppInfo struct {
-	PackageName string `json:"package_name"`
-	AppName     string `json:"app_name"`
-	Version     string `json:"version"`
-	Installer   string `json:"installer"` // "com.android.vending" = Play; "" = sideloaded
+	PackageName          string   `json:"package_name"`
+	AppName              string   `json:"app_name"`
+	Version              string   `json:"version"`
+	Installer            string   `json:"installer"` // "com.android.vending" = Play; "" = sideloaded
+	IsSystemApp          bool     `json:"is_system_app"`
+	DangerousPermissions []string `json:"dangerous_permissions"`
 }
 
-// SubmitAppInventory replaces the stored app list for threat analysis.
-func SubmitAppInventory(deviceID, tenantID int, apps []AppInfo) error {
+// SubmitAppInventory replaces the stored app list for threat analysis, and
+// records the device-level sideloaded/high-risk counts the agent computed
+// alongside it (the agent, not the server, knows which local heuristics
+// were used to reach those counts — see ThreatDetector on the mobile side).
+func SubmitAppInventory(deviceID, tenantID int, apps []AppInfo, sideloadedCount, highRiskCount int) error {
 	if len(apps) == 0 {
 		return nil
 	}
@@ -306,14 +332,31 @@ func SubmitAppInventory(deviceID, tenantID int, apps []AppInfo) error {
 		return err
 	}
 	for _, app := range apps {
+		perms := app.DangerousPermissions
+		if perms == nil {
+			// pq.Array(nil) encodes as SQL NULL, which violates the column's
+			// NOT NULL constraint — the mobile client omits this key entirely
+			// when the list is empty, so a nil slice here is the common case,
+			// not an edge case.
+			perms = []string{}
+		}
 		if _, err := tx.Exec(`
 			INSERT INTO mdm_device_apps
-				(device_id, tenant_id, package_name, app_name, version, installer)
-			VALUES ($1,$2,$3,$4,$5,$6)
-		`, deviceID, tenantID, app.PackageName, app.AppName, app.Version, app.Installer); err != nil {
+				(device_id, tenant_id, package_name, app_name, version, installer,
+				 is_system_app, dangerous_permissions)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		`, deviceID, tenantID, app.PackageName, app.AppName, app.Version, app.Installer,
+			app.IsSystemApp, pq.Array(perms)); err != nil {
 			tx.Rollback()
 			return err
 		}
+	}
+	if _, err := tx.Exec(`
+		UPDATE mdm_devices SET sideloaded_app_count=$2, high_risk_app_count=$3
+		WHERE id=$1
+	`, deviceID, sideloadedCount, highRiskCount); err != nil {
+		tx.Rollback()
+		return err
 	}
 	return tx.Commit()
 }
@@ -321,13 +364,14 @@ func SubmitAppInventory(deviceID, tenantID int, apps []AppInfo) error {
 // ── Threat scan ──────────────────────────────────────────────────────────────
 
 // RecordThreatScan stores the mobile agent's periodic on-device scan summary.
-func RecordThreatScan(deviceID, tenantID, totalApps, sideloadedApps int) error {
+func RecordThreatScan(deviceID, tenantID, totalApps, sideloadedApps, systemApps int) error {
 	_, err := database.DB.Exec(`
 		UPDATE mdm_devices SET
 			last_threat_scan_at  = NOW(),
 			total_app_count      = $3,
-			sideloaded_app_count = $4
+			sideloaded_app_count = $4,
+			system_app_count     = $5
 		WHERE id=$1 AND tenant_id=$2`,
-		deviceID, tenantID, totalApps, sideloadedApps)
+		deviceID, tenantID, totalApps, sideloadedApps, systemApps)
 	return err
 }

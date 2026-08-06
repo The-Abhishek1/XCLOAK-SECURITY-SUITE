@@ -51,6 +51,12 @@ class LogForwarder {
       return (result.stdout as String)
           .split('\n')
           .where((l) => l.trim().isNotEmpty)
+          // logcat prints its own buffer-boundary marker lines (e.g.
+          // "--------- beginning of crash") when a requested buffer has
+          // no more history — these aren't real log content and were
+          // being forwarded as if they were, previously tripping an
+          // unrelated backend "SQL Injection" keyword rule on the "--".
+          .where((l) => !l.startsWith('---------'))
           .take(200)
           .map((line) => {
                 'log_source':  'android_agent',

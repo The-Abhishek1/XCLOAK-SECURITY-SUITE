@@ -142,6 +142,14 @@ class _CaseCard extends StatelessWidget {
     } catch (_) { return 0; }
   }
 
+  void _showDetail(BuildContext context) {
+    final id = c['id'] as int? ?? 0;
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      builder: (_) => _CaseDetailSheet(caseId: id, title: str(c['title']), api: api),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final id  = c['id'] as int? ?? 0;
@@ -150,7 +158,9 @@ class _CaseCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.hardEdge,
-      child: Row(children: [
+      child: InkWell(
+        onTap: () => _showDetail(context),
+        child: Row(children: [
         Container(width: 4, color: col),
         Expanded(child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
@@ -190,11 +200,11 @@ class _CaseCard extends StatelessWidget {
               const Icon(Icons.access_time, size: 12, color: Colors.grey),
               const SizedBox(width: 4),
               Text(timeAgo(c['created_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              if (c['assignee'] != null) ...[
+              if ((c['owner'] ?? '').toString().isNotEmpty) ...[
                 const SizedBox(width: 12),
                 const Icon(Icons.person_outline, size: 12, color: Colors.grey),
                 const SizedBox(width: 4),
-                Text(str(c['assignee']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(str(c['owner']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
               const Spacer(),
               PopupMenuButton<String>(
@@ -245,8 +255,215 @@ class _CaseCard extends StatelessWidget {
           ]),
         )),
       ]),
+      ),
     );
   }
+}
+
+// ── Case Detail Sheet — Tasks / Evidence / Notes ─────────────────────────────
+
+class _CaseDetailSheet extends StatefulWidget {
+  final int caseId;
+  final String title;
+  final DashboardApi api;
+  const _CaseDetailSheet({required this.caseId, required this.title, required this.api});
+  @override State<_CaseDetailSheet> createState() => _CaseDetailSheetState();
+}
+
+class _CaseDetailSheetState extends State<_CaseDetailSheet> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  List _tasks = [], _evidence = [], _notes = [];
+  bool _loading = true;
+
+  @override void initState() {
+    super.initState();
+    _tabs = TabController(length: 3, vsync: this);
+    _load();
+  }
+  @override void dispose() { _tabs.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final res = await Future.wait([
+      widget.api.caseTasks(widget.caseId),
+      widget.api.caseEvidence(widget.caseId),
+      widget.api.caseNotes(widget.caseId),
+    ]);
+    if (!mounted) return;
+    setState(() { _tasks = res[0]; _evidence = res[1]; _notes = res[2]; _loading = false; });
+  }
+
+  void _addTask() {
+    final titleCtrl = TextEditingController();
+    String priority = 'medium';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Task'),
+          xField(titleCtrl, 'Task title'),
+          const SizedBox(height: 10),
+          xDropdown('Priority', priority, ['critical','high','medium','low'], (v) => ss(() => priority = v!)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createCaseTask(widget.caseId, {'title': titleCtrl.text.trim(), 'priority': priority});
+              if (context.mounted) xSnack(context, ok ? 'Task added' : 'Failed', error: !ok);
+              _load();
+            },
+            child: const Text('Add'),
+          )),
+        ]),
+      )),
+    );
+  }
+
+  void _addEvidence() {
+    final titleCtrl = TextEditingController();
+    final hashCtrl  = TextEditingController();
+    String type = 'file';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Evidence'),
+          xField(titleCtrl, 'Title'),
+          const SizedBox(height: 10),
+          xDropdown('Type', type, ['file','log','screenshot','memory_dump','disk_image','network_capture'], (v) => ss(() => type = v!)),
+          const SizedBox(height: 10),
+          xField(hashCtrl, 'File hash (optional)'),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.addCaseEvidence(widget.caseId, {'title': titleCtrl.text.trim(), 'evidence_type': type, 'file_hash': hashCtrl.text.trim()});
+              if (context.mounted) xSnack(context, ok ? 'Evidence logged' : 'Failed', error: !ok);
+              _load();
+            },
+            child: const Text('Add'),
+          )),
+        ]),
+      )),
+    );
+  }
+
+  void _addNote() {
+    final ctrl = TextEditingController();
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('Add Note'),
+      content: TextField(controller: ctrl, maxLines: 4, decoration: const InputDecoration(hintText: 'Note (markdown supported)…')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: () async {
+          Navigator.pop(context);
+          final ok = await widget.api.addCaseNote(widget.caseId, ctrl.text.trim());
+          if (context.mounted) xSnack(context, ok ? 'Note added' : 'Failed', error: !ok);
+          _load();
+        }, child: const Text('Add')),
+      ],
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75, maxChildSize: 0.95, minChildSize: 0.4, expand: false,
+      builder: (_, ctrl) => Container(
+        decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+        child: Column(children: [
+          Center(child: Container(
+            width: 38, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(widget.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+          const SizedBox(height: 8),
+          TabBar(controller: _tabs, tabs: const [Tab(text: 'Tasks'), Tab(text: 'Evidence'), Tab(text: 'Notes')]),
+          const Divider(height: 1),
+          Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : TabBarView(
+            controller: _tabs,
+            children: [
+              _tasksTab(ctrl),
+              _evidenceTab(ctrl),
+              _notesTab(ctrl),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
+  Widget _tasksTab(ScrollController ctrl) => Scaffold(
+    floatingActionButton: FloatingActionButton.small(onPressed: _addTask, child: const Icon(Icons.add)),
+    body: _tasks.isEmpty
+      ? const Center(child: Text('No tasks', style: TextStyle(color: Colors.grey)))
+      : ListView.builder(
+          controller: ctrl,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+          itemCount: _tasks.length,
+          itemBuilder: (_, i) {
+            final t = _tasks[i] as Map<String,dynamic>;
+            final taskId = t['id'] as int? ?? 0;
+            final done = str(t['status']) == 'done' || str(t['status']) == 'completed';
+            return CheckboxListTile(
+              value: done,
+              onChanged: (v) async {
+                await widget.api.updateCaseTask(widget.caseId, taskId, {'status': v! ? 'done' : 'pending'});
+                _load();
+              },
+              title: Text(str(t['title']), style: TextStyle(fontSize: 13, decoration: done ? TextDecoration.lineThrough : null)),
+              subtitle: Text('${str(t['priority'])}  ·  ${str(t['assignee'], 'unassigned')}', style: const TextStyle(fontSize: 11)),
+            );
+          },
+        ),
+  );
+
+  Widget _evidenceTab(ScrollController ctrl) => Scaffold(
+    floatingActionButton: FloatingActionButton.small(onPressed: _addEvidence, child: const Icon(Icons.add)),
+    body: _evidence.isEmpty
+      ? const Center(child: Text('No evidence logged', style: TextStyle(color: Colors.grey)))
+      : ListView.builder(
+          controller: ctrl,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+          itemCount: _evidence.length,
+          itemBuilder: (_, i) {
+            final e = _evidence[i] as Map<String,dynamic>;
+            return ListTile(
+              leading: Icon(e['verified'] == true ? Icons.verified : Icons.pending_outlined, size: 18),
+              title: Text(str(e['title']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              subtitle: Text('${str(e['evidence_id'])}  ·  ${str(e['evidence_type'])}  ·  ${str(e['collector'], 'unknown')}',
+                style: const TextStyle(fontSize: 11)),
+            );
+          },
+        ),
+  );
+
+  Widget _notesTab(ScrollController ctrl) => Scaffold(
+    floatingActionButton: FloatingActionButton.small(onPressed: _addNote, child: const Icon(Icons.add)),
+    body: _notes.isEmpty
+      ? const Center(child: Text('No notes', style: TextStyle(color: Colors.grey)))
+      : ListView.builder(
+          controller: ctrl,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+          itemCount: _notes.length,
+          itemBuilder: (_, i) {
+            final n = _notes[i] as Map<String,dynamic>;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(str(n['content']), style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 4),
+                Text('${str(n['author'], 'analyst')}  ·  ${timeAgo(n['created_at'])}',
+                  style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+              ]),
+            );
+          },
+        ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -300,7 +517,7 @@ class _PlaybooksState extends State<PlaybooksScreen> {
                 Navigator.pop(context);
                 final ok = await widget.api.createPlaybook({
                   'name': nameCtrl.text, 'description': descCtrl.text,
-                  'trigger': trigger, 'steps': [], 'enabled': true,
+                  'trigger_type': trigger,
                 });
                 if (context.mounted) xSnack(context, ok ? 'Playbook created' : 'Failed', error: !ok);
                 _load();
@@ -389,10 +606,13 @@ class _PlaybookCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // pb_playbooks — status (draft/active/archived), not a bare `enabled`
+    // bool; step count lives in the workflow JSON, not the list response,
+    // so execution_count is shown instead.
     final id      = book['id'] as int? ?? 0;
-    final enabled = book['enabled'] == true;
-    final steps   = (book['steps'] as List?)?.length ?? 0;
-    final trigger = str(book['trigger'] ?? 'manual');
+    final enabled = str(book['status']) == 'active';
+    final execCount = book['execution_count'] ?? 0;
+    final trigger = str(book['trigger_type'], 'manual');
     final col     = enabled ? const Color(0xFF22C55E) : Colors.grey;
 
     return Card(
@@ -415,7 +635,7 @@ class _PlaybookCard extends StatelessWidget {
               Row(children: [
                 _Tag(Icons.play_circle_outline, _triggerLabel(trigger)),
                 const SizedBox(width: 8),
-                _Tag(Icons.list, '$steps steps'),
+                _Tag(Icons.history, '$execCount runs'),
               ]),
             ])),
             Switch(
@@ -537,6 +757,8 @@ class _ApprovalsState extends State<ApprovalsScreen> {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
         itemCount: _tasks.length,
         itemBuilder: (_, i) {
+          // aq_requests — request_type/requested_action/requester/severity,
+          // not the legacy agent-task shape (task_type/agent_id).
           final t  = _tasks[i] as Map<String,dynamic>;
           final id = t['id'] as int? ?? 0;
           return Card(
@@ -545,12 +767,16 @@ class _ApprovalsState extends State<ApprovalsScreen> {
               padding: const EdgeInsets.all(14),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Expanded(child: Text(str(t['task_type'] ?? t['type'] ?? 'Task'),
+                  Expanded(child: Text(str(t['requested_action'] ?? t['request_type'], 'Request'),
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
-                  Text('Agent ${str(t['agent_id'])}',
-                    style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+                  if (t['is_emergency'] == true) const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.priority_high, size: 16, color: Color(0xFFEF4444))),
+                  SevChip(str(t['severity'])),
                 ]),
                 const SizedBox(height: 4),
+                Text('${str(t['target_asset'] ?? t['target_user'], '')}  ·  requested by ${str(t['requester'])}',
+                  style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
                 Text(timeAgo(t['created_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 const SizedBox(height: 10),
                 Row(children: [
@@ -629,8 +855,8 @@ class _ScheduledTasksState extends State<ScheduledTasksScreen> {
               onPressed: () async {
                 Navigator.pop(context);
                 final ok = await widget.api.createScheduledTask({
-                  'name': nameCtrl.text, 'cron_expression': cronCtrl.text,
-                  'task_type': taskType, 'enabled': true,
+                  'name': nameCtrl.text, 'cron_expr': cronCtrl.text, 'schedule_type': 'cron',
+                  'task_type': taskType, 'category': 'security_operations', 'enabled': true,
                 });
                 if (context.mounted) xSnack(context, ok ? 'Scheduled' : 'Failed', error: !ok);
                 _load();
@@ -673,12 +899,12 @@ class _ScheduledTasksState extends State<ScheduledTasksScreen> {
                       child: Icon(Icons.schedule, size: 18,
                         color: enabled ? const Color(0xFF3B82F6) : Colors.grey)),
                     title: Text(str(t['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('${str(t['cron_expression'] ?? t['cron'])}  ·  ${str(t['task_type'])}'),
+                    subtitle: Text('${str(t['cron_expr'])}  ·  ${str(t['task_type'])}  ·  ${t['run_count'] ?? 0} runs'),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Switch(
                         value: enabled,
-                        onChanged: (_) async {
-                          final ok = await widget.api.toggleScheduledTask(id);
+                        onChanged: (v) async {
+                          final ok = await widget.api.toggleScheduledTask(id, v);
                           if (context.mounted) xSnack(context, ok ? 'Updated' : 'Failed', error: !ok);
                           _load();
                         },
@@ -712,28 +938,71 @@ class DFIRScreen extends StatefulWidget {
 
 class _DFIRState extends State<DFIRScreen> {
   List _collections = [];
+  List _agents      = [];
   bool _loading     = true;
 
   @override void initState() { super.initState(); _load(); }
   Future<void> _load() async {
     setState(() => _loading = true);
-    _collections = await widget.api.dfirCollections();
+    final res = await Future.wait([widget.api.dfirCollections(), widget.api.agents()]);
     if (!mounted) return;
-    setState(() => _loading = false);
+    setState(() { _collections = res[0]; _agents = res[1]; _loading = false; });
+  }
+
+  void _startCollection() {
+    int? agentId = _agents.isNotEmpty ? ((_agents.first as Map)['id'] as int?) : null;
+    String type = 'triage';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New DFIR Collection'),
+          DropdownButtonFormField<int>(
+            initialValue: agentId,
+            decoration: const InputDecoration(labelText: 'Agent', isDense: true),
+            items: _agents.map((a) {
+              final m = a as Map<String,dynamic>;
+              return DropdownMenuItem(value: m['id'] as int?, child: Text(str(m['hostname'])));
+            }).toList(),
+            onChanged: (v) => ss(() => agentId = v),
+          ),
+          const SizedBox(height: 10),
+          xDropdown('Collection Type', type, ['triage','memory','disk','full'], (v) => ss(() => type = v!)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: agentId == null ? null : () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.triggerDfir(agentId!, type);
+              if (context.mounted) xSnack(context, ok ? 'Collection started' : 'Failed', error: !ok);
+              _load();
+            },
+            child: const Text('Start Collection'),
+          )),
+        ]),
+      )),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return xLoading();
-    if (_collections.isEmpty) return const XEmptyState('No DFIR collections', icon: Icons.folder_zip_outlined);
-    return RefreshIndicator(
+    return Scaffold(
+      body: _collections.isEmpty
+        ? const XEmptyState('No DFIR collections', icon: Icons.folder_zip_outlined)
+        : RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
         itemCount: _collections.length,
         itemBuilder: (_, i) {
           final col  = _collections[i] as Map<String,dynamic>;
-          final type = str(col['collection_type'] ?? col['type']);
+          // models.ForensicCollection (models/dfir.go:8) has no
+          // collection_type/type field — real fields are label and
+          // agent_hostname (falls back to agent_id if hostname wasn't
+          // joined in this response).
+          final label = str(col['label'], 'Collection');
+          final host  = str(col['agent_hostname'], 'Agent ${str(col['agent_id'])}');
           final st   = str(col['status']);
           final ok   = st == 'completed';
           final stCol = ok ? const Color(0xFF22C55E) : Colors.grey;
@@ -746,7 +1015,7 @@ class _DFIRState extends State<DFIRScreen> {
                   color: stCol.withValues(alpha: .1),
                   borderRadius: BorderRadius.circular(9)),
                 child: Icon(Icons.folder_zip, size: 18, color: stCol)),
-              title: Text('$type — Agent ${str(col['agent_id'])}',
+              title: Text('$label — $host',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Row(children: [
                 StatusChip(st),
@@ -762,6 +1031,8 @@ class _DFIRState extends State<DFIRScreen> {
           );
         },
       ),
+    ),
+      floatingActionButton: FloatingActionButton(onPressed: _startCollection, child: const Icon(Icons.add)),
     );
   }
 }
@@ -802,20 +1073,25 @@ class _QuarantineState extends State<QuarantineScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           Row(children: [
-            KpiCard(label: 'Quarantined', value: str(stats['total'] ?? _files.length),
-              color: const Color(0xFFEF4444), icon: Icons.security),
+            Expanded(child: KpiCard(label: 'Active', value: str(stats['active_quarantine_sessions'] ?? _files.length),
+              color: const Color(0xFFEF4444), icon: Icons.security)),
             const SizedBox(width: 8),
-            KpiCard(label: 'Released', value: str(stats['released'] ?? 0),
-              color: const Color(0xFF22C55E), icon: Icons.lock_open),
+            Expanded(child: KpiCard(label: 'Released', value: str(stats['released_assets'] ?? 0),
+              color: const Color(0xFF22C55E), icon: Icons.lock_open)),
+            const SizedBox(width: 8),
+            Expanded(child: KpiCard(label: 'Pending Approval', value: str(stats['pending_approvals'] ?? 0),
+              color: const Color(0xFFF59E0B), icon: Icons.hourglass_top)),
           ]),
           const SizedBox(height: 16),
-          SectionTitle('Quarantined Files'),
+          SectionTitle('Quarantined Assets'),
           if (_files.isEmpty)
-            const XEmptyState('No quarantined files', icon: Icons.security_update_good_outlined)
+            const XEmptyState('No quarantined assets', icon: Icons.security_update_good_outlined)
           else
             ..._files.map((f) {
+              // qe_items — asset_name/asset_type/status, not file_name/path.
               final file = f as Map<String,dynamic>;
               final id   = file['id'] as int? ?? 0;
+              final active = str(file['status']) == 'active';
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(14),
@@ -827,22 +1103,22 @@ class _QuarantineState extends State<QuarantineScreen> {
                   const Icon(Icons.insert_drive_file, color: Color(0xFFEF4444), size: 20),
                   const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(str(file['file_name'] ?? file['path'] ?? 'Unknown'),
+                    Text(str(file['asset_name'], 'Unknown'),
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text('Agent ${str(file['agent_id'])}  ·  ${timeAgo(file['created_at'])}',
+                    Text('${str(file['asset_type'])}  ·  ${str(file['quarantine_id'])}  ·  ${timeAgo(file['created_at'])}',
                       style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   ])),
-                  TextButton(
+                  if (active) TextButton(
                     onPressed: () async {
-                      if (await xConfirm(context, 'Release File', 'Release from quarantine?')) {
+                      if (await xConfirm(context, 'Release Asset', 'Release from quarantine?')) {
                         final ok = await widget.api.releaseQuarantine(id);
                         if (context.mounted) xSnack(context, ok ? 'Released' : 'Failed', error: !ok);
                         _load();
                       }
                     },
                     child: const Text('Release', style: TextStyle(fontSize: 12)),
-                  ),
+                  ) else StatusChip(str(file['status'])),
                 ]),
               );
             }),

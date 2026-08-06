@@ -28,20 +28,27 @@ class CommandService {
       final cmd   = raw as Map<String, dynamic>;
       final cmdId = cmd['id'];
       final type  = (cmd['command_type'] ?? '') as String;
-      String? result;
       String? error;
 
       try {
-        result = await _execute(type, cmd, client, deviceId);
+        // Return value is a human-readable outcome string for local
+        // debugging only — AcknowledgeMDMCommand has no result/message
+        // column to send it to (see comment below).
+        await _execute(type, cmd, client, deviceId);
       } catch (e) {
         error = e.toString();
       }
 
       try {
+        // AcknowledgeMDMCommand (api/mdm.go) binds success(bool)/error_msg —
+        // it derives its own status string server-side and never reads a
+        // status/result/error field, so every acknowledgement previously
+        // bound to the zero value (success=false) regardless of outcome,
+        // permanently recording every mobile command as "failed" even when
+        // _execute() completed cleanly.
         await client.post('/api/mdm/commands/$cmdId/acknowledge', {
-          'status': error != null ? 'failed' : 'executed',
-          if (result != null) 'result': result,
-          if (error  != null) 'error':  error,
+          'success': error == null,
+          'error_msg': error ?? '',
         });
       } catch (_) {}
     }

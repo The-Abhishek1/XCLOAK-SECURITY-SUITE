@@ -21,16 +21,46 @@ const _kSuggestedPrompts = [
 class AIAssistantScreen extends StatefulWidget {
   final DashboardApi api;
   const AIAssistantScreen({super.key, required this.api});
-  @override State<AIAssistantScreen> createState() => _AIAssistantState();
+  @override State<AIAssistantScreen> createState() => _AIAssistantScreenState();
 }
 
-class _AIAssistantState extends State<AIAssistantScreen> {
+class _AIAssistantScreenState extends State<AIAssistantScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  @override void initState() { super.initState(); _tabs = TabController(length: 3, vsync: this); }
+  @override void dispose() { _tabs.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    TabBar(
+      controller: _tabs,
+      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      tabs: const [Tab(text: 'Chat'), Tab(text: 'Recommendations'), Tab(text: 'Prompts')],
+    ),
+    Expanded(child: TabBarView(controller: _tabs, children: [
+      _ChatTab(api: widget.api),
+      _RecommendationsTab(api: widget.api),
+      _PromptsTab(api: widget.api),
+    ])),
+  ]);
+}
+
+class _ChatTab extends StatefulWidget {
+  final DashboardApi api;
+  const _ChatTab({required this.api});
+  @override State<_ChatTab> createState() => _ChatTabState();
+}
+
+class _ChatTabState extends State<_ChatTab> {
   final List<_Msg>         _messages   = [];
   final TextEditingController _ctrl     = TextEditingController();
   final ScrollController   _scroll     = ScrollController();
   bool   _sending   = false;
   bool   _loadingHistory = true;
-  String? _sessionId;
+  // AIChatHandler is stateless — it expects the full prior turn history on
+  // every request and returns the updated history back, so this list (not
+  // a session id, which the handler has no concept of) is what carries
+  // conversation memory across turns.
+  List<Map<String,dynamic>> _history = [];
 
   @override
   void initState() {
@@ -50,11 +80,15 @@ class _AIAssistantState extends State<AIAssistantScreen> {
     final history = await widget.api.chatHistory();
     if (!mounted) return;
     _messages.clear();
+    _history = [];
     for (final m in history) {
       final map  = m as Map<String,dynamic>;
       final role = str(map['role'] ?? map['sender']);
       final text = str(map['content'] ?? map['message']);
-      if (text.isNotEmpty) _messages.add(_Msg(text: text, isUser: role == 'user'));
+      if (text.isNotEmpty) {
+        _messages.add(_Msg(text: text, isUser: role == 'user'));
+        _history.add({'role': role, 'content': text});
+      }
     }
     setState(() => _loadingHistory = false);
     _scrollBottom();
@@ -70,11 +104,22 @@ class _AIAssistantState extends State<AIAssistantScreen> {
     });
     _scrollBottom();
 
-    final res = await widget.api.aiChat(trimmed, sessionId: _sessionId);
+    final res = await widget.api.aiChat(trimmed, _history);
     if (!mounted) return;
 
-    final reply = str(res?['response'] ?? res?['message'] ?? res?['content'] ?? '');
-    _sessionId ??= str(res?['session_id']);
+    final reply = str(res?['response'] ?? '');
+    final updatedHistory = res?['history'] as List?;
+    if (updatedHistory != null) {
+      _history = updatedHistory.cast<Map<String,dynamic>>();
+    } else {
+      // Fall back to appending locally if the request failed — still keeps
+      // the conversation going instead of resetting memory to empty.
+      _history = [
+        ..._history,
+        {'role': 'user', 'content': trimmed},
+        if (reply.isNotEmpty) {'role': 'assistant', 'content': reply},
+      ];
+    }
 
     setState(() {
       _sending = false;
@@ -96,7 +141,7 @@ class _AIAssistantState extends State<AIAssistantScreen> {
     if (!await xConfirm(context, 'Clear History', 'Delete all chat history?')) return;
     await widget.api.clearChatHistory();
     if (!mounted) return;
-    setState(() { _messages.clear(); _sessionId = null; });
+    setState(() { _messages.clear(); _history = []; });
   }
 
   @override
@@ -187,6 +232,164 @@ class _AIAssistantState extends State<AIAssistantScreen> {
         ]),
       )),
     ]);
+  }
+}
+
+// ── Recommendations tab (AI-suggested actions, approve/reject) ─────────────
+
+class _RecommendationsTab extends StatefulWidget {
+  final DashboardApi api;
+  const _RecommendationsTab({required this.api});
+  @override State<_RecommendationsTab> createState() => _RecommendationsTabState();
+}
+
+class _RecommendationsTabState extends State<_RecommendationsTab> {
+  List _recs = [];
+  bool _loading = true;
+
+  @override void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    _recs = await widget.api.aiaRecommendations();
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return xLoading();
+    if (_recs.isEmpty) return const XEmptyState('No AI recommendations', icon: Icons.lightbulb_outline);
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+        itemCount: _recs.length,
+        itemBuilder: (_, i) {
+          final r = _recs[i] as Map<String,dynamic>;
+          final recId  = str(r['rec_id']);
+          final status = str(r['status'], 'open');
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: Text(str(r['title']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5))),
+                  SevChip(str(r['priority'])),
+                ]),
+                const SizedBox(height: 4),
+                Text(str(r['description']), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Text('Impact: ${str(r['impact'], '—')}', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                  const SizedBox(width: 10),
+                  Text('Effort: ${str(r['effort'], '—')}', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                  const Spacer(),
+                  StatusChip(status),
+                ]),
+                if (status == 'open') ...[
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(child: OutlinedButton(
+                      onPressed: () async {
+                        final ok = await widget.api.updateAiaRecommendation(recId, 'rejected');
+                        if (context.mounted) xSnack(context, ok ? 'Rejected' : 'Failed', error: !ok);
+                        _load();
+                      },
+                      child: const Text('Reject'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: FilledButton(
+                      onPressed: () async {
+                        final ok = await widget.api.updateAiaRecommendation(recId, 'accepted');
+                        if (context.mounted) xSnack(context, ok ? 'Accepted' : 'Failed', error: !ok);
+                        _load();
+                      },
+                      child: const Text('Accept'))),
+                  ]),
+                ],
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Prompts tab (saved prompt library) ──────────────────────────────────────
+
+class _PromptsTab extends StatefulWidget {
+  final DashboardApi api;
+  const _PromptsTab({required this.api});
+  @override State<_PromptsTab> createState() => _PromptsTabState();
+}
+
+class _PromptsTabState extends State<_PromptsTab> {
+  List _prompts = [];
+  bool _loading = true;
+
+  @override void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    _prompts = await widget.api.aiaPrompts();
+    if (!mounted) return;
+    setState(() => _loading = false);
+  }
+
+  void _create() {
+    final titleCtrl = TextEditingController();
+    final contentCtrl = TextEditingController();
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Saved Prompt'),
+          xField(titleCtrl, 'Title'),
+          const SizedBox(height: 10),
+          xField(contentCtrl, 'Prompt text', maxLines: 4),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createAiaPrompt({'title': titleCtrl.text.trim(), 'content': contentCtrl.text.trim()});
+              if (context.mounted) xSnack(context, ok ? 'Prompt saved' : 'Failed', error: !ok);
+              _load();
+            },
+            child: const Text('Save'),
+          )),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return xLoading();
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(onPressed: _create, child: const Icon(Icons.add)),
+      body: _prompts.isEmpty
+        ? const XEmptyState('No saved prompts', icon: Icons.bookmark_border)
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+              itemCount: _prompts.length,
+              itemBuilder: (_, i) {
+                final p = _prompts[i] as Map<String,dynamic>;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: const Icon(Icons.bookmark_outline, color: Color(0xFF6366F1)),
+                    title: Text(str(p['title']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    subtitle: Text(str(p['content']), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5)),
+                    trailing: Text('${p['usage_count'] ?? 0}×', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ),
+                );
+              },
+            ),
+          ),
+    );
   }
 }
 
@@ -316,7 +519,7 @@ class _SettingsState extends State<SettingsScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
   }
 
   @override void dispose() { _tabs.dispose(); super.dispose(); }
@@ -325,14 +528,17 @@ class _SettingsState extends State<SettingsScreen> with SingleTickerProviderStat
   Widget build(BuildContext context) => Column(children: [
     TabBar(
       controller: _tabs,
+      isScrollable: true,
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-      tabs: const [Tab(text: 'Users'), Tab(text: 'API Keys'), Tab(text: 'Integrations'), Tab(text: 'Roles')],
+      tabs: const [Tab(text: 'Users'), Tab(text: 'API Keys'), Tab(text: 'Integrations'), Tab(text: 'Roles'), Tab(text: 'Security'), Tab(text: 'System')],
     ),
     Expanded(child: TabBarView(controller: _tabs, children: [
       _UsersTab(api: widget.api),
       _ApiKeysTab(api: widget.api),
       _IntegrationsTab(api: widget.api),
       _RolesTab(api: widget.api),
+      _SecurityTab(api: widget.api),
+      _SystemTab(api: widget.api),
     ])),
   ]);
 }
@@ -789,6 +995,340 @@ class _RolesTabState extends State<_RolesTab> with AutomaticKeepAliveClientMixin
             )),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+// ── Security tab (password policy + session revocation) ─────────────────────
+
+class _SecurityTab extends StatefulWidget {
+  final DashboardApi api;
+  const _SecurityTab({required this.api});
+  @override State<_SecurityTab> createState() => _SecurityTabState();
+}
+
+class _SecurityTabState extends State<_SecurityTab> with AutomaticKeepAliveClientMixin {
+  @override bool get wantKeepAlive => true;
+  List _sessions = [];
+  bool _loading  = true;
+  bool _saving   = false;
+
+  final _sessionTimeoutCtrl = TextEditingController();
+  final _maxSessionsCtrl    = TextEditingController();
+  final _minPwdCtrl         = TextEditingController();
+  final _maxFailedCtrl      = TextEditingController();
+  final _lockoutCtrl        = TextEditingController();
+  final _pwdExpiryCtrl      = TextEditingController();
+  final _ipAllowlistCtrl    = TextEditingController();
+  bool _mfaRequired = false, _reqSpecial = false, _reqNumbers = false;
+
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() {
+    _sessionTimeoutCtrl.dispose(); _maxSessionsCtrl.dispose(); _minPwdCtrl.dispose();
+    _maxFailedCtrl.dispose(); _lockoutCtrl.dispose(); _pwdExpiryCtrl.dispose(); _ipAllowlistCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final res = await Future.wait([widget.api.securityPolicy(), widget.api.allSessions()]);
+    if (!mounted) return;
+    final p = (res[0] as Map<String,dynamic>?) ?? {};
+    setState(() {
+      _sessions = res[1] as List;
+      _sessionTimeoutCtrl.text = str(p['session_timeout_mins'], '60');
+      _maxSessionsCtrl.text    = str(p['max_concurrent_sessions'], '5');
+      _minPwdCtrl.text         = str(p['min_password_length'], '8');
+      _maxFailedCtrl.text      = str(p['max_failed_logins'], '5');
+      _lockoutCtrl.text        = str(p['lockout_duration_mins'], '15');
+      _pwdExpiryCtrl.text      = str(p['password_expiry_days'], '0');
+      _ipAllowlistCtrl.text    = str(p['ip_allowlist'], '');
+      _mfaRequired  = p['mfa_required'] == true;
+      _reqSpecial   = p['require_special_chars'] == true;
+      _reqNumbers   = p['require_numbers'] == true;
+      _loading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final ok = await widget.api.updateSecurityPolicy({
+      'session_timeout_mins': int.tryParse(_sessionTimeoutCtrl.text) ?? 60,
+      'max_concurrent_sessions': int.tryParse(_maxSessionsCtrl.text) ?? 5,
+      'mfa_required': _mfaRequired,
+      'min_password_length': int.tryParse(_minPwdCtrl.text) ?? 8,
+      'require_special_chars': _reqSpecial,
+      'require_numbers': _reqNumbers,
+      'password_expiry_days': int.tryParse(_pwdExpiryCtrl.text) ?? 0,
+      'max_failed_logins': int.tryParse(_maxFailedCtrl.text) ?? 5,
+      'lockout_duration_mins': int.tryParse(_lockoutCtrl.text) ?? 15,
+      'ip_allowlist': _ipAllowlistCtrl.text.trim(),
+    });
+    if (!mounted) return;
+    setState(() => _saving = false);
+    xSnack(context, ok ? 'Security policy updated' : 'Failed — check IP allowlist syntax', error: !ok);
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return xLoading();
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+        children: [
+          SectionTitle('Password Policy'),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: xField(_minPwdCtrl, 'Min length', keyboardType: TextInputType.number)),
+            const SizedBox(width: 10),
+            Expanded(child: xField(_pwdExpiryCtrl, 'Expiry (days, 0=never)', keyboardType: TextInputType.number)),
+          ]),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero, dense: true,
+            title: const Text('Require special characters', style: TextStyle(fontSize: 13)),
+            value: _reqSpecial, onChanged: (v) => setState(() => _reqSpecial = v)),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero, dense: true,
+            title: const Text('Require numbers', style: TextStyle(fontSize: 13)),
+            value: _reqNumbers, onChanged: (v) => setState(() => _reqNumbers = v)),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero, dense: true,
+            title: const Text('Require MFA for all users', style: TextStyle(fontSize: 13)),
+            value: _mfaRequired, onChanged: (v) => setState(() => _mfaRequired = v)),
+          const SizedBox(height: 12),
+          SectionTitle('Lockout & Sessions'),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: xField(_maxFailedCtrl, 'Max failed logins', keyboardType: TextInputType.number)),
+            const SizedBox(width: 10),
+            Expanded(child: xField(_lockoutCtrl, 'Lockout (min)', keyboardType: TextInputType.number)),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: xField(_sessionTimeoutCtrl, 'Session timeout (min)', keyboardType: TextInputType.number)),
+            const SizedBox(width: 10),
+            Expanded(child: xField(_maxSessionsCtrl, 'Max concurrent sessions', keyboardType: TextInputType.number)),
+          ]),
+          const SizedBox(height: 10),
+          xField(_ipAllowlistCtrl, 'IP allowlist (comma-separated CIDRs, blank = any)'),
+          const SizedBox(height: 14),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Saving…' : 'Save Policy'),
+          )),
+          const SizedBox(height: 24),
+          SectionTitle('Active Sessions  (${_sessions.length})'),
+          const SizedBox(height: 8),
+          if (_sessions.isEmpty)
+            const Padding(padding: EdgeInsets.all(16),
+              child: Center(child: Text('No active sessions', style: TextStyle(color: Colors.grey))))
+          else
+            ..._sessions.map((s) {
+              final sess = s as Map<String,dynamic>;
+              final id   = sess['id'] as int? ?? 0;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.devices, size: 18),
+                  title: Text(str(sess['username']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  subtitle: Text('${str(sess['ip_address'], '—')}  ·  last active ${timeAgo(sess['last_active_at'])}',
+                    style: const TextStyle(fontSize: 11)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
+                    tooltip: 'Revoke session',
+                    onPressed: () async {
+                      if (!await xConfirm(context, 'Revoke Session', 'End this session immediately?')) return;
+                      final ok = await widget.api.revokeSession(id);
+                      if (context.mounted) xSnack(context, ok ? 'Session revoked' : 'Failed', error: !ok);
+                      _load();
+                    },
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+// ── System tab (org / backup / license / agent defaults / audit) ────────────
+
+class _SystemTab extends StatefulWidget {
+  final DashboardApi api;
+  const _SystemTab({required this.api});
+  @override State<_SystemTab> createState() => _SystemTabState();
+}
+
+class _SystemTabState extends State<_SystemTab> with AutomaticKeepAliveClientMixin {
+  @override bool get wantKeepAlive => true;
+  Map<String,dynamic>? _org, _backups, _updates, _license, _agentsCfg;
+  List _audit = [];
+  bool _loading = true;
+  bool _backingUp = false;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final res = await Future.wait([
+      widget.api.stteOrg(), widget.api.stteBackups(), widget.api.stteUpdates(),
+      widget.api.stteLicense(), widget.api.stteAgentsConfig(),
+    ]);
+    final audit = await widget.api.stteAudit();
+    if (!mounted) return;
+    setState(() {
+      _org = res[0];
+      _backups = res[1];
+      _updates = res[2];
+      _license = res[3];
+      _agentsCfg = res[4];
+      _audit = audit;
+      _loading = false;
+    });
+  }
+
+  Future<void> _runBackup() async {
+    setState(() => _backingUp = true);
+    final r = await widget.api.triggerBackup() ?? {'error': 'Backup failed'};
+    if (!mounted) return;
+    setState(() => _backingUp = false);
+    final ok = r['error'] == null;
+    xSnack(context, ok ? 'Backup completed (${str(r['size_bytes'], '0')} bytes)' : str(r['error'], 'Backup failed'), error: !ok);
+    _load();
+  }
+
+  void _activateLicense() {
+    final keyCtrl = TextEditingController();
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('Activate License'),
+          xField(keyCtrl, 'License Key'),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final r = await widget.api.activateLicense(keyCtrl.text.trim()) ?? {'error': 'Activation failed'};
+              final ok = r['error'] == null;
+              if (context.mounted) xSnack(context, ok ? 'License activated (${str(r['tier'])})' : str(r['error'], 'Activation failed'), error: !ok);
+              _load();
+            },
+            child: const Text('Activate'),
+          )),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return xLoading();
+    final org = _org ?? {};
+    final lic = _license ?? {};
+    final upd = _updates ?? {};
+    final agentsCfg = _agentsCfg ?? {};
+    final backupCfg = (_backups?['config'] as Map<String,dynamic>?) ?? {};
+    final backupJobs = (_backups?['jobs'] as List?) ?? [];
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+        children: [
+          SectionTitle('Organization'),
+          const SizedBox(height: 6),
+          InfoPair('Name', str(org['org_name'], '—')),
+          InfoPair('Domain', str(org['domain'], '—')),
+          InfoPair('Timezone', str(org['timezone'], '—')),
+          InfoPair('Max Agents', str(org['max_agents'], '—')),
+          InfoPair('Data Retention', '${str(org['data_retention_days'], '—')} days'),
+
+          const SizedBox(height: 20),
+          SectionTitle('License'),
+          const SizedBox(height: 6),
+          InfoPair('Tier', str(lic['tier'], 'community')),
+          InfoPair('Seats', '${str(lic['seats_used'], '0')} / ${str(lic['seats_total'], '—')}'),
+          InfoPair('Agents', '${str(lic['agents_used'], '0')} / ${str(lic['agents_total'], '—')}'),
+          if (str(lic['valid_until'], '').isNotEmpty) InfoPair('Valid Until', str(lic['valid_until'])),
+          const SizedBox(height: 8),
+          SizedBox(width: double.infinity, child: OutlinedButton(onPressed: _activateLicense, child: const Text('Activate License'))),
+
+          const SizedBox(height: 20),
+          SectionTitle('Updates'),
+          const SizedBox(height: 6),
+          InfoPair('Current Version', str(upd['current_version'], '—')),
+          InfoPair('Update Available', upd['update_available'] == true ? 'Yes' : 'No'),
+
+          const SizedBox(height: 20),
+          SectionTitle('Backup'),
+          const SizedBox(height: 6),
+          InfoPair('Schedule', '${str(backupCfg['schedule_type'], '—')} at ${str(backupCfg['schedule_time'], '—')}'),
+          InfoPair('Retention', '${str(backupCfg['retention_days'], '—')} days'),
+          const SizedBox(height: 8),
+          SizedBox(width: double.infinity, child: FilledButton.icon(
+            onPressed: _backingUp ? null : _runBackup,
+            icon: _backingUp
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.backup, size: 16),
+            label: Text(_backingUp ? 'Running…' : 'Run Backup Now'))),
+          if (backupJobs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...backupJobs.take(5).map((j) {
+              final job = j as Map<String,dynamic>;
+              final ok  = str(job['status']) == 'completed';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(children: [
+                  Icon(ok ? Icons.check_circle : Icons.error, size: 14,
+                    color: ok ? const Color(0xFF22C55E) : const Color(0xFFEF4444)),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text('${str(job['backup_id'])}  ·  ${str(job['size_human'], '—')}',
+                    style: const TextStyle(fontSize: 11.5))),
+                  Text(timeAgo(job['created_at']), style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                ]),
+              );
+            }),
+          ],
+
+          const SizedBox(height: 20),
+          SectionTitle('Agent Defaults'),
+          const SizedBox(height: 6),
+          InfoPair('Offline Threshold', '${str(agentsCfg['offline_threshold_mins'], '—')} min'),
+          InfoPair('Heartbeat Interval', '${str(agentsCfg['heartbeat_interval_secs'], '—')} sec'),
+          InfoPair('Auto-Deregister', '${str(agentsCfg['auto_deregister_days'], '—')} days'),
+          InfoPair('FIM Enabled', agentsCfg['enable_fim'] == true ? 'Yes' : 'No'),
+
+          const SizedBox(height: 20),
+          SectionTitle('Audit Trail  (${_audit.length})'),
+          const SizedBox(height: 6),
+          if (_audit.isEmpty)
+            const Padding(padding: EdgeInsets.all(16),
+              child: Center(child: Text('No audit entries', style: TextStyle(color: Colors.grey))))
+          else
+            ..._audit.take(30).map((e) {
+              final entry = e as Map<String,dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${str(entry['action'])}  ·  ${str(entry['section'])}',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  if (str(entry['details'], '').isNotEmpty)
+                    Text(str(entry['details']), style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+                  Text('${str(entry['actor'])}  ·  ${timeAgo(entry['created_at'])}',
+                    style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                ]),
+              );
+            }),
+        ],
       ),
     );
   }

@@ -65,6 +65,27 @@ type MDMDevice struct {
 	ComplianceStatus   string     `json:"compliance_status"`
 	ComplianceCheckedAt *time.Time `json:"compliance_checked_at,omitempty"`
 	PushToken          string     `json:"push_token,omitempty"`
+
+	// Posture snapshot (Android agent) — set on enroll and refreshed on
+	// every check-in.
+	Manufacturer           string  `json:"manufacturer,omitempty"`
+	Hardware               string  `json:"hardware,omitempty"`
+	SecurityPatchLevel     string  `json:"security_patch_level,omitempty"`
+	AndroidSDKVersion      *int    `json:"android_sdk_version,omitempty"`
+	USBDebuggingEnabled    *bool   `json:"usb_debugging_enabled,omitempty"`
+	UnknownSourcesEnabled  *bool   `json:"unknown_sources_enabled,omitempty"`
+	VPNActive              *bool   `json:"vpn_active,omitempty"`
+	BatteryLevel           *int    `json:"battery_level,omitempty"`
+	BatteryCharging        *bool   `json:"battery_charging,omitempty"`
+	NetworkType            string  `json:"network_type,omitempty"`
+	WifiSSID               string  `json:"wifi_ssid,omitempty"`
+	StorageTotalGB         *float64 `json:"storage_total_gb,omitempty"`
+	StorageFreeGB          *float64 `json:"storage_free_gb,omitempty"`
+	RAMTotalMB             *int    `json:"ram_total_mb,omitempty"`
+	BuildFingerprint       string  `json:"build_fingerprint,omitempty"`
+	BiometricEnrolled      *bool   `json:"biometric_enrolled,omitempty"`
+	SystemAppCount         int     `json:"system_app_count,omitempty"`
+	HighRiskAppCount       int     `json:"high_risk_app_count,omitempty"`
 }
 
 type MDMPolicy struct {
@@ -135,9 +156,15 @@ func EnrollDevice(d MDMDevice) (int, error) {
 			 platform, os_version, build_version, owner_email, enrollment_type,
 			 is_supervised, is_personal, push_token, status, last_check_in,
 			 is_encrypted, has_passcode, passcode_compliant,
-			 is_jailbroken, developer_mode_on, firewall_enabled)
+			 is_jailbroken, developer_mode_on, firewall_enabled,
+			 manufacturer, hardware, security_patch_level, android_sdk_version,
+			 usb_debugging_enabled, unknown_sources_enabled, vpn_active,
+			 battery_level, battery_charging, network_type, wifi_ssid,
+			 storage_total_gb, storage_free_gb, ram_total_mb,
+			 build_fingerprint, biometric_enrolled)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'enrolled',NOW(),
-		        $15,$16,$17,$18,$19,$20)
+		        $15,$16,$17,$18,$19,$20,
+		        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
 		ON CONFLICT (tenant_id, udid) DO UPDATE SET
 			serial_number      = EXCLUDED.serial_number,
 			device_name        = EXCLUDED.device_name,
@@ -152,6 +179,22 @@ func EnrollDevice(d MDMDevice) (int, error) {
 			is_jailbroken      = EXCLUDED.is_jailbroken,
 			developer_mode_on  = EXCLUDED.developer_mode_on,
 			firewall_enabled   = COALESCE(EXCLUDED.firewall_enabled, mdm_devices.firewall_enabled),
+			manufacturer            = COALESCE(NULLIF(EXCLUDED.manufacturer,''), mdm_devices.manufacturer),
+			hardware                = COALESCE(NULLIF(EXCLUDED.hardware,''), mdm_devices.hardware),
+			security_patch_level    = COALESCE(NULLIF(EXCLUDED.security_patch_level,''), mdm_devices.security_patch_level),
+			android_sdk_version     = COALESCE(EXCLUDED.android_sdk_version, mdm_devices.android_sdk_version),
+			usb_debugging_enabled   = COALESCE(EXCLUDED.usb_debugging_enabled, mdm_devices.usb_debugging_enabled),
+			unknown_sources_enabled = COALESCE(EXCLUDED.unknown_sources_enabled, mdm_devices.unknown_sources_enabled),
+			vpn_active              = COALESCE(EXCLUDED.vpn_active, mdm_devices.vpn_active),
+			battery_level           = COALESCE(EXCLUDED.battery_level, mdm_devices.battery_level),
+			battery_charging        = COALESCE(EXCLUDED.battery_charging, mdm_devices.battery_charging),
+			network_type            = COALESCE(NULLIF(EXCLUDED.network_type,''), mdm_devices.network_type),
+			wifi_ssid               = COALESCE(NULLIF(EXCLUDED.wifi_ssid,''), mdm_devices.wifi_ssid),
+			storage_total_gb        = COALESCE(EXCLUDED.storage_total_gb, mdm_devices.storage_total_gb),
+			storage_free_gb         = COALESCE(EXCLUDED.storage_free_gb, mdm_devices.storage_free_gb),
+			ram_total_mb            = COALESCE(EXCLUDED.ram_total_mb, mdm_devices.ram_total_mb),
+			build_fingerprint       = COALESCE(NULLIF(EXCLUDED.build_fingerprint,''), mdm_devices.build_fingerprint),
+			biometric_enrolled      = COALESCE(EXCLUDED.biometric_enrolled, mdm_devices.biometric_enrolled),
 			status             = 'enrolled',
 			last_check_in      = NOW()
 		RETURNING id
@@ -160,6 +203,11 @@ func EnrollDevice(d MDMDevice) (int, error) {
 		d.IsSupervised, d.IsPersonal, d.PushToken,
 		d.IsEncrypted, d.HasPasscode, d.PasscodeCompliant,
 		d.IsJailbroken, d.DeveloperModeOn, d.FirewallEnabled,
+		d.Manufacturer, d.Hardware, d.SecurityPatchLevel, d.AndroidSDKVersion,
+		d.USBDebuggingEnabled, d.UnknownSourcesEnabled, d.VPNActive,
+		d.BatteryLevel, d.BatteryCharging, d.NetworkType, d.WifiSSID,
+		d.StorageTotalGB, d.StorageFreeGB, d.RAMTotalMB,
+		d.BuildFingerprint, d.BiometricEnrolled,
 	).Scan(&id)
 	return id, err
 }
@@ -189,14 +237,23 @@ func UnblockDevice(deviceID, tenantID int) error {
 }
 
 // GetDevice returns one device scoped to the tenant.
+const mdmDeviceColumns = `
+	id, tenant_id, agent_id, udid, serial_number, device_name, model,
+	platform, os_version, build_version, owner_email, enrollment_type,
+	is_supervised, is_personal, enrolled_at, last_check_in, status,
+	is_encrypted, has_passcode, passcode_compliant,
+	is_jailbroken, developer_mode_on, firewall_enabled,
+	compliance_status, compliance_checked_at, push_token,
+	manufacturer, hardware, security_patch_level, android_sdk_version,
+	usb_debugging_enabled, unknown_sources_enabled, vpn_active,
+	battery_level, battery_charging, network_type, wifi_ssid,
+	storage_total_gb, storage_free_gb, ram_total_mb,
+	build_fingerprint, biometric_enrolled, system_app_count, high_risk_app_count
+`
+
 func GetDevice(deviceID, tenantID int) (*MDMDevice, error) {
 	row := database.RDB().QueryRow(`
-		SELECT id, tenant_id, agent_id, udid, serial_number, device_name, model,
-		       platform, os_version, build_version, owner_email, enrollment_type,
-		       is_supervised, is_personal, enrolled_at, last_check_in, status,
-		       is_encrypted, has_passcode, passcode_compliant,
-		       is_jailbroken, developer_mode_on, firewall_enabled,
-		       compliance_status, compliance_checked_at, push_token
+		SELECT `+mdmDeviceColumns+`
 		FROM mdm_devices WHERE id=$1 AND tenant_id=$2
 	`, deviceID, tenantID)
 	return scanDevice(row)
@@ -205,12 +262,7 @@ func GetDevice(deviceID, tenantID int) (*MDMDevice, error) {
 // ListDevices returns devices for a tenant; optional platform/status filter.
 func ListDevices(tenantID int, platform, status, ownerEmail string) ([]MDMDevice, error) {
 	q := `
-		SELECT id, tenant_id, agent_id, udid, serial_number, device_name, model,
-		       platform, os_version, build_version, owner_email, enrollment_type,
-		       is_supervised, is_personal, enrolled_at, last_check_in, status,
-		       is_encrypted, has_passcode, passcode_compliant,
-		       is_jailbroken, developer_mode_on, firewall_enabled,
-		       compliance_status, compliance_checked_at, push_token
+		SELECT ` + mdmDeviceColumns + `
 		FROM mdm_devices
 		WHERE tenant_id = $1
 	`
@@ -262,6 +314,11 @@ func scanDevice(s deviceScanner) (*MDMDevice, error) {
 		&d.IsEncrypted, &d.HasPasscode, &d.PasscodeCompliant,
 		&d.IsJailbroken, &d.DeveloperModeOn, &d.FirewallEnabled,
 		&d.ComplianceStatus, &d.ComplianceCheckedAt, &d.PushToken,
+		&d.Manufacturer, &d.Hardware, &d.SecurityPatchLevel, &d.AndroidSDKVersion,
+		&d.USBDebuggingEnabled, &d.UnknownSourcesEnabled, &d.VPNActive,
+		&d.BatteryLevel, &d.BatteryCharging, &d.NetworkType, &d.WifiSSID,
+		&d.StorageTotalGB, &d.StorageFreeGB, &d.RAMTotalMB,
+		&d.BuildFingerprint, &d.BiometricEnrolled, &d.SystemAppCount, &d.HighRiskAppCount,
 	)
 	return &d, err
 }

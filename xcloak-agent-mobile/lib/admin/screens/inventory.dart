@@ -27,7 +27,7 @@ class _AssetsState extends State<AssetsScreen> {
   List get _filtered => _filter.isEmpty ? _assets : _assets.where((a) {
     final m = a as Map<String,dynamic>;
     final q = _filter.toLowerCase();
-    return str(m['hostname']).toLowerCase().contains(q) || str(m['ip_address']).toLowerCase().contains(q) || str(m['asset_type']).toLowerCase().contains(q);
+    return str(m['hostname']).toLowerCase().contains(q) || str(m['ip_addresses']).toLowerCase().contains(q) || str(m['asset_type']).toLowerCase().contains(q);
   }).toList();
 
   @override
@@ -48,15 +48,17 @@ class _AssetsState extends State<AssetsScreen> {
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 80),
             itemCount: _filtered.length,
             itemBuilder: (_, i) {
+              // ace_assets: hostname/name/asset_type/ip_addresses(plural)/
+              // os_name/status — no create/delete endpoint in this system,
+              // assets arrive via discovery.
               final a  = _filtered[i] as Map<String,dynamic>;
-              final id = a['id'] as int? ?? 0;
               return Card(
                 margin: const EdgeInsets.only(bottom: 4),
                 child: ListTile(
-                  leading: _assetIcon(str(a['asset_type'] ?? a['type'])),
-                  title: Text(str(a['hostname'] ?? a['name'] ?? 'Asset $id'), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('${str(a['ip_address'] ?? '')}  ·  ${str(a['asset_type'] ?? a['type'] ?? '')}  ·  ${str(a['os'] ?? '')}', style: const TextStyle(fontSize: 11)),
-                  trailing: StatusChip(str(a['status'] ?? 'active')),
+                  leading: _assetIcon(str(a['asset_type'])),
+                  title: Text(str(a['hostname'] ?? a['name'], 'Unknown asset'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('${str(a['ip_addresses'], '')}  ·  ${str(a['asset_type'])}  ·  ${str(a['os_name'], '')}', style: const TextStyle(fontSize: 11)),
+                  trailing: StatusChip(str(a['status'], 'active')),
                   onTap: () => _showDetail(a),
                 ),
               );
@@ -64,7 +66,6 @@ class _AssetsState extends State<AssetsScreen> {
           ),
         )),
       ]),
-      floatingActionButton: FloatingActionButton(onPressed: _create, child: const Icon(Icons.add)),
     );
   }
 
@@ -97,56 +98,55 @@ class _AssetsState extends State<AssetsScreen> {
 
   void _showDetail(Map<String,dynamic> a) {
     showDetailSheet(context, str(a['hostname'] ?? a['name']), [
-      ('Type',          str(a['asset_type'] ?? a['type'])),
-      ('IP Address',    str(a['ip_address'])),
-      ('MAC Address',   str(a['mac_address'] ?? '')),
-      ('OS',            str(a['os'] ?? '')),
-      ('Owner',         str(a['owner'] ?? '')),
-      ('Location',      str(a['location'] ?? '')),
-      ('Status',        str(a['status'] ?? '')),
-      ('Last Seen',     timeAgo(a['last_seen'] ?? a['updated_at'])),
+      ('Type',          str(a['asset_type'])),
+      ('IP Addresses',  str(a['ip_addresses'], '')),
+      ('OS',            '${str(a['os_name'], '')} ${str(a['os_version'], '')}'),
+      ('Owner',         str(a['owner'], '')),
+      ('Business Unit', str(a['business_unit'], '')),
+      ('Criticality',   str(a['criticality'], '')),
+      ('Location',      str(a['location'], '')),
+      ('Status',        str(a['status'], '')),
+      ('Managed',       a['managed'] == true ? 'Yes' : 'No'),
+      ('Last Seen',     timeAgo(a['last_seen_at'])),
     ], actions: [
       TextButton(
-        onPressed: () async {
-          Navigator.pop(context);
-          if (await xConfirm(context, 'Delete Asset', 'Delete this asset from CMDB?')) {
-            await widget.api.deleteAsset(a['id'] as int? ?? 0);
-            _load();
-          }
-        },
-        child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        onPressed: () { Navigator.pop(context); _editAsset(a); },
+        child: const Text('Edit'),
       ),
     ]);
   }
 
-  void _create() {
-    final nameCtrl  = TextEditingController();
-    final ipCtrl    = TextEditingController();
-    final ownerCtrl = TextEditingController();
-    String type = 'workstation', status = 'active';
+  void _editAsset(Map<String,dynamic> a) {
+    final assetId = str(a['asset_id']);
+    final ownerCtrl = TextEditingController(text: str(a['owner']));
+    final locationCtrl = TextEditingController(text: str(a['location']));
+    String criticality = str(a['criticality'], 'medium');
+    String status = str(a['status'], 'active');
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => SingleChildScrollView(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('New Asset'),
-          xField(nameCtrl, 'Hostname / Name'),
+          sheetHeader('Edit Asset'),
+          xField(ownerCtrl, 'Owner'),
           const SizedBox(height: 10),
-          xField(ipCtrl, 'IP Address', keyboardType: TextInputType.numberWithOptions(decimal: true)),
+          xField(locationCtrl, 'Location'),
           const SizedBox(height: 10),
-          xDropdown('Asset Type', type, ['workstation','server','network','mobile','cloud','other'], (v) => ss(() => type = v!)),
+          xDropdown('Criticality', criticality, ['critical','high','medium','low'], (v) => ss(() => criticality = v!)),
           const SizedBox(height: 10),
           xDropdown('Status', status, ['active','inactive','decommissioned','maintenance'], (v) => ss(() => status = v!)),
-          const SizedBox(height: 10),
-          xField(ownerCtrl, 'Owner'),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createAsset({'hostname': nameCtrl.text.trim(), 'ip_address': ipCtrl.text.trim(), 'asset_type': type, 'status': status, 'owner': ownerCtrl.text.trim()});
+              final ok = await widget.api.updateAsset(assetId, {
+                'owner': ownerCtrl.text.trim(), 'location': locationCtrl.text.trim(),
+                'criticality': criticality, 'status': status,
+              });
+              if (context.mounted) xSnack(context, ok ? 'Asset updated' : 'Failed', error: !ok);
               _load();
             },
-            child: const Text('Create'),
+            child: const Text('Save'),
           )),
         ]),
       )),

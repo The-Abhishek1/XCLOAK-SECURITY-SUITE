@@ -221,7 +221,7 @@ class _ModeSelectState extends State<ModeSelectScreen> {
                   title: 'Admin Console',
                   subtitle: 'Full platform management',
                   features: const [
-                    'All 53 management sections',
+                    'All 56 management sections',
                     'Agents, alerts & cases',
                     'Firewall rules & policies',
                     'Requires admin credentials',

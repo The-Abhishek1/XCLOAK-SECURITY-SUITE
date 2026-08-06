@@ -18,9 +18,12 @@ class _DashboardState extends State<DashboardScreen> {
   bool _loading = true;
   Map<String,dynamic> _ov  = {};
   Map<String,dynamic> _soc = {};
+  Map<String,dynamic> _risk = {};
   List _critAlerts  = [];
   List _agents      = [];
   List _incidents   = [];
+  List _cases       = [];
+  List _pending     = [];
   DateTime? _lastRefreshed;
 
   @override void initState() { super.initState(); _load(); }
@@ -30,9 +33,12 @@ class _DashboardState extends State<DashboardScreen> {
     await Future.wait([
       widget.api.overview().then((r)       { _ov       = r ?? {}; }),
       widget.api.socMetrics().then((r)      { _soc      = r ?? {}; }),
+      widget.api.riskPosture().then((r)     { _risk     = r ?? {}; }),
       widget.api.alerts(sev: 'critical', per: 5).then((r) { _critAlerts = r; }),
       widget.api.agents().then((r)          { _agents   = r; }),
       widget.api.incidents(per: 5).then((r) { _incidents = r; }),
+      widget.api.cases().then((r)           { _cases    = r; }),
+      widget.api.pendingApprovals().then((r) { _pending = r; }),
     ]);
     _lastRefreshed = DateTime.now();
     if (!mounted) return;
@@ -40,9 +46,12 @@ class _DashboardState extends State<DashboardScreen> {
   }
 
   int get _online => _agents.where((a) => str(a['status']) == 'online').length;
+  int get _openCases => _cases.where((c) => str((c as Map)['status']) != 'closed').length;
 
+  // DashboardOverview has no risk_score field — the real composite score
+  // lives on the Risk Posture snapshot (services.EnrichRiskPostureLiveData).
   int _riskScore() {
-    final v = _ov['risk_score'];
+    final v = _risk['score'];
     if (v is num) return v.toInt();
     return 0;
   }
@@ -139,15 +148,15 @@ class _DashboardState extends State<DashboardScreen> {
                   color: const Color(0xFFEF4444)),
                 KpiCard(
                   label: 'Incidents', icon: Icons.bolt,
-                  value: str(_ov['active_incidents'] ?? _ov['open_incidents'] ?? 0),
+                  value: str(_ov['incidents'] ?? 0),
                   color: const Color(0xFF3B82F6)),
                 KpiCard(
                   label: 'Open Cases', icon: Icons.folder_open,
-                  value: str(_ov['open_cases'] ?? 0),
+                  value: '$_openCases',
                   color: const Color(0xFF8B5CF6)),
                 KpiCard(
                   label: 'Pending', icon: Icons.hourglass_top,
-                  value: str(_ov['pending_approvals'] ?? 0),
+                  value: '${_pending.length}',
                   color: const Color(0xFFF59E0B)),
               ],
             ),
@@ -159,13 +168,13 @@ class _DashboardState extends State<DashboardScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(children: [
-                _SocMetric(label: 'MTTD', value: str(_soc['mttd'] ?? _soc['mean_time_to_detect'] ?? '—'), unit: 'min'),
+                _SocMetric(label: 'MTTD', value: str(_soc['mttd_mins'], '—'), unit: 'min'),
                 const SizedBox(width: 8),
-                _SocMetric(label: 'MTTR', value: str(_soc['mttr'] ?? _soc['mean_time_to_respond'] ?? '—'), unit: 'min'),
+                _SocMetric(label: 'MTTR', value: str(_soc['mttr_mins'], '—'), unit: 'min'),
                 const SizedBox(width: 8),
-                _SocMetric(label: 'Alerts/Day', value: str(_soc['alerts_today'] ?? _soc['alert_volume'] ?? '—'), unit: ''),
+                _SocMetric(label: 'Active Alerts', value: str(_soc['active_alerts'], '—'), unit: ''),
                 const SizedBox(width: 8),
-                _SocMetric(label: 'Resolved', value: str(_soc['resolved_today'] ?? '—'), unit: ''),
+                _SocMetric(label: 'Open Cases', value: str(_soc['open_cases'], '—'), unit: ''),
               ]),
             ),
             const SizedBox(height: 16),
@@ -527,7 +536,10 @@ class _AgentCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openDetail(context, id),
+        child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -547,16 +559,13 @@ class _AgentCard extends StatelessWidget {
               Text('${str(agent['ip_address'])}  ·  v${str(agent['version'])}',
                 style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
             ])),
+            const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
             PopupMenuButton<String>(
               onSelected: (task) async {
-                if (task == '__detail') { _showDetail(context, id, os); return; }
                 final ok = await api.queueTask(id, task);
                 if (context.mounted) xSnack(context, ok ? 'Task queued: $task' : 'Failed', error: !ok);
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: '__detail', child: Row(children: [
-                  Icon(Icons.info_outline, size: 16), SizedBox(width: 8), Text('View Details')])),
-                const PopupMenuDivider(),
                 ..._kAgentTasks.map((t) => PopupMenuItem(value: t.$1, child: Text(t.$2))),
               ],
             ),
@@ -589,21 +598,13 @@ class _AgentCard extends StatelessWidget {
             style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
         ]),
       ),
+      ),
     );
   }
 
-  void _showDetail(BuildContext ctx, int id, String os) {
-    showDetailSheet(ctx, str(agent['hostname'], 'Agent $id'), [
-      ('ID',          str(id)),
-      ('Status',      str(agent['status'])),
-      ('OS',          str(agent['os'] ?? agent['platform'])),
-      ('IP Address',  str(agent['ip_address'])),
-      ('Version',     str(agent['version'])),
-      ('Health',      '$_health / 100'),
-      ('Last Seen',   timeAgo(agent['last_seen'])),
-      ('Enrolled',    timeAgo(agent['created_at'])),
-      ('Tenant ID',   str(agent['tenant_id'])),
-    ]);
+  void _openDetail(BuildContext ctx, int id) {
+    Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
+      AgentDetailScreen(api: api, agentId: id, agent: agent)));
   }
 
   IconData _osIcon(String os) {
@@ -645,6 +646,345 @@ class _QuickAction extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Agent Detail — the web frontend's /agents/[id] has 19 tabs across 4 groups
+// (Detection/Monitoring/Inventory/Response); scoped down here to the 6 real,
+// already-built api.dart methods that had zero UI ever calling them
+// (agentSummary/agentProcesses/agentConnections/agentPackages/agentVulns/
+// agentTimeline) — previously the only "detail" view was a static 9-field
+// sheet with no real collected data, and the agent list's only other
+// interaction was dispatching tasks blind with no way to see the results.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class AgentDetailScreen extends StatefulWidget {
+  final DashboardApi api;
+  final int agentId;
+  final Map<String,dynamic> agent;
+  const AgentDetailScreen({super.key, required this.api, required this.agentId, required this.agent});
+  @override State<AgentDetailScreen> createState() => _AgentDetailState();
+}
+
+class _AgentDetailState extends State<AgentDetailScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  Map<String,dynamic>? _summary;
+  List _processes = [], _connections = [], _packages = [], _vulns = [], _timeline = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 6, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() { _tabs.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final results = await Future.wait([
+      widget.api.agentSummary(widget.agentId),
+      widget.api.agentProcesses(widget.agentId),
+      widget.api.agentConnections(widget.agentId),
+      widget.api.agentPackages(widget.agentId),
+      widget.api.agentVulns(widget.agentId),
+      widget.api.agentTimeline(widget.agentId),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _summary     = results[0] as Map<String,dynamic>?;
+      _processes   = results[1] as List;
+      _connections = results[2] as List;
+      _packages    = results[3] as List;
+      _vulns       = results[4] as List;
+      _timeline    = results[5] as List;
+      _loading     = false;
+    });
+  }
+
+  Future<void> _dispatch(String taskType, {String? confirmTitle, String? confirmBody}) async {
+    if (confirmTitle != null) {
+      if (!await xConfirm(context, confirmTitle, confirmBody ?? '')) return;
+    }
+    final ok = await widget.api.queueTask(widget.agentId, taskType);
+    if (!mounted) return;
+    xSnack(context, ok ? 'Task queued: $taskType' : 'Failed to queue task', error: !ok);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hostname = str(widget.agent['hostname'], 'Agent ${widget.agentId}');
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(hostname, style: const TextStyle(fontSize: 16)),
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabs: [
+            const Tab(text: 'Overview'),
+            Tab(text: 'Processes (${_processes.length})'),
+            Tab(text: 'Network (${_connections.length})'),
+            Tab(text: 'Packages (${_packages.length})'),
+            Tab(text: 'Vulns (${_vulns.length})'),
+            const Tab(text: 'Timeline'),
+          ],
+        ),
+      ),
+      body: _loading ? xLoading() : TabBarView(
+        controller: _tabs,
+        children: [
+          _overviewTab(),
+          _processesTab(),
+          _connectionsTab(),
+          _packagesTab(),
+          _vulnsTab(),
+          _timelineTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _overviewTab() {
+    final a = widget.agent;
+    return RefreshIndicator(onRefresh: _load, child: ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        Row(children: [
+          // KpiCard's internal Row (icon + Spacer + trend chip) needs a
+          // bounded width — placing it directly in a Row without Expanded
+          // gives it unconstrained width and throws at layout time
+          // ("BoxConstraints(unconstrained)"/"Null check operator used on a
+          // null value"), which renders as a silently blank tab (no visible
+          // error overlay for a layout exception that happens post-build).
+          Expanded(child: KpiCard(label: 'Processes', value: str(_summary?['processes'], '${_processes.length}'),
+            color: const Color(0xFF3B82F6), icon: Icons.list_alt,
+            onTap: () => _tabs.animateTo(1))),
+          const SizedBox(width: 8),
+          Expanded(child: KpiCard(label: 'Connections', value: str(_summary?['connections'], '${_connections.length}'),
+            color: const Color(0xFF22C55E), icon: Icons.cable,
+            onTap: () => _tabs.animateTo(2))),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: KpiCard(label: 'Packages', value: str(_summary?['packages'], '${_packages.length}'),
+            color: const Color(0xFF8B5CF6), icon: Icons.inventory_2_outlined,
+            onTap: () => _tabs.animateTo(3))),
+          const SizedBox(width: 8),
+          Expanded(child: KpiCard(label: 'Vulnerabilities', value: '${_vulns.length}',
+            color: _vulns.isEmpty ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+            icon: Icons.bug_report_outlined, onTap: () => _tabs.animateTo(4))),
+        ]),
+        const SizedBox(height: 16),
+        SectionTitle('Agent Identity'),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12)),
+          child: Column(children: [
+            _row('ID', str(widget.agentId)),
+            _row('Status', str(a['status'])),
+            _row('OS', str(a['os'] ?? a['platform'])),
+            _row('IP Address', str(a['ip_address'])),
+            _row('Version', str(a['version'])),
+            _row('Last Seen', timeAgo(a['last_seen'])),
+            _row('Enrolled', timeAgo(a['created_at'])),
+            _row('Tenant ID', str(a['tenant_id'])),
+          ]),
+        ),
+        const SizedBox(height: 16),
+        SectionTitle('Actions'),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final t in _kAgentTasks)
+            OutlinedButton(
+              onPressed: () => _dispatch(t.$1,
+                confirmTitle: t.$1 == 'isolate_host' ? 'Isolate Host' : null,
+                confirmBody: t.$1 == 'isolate_host'
+                  ? 'This will block all network access for this agent.' : null),
+              child: Text(t.$2, style: const TextStyle(fontSize: 12)),
+            ),
+        ]),
+      ],
+    ));
+  }
+
+  Widget _row(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(children: [
+      SizedBox(width: 110, child: Text(label,
+        style: TextStyle(fontSize: 12.5, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55)))),
+      Expanded(child: Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+    ]),
+  );
+
+  Widget _processesTab() {
+    if (_processes.isEmpty) return _emptyWithAction('No processes collected',
+      Icons.list_alt, 'Collect Processes', () => _dispatch('collect_processes'));
+    return RefreshIndicator(onRefresh: _load, child: ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _processes.length,
+      itemBuilder: (_, i) {
+        final p = _processes[i] as Map<String,dynamic>;
+        return _tile(
+          icon: Icons.memory,
+          title: str(p['process_name'], 'unknown'),
+          subtitle: 'PID ${str(p['pid'])} · PPID ${str(p['ppid'])} · ${str(p['username'])}',
+          trailing: '${str(p['cpu_percent'], '0')}% CPU',
+          detail: str(p['cmdline']),
+        );
+      },
+    ));
+  }
+
+  Widget _connectionsTab() {
+    if (_connections.isEmpty) return _emptyWithAction('No connections collected',
+      Icons.cable, 'Collect Connections', () => _dispatch('collect_connections'));
+    return RefreshIndicator(onRefresh: _load, child: ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _connections.length,
+      itemBuilder: (_, i) {
+        final c = _connections[i] as Map<String,dynamic>;
+        return _tile(
+          icon: Icons.swap_horiz,
+          title: '${str(c['local_address'])} → ${str(c['remote_address'])}',
+          subtitle: '${str(c['protocol']).toUpperCase()} · ${str(c['state'])}',
+          trailing: str(c['process_name']),
+        );
+      },
+    ));
+  }
+
+  Widget _packagesTab() {
+    if (_packages.isEmpty) return _emptyWithAction('No packages collected',
+      Icons.inventory_2_outlined, 'Collect Packages', () => _dispatch('collect_packages'));
+    return RefreshIndicator(onRefresh: _load, child: ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _packages.length,
+      itemBuilder: (_, i) {
+        final p = _packages[i] as Map<String,dynamic>;
+        return _tile(
+          icon: Icons.inventory_2_outlined,
+          title: str(p['package_name']),
+          subtitle: 'v${str(p['version'])}',
+        );
+      },
+    ));
+  }
+
+  Widget _vulnsTab() {
+    if (_vulns.isEmpty) return _emptyWithAction('No vulnerabilities found',
+      Icons.verified_user_outlined, 'Run Vulnerability Scan', () => _dispatch('vulnerability_scan'));
+    return RefreshIndicator(onRefresh: _load, child: ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _vulns.length,
+      itemBuilder: (_, i) {
+        final v = _vulns[i] as Map<String,dynamic>;
+        final sev = str(v['severity']).toLowerCase();
+        final col = sev == 'critical' ? const Color(0xFFEF4444)
+          : sev == 'high' ? const Color(0xFFF97316)
+          : sev == 'medium' ? const Color(0xFFF59E0B) : const Color(0xFF3B82F6);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: col.withValues(alpha: .3)),
+            color: col.withValues(alpha: .05)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text(str(v['cve_id'], str(v['name'])),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+              if ((v['is_kev'] ?? false) == true)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: const Color(0xFFEF4444).withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(4)),
+                  child: const Text('KEV', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFFEF4444))),
+                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: col.withValues(alpha: .15), borderRadius: BorderRadius.circular(5)),
+                child: Text(sev.toUpperCase(), style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: col)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text('${str(v['package_name'])} ${str(v['package_version'])} · CVSS ${str(v['cvss_score'])}',
+              style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+            if (str(v['description']).isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(str(v['description']), style: const TextStyle(fontSize: 11.5), maxLines: 3, overflow: TextOverflow.ellipsis),
+            ],
+          ]),
+        );
+      },
+    ));
+  }
+
+  Widget _timelineTab() {
+    if (_timeline.isEmpty) return const XEmptyState('No timeline events', icon: Icons.history);
+    return RefreshIndicator(onRefresh: _load, child: ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _timeline.length,
+      itemBuilder: (_, i) {
+        final e = _timeline[i] as Map<String,dynamic>;
+        final type = str(e['event_type']);
+        return _tile(
+          icon: type.contains('alert') ? Icons.warning_amber_rounded
+            : type.contains('incident') ? Icons.report_problem_outlined
+            : type.contains('process') ? Icons.memory
+            : Icons.circle_outlined,
+          title: str(e['message'], type),
+          subtitle: '${type.replaceAll('_', ' ')} · ${str(e['source'])}',
+          trailing: timeAgo(e['created_at']),
+        );
+      },
+    ));
+  }
+
+  Widget _tile({required IconData icon, required String title, String? subtitle, String? trailing, String? detail}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .5)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (subtitle != null && subtitle.isNotEmpty)
+            Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (detail != null && detail.isNotEmpty)
+            Text(detail, style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontFamily: 'monospace'),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        ])),
+        if (trailing != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Text(trailing, style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+          ),
+      ]),
+    );
+  }
+
+  Widget _emptyWithAction(String message, IconData icon, String actionLabel, VoidCallback onTap) {
+    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 56, color: Colors.grey.withValues(alpha: .4)),
+      const SizedBox(height: 12),
+      Text(message, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(onPressed: () { onTap(); _load(); },
+        icon: const Icon(Icons.play_arrow, size: 16), label: Text(actionLabel)),
+    ]));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Network Map
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -678,11 +1018,11 @@ class _NetworkMapState extends State<NetworkMapScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           Row(children: [
-            KpiCard(label: 'Nodes', value: '${nodes.length}',
-              color: const Color(0xFF3B82F6), icon: Icons.device_hub),
+            Expanded(child: KpiCard(label: 'Nodes', value: '${nodes.length}',
+              color: const Color(0xFF3B82F6), icon: Icons.device_hub)),
             const SizedBox(width: 8),
-            KpiCard(label: 'Connections', value: '${edges.length}',
-              color: const Color(0xFF22C55E), icon: Icons.cable),
+            Expanded(child: KpiCard(label: 'Connections', value: '${edges.length}',
+              color: const Color(0xFF22C55E), icon: Icons.cable)),
           ]),
           const SizedBox(height: 16),
           SectionTitle('Network Nodes'),
@@ -690,7 +1030,10 @@ class _NetworkMapState extends State<NetworkMapScreen> {
             final node = n as Map<String,dynamic>;
             final type = str(node['type'] ?? node['role']);
             final col  = _nodeColor(type);
-            return Container(
+            return InkWell(
+              onTap: () => _showNodeActions(node),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               decoration: BoxDecoration(
@@ -704,7 +1047,7 @@ class _NetworkMapState extends State<NetworkMapScreen> {
                   child: Icon(_nodeIcon(type), color: col, size: 18)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(str(node['label'] ?? node['ip'] ?? node['id']),
+                  Text(str(node['hostname'] ?? node['ip'] ?? node['id']),
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   Text(type.isEmpty ? '—' : type,
                     style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
@@ -712,10 +1055,46 @@ class _NetworkMapState extends State<NetworkMapScreen> {
                 if (node['ip'] != null)
                   Text(str(node['ip']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ]),
+              ),
             );
           }),
         ],
       ),
+    );
+  }
+
+  void _showNodeActions(Map<String,dynamic> node) {
+    final agentId = node['agent_id'] as int?;
+    final ip      = str(node['ip'], '');
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        sheetHeader(str(node['hostname'] ?? node['ip'] ?? node['id'], 'Node')),
+        if (agentId != null && agentId > 0) ...[
+          ListTile(leading: const Icon(Icons.list_alt), title: const Text('Collect Processes'),
+            onTap: () async { Navigator.pop(ctx); final ok = await widget.api.queueTask(agentId, 'collect_processes'); if (context.mounted) xSnack(context, ok ? 'Queued' : 'Failed', error: !ok); }),
+          ListTile(leading: const Icon(Icons.bug_report_outlined), title: const Text('Vulnerability Scan'),
+            onTap: () async { Navigator.pop(ctx); final ok = await widget.api.queueTask(agentId, 'vulnerability_scan'); if (context.mounted) xSnack(context, ok ? 'Queued' : 'Failed', error: !ok); }),
+          ListTile(leading: const Icon(Icons.article_outlined), title: const Text('Collect Auth Logs'),
+            onTap: () async { Navigator.pop(ctx); final ok = await widget.api.queueTask(agentId, 'collect_auth_logs'); if (context.mounted) xSnack(context, ok ? 'Queued' : 'Failed', error: !ok); }),
+          ListTile(leading: const Icon(Icons.block, color: Color(0xFFEF4444)), title: const Text('Isolate Endpoint'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              if (!context.mounted) return;
+              if (await xConfirm(context, 'Isolate Host', 'This will block all network access for this agent.')) {
+                final ok = await widget.api.queueTask(agentId, 'isolate_host');
+                if (context.mounted) xSnack(context, ok ? 'Isolation queued' : 'Failed', error: !ok);
+              }
+            }),
+        ],
+        if (ip.isNotEmpty)
+          ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('Add IP to IOCs'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createIoc({'type': 'ip', 'indicator': ip, 'severity': 'high', 'description': 'From network map'});
+              if (context.mounted) xSnack(context, ok ? 'IOC created' : 'Failed', error: !ok);
+            }),
+      ])),
     );
   }
 
@@ -748,6 +1127,7 @@ class AttackPathsScreen extends StatefulWidget {
 
 class _AttackPathsState extends State<AttackPathsScreen> {
   List _paths = [];
+  Map<String,Map<String,dynamic>> _nodesById = {};
   bool _loading = true;
 
   @override void initState() { super.initState(); _load(); }
@@ -755,7 +1135,39 @@ class _AttackPathsState extends State<AttackPathsScreen> {
     setState(() => _loading = true);
     final r = await widget.api.attackPaths();
     if (!mounted) return;
-    setState(() { _paths = (r?['paths'] as List?) ?? []; _loading = false; });
+    // AttackPathGraph wraps ranked paths under `top_paths`, not `paths`.
+    final nodes = (r?['nodes'] as List?) ?? [];
+    setState(() {
+      _paths = (r?['top_paths'] as List?) ?? [];
+      _nodesById = {for (final n in nodes) str((n as Map)['id']): n as Map<String,dynamic>};
+      _loading = false;
+    });
+  }
+
+  void _showPathActions(Map<String,dynamic> path) {
+    final hops = (path['hops'] as List?)?.map(str).toList() ?? [];
+    final target = hops.isEmpty ? null : _nodesById[hops.last];
+    final agentId = target?['agent_id'] as int?;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        sheetHeader(str(path['target_hostname'], 'Target')),
+        if (agentId != null && agentId > 0) ...[
+          ListTile(leading: const Icon(Icons.bug_report_outlined), title: const Text('Vulnerability Scan'),
+            onTap: () async { Navigator.pop(ctx); final ok = await widget.api.queueTask(agentId, 'vulnerability_scan'); if (context.mounted) xSnack(context, ok ? 'Queued' : 'Failed', error: !ok); }),
+          ListTile(leading: const Icon(Icons.block, color: Color(0xFFEF4444)), title: const Text('Isolate Endpoint'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              if (!context.mounted) return;
+              if (await xConfirm(context, 'Isolate Host', 'This will block all network access for this agent.')) {
+                final ok = await widget.api.queueTask(agentId, 'isolate_host');
+                if (context.mounted) xSnack(context, ok ? 'Isolation queued' : 'Failed', error: !ok);
+              }
+            }),
+        ] else
+          const ListTile(leading: Icon(Icons.info_outline), title: Text('No agent linked to this target')),
+      ])),
+    );
   }
 
   @override
@@ -772,10 +1184,17 @@ class _AttackPathsState extends State<AttackPathsScreen> {
           const SizedBox(height: 16),
           SectionTitle('Attack Paths'),
           ..._paths.map((p) {
+            // RankedAttackPath — target_risk_level ("critical"/"high"/...),
+            // score (higher = more exploitable), hops (internet -> ... -> target).
             final path = p as Map<String,dynamic>;
-            final sev  = str(path['severity'] ?? path['risk']);
+            final sev  = str(path['target_risk_level']);
             final col  = sevColor(sev);
-            return Container(
+            final hops = (path['hops'] as List?)?.map(str).toList() ?? [];
+            final phases = (path['kill_chain_phases'] as List?)?.map(str).toList() ?? [];
+            return InkWell(
+              onTap: () => _showPathActions(path),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -784,20 +1203,37 @@ class _AttackPathsState extends State<AttackPathsScreen> {
                 color: col.withValues(alpha: .04)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Expanded(child: Text(str(path['name'] ?? path['title'] ?? 'Attack Path'),
+                  Expanded(child: Text(str(path['target_hostname'], 'Attack Path'),
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700))),
                   SevChip(sev),
                 ]),
-                if (path['description'] != null) ...[
-                  const SizedBox(height: 6),
-                  Text(str(path['description']),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                ],
+                const SizedBox(height: 6),
+                Text(
+                  hops.isEmpty ? '—' : hops.join('  →  '),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 8),
-                Text('Discovered ${timeAgo(path['created_at'])}',
-                  style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                Row(children: [
+                  if (str(path['path_type'], '').isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: col.withValues(alpha: .12), borderRadius: BorderRadius.circular(6)),
+                      child: Text(str(path['path_type']),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: col))),
+                    const SizedBox(width: 8),
+                  ],
+                  Text('Score ${str(path['score'], '0')}',
+                    style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                  if (phases.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(phases.join(', '),
+                      style: const TextStyle(fontSize: 10.5, color: Colors.grey),
+                      maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ],
+                ]),
               ]),
+              ),
             );
           }),
         ],
@@ -928,4 +1364,287 @@ class _TimelineState extends State<TimelineScreen> {
     'enrollment'            => 'Device enrolled',
     _                       => t.replaceAll('_', ' '),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deploy Agent — 4-step onboarding wizard (mirrors web /agents/onwards)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _kDeploySteps = [
+  (1, Icons.vpn_key,       'Generate'),
+  (2, Icons.description,   'Configure'),
+  (3, Icons.play_arrow,    'Run'),
+  (4, Icons.verified_user, 'Verify'),
+];
+
+class DeployAgentScreen extends StatefulWidget {
+  final DashboardApi api;
+  const DeployAgentScreen({super.key, required this.api});
+  @override State<DeployAgentScreen> createState() => _DeployAgentState();
+}
+
+class _DeployAgentState extends State<DeployAgentScreen> {
+  int    _step       = 1;
+  String _token      = '';
+  bool   _generating = false;
+  bool   _checking   = false;
+  bool   _found      = false;
+  final _labelCtrl = TextEditingController();
+  late final TextEditingController _urlCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlCtrl = TextEditingController(text: widget.api.c.baseUrl);
+  }
+
+  @override
+  void dispose() { _labelCtrl.dispose(); _urlCtrl.dispose(); super.dispose(); }
+
+  Future<void> _generate() async {
+    setState(() => _generating = true);
+    final r = await widget.api.generateInstallToken(_labelCtrl.text.trim());
+    if (!mounted) return;
+    setState(() => _generating = false);
+    if (r == null || r['error'] != null || str(r['token'], '').isEmpty) {
+      xSnack(context,
+        r != null && r['error'] != null
+          ? str(r['error'])
+          : 'Failed to generate token — ensure you are logged in as admin.',
+        error: true);
+      return;
+    }
+    setState(() { _token = str(r['token']); _step = 2; });
+  }
+
+  Future<void> _checkForAgent() async {
+    setState(() => _checking = true);
+    final agents = await widget.api.agents();
+    if (!mounted) return;
+    // Only count an agent whose enrollment happened in the last 2 minutes —
+    // matching the web wizard's fix for the same false-positive: this demo
+    // tenant already has agents from before this onboarding session, so a
+    // bare "agents.isNotEmpty" check would report success on the first click
+    // regardless of whether *this* token was ever actually used.
+    final recent = agents.any((a) {
+      final map = a as Map<String,dynamic>;
+      final raw = map['created_at'] ?? map['last_seen'];
+      if (raw == null) return false;
+      try {
+        final created = DateTime.parse(raw.toString());
+        return DateTime.now().difference(created).inMinutes < 2;
+      } catch (_) { return false; }
+    });
+    setState(() { _checking = false; if (recent) _found = true; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Step indicator
+        Row(children: [
+          for (final s in _kDeploySteps)
+            Expanded(child: Column(children: [
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _step > s.$1
+                    ? const Color(0xFF22C55E)
+                    : (_step == s.$1 ? cs.primary.withValues(alpha: .15) : cs.surfaceContainerLow),
+                  border: Border.all(
+                    color: _step > s.$1
+                      ? const Color(0xFF22C55E)
+                      : (_step == s.$1 ? cs.primary : cs.outlineVariant),
+                    width: 2)),
+                child: Icon(_step > s.$1 ? Icons.check : s.$2, size: 16,
+                  color: _step > s.$1 ? Colors.white : (_step == s.$1 ? cs.primary : cs.onSurfaceVariant)),
+              ),
+              const SizedBox(height: 4),
+              Text(s.$3, style: TextStyle(fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                color: _step == s.$1 ? cs.primary : (_step > s.$1 ? const Color(0xFF22C55E) : cs.onSurfaceVariant))),
+            ])),
+        ]),
+        const SizedBox(height: 20),
+
+        if (_step == 1) _buildStep1(cs),
+        if (_step == 2) _buildStep2(cs),
+        if (_step == 3) _buildStep3(cs),
+        if (_step == 4) _buildStep4(cs),
+      ],
+    );
+  }
+
+  Widget _buildStep1(ColorScheme cs) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Generate an install token', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(
+          'A one-time token that lets the agent register securely. Expires in 24 hours and can only be used once.',
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 14),
+        xField(_labelCtrl, 'Agent label (e.g. prod-web-01)'),
+        const SizedBox(height: 10),
+        xField(_urlCtrl, 'XCloak server URL'),
+        const SizedBox(height: 14),
+        SizedBox(width: double.infinity, child: FilledButton.icon(
+          onPressed: _generating ? null : _generate,
+          icon: _generating
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.vpn_key, size: 16),
+          label: Text(_generating ? 'Generating…' : 'Generate Install Token'),
+        )),
+      ]),
+    ),
+  );
+
+  Widget _buildStep2(ColorScheme cs) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Configure the agent', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(
+          'Create a .env file in the agent directory with these values. The agent reads this file automatically on startup.',
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: cs.primary.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: cs.primary.withValues(alpha: .25))),
+          child: Row(children: [
+            Expanded(child: Text(_token,
+              style: const TextStyle(fontSize: 11, fontFamily: 'monospace'))),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 16),
+              padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+              onPressed: () => copyToClipboard(context, _token)),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        Text('1. Create xcloak-agent-desktop/.env',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        _codeBlock('XCLOAK_INSTALL_TOKEN=$_token\nXCLOAK_SERVER_URL=${_urlCtrl.text}'),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: OutlinedButton(onPressed: () => setState(() => _step = 1), child: const Text('Back'))),
+          const SizedBox(width: 10),
+          Expanded(child: FilledButton(onPressed: () => setState(() => _step = 3), child: const Text('Next'))),
+        ]),
+      ]),
+    ),
+  );
+
+  Widget _buildStep3(ColorScheme cs) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Build and run the agent', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 14),
+        Text('1. Build from source',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        _codeBlock('cd xcloak-agent-desktop\ngo build -o xcloak-agent-desktop ./main.go'),
+        const SizedBox(height: 12),
+        Text('2. Run (first time — reads token from .env and registers)',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        _codeBlock('./xcloak-agent-desktop'),
+        const SizedBox(height: 12),
+        Text('On every restart after this, it loads the saved token automatically.',
+          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: OutlinedButton(onPressed: () => setState(() => _step = 2), child: const Text('Back'))),
+          const SizedBox(width: 10),
+          Expanded(child: FilledButton(onPressed: () => setState(() => _step = 4), child: const Text('Next'))),
+        ]),
+      ]),
+    ),
+  );
+
+  Widget _buildStep4(ColorScheme cs) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Verify the agent is connected', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: (_found ? const Color(0xFF22C55E) : cs.primary).withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: (_found ? const Color(0xFF22C55E) : cs.primary).withValues(alpha: .3))),
+          child: Column(children: [
+            Icon(_found ? Icons.check_circle : Icons.terminal, size: 36,
+              color: _found ? const Color(0xFF22C55E) : cs.primary),
+            const SizedBox(height: 8),
+            Text(_found ? 'Agent detected!' : 'Waiting for agent…',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                color: _found ? const Color(0xFF22C55E) : null)),
+            const SizedBox(height: 4),
+            Text(
+              _found
+                ? 'Your agent is registered and running.'
+                : 'Run the agent on the target machine. It will appear here within 30 seconds.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+          ]),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          onPressed: _checking ? null : _checkForAgent,
+          icon: _checking
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.refresh, size: 16),
+          label: Text(_checking ? 'Checking…' : 'Check Now'),
+        )),
+        const SizedBox(height: 16),
+        Text('What this agent will collect every 30s:',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        ...const [
+          'Processes — running process list with PIDs',
+          'Connections — active network connections + remote IPs',
+          'Packages — installed packages and versions (for CVE scanning)',
+          'Users — local user accounts and shells',
+          'Auth logs — login attempts, sudo usage',
+          'File hashes — SHA256/MD5 of watched files (FIM)',
+        ].map((line) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.check, size: 13, color: Color(0xFF22C55E)),
+            const SizedBox(width: 6),
+            Expanded(child: Text(line, style: const TextStyle(fontSize: 11.5))),
+          ]),
+        )),
+      ]),
+    ),
+  );
+
+  Widget _codeBlock(String code) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: .85),
+      borderRadius: BorderRadius.circular(8)),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(child: Text(code,
+        style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: Colors.greenAccent))),
+      IconButton(
+        icon: const Icon(Icons.copy, size: 14, color: Colors.white70),
+        padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+        onPressed: () => copyToClipboard(context, code)),
+    ]),
+  );
 }

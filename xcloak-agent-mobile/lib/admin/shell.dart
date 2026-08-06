@@ -3,13 +3,21 @@ import 'package:flutter/material.dart';
 import '../screens/mode_select.dart';
 import '../services/secure_storage.dart';
 import 'api.dart';
+import 'screens/cloud_security.dart';
+import 'screens/ad_security.dart';
 import 'screens/compliance.dart';
+import 'screens/container_security.dart';
+import 'screens/defense_evasion.dart';
 import 'screens/detection.dart';
+import 'screens/email_security.dart';
 import 'screens/hunt.dart';
 import 'screens/inventory.dart';
+import 'screens/ot_ics.dart';
 import 'screens/overview.dart';
 import 'screens/platform.dart';
+import 'screens/process_injection.dart';
 import 'screens/response.dart';
+import 'screens/supply_chain.dart';
 
 // ── 10-group nav matching the web sidebar ─────────────────────────────────────
 
@@ -37,9 +45,11 @@ const _nav = [
   ]),
   _NavGroup('MONITORING', Icons.monitor_heart_outlined, [
     _NavItem(1,  Icons.computer,            'Agents'),
+    _NavItem(53, Icons.download,            'Deploy Agent'),
     _NavItem(4,  Icons.timeline,            'Timeline'),
     _NavItem(26, Icons.terminal,            'Live Logs'),
     _NavItem(27, Icons.search,              'Log Search'),
+    _NavItem(54, Icons.data_object,         'ES Query'),
     _NavItem(28, Icons.source,              'Log Sources'),
   ]),
   _NavGroup('DETECTION', Icons.warning_amber_outlined, [
@@ -48,6 +58,7 @@ const _nav = [
     _NavItem(7,  Icons.person_search,       'UEBA'),
     _NavItem(8,  Icons.person_off,          'Insider Threat'),
     _NavItem(20, Icons.show_chart,          'Net Behavior'),
+    _NavItem(55, Icons.manage_search,       'Deep Inspection'),
     _NavItem(25, Icons.bar_chart,           'Behavioral'),
     _NavItem(31, Icons.compare_arrows,      'Correlation'),
     _NavItem(30, Icons.bubble_chart,        'Alert Clusters'),
@@ -173,14 +184,14 @@ class _AdminAppState extends State<AdminApp> {
       6  => IncidentsScreen(api: api),
       7  => UEBAScreen(api: api),
       8  => InsiderThreatScreen(api: api),
-      9  => ItdrScreen(api: api, category: 'cloud',           title: 'Cloud Security'),
-      10 => ItdrScreen(api: api, category: 'email',           title: 'Email Security'),
-      11 => ItdrScreen(api: api, category: 'container',       title: 'Containers/K8s'),
-      12 => ItdrScreen(api: api, category: 'ad',              title: 'AD Attacks'),
-      13 => ItdrScreen(api: api, category: 'supply_chain',    title: 'Supply Chain'),
-      14 => ItdrScreen(api: api, category: 'process_inject',  title: 'Process Injection'),
-      15 => ItdrScreen(api: api, category: 'defense_evasion', title: 'Defense Evasion'),
-      16 => ItdrScreen(api: api, category: 'ot_ics',          title: 'OT/ICS'),
+      9  => CloudSecurityScreen(api: api),
+      10 => EmailSecurityScreen(api: api),
+      11 => ContainerSecurityScreen(api: api),
+      12 => ADSecurityScreen(api: api),
+      13 => SupplyChainScreen(api: api),
+      14 => ProcessInjectionScreen(api: api),
+      15 => DefenseEvasionScreen(api: api),
+      16 => OTICSScreen(api: api),
       17 => DeceptionScreen(api: api),
       18 => HuntWorkbenchScreen(api: api),
       19 => ThreatActorsScreen(api: api),
@@ -217,6 +228,9 @@ class _AdminAppState extends State<AdminApp> {
       50 => AIAssistantScreen(api: api),
       51 => SettingsScreen(api: api),
       52 => TenantsScreen(api: api),
+      53 => DeployAgentScreen(api: api),
+      54 => EsQueryScreen(api: api),
+      55 => DeepInspectionScreen(api: api),
       _  => DashboardScreen(api: api),
     };
   }

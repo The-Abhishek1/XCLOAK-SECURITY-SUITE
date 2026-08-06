@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/services.dart';
 
 import '../models/device_posture.dart';
 
@@ -10,6 +11,17 @@ import '../models/device_posture.dart';
 // permissions or a Device Owner profile.
 class PostureCollector {
   static final _deviceInfo = DeviceInfoPlugin();
+
+  // Battery level/charging, developer-options, ADB, and unknown-sources
+  // state all require real Android APIs (BatteryManager, Settings.Global/
+  // Secure ContentResolver reads, PackageManager.canRequestPackageInstalls)
+  // — the previous Process.run('dumpsys'/'settings', ...) approach throws
+  // SecurityException/"Permission Denial" for a regular app's own process
+  // on every real device (dumpsys/settings require shell or system UID),
+  // so those fields silently and permanently returned defaults in
+  // production. Confirmed via `adb shell run-as <pkg> dumpsys battery` →
+  // "Can't find service: battery"; `settings get ...` → SecurityException.
+  static const _posture = MethodChannel('xcloak.agent/posture');
 
   static Future<DevicePosture> collect() async {
     final androidInfo = await _deviceInfo.androidInfo;
@@ -29,13 +41,9 @@ class PostureCollector {
       passcodeCompliant:   null,
       biometricEnrolled:   null,
       isRooted:            await _checkRooted(androidInfo),
-      developerModeOn:     androidInfo.version.sdkInt >= 17
-                             ? await _checkDeveloperOptions()
-                             : false,
+      developerModeOn:     await _checkDeveloperOptions(),
       usbDebuggingEnabled: await _checkUsbDebugging(),
-      unknownSourcesEnabled: androidInfo.version.sdkInt < 26
-                               ? await _checkUnknownSources()
-                               : false, // API 26+: per-app setting, not global
+      unknownSourcesEnabled: await _checkUnknownSources(),
       vpnActive:           network['vpn'] as bool,
       batteryLevel:        battery['level'] as int,
       batteryCharging:     battery['charging'] as bool,
@@ -68,28 +76,23 @@ class PostureCollector {
     return false;
   }
 
-  // ── Developer options / USB debugging ────────────────────────────────────
+  // ── Developer options / USB debugging / unknown sources ──────────────────
+  // Read via native Settings.Global/Secure + PackageManager APIs (see
+  // MainActivity.kt) — these need no special permission from a regular
+  // app's own process, unlike shelling out to the "settings" CLI tool.
 
   static Future<bool> _checkDeveloperOptions() async {
     try {
-      // settings get global development_settings_enabled returns "1" when on
-      final result = await Process.run(
-        'settings', ['get', 'global', 'development_settings_enabled']);
-      if (result.stdout.toString().trim() == '1') return true;
-    } catch (_) {}
-    try {
-      // Fallback: ADB over TCP port is set only when wireless debugging is on
-      final result = await Process.run('getprop', ['service.adb.tcp.port']);
-      if (result.stdout.toString().trim().isNotEmpty) return true;
-    } catch (_) {}
-    return false;
+      return await _posture.invokeMethod<bool>('getDeveloperOptionsEnabled')
+          ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<bool> _checkUsbDebugging() async {
     try {
-      final result = await Process.run(
-        'settings', ['get', 'global', 'adb_enabled']);
-      return result.stdout.toString().trim() == '1';
+      return await _posture.invokeMethod<bool>('getAdbEnabled') ?? false;
     } catch (_) {
       return false;
     }
@@ -97,10 +100,8 @@ class PostureCollector {
 
   static Future<bool> _checkUnknownSources() async {
     try {
-      // API < 26: single global setting
-      final result = await Process.run(
-        'settings', ['get', 'secure', 'install_non_market_apps']);
-      return result.stdout.toString().trim() == '1';
+      return await _posture.invokeMethod<bool>('getUnknownSourcesEnabled')
+          ?? false;
     } catch (_) {
       return false;
     }
@@ -195,23 +196,22 @@ class PostureCollector {
   }
 
   // ── Battery ───────────────────────────────────────────────────────────────
+  // Read via native BatteryManager sticky-intent (see MainActivity.kt) — no
+  // permission required, and works on every Android version, unlike the
+  // former Process.run('dumpsys', ['battery']) approach which always failed
+  // ("Can't find service: battery" — dumpsys requires shell/system UID).
 
   static Future<Map<String, dynamic>> _batteryInfo() async {
-    int  level    = -1;
-    bool charging = false;
     try {
-      final result = await Process.run('dumpsys', ['battery']);
-      final out = result.stdout as String;
-      final lm = RegExp(r'level: (\d+)').firstMatch(out);
-      if (lm != null) level = int.tryParse(lm.group(1)!) ?? -1;
-      final sm = RegExp(r'status: (\d+)').firstMatch(out);
-      // status 2 = CHARGING, 5 = FULL (also considered "charging")
-      if (sm != null) {
-        final s = int.tryParse(sm.group(1)!) ?? 0;
-        charging = s == 2 || s == 5;
-      }
-    } catch (_) {}
-    return {'level': level, 'charging': charging};
+      final r = await _posture.invokeMethod<Map>('getBatteryInfo');
+      if (r == null) return {'level': -1, 'charging': false};
+      return {
+        'level':    (r['level'] as int?) ?? -1,
+        'charging': (r['charging'] as bool?) ?? false,
+      };
+    } catch (_) {
+      return {'level': -1, 'charging': false};
+    }
   }
 
   // ── Device identity ───────────────────────────────────────────────────────

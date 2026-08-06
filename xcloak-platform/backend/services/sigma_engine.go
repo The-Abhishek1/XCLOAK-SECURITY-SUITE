@@ -47,6 +47,9 @@ func EvaluateRules(log models.Log) {
 	candidates := getRulesForFormat(entry, pf.Format)
 
 	for _, rule := range candidates {
+		if !ruleMatchesLogSourceOrigin(rule, log.LogSource) {
+			continue
+		}
 		if !ruleMatchesLogsourceService(rule, pf) {
 			continue
 		}
@@ -115,6 +118,39 @@ func ruleMatchesLogsource(rule models.SigmaRule, pf ParsedFields) bool {
 	}
 
 	return true
+}
+
+// ruleMatchesLogSourceOrigin excludes rules whose logsource_cat is known to
+// be incompatible with the log's actual origin. Currently only enforces the
+// mobile/android case; every other origin is unaffected (returns true).
+//
+// getRulesForFormat's product-bucketing treats any rule with an empty
+// logsource_prod as "unconstrained" and includes it in every format bucket —
+// including "raw", which is exactly what a mobile logcat line normalizes to
+// when it matches none of the structured parsers. That let category-only
+// rules (78 of them platform-wide have logsource_prod == "" and rely
+// entirely on logsource_cat, e.g. "SQL Injection in HTTP POST" with
+// cat="web") apply to literally any log regardless of origin — a benign
+// logcat buffer-separator line ("--------- beginning of crash") matched
+// that rule's "--" keyword and fired a fake high-severity alert on every
+// mobile device, every ~10-minute log-forward cycle.
+//
+// This only scopes the mobile-origin case (the reported, verified bug) —
+// deny-by-default for any category that isn't empty (truly unconstrained)
+// or "android", rather than an allow-list of known-incompatible categories,
+// so a category value added later is excluded by default too. It does not
+// attempt full category-based bucketing for every other logsource_cat value
+// across desktop/network log sources, which would be a much larger change.
+// Two sigma_rules already carry logsource_cat="android" and were previously
+// dead weight (never reachable) since nothing scoped mobile logs to them;
+// this fix makes them the only category-labelled rules that actually apply
+// to mobile logs.
+func ruleMatchesLogSourceOrigin(rule models.SigmaRule, logSource string) bool {
+	if logSource != "android_agent" {
+		return true
+	}
+	cat := strings.ToLower(rule.LogsourceCategory)
+	return cat == "" || cat == "android"
 }
 
 // ruleMatchesLogsourceService is the service-level half of ruleMatchesLogsource.

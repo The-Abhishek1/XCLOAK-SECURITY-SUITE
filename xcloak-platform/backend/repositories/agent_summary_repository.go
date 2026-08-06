@@ -15,7 +15,8 @@ func GetAgentSummary(
 		SELECT
 			id,
 			hostname,
-			status
+			status,
+			last_seen
 		FROM agents
 		WHERE id = $1
 	`,
@@ -24,6 +25,7 @@ func GetAgentSummary(
 		&summary.AgentID,
 		&summary.Hostname,
 		&summary.Status,
+		&summary.LastSeen,
 	)
 
 	if err != nil {

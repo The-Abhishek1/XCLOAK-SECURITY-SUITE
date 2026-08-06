@@ -459,6 +459,18 @@ func dispatchActionAdvanced(action models.PlaybookAction, alert models.Alert) (s
 
 // dispatchAgentTask queues an agent task (or holds it for approval if destructive).
 func dispatchAgentTask(action models.PlaybookAction, alert models.Alert) (string, error) {
+	// Playbooks trigger on alert severity/rule name, not on which agent
+	// platforms can actually run the resulting action — a mobile-only
+	// android/ios alert (e.g. "Android Rooting Tool Detected") matching a
+	// generic "alert_high" playbook would otherwise dispatch desktop-only
+	// forensic tasks (collect_processes, collect_auth_logs, etc.) to a
+	// mobile MDM agent that has no executor for any of them, permanently
+	// pending/expired garbage identical in kind to the same bug already
+	// fixed in DispatchSTETask/ResolveSTETargetAgents.
+	if steRealAgentTaskTypes[action.ActionType] && !isDesktopCapableAgent(alert.AgentID) {
+		return "", fmt.Errorf(
+			"action %q has no execution backend on this agent's platform", action.ActionType)
+	}
 	payload := mergePayload(action.Payload, alert)
 	task := models.AgentTask{
 		AgentID:  alert.AgentID,

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
+
 	"xcloak-platform/database"
 	"xcloak-platform/models"
 	"xcloak-platform/repositories"
@@ -32,6 +34,42 @@ var steRealAgentTaskTypes = map[string]bool{
 	"collect_kernel_modules": true, "collect_suid_binaries": true, "collect_disk_usage": true,
 }
 
+// steDesktopPlatforms are the only platform_category values that run the
+// desktop agent executor steRealAgentTaskTypes dispatches to
+// (xcloak-agent-desktop/agent/executor.go). Mobile (android/ios) agents are
+// MDM-managed devices with a completely different command path
+// (mdm_commands, polled by the mobile app's CommandService) — they have no
+// implementation for any of these task types at all. Before this filter,
+// "all agents" targeting queued collect_processes/collect_auth_logs/etc.
+// against every mobile agent too; since nothing on the mobile side ever
+// looks at agent_tasks, those rows just piled up as permanently
+// pending/expired garbage (one test device accumulated 4,500+ leaked rows).
+var steDesktopPlatforms = []string{"windows", "linux", "macos"}
+
+// isDesktopCapableAgent reports whether agentID's platform_category is one
+// that runs the desktop agent executor. Used to reject dispatching a
+// steRealAgentTaskTypes task to an agent that structurally can't run it
+// (mobile MDM agents, network/cloud/other categories) — shared by both the
+// scheduled-task dispatcher (DispatchSTETask) and the SOAR playbook engine
+// (dispatchAgentTask in playbook_engine.go), which independently had the
+// same "dispatch to whatever agent triggered/was targeted, regardless of
+// platform" gap.
+func isDesktopCapableAgent(agentID int) bool {
+	var category string
+	err := database.DB.QueryRow(
+		`SELECT platform_category FROM agents WHERE id=$1`, agentID,
+	).Scan(&category)
+	if err != nil {
+		return false
+	}
+	for _, p := range steDesktopPlatforms {
+		if category == p {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveSTETargetAgents resolves a task's target_type/target_ids to real
 // agent IDs registered for the tenant. Never invents a target — returns an
 // empty slice if nothing matches, so the caller can fail honestly instead of
@@ -40,7 +78,9 @@ func ResolveSTETargetAgents(tid int, targetType, targetIDs string) []int {
 	agentIDs := []int{}
 	switch targetType {
 	case "all", "":
-		rows, err := database.DB.Query(`SELECT id FROM agents WHERE tenant_id=$1`, tid)
+		rows, err := database.DB.Query(
+			`SELECT id FROM agents WHERE tenant_id=$1 AND platform_category = ANY($2)`,
+			tid, pq.Array(steDesktopPlatforms))
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -55,7 +95,10 @@ func ResolveSTETargetAgents(tid int, targetType, targetIDs string) []int {
 		if json.Unmarshal([]byte(targetIDs), &hostnames) == nil {
 			for _, h := range hostnames {
 				var id int
-				if database.DB.QueryRow(`SELECT id FROM agents WHERE tenant_id=$1 AND (hostname=$2 OR ip_address=$2)`, tid, h).Scan(&id) == nil {
+				if database.DB.QueryRow(
+					`SELECT id FROM agents WHERE tenant_id=$1 AND (hostname=$2 OR ip_address=$2) AND platform_category = ANY($3)`,
+					tid, h, pq.Array(steDesktopPlatforms),
+				).Scan(&id) == nil {
 					agentIDs = append(agentIDs, id)
 				}
 			}

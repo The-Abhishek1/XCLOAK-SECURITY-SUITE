@@ -599,16 +599,27 @@ class _OverviewTabState extends State<_OverviewTab>
                 icon: Icons.sync_rounded, label: 'Force\nSync', color: _kBlue,
                 onTap: () async {
                   try {
+                    // Was POSTing an empty body to /api/agents/heartbeat —
+                    // HeartbeatRequest.AgentID defaults to 0 absent an id, so
+                    // the handler's WHERE id=$1 matched zero rows and still
+                    // returned 200: a fake "Check-in sent" with nothing
+                    // actually synced. Do what CommandService's real 'sync'
+                    // command does — collect posture and push it to the
+                    // device's own checkin endpoint.
+                    final deviceId = await SecureStore.deviceId();
+                    if (deviceId == null) throw Exception('not enrolled');
                     final c = await ApiClient.fromStorage();
-                    await c.post('/api/agents/heartbeat', {});
+                    final posture = await PostureCollector.collect();
+                    await c.put('/api/mdm/devices/$deviceId/checkin', posture.toJson());
+                    await ThreatDetector.runInventoryScan();
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Check-in sent'), backgroundColor: _kGreen));
+                      content: Text('Synced'), backgroundColor: _kGreen));
                     _load();
                   } catch (_) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Check-in failed'), backgroundColor: _kRed));
+                      content: Text('Sync failed'), backgroundColor: _kRed));
                   }
                 },
               ),
@@ -616,12 +627,34 @@ class _OverviewTabState extends State<_OverviewTab>
               _ActionTile(
                 icon: Icons.bug_report_outlined, label: 'Scan\nThreats', color: _kOrange,
                 onTap: () async {
-                  final apps = await ThreatDetector.sideloadedPackages();
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(apps.isEmpty
-                      ? 'No threats detected' : '${apps.length} sideloaded app(s) found'),
-                    backgroundColor: apps.isEmpty ? _kGreen : _kAmber));
+                  // Was purely local (sideloadedPackages() only, no network
+                  // call) — always said "No threats detected" regardless of
+                  // anything, since it never submitted inventory or checked
+                  // for server-side alerts. Now runs a real on-demand scan:
+                  // upload the current app inventory (server-side sideload/
+                  // high-risk counts) and a threat-scan summary, then refresh
+                  // so any resulting alerts actually show up.
+                  try {
+                    final apps = await ThreatDetector.sideloadedPackages();
+                    await ThreatDetector.runInventoryScan();
+                    final deviceId = await SecureStore.deviceId();
+                    if (deviceId != null) {
+                      final client  = await ApiClient.fromStorage();
+                      final summary = await ThreatDetector.threatSummary();
+                      await client.post(
+                        '/api/mdm/devices/$deviceId/threat-scan', summary);
+                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(apps.isEmpty
+                        ? 'Scan complete — no threats detected'
+                        : '${apps.length} sideloaded app(s) found'),
+                      backgroundColor: apps.isEmpty ? _kGreen : _kAmber));
+                  } catch (_) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Scan failed'), backgroundColor: _kRed));
+                  }
                   _load();
                 },
               ),
@@ -1184,8 +1217,11 @@ class _NetworkTabState extends State<_NetworkTab> {
 
   Future<void> _fetchNetEvents() async {
     try {
+      // GetSelfTimeline (api/agent_self.go) returns a bare JSON array, not
+      // {"events": [...]} — indexing it with a string key threw at runtime
+      // (silently swallowed by the catch below), so this list was always empty.
       final r = await (await ApiClient.fromStorage()).get('/api/agents/self/timeline');
-      final all = (r['events'] ?? r['data'] ?? []) as List;
+      final all = r as List;
       _netEvents = all.where((e) {
         final t = (e['event_type'] ?? e['type'] ?? '').toString();
         return t.contains('connect') || t.contains('network') || t.contains('checkin');
@@ -1410,16 +1446,16 @@ class _TasksTabState extends State<_TasksTab> {
 
   Future<void> _fetchYara(ApiClient c) async {
     try {
+      // GetEnabledYaraRules returns a bare array too — same bug as timeline.
       final r = await c.get('/api/yara/rules/enabled');
-      final rules = r['rules'] ?? r['data'] ?? [];
-      _yaraCount = (rules as List).length;
+      _yaraCount = (r as List).length;
     } catch (_) {}
   }
 
   Future<void> _fetchHistory(ApiClient c) async {
     try {
       final r = await c.get('/api/agents/self/timeline');
-      final all = (r['events'] ?? r['data'] ?? []) as List;
+      final all = r as List;
       _taskHistory = all.where((e) {
         final t = (e['event_type'] ?? e['type'] ?? '').toString();
         return t.contains('task') || t.contains('scan') || t.contains('command');
@@ -1577,9 +1613,13 @@ class _AlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // models.Alert has no description/message field — the detail text is
+    // log_message. Previously every card (including the compact Overview
+    // one, which can never be expanded to fall back on the raw-fields loop
+    // below) silently showed no body text at all.
     final sev   = _parseSev(alert['severity'] ?? alert['level']);
     final rule  = (alert['rule_name'] ?? alert['name'] ?? 'Unknown Rule').toString();
-    final desc  = (alert['description'] ?? alert['message'] ?? '').toString();
+    final desc  = (alert['log_message'] ?? '').toString();
     final ts    = (alert['created_at'] ?? alert['timestamp'] ?? '').toString();
     final mitre = (alert['mitre_technique'] ?? alert['technique'] ?? '').toString();
 
@@ -1635,7 +1675,7 @@ class _AlertCard extends StatelessWidget {
                 const Divider(height: 16),
                 ...alert.entries
                   .where((kv) => !const {
-                    'rule_name', 'name', 'description', 'message',
+                    'rule_name', 'name', 'log_message',
                     'severity', 'level', 'created_at', 'timestamp',
                     'mitre_technique', 'technique',
                   }.contains(kv.key) && kv.value != null)

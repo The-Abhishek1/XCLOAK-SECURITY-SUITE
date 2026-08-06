@@ -117,6 +117,19 @@ func SelfEnrollDevice(c *gin.Context) {
 		HasPasscode  *bool  `json:"has_passcode"`
 		IsRooted     bool   `json:"is_rooted"`
 		DevModeOn    bool   `json:"developer_mode_on"`
+
+		SecurityPatchLevel    string   `json:"security_patch_level"`
+		AndroidSDKVersion     *int     `json:"android_sdk_version"`
+		Manufacturer          string   `json:"manufacturer"`
+		Hardware              string   `json:"hardware"`
+		USBDebuggingEnabled   *bool    `json:"usb_debugging_enabled"`
+		UnknownSourcesEnabled *bool    `json:"unknown_sources_enabled"`
+		BatteryLevel          *int     `json:"battery_level"`
+		NetworkType           string   `json:"network_type"`
+		StorageTotalGB        *float64 `json:"storage_total_gb"`
+		StorageFreeGB         *float64 `json:"storage_free_gb"`
+		RAMTotalMB            *int     `json:"ram_total_mb"`
+		BuildFingerprint      string   `json:"build_fingerprint"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -145,6 +158,19 @@ func SelfEnrollDevice(c *gin.Context) {
 		HasPasscode:     req.HasPasscode,
 		IsJailbroken:    req.IsRooted,
 		DeveloperModeOn: req.DevModeOn,
+
+		SecurityPatchLevel:    req.SecurityPatchLevel,
+		AndroidSDKVersion:     req.AndroidSDKVersion,
+		Manufacturer:          req.Manufacturer,
+		Hardware:              req.Hardware,
+		USBDebuggingEnabled:   req.USBDebuggingEnabled,
+		UnknownSourcesEnabled: req.UnknownSourcesEnabled,
+		BatteryLevel:          req.BatteryLevel,
+		NetworkType:           req.NetworkType,
+		StorageTotalGB:        req.StorageTotalGB,
+		StorageFreeGB:         req.StorageFreeGB,
+		RAMTotalMB:            req.RAMTotalMB,
+		BuildFingerprint:      req.BuildFingerprint,
 	}
 
 	result, err := services.SelfEnrollDevice(req.EnrollToken, device)
@@ -199,6 +225,22 @@ func MobileDeviceCheckIn(c *gin.Context) {
 		IsRooted     bool   `json:"is_rooted"`
 		DevModeOn    bool   `json:"developer_mode_on"`
 		PushToken    string `json:"push_token"`
+
+		SecurityPatchLevel    string   `json:"security_patch_level"`
+		AndroidSDKVersion     *int     `json:"android_sdk_version"`
+		Manufacturer          string   `json:"manufacturer"`
+		Hardware              string   `json:"hardware"`
+		BiometricEnrolled     *bool    `json:"biometric_enrolled"`
+		USBDebuggingEnabled   *bool    `json:"usb_debugging_enabled"`
+		UnknownSourcesEnabled *bool    `json:"unknown_sources_enabled"`
+		VPNActive             *bool    `json:"vpn_active"`
+		BatteryLevel          *int     `json:"battery_level"`
+		BatteryCharging       *bool    `json:"battery_charging"`
+		NetworkType           string   `json:"network_type"`
+		WifiSSID              string   `json:"wifi_ssid"`
+		StorageTotalGB        *float64 `json:"storage_total_gb"`
+		StorageFreeGB         *float64 `json:"storage_free_gb"`
+		RAMTotalMB            *int     `json:"ram_total_mb"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -214,6 +256,22 @@ func MobileDeviceCheckIn(c *gin.Context) {
 		IsJailbroken:      req.IsRooted,
 		DeveloperModeOn:   req.DevModeOn,
 		PushToken:         req.PushToken,
+
+		SecurityPatchLevel:    req.SecurityPatchLevel,
+		AndroidSDKVersion:     req.AndroidSDKVersion,
+		Manufacturer:          req.Manufacturer,
+		Hardware:              req.Hardware,
+		BiometricEnrolled:     req.BiometricEnrolled,
+		USBDebuggingEnabled:   req.USBDebuggingEnabled,
+		UnknownSourcesEnabled: req.UnknownSourcesEnabled,
+		VPNActive:             req.VPNActive,
+		BatteryLevel:          req.BatteryLevel,
+		BatteryCharging:       req.BatteryCharging,
+		NetworkType:           req.NetworkType,
+		WifiSSID:              req.WifiSSID,
+		StorageTotalGB:        req.StorageTotalGB,
+		StorageFreeGB:         req.StorageFreeGB,
+		RAMTotalMB:            req.RAMTotalMB,
 	}
 	if err := services.DeviceCheckIn(deviceID, tid, d); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -268,7 +326,9 @@ func SubmitAppInventory(c *gin.Context) {
 	}
 
 	var req struct {
-		Apps []services.AppInfo `json:"apps"`
+		Apps            []services.AppInfo `json:"apps"`
+		SideloadedCount int                `json:"sideloaded_count"`
+		HighRiskCount   int                `json:"high_risk_count"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -279,7 +339,7 @@ func SubmitAppInventory(c *gin.Context) {
 		return
 	}
 
-	if err := services.SubmitAppInventory(deviceID, tid, req.Apps); err != nil {
+	if err := services.SubmitAppInventory(deviceID, tid, req.Apps, req.SideloadedCount, req.HighRiskCount); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -315,7 +375,7 @@ func PostMDMThreatScan(c *gin.Context) {
 		return
 	}
 
-	if err := services.RecordThreatScan(deviceID, tid, req.TotalApps, req.SideloadedCount); err != nil {
+	if err := services.RecordThreatScan(deviceID, tid, req.TotalApps, req.SideloadedCount, req.SystemAppCount); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}

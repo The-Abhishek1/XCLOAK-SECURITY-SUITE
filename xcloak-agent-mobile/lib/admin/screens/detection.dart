@@ -271,24 +271,19 @@ class _AlertCardState extends State<_AlertCard> {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (a['description'] != null && a['description'].toString().isNotEmpty) ...[
-                  Text(str(a['description']),
-                    style: const TextStyle(fontSize: 12.5, color: Colors.grey)),
+                if (str(a['log_message'], '').isNotEmpty) ...[
+                  Text(str(a['log_message']),
+                    style: const TextStyle(fontSize: 12.5, color: Colors.grey), maxLines: 3, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                 ],
-                if (a['mitre_tactics'] != null || a['mitre_technique_id'] != null)
+                if (str(a['mitre_technique'], '').isNotEmpty || str(a['mitre_tactic'], '').isNotEmpty)
                   Wrap(spacing: 6, runSpacing: 4, children: [
-                    if (a['mitre_technique_id'] != null) _MitreTag(str(a['mitre_technique_id'])),
-                    if (a['mitre_tactic'] != null) _MitreTag(str(a['mitre_tactic'])),
-                    ...(a['mitre_tactics'] as List? ?? []).map((t) => _MitreTag(t.toString())),
+                    if (str(a['mitre_technique'], '').isNotEmpty) _MitreTag(str(a['mitre_technique'])),
+                    if (str(a['mitre_tactic'], '').isNotEmpty) _MitreTag(str(a['mitre_tactic'])),
                   ]),
                 const SizedBox(height: 8),
-                if (a['source_ip'] != null) InfoPair('Source IP', str(a['source_ip'])),
-                if (a['dest_ip'] != null)   InfoPair('Dest IP',   str(a['dest_ip'])),
-                if (a['process_name'] != null) InfoPair('Process', str(a['process_name'])),
-                if (a['file_path'] != null)
-                  InfoPair('File', str(a['file_path']), valueColor: const Color(0xFFEF4444)),
-                if (a['rule_id'] != null)    InfoPair('Rule ID',  str(a['rule_id'])),
+                if (str(a['hostname'], '').isNotEmpty) InfoPair('Hostname', str(a['hostname'])),
+                if (str(a['fingerprint'], '').isNotEmpty) InfoPair('Fingerprint', str(a['fingerprint'])),
               ]),
             ),
           ],
@@ -341,6 +336,17 @@ class _AlertDetailSheet extends StatefulWidget {
 class _AlertDetailSheetState extends State<_AlertDetailSheet> {
   bool    _triaging   = false;
   String? _aiAnalysis;
+  Map<String,dynamic>? _investigation;
+  bool _loadingInvestigation = true;
+
+  @override void initState() { super.initState(); _loadInvestigation(); }
+
+  Future<void> _loadInvestigation() async {
+    final id = widget.alert['id'] as int? ?? 0;
+    final r  = await widget.api.alertInvestigation(id);
+    if (!mounted) return;
+    setState(() { _investigation = r; _loadingInvestigation = false; });
+  }
 
   Future<void> _triage() async {
     final id = widget.alert['id'] as int? ?? 0;
@@ -380,7 +386,7 @@ class _AlertDetailSheetState extends State<_AlertDetailSheet> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.copy, size: 16),
-                  onPressed: () => copyToClipboard(context, '${str(a['rule_name'])} — ${str(a['source_ip'] ?? '')}'),
+                  onPressed: () => copyToClipboard(context, '${str(a['rule_name'])} — ${str(a['hostname'] ?? '')}'),
                   tooltip: 'Copy details',
                 ),
                 IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
@@ -416,38 +422,64 @@ class _AlertDetailSheetState extends State<_AlertDetailSheet> {
               InfoPair('Alert ID',  str(id)),
               InfoPair('Status',    str(a['status'])),
               InfoPair('Hostname',  str(a['hostname']  ?? '—')),
-              InfoPair('Source IP', str(a['source_ip'] ?? '—')),
-              InfoPair('Dest IP',   str(a['dest_ip']   ?? '—')),
-              InfoPair('Process',   str(a['process_name'] ?? '—')),
-              InfoPair('File',      str(a['file_path'] ?? '—')),
-              InfoPair('User',      str(a['username']  ?? '—')),
-              InfoPair('Rule ID',   str(a['rule_id']   ?? '—')),
               InfoPair('Agent ID',  str(a['agent_id']  ?? '—')),
-              if (a['description'] != null && a['description'].toString().isNotEmpty) ...[
+              InfoPair('Fingerprint', str(a['fingerprint'] ?? '—')),
+              if (str(a['log_message'], '').isNotEmpty) ...[
                 const SizedBox(height: 10),
-                SectionTitle('Description'),
-                Text(str(a['description']), style: const TextStyle(fontSize: 13, height: 1.5)),
-              ],
-              if (a['mitre_technique_id'] != null || a['mitre_tactic'] != null) ...[
-                const SizedBox(height: 12),
-                SectionTitle('MITRE ATT&CK'),
-                Wrap(spacing: 6, runSpacing: 4, children: [
-                  if (a['mitre_technique_id'] != null) _MitreTag(str(a['mitre_technique_id'])),
-                  if (a['mitre_tactic'] != null) _MitreTag(str(a['mitre_tactic'])),
-                  ...(a['mitre_tactics'] as List? ?? []).map((t) => _MitreTag(t.toString())),
-                ]),
-              ],
-              if (a['raw_event'] != null) ...[
-                const SizedBox(height: 12),
-                SectionTitle('Raw Event'),
+                SectionTitle('Log Message'),
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8)),
-                  child: SelectableText(str(a['raw_event']),
-                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                  child: SelectableText(str(a['log_message']),
+                    style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace')),
                 ),
+              ],
+              // Alert model has no mitre_technique_id — real key is mitre_technique.
+              if (a['mitre_technique'] != null || a['mitre_tactic'] != null) ...[
+                const SizedBox(height: 12),
+                SectionTitle('MITRE ATT&CK'),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  if (str(a['mitre_technique'], '').isNotEmpty) _MitreTag(str(a['mitre_technique'])),
+                  if (str(a['mitre_tactic'], '').isNotEmpty) _MitreTag(str(a['mitre_tactic'])),
+                  if (str(a['mitre_name'], '').isNotEmpty) _MitreTag(str(a['mitre_name'])),
+                ]),
+              ],
+              const SizedBox(height: 14),
+              SectionTitle('Investigation',
+                trailing: _loadingInvestigation
+                  ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                  : null),
+              if (!_loadingInvestigation) ...[
+                if (_investigation == null)
+                  const Text('Investigation data unavailable.', style: TextStyle(fontSize: 12, color: Colors.grey))
+                else ...[
+                  InfoPair('Threat Score', str(_investigation!['threat_score'], '0')),
+                  if ((_investigation!['ioc_hits'] as List?)?.isNotEmpty ?? false) ...[
+                    const SizedBox(height: 6),
+                    const Text('IOC Hits', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey)),
+                    ...((_investigation!['ioc_hits'] as List).map((h) {
+                      final hit = h as Map<String,dynamic>;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('${str(hit['type'])}: ${str(hit['indicator'])}',
+                          style: const TextStyle(fontSize: 12, fontFamily: 'monospace')));
+                    })),
+                  ],
+                  if ((_investigation!['similar_alerts'] as List?)?.isNotEmpty ?? false) ...[
+                    const SizedBox(height: 8),
+                    const Text('Similar Alerts', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey)),
+                    ...((_investigation!['similar_alerts'] as List).take(5).map((s) {
+                      final sim = s as Map<String,dynamic>;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('${str(sim['rule_name'])} — ${str(sim['hostname'])}',
+                          style: const TextStyle(fontSize: 12)));
+                    })),
+                  ],
+                ],
               ],
               const SizedBox(height: 16),
             ],
@@ -568,6 +600,46 @@ class _IncidentCard extends StatelessWidget {
   final VoidCallback onAction;
   const _IncidentCard({required this.incident, required this.api, required this.onAction});
 
+  void _showEvents(BuildContext context) {
+    final id = incident['id'] as int? ?? 0;
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6, maxChildSize: 0.9, minChildSize: 0.3, expand: false,
+        builder: (_, ctrl) => FutureBuilder<List>(
+          future: api.incidentEvents(id),
+          builder: (ctx2, snap) {
+            final events = snap.data ?? [];
+            return Column(children: [
+              sheetHeader('Incident Timeline'),
+              Expanded(child: !snap.hasData
+                ? const Center(child: CircularProgressIndicator())
+                : events.isEmpty
+                  ? const Center(child: Text('No events recorded', style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      controller: ctrl,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: events.length,
+                      itemBuilder: (_, i) {
+                        final e = events[i] as Map<String,dynamic>;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(str(e['event_type'], 'event'),
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                            Text(str(e['details']), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text(timeAgo(e['created_at']), style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                          ]),
+                        );
+                      },
+                    )),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final inc = incident;
@@ -575,7 +647,9 @@ class _IncidentCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
+      child: InkWell(
+        onTap: () => _showEvents(context),
+        child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -589,6 +663,12 @@ class _IncidentCard extends StatelessWidget {
                 if (['investigating', 'contained', 'resolved'].contains(action)) {
                   final ok = await api.updateIncidentStatus(id, action);
                   if (context.mounted) xSnack(context, ok ? 'Status updated' : 'Failed', error: !ok);
+                  onAction();
+                  return;
+                }
+                if (['critical','high','medium','low'].contains(action)) {
+                  final ok = await api.updateIncidentSeverity(id, action);
+                  if (context.mounted) xSnack(context, ok ? 'Severity updated' : 'Failed', error: !ok);
                   onAction();
                   return;
                 }
@@ -615,6 +695,11 @@ class _IncidentCard extends StatelessWidget {
                 const PopupMenuItem(value: 'contained',    child: Text('→ Contained')),
                 const PopupMenuItem(value: 'resolved',     child: Text('→ Resolved')),
                 const PopupMenuDivider(),
+                const PopupMenuItem(value: 'critical', child: Text('Severity: Critical')),
+                const PopupMenuItem(value: 'high',     child: Text('Severity: High')),
+                const PopupMenuItem(value: 'medium',   child: Text('Severity: Medium')),
+                const PopupMenuItem(value: 'low',      child: Text('Severity: Low')),
+                const PopupMenuDivider(),
                 const PopupMenuItem(value: 'note',         child: Text('Add Note')),
               ],
             ),
@@ -629,15 +714,19 @@ class _IncidentCard extends StatelessWidget {
             const Icon(Icons.access_time, size: 13, color: Colors.grey),
             const SizedBox(width: 4),
             Text(timeAgo(inc['created_at']), style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
-            if (inc['affected_hosts'] != null) ...[
+            // models.Incident (models/incident.go:5) has no affected_hosts
+            // list — an incident is tied to exactly one agent, real field
+            // is the singular hostname.
+            if ((inc['hostname'] ?? '').toString().isNotEmpty) ...[
               const SizedBox(width: 12),
               const Icon(Icons.computer, size: 13, color: Colors.grey),
               const SizedBox(width: 4),
-              Text('${(inc['affected_hosts'] as List?)?.length ?? 0} hosts',
+              Text(str(inc['hostname']),
                 style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
             ],
           ]),
         ]),
+        ),
       ),
     );
   }
@@ -678,11 +767,11 @@ class _UEBAState extends State<UEBAScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           Row(children: [
-            KpiCard(label: 'Users Monitored', value: '${_users.length}',
-              color: const Color(0xFF3B82F6), icon: Icons.person_search),
+            Expanded(child: KpiCard(label: 'Users Monitored', value: '${_users.length}',
+              color: const Color(0xFF3B82F6), icon: Icons.person_search)),
             const SizedBox(width: 8),
-            KpiCard(label: 'Anomalous Events', value: '${_events.length}',
-              color: const Color(0xFFF97316), icon: Icons.warning_amber),
+            Expanded(child: KpiCard(label: 'Anomalous Events', value: '${_events.length}',
+              color: const Color(0xFFF97316), icon: Icons.warning_amber)),
           ]),
           const SizedBox(height: 16),
           Row(children: [
@@ -697,8 +786,10 @@ class _UEBAState extends State<UEBAScreen> {
             ),
           ]),
           ..._users.take(20).map((u) {
-            final user  = u as Map<String,dynamic>;
-            final score = (user['risk_score'] ?? 0) is num ? (user['risk_score'] as num).toInt() : 0;
+            final user     = u as Map<String,dynamic>;
+            final username = str(user['username'] ?? user['email']);
+            // GetInsiderThreatScores (api/insider_threat.go:16) — real field is score.
+            final score = (user['score'] ?? 0) is num ? (user['score'] as num).toInt() : 0;
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
@@ -710,7 +801,7 @@ class _UEBAState extends State<UEBAScreen> {
                   child: Text((str(user['username'], 'U')[0]).toUpperCase())),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(str(user['username'] ?? user['email']),
+                  Text(username,
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
                   HealthBar(100 - score),
@@ -721,6 +812,22 @@ class _UEBAState extends State<UEBAScreen> {
                   color: score > 70 ? const Color(0xFFEF4444)
                        : score > 40 ? const Color(0xFFF59E0B)
                        :               const Color(0xFF22C55E))),
+                PopupMenuButton<String>(
+                  onSelected: (v) async {
+                    bool ok;
+                    if (v == 'logout') {
+                      ok = await widget.api.forceLogoutUebaUser(username);
+                    } else {
+                      ok = await widget.api.addUebaWatchlist(username);
+                    }
+                    if (context.mounted) xSnack(context, ok ? 'Done' : 'Failed', error: !ok);
+                    _load();
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'logout', child: Text('Force Logout')),
+                    PopupMenuItem(value: 'watchlist', child: Text('Add to Watchlist')),
+                  ],
+                ),
               ]),
             );
           }),
@@ -766,21 +873,23 @@ class _InsiderThreatState extends State<InsiderThreatScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           Row(children: [
-            KpiCard(label: 'High Risk',   value: str(summary['high_risk']   ?? 0),
-              color: const Color(0xFFEF4444), icon: Icons.person_off),
+            Expanded(child: KpiCard(label: 'High Risk',   value: str(summary['high_risk']   ?? 0),
+              color: const Color(0xFFEF4444), icon: Icons.person_off)),
             const SizedBox(width: 8),
-            KpiCard(label: 'Medium Risk', value: str(summary['medium_risk'] ?? 0),
-              color: const Color(0xFFF59E0B), icon: Icons.warning),
+            Expanded(child: KpiCard(label: 'Medium Risk', value: str(summary['medium_risk'] ?? 0),
+              color: const Color(0xFFF59E0B), icon: Icons.warning)),
             const SizedBox(width: 8),
-            KpiCard(label: 'Low Risk',    value: str(summary['low_risk']    ?? 0),
-              color: const Color(0xFF22C55E), icon: Icons.verified_user),
+            Expanded(child: KpiCard(label: 'Low Risk',    value: str(summary['low_risk']    ?? 0),
+              color: const Color(0xFF22C55E), icon: Icons.verified_user)),
           ]),
           const SizedBox(height: 16),
           SectionTitle('Threat Scores'),
           ..._scores.take(20).map((s) {
-            final score = s as Map<String,dynamic>;
-            final val   = (score['threat_score'] ?? 0) is num
-              ? (score['threat_score'] ?? 0).toInt() : 0;
+            final score    = s as Map<String,dynamic>;
+            final username = str(score['username'] ?? score['user_id']);
+            // GetInsiderThreatScores (api/insider_threat.go:16) — real field is score.
+            final val   = (score['score'] ?? 0) is num
+              ? (score['score'] ?? 0).toInt() : 0;
             final col   = val > 70 ? const Color(0xFFEF4444)
                         : val > 40 ? const Color(0xFFF59E0B)
                         :             const Color(0xFF22C55E);
@@ -793,7 +902,7 @@ class _InsiderThreatState extends State<InsiderThreatScreen> {
                 border: Border.all(color: col.withValues(alpha: .2))),
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(str(score['username'] ?? score['user_id']),
+                  Text(username,
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
                   Text(str(score['reason'] ?? score['details'] ?? ''),
@@ -806,6 +915,22 @@ class _InsiderThreatState extends State<InsiderThreatScreen> {
                     fontSize: 22, fontWeight: FontWeight.w900, color: col)),
                   const Text('/ 100', style: TextStyle(fontSize: 10, color: Colors.grey)),
                 ]),
+                PopupMenuButton<String>(
+                  onSelected: (v) async {
+                    bool ok;
+                    if (v == 'logout') {
+                      ok = await widget.api.forceLogoutInsiderUser(username);
+                    } else {
+                      ok = await widget.api.addInsiderWatchlist(username);
+                    }
+                    if (context.mounted) xSnack(context, ok ? 'Done' : 'Failed', error: !ok);
+                    _load();
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'logout', child: Text('Force Logout')),
+                    PopupMenuItem(value: 'watchlist', child: Text('Add to Watchlist')),
+                  ],
+                ),
               ]),
             );
           }),
@@ -868,9 +993,13 @@ class _NBAState extends State<NBAScreen> {
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
           itemCount: _anomalies.length,
           itemBuilder: (_, i) {
-            final a   = _anomalies[i] as Map<String,dynamic>;
-            final id  = a['id'] as int? ?? 0;
-            final col = sevColor(str(a['severity']));
+            // NetworkAnomaly has no `severity` field — derive a label from
+            // the real deviation_score (0-100-ish, higher = more anomalous).
+            final a    = _anomalies[i] as Map<String,dynamic>;
+            final id   = a['id'] as int? ?? 0;
+            final dev  = (a['deviation_score'] as num?)?.toInt() ?? 0;
+            final sev  = dev >= 80 ? 'critical' : dev >= 60 ? 'high' : dev >= 40 ? 'medium' : 'low';
+            final col  = sevColor(sev);
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(14),
@@ -881,16 +1010,16 @@ class _NBAState extends State<NBAScreen> {
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    Expanded(child: Text(str(a['anomaly_type'] ?? a['type'] ?? 'Anomaly'),
+                    Expanded(child: Text(str(a['anomaly_type'], 'Anomaly'),
                       style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700))),
-                    SevChip(str(a['severity'])),
+                    SevChip(sev),
                   ]),
                   const SizedBox(height: 4),
-                  Text(str(a['description'] ?? a['details'] ?? ''),
+                  Text(str(a['description'], ''),
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                     maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
-                  Text(timeAgo(a['created_at']),
+                  Text('Score $dev  ·  ${timeAgo(a['detected_at'])}',
                     style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
                 ])),
                 const SizedBox(width: 8),
@@ -909,6 +1038,391 @@ class _NBAState extends State<NBAScreen> {
       )),
     ]);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deep Inspection (DPI)
+// ─────────────────────────────────────────────────────────────────────────────
+// Mobile cut of the desktop /dpi page (real KPIs + sessions + files/DLP +
+// protocol anomalies + a single-shot AI inspector button) — not a literal
+// port of the 1300-line desktop page's HTTP/DNS/TLS/analytics/performance
+// sub-tabs or its raw response-action console; see class docs on parity.
+
+class DeepInspectionScreen extends StatefulWidget {
+  final DashboardApi api;
+  const DeepInspectionScreen({super.key, required this.api});
+  @override State<DeepInspectionScreen> createState() => _DeepInspectionState();
+}
+
+class _DeepInspectionState extends State<DeepInspectionScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  final _loadedTabs = <int>{};
+
+  Map<String,dynamic>? _overview;
+  List _sessions        = [];
+  List _files           = [];
+  List _dlp             = [];
+  List _protoAnomalies  = [];
+
+  bool _loadingOverview = true;
+  bool _loadingSessions = false;
+  bool _loadingFiles    = false;
+  bool _loadingProto    = false;
+
+  Map<String,dynamic>? _ai;
+  bool _aiLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 4, vsync: this);
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging) _loadTab(_tabs.index);
+    });
+    _loadOverview();
+  }
+
+  @override void dispose() { _tabs.dispose(); super.dispose(); }
+
+  Future<void> _loadTab(int i) async {
+    if (_loadedTabs.contains(i)) return;
+    _loadedTabs.add(i);
+    switch (i) {
+      case 1: await _loadSessions();  break;
+      case 2: await _loadFilesDlp();  break;
+      case 3: await _loadProtoAnomalies(); break;
+    }
+  }
+
+  Future<void> _loadOverview() async {
+    setState(() => _loadingOverview = true);
+    final r = await widget.api.dpiOverview();
+    if (!mounted) return;
+    setState(() { _overview = r; _loadingOverview = false; });
+  }
+
+  Future<void> _loadSessions() async {
+    setState(() => _loadingSessions = true);
+    final r = await widget.api.dpiSessions();
+    if (!mounted) return;
+    setState(() { _sessions = r; _loadingSessions = false; });
+  }
+
+  Future<void> _loadFilesDlp() async {
+    setState(() => _loadingFiles = true);
+    final f = await widget.api.dpiFiles();
+    final d = await widget.api.dpiDlp();
+    if (!mounted) return;
+    setState(() { _files = f; _dlp = d; _loadingFiles = false; });
+  }
+
+  Future<void> _loadProtoAnomalies() async {
+    setState(() => _loadingProto = true);
+    final r = await widget.api.dpiProtocolAnomalies();
+    if (!mounted) return;
+    setState(() { _protoAnomalies = r; _loadingProto = false; });
+  }
+
+  Future<void> _runAiInspect() async {
+    setState(() => _aiLoading = true);
+    final r = await widget.api.dpiAiInspect();
+    if (!mounted) return;
+    setState(() { _ai = r; _aiLoading = false; });
+  }
+
+  Future<void> _refreshCurrent() async {
+    switch (_tabs.index) {
+      case 0: return _loadOverview();
+      case 1: return _loadSessions();
+      case 2: return _loadFilesDlp();
+      case 3: return _loadProtoAnomalies();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      TabBar(
+        controller: _tabs,
+        isScrollable: true,
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        tabs: const [
+          Tab(text: 'Overview'), Tab(text: 'Sessions'),
+          Tab(text: 'Files & DLP'), Tab(text: 'Protocol Anomalies'),
+        ],
+      ),
+      Expanded(child: TabBarView(
+        controller: _tabs,
+        children: [
+          _buildOverview(),
+          _buildSessions(),
+          _buildFilesDlp(),
+          _buildProtoAnomalies(),
+        ],
+      )),
+    ]);
+  }
+
+  Widget _buildOverview() {
+    if (_loadingOverview) return xLoading();
+    final ov = _overview;
+    if (ov == null) {
+      return RefreshIndicator(onRefresh: _loadOverview,
+        child: const XEmptyState('DPI overview unavailable', icon: Icons.search_off));
+    }
+    final breakdown = (ov['finding_breakdown'] as List?) ?? [];
+    return RefreshIndicator(
+      onRefresh: _refreshCurrent,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 8, mainAxisSpacing: 8,
+            childAspectRatio: 1.7,
+            children: [
+              KpiCard(label: 'Total Findings', value: str(ov['total_findings'], '0'),
+                color: const Color(0xFFF97316), icon: Icons.search),
+              KpiCard(label: 'Alerted', value: str(ov['alerted_findings'], '0'),
+                color: const Color(0xFFEF4444), icon: Icons.notifications_active),
+              KpiCard(label: 'Sessions', value: str(ov['total_sessions'], '0'),
+                color: const Color(0xFF3B82F6), icon: Icons.hub),
+              KpiCard(label: 'Malware', value: str(ov['malware_detected'], '0'),
+                color: const Color(0xFFEF4444), icon: Icons.bug_report),
+              KpiCard(label: 'DLP Violations', value: str(ov['dlp_violations'], '0'),
+                color: const Color(0xFFF59E0B), icon: Icons.policy),
+              KpiCard(label: 'Protocol Anomalies', value: str(ov['protocol_anomalies'], '0'),
+                color: const Color(0xFF8B5CF6), icon: Icons.warning_amber),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            _MiniStat(label: 'Encrypted', value: str(ov['encrypted_traffic'], '0')),
+            _MiniStat(label: 'HTTP', value: str(ov['http_sessions'], '0')),
+            _MiniStat(label: 'DNS', value: str(ov['dns_queries'], '0')),
+            _MiniStat(label: 'TLS', value: str(ov['tls_connections'], '0'), last: true),
+          ]),
+          if (breakdown.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            SectionTitle('Finding Types'),
+            ...breakdown.map((f) {
+              final e = f as Map<String,dynamic>;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Expanded(child: Text(str(e['type']), style: const TextStyle(fontSize: 12.5))),
+                  Text(str(e['count'], '0'), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                ]),
+              );
+            }),
+          ],
+          const SizedBox(height: 16),
+          SectionTitle('AI Threat Inspector'),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            onPressed: _aiLoading ? null : _runAiInspect,
+            icon: _aiLoading
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.smart_toy_outlined, size: 16),
+            label: Text(_aiLoading ? 'Analyzing…' : 'Run AI Inspection'),
+          )),
+          if (_ai != null) ...[
+            const SizedBox(height: 10),
+            if (_ai!['error'] != null)
+              Text(str(_ai!['error']), style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)))
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(10)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    const Text('Risk: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    SevChip(str(_ai!['risk_level'], 'low')),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(str(_ai!['threat_summary']), style: const TextStyle(fontSize: 12.5)),
+                  if (_ai!['recommendations'] is List && (_ai!['recommendations'] as List).isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text('Recommendations', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey)),
+                    ...(_ai!['recommendations'] as List).map((r) => Text('• $r', style: const TextStyle(fontSize: 12))),
+                  ],
+                ]),
+              ),
+          ],
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessions() {
+    if (_loadingSessions) return xLoading();
+    if (_sessions.isEmpty) {
+      return RefreshIndicator(onRefresh: _loadSessions,
+        child: const XEmptyState('No active DPI sessions', icon: Icons.hub_outlined));
+    }
+    return RefreshIndicator(
+      onRefresh: _loadSessions,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+        itemCount: _sessions.length,
+        itemBuilder: (_, i) {
+          final s    = _sessions[i] as Map<String,dynamic>;
+          final susp = s['is_suspicious'] == true;
+          final col  = susp ? const Color(0xFFEF4444) : const Color(0xFF3B82F6);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: col.withValues(alpha: .25)),
+              color: col.withValues(alpha: .04)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(s['is_encrypted'] == true ? Icons.lock_outline : Icons.lock_open, size: 14, color: col),
+                const SizedBox(width: 6),
+                Expanded(child: Text(str(s['hostname']),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+                if (susp) const SevChip('high'),
+              ]),
+              const SizedBox(height: 4),
+              Text('${str(s['remote_address'])}  ·  ${str(s['app_proto'] ?? s['protocol'])}',
+                style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+              if (str(s['http_host'] ?? s['sni'], '').isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(str(s['http_host'] ?? s['sni']),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+              const SizedBox(height: 6),
+              Row(children: [
+                Text('${str(s['conn_count'], '0')} conns', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                const SizedBox(width: 10),
+                Text('last ${timeAgo(s['last_seen'])}', style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+              ]),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilesDlp() {
+    if (_loadingFiles) return xLoading();
+    // Files' JSON key is `finding_type`; DLP's real column is aliased to
+    // `category` (see DashboardApi.dpiDlp) — check both so neither list
+    // renders a blank type label.
+    final List<Map<String,dynamic>> combined = [
+      for (final f in _files) {...f as Map<String,dynamic>, '_kind': 'file'},
+      for (final d in _dlp)   {...d as Map<String,dynamic>, '_kind': 'dlp'},
+    ]..sort((a, b) => str(b['detected_at']).compareTo(str(a['detected_at'])));
+
+    if (combined.isEmpty) {
+      return RefreshIndicator(onRefresh: _loadFilesDlp,
+        child: const XEmptyState('No file or DLP findings', icon: Icons.shield_outlined));
+    }
+    return RefreshIndicator(
+      onRefresh: _loadFilesDlp,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+        itemCount: combined.length,
+        itemBuilder: (_, i) {
+          final f      = combined[i];
+          final col    = sevColor(str(f['severity']));
+          final isFile = f['_kind'] == 'file';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: col.withValues(alpha: .25)),
+              color: col.withValues(alpha: .04)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(isFile ? Icons.description_outlined : Icons.policy_outlined, size: 14, color: col),
+                const SizedBox(width: 6),
+                Expanded(child: Text(str(f['finding_type'] ?? f['category'], 'Finding'),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+                SevChip(str(f['severity'])),
+              ]),
+              const SizedBox(height: 4),
+              Text(str(f['description']),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 6),
+              Row(children: [
+                Expanded(child: Text(str(f['indicator']),
+                  style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontFamily: 'monospace'),
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Text(timeAgo(f['detected_at']), style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+              ]),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProtoAnomalies() {
+    if (_loadingProto) return xLoading();
+    if (_protoAnomalies.isEmpty) {
+      return RefreshIndicator(onRefresh: _loadProtoAnomalies,
+        child: const XEmptyState('No protocol anomalies', icon: Icons.rule_folder_outlined));
+    }
+    return RefreshIndicator(
+      onRefresh: _loadProtoAnomalies,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+        itemCount: _protoAnomalies.length,
+        itemBuilder: (_, i) {
+          final a   = _protoAnomalies[i] as Map<String,dynamic>;
+          final col = sevColor(str(a['severity']));
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: col.withValues(alpha: .25)),
+              color: col.withValues(alpha: .04)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(str(a['finding_type'], 'Anomaly'),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
+                SevChip(str(a['severity'])),
+              ]),
+              const SizedBox(height: 4),
+              Text(str(a['description']),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 6),
+              Text(timeAgo(a['detected_at']), style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final String label, value;
+  final bool last;
+  const _MiniStat({required this.label, required this.value, this.last = false});
+  @override
+  Widget build(BuildContext context) => Expanded(child: Container(
+    margin: EdgeInsets.only(right: last ? 0 : 6),
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(8)),
+    child: Column(children: [
+      Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+      Text(label, style: const TextStyle(fontSize: 9.5, color: Colors.grey)),
+    ]),
+  ));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -973,9 +1487,12 @@ class _ClustersState extends State<ClustersScreen> {
                   backgroundColor: const Color(0xFF6366F1).withValues(alpha: .12),
                   child: Text('$cnt', style: const TextStyle(
                     fontWeight: FontWeight.w900, color: Color(0xFF6366F1)))),
-                title: Text(str(cl['cluster_name'] ?? cl['name'] ?? 'Cluster $id'),
+                // models.AlertCluster (models/dfir.go:48) has no cluster_name/
+                // name/severity/created_at — real fields are rule_name (title),
+                // mitre_technique, and first_seen/last_seen (no severity at all).
+                title: Text(str(cl['rule_name'] ?? cl['cluster_key'], 'Cluster $id'),
                   style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('${str(cl['severity'] ?? 'mixed')} · ${timeAgo(cl['created_at'])}'),
+                subtitle: Text('${str(cl['mitre_technique'], 'uncategorized')} · last seen ${timeAgo(cl['last_seen'])}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.do_not_disturb, color: Color(0xFFF97316)),
                   tooltip: 'Suppress',
@@ -1023,17 +1540,19 @@ class _CorrelationState extends State<CorrelationScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return xLoading();
-    return RefreshIndicator(
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(onPressed: _createRule, child: const Icon(Icons.add)),
+      body: RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
         children: [
           Row(children: [
-            KpiCard(label: 'Rules',   value: '${_rules.length}',
-              color: const Color(0xFF3B82F6), icon: Icons.rule),
+            Expanded(child: KpiCard(label: 'Rules',   value: '${_rules.length}',
+              color: const Color(0xFF3B82F6), icon: Icons.rule)),
             const SizedBox(width: 8),
-            KpiCard(label: 'Matches', value: '${_matches.length}',
-              color: const Color(0xFFF97316), icon: Icons.link),
+            Expanded(child: KpiCard(label: 'Matches', value: '${_matches.length}',
+              color: const Color(0xFFF97316), icon: Icons.link)),
           ]),
           const SizedBox(height: 16),
           SectionTitle('Correlation Rules'),
@@ -1053,7 +1572,7 @@ class _CorrelationState extends State<CorrelationScreen> {
                   },
                 ),
                 title: Text(str(rule['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('${str(rule['severity'])} · window: ${str(rule['window'] ?? rule['time_window'] ?? '?')}'),
+                subtitle: Text('${str(rule['severity'])} · window: ${str(rule['window_minutes'])}min'),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
                   onPressed: () async {
@@ -1069,6 +1588,58 @@ class _CorrelationState extends State<CorrelationScreen> {
           }),
         ],
       ),
+    ));
+  }
+
+  // Correlation rules support several types (simple/event_count/temporal/
+  // temporal_ordered with multi-stage configs) — mobile exposes the
+  // simplest real one (event_count: "N matches of rule X within Y minutes")
+  // rather than a full stage-builder, matching the established simplified-form
+  // precedent for other rule types (Sigma/YARA content is a plain text field too).
+  void _createRule() {
+    final nameCtrl   = TextEditingController();
+    final ruleCtrl   = TextEditingController();
+    final windowCtrl = TextEditingController(text: '15');
+    final threshCtrl = TextEditingController(text: '3');
+    String sev = 'high';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Correlation Rule'),
+          xField(nameCtrl, 'Rule Name'),
+          const SizedBox(height: 10),
+          xField(ruleCtrl, 'Match alert rule_name'),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: xField(windowCtrl, 'Window (min)', keyboardType: TextInputType.number)),
+            const SizedBox(width: 10),
+            Expanded(child: xField(threshCtrl, 'Threshold (>1)', keyboardType: TextInputType.number)),
+          ]),
+          const SizedBox(height: 10),
+          xDropdown('Severity', sev, ['critical','high','medium','low'], (v) => ss(() => sev = v!)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createCorrelationRule({
+                'name': nameCtrl.text.trim(),
+                'rule_name': ruleCtrl.text.trim(),
+                'severity': sev,
+                'correlation_type': 'event_count',
+                'source_type': 'alert',
+                'window_minutes': int.tryParse(windowCtrl.text) ?? 15,
+                'threshold': int.tryParse(threshCtrl.text) ?? 3,
+                'enabled': true,
+              });
+              if (context.mounted) xSnack(context, ok ? 'Rule created' : 'Failed — check window/threshold', error: !ok);
+              _load();
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      )),
     );
   }
 }
@@ -1209,22 +1780,25 @@ class _SuppressionState extends State<SuppressionScreen> {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
               itemCount: _rules.length,
               itemBuilder: (_, i) {
+                // sup_rules: rule_name, status ("draft"|"active"|...),
+                // conditions — not name/filter/enabled (a different, older
+                // table those keys belonged to).
                 final r       = _rules[i] as Map<String,dynamic>;
                 final id      = r['id'] as int? ?? 0;
-                final enabled = r['enabled'] == true;
+                final enabled = str(r['status']) == 'active';
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     leading: Switch(
                       value: enabled,
-                      onChanged: (_) async {
-                        final ok = await widget.api.toggleSuppression(id);
+                      onChanged: (v) async {
+                        final ok = await widget.api.updateSuppressionStatus(id, v ? 'active' : 'draft');
                         if (context.mounted) xSnack(context, ok ? 'Updated' : 'Failed', error: !ok);
                         _load();
                       },
                     ),
-                    title: Text(str(r['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(str(r['filter'] ?? r['condition'] ?? '')),
+                    title: Text(str(r['rule_name']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text('${str(r['suppression_type'], '')}  ·  ${str(r['conditions'], '')}'),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
                       onPressed: () async {
@@ -1256,13 +1830,13 @@ class _SuppressionState extends State<SuppressionScreen> {
             const SizedBox(height: 16),
             xField(nameCtrl,   'Rule Name'),
             const SizedBox(height: 10),
-            xField(filterCtrl, 'Filter / Condition'),
+            xField(filterCtrl, 'Conditions (free text)'),
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: FilledButton(
               onPressed: () async {
                 Navigator.pop(context);
                 final ok = await widget.api.createSuppressionRule({
-                  'name': nameCtrl.text, 'filter': filterCtrl.text, 'enabled': true,
+                  'rule_name': nameCtrl.text, 'conditions': filterCtrl.text,
                 });
                 if (context.mounted) xSnack(context, ok ? 'Rule created' : 'Failed', error: !ok);
                 _load();

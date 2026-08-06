@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -47,7 +49,7 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
           return Card(child: ListTile(
             leading: const Icon(Icons.travel_explore),
             title: Text(str(t['name'])),
-            subtitle: Text('${str(t['platform'] ?? 'any')}  ·  ${str(t['description'] ?? '')}', maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(str(t['description'] ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: PopupMenuButton<String>(
               onSelected: (v) async {
                 if (v == 'run') _executeHunt(id);
@@ -74,7 +76,6 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
     final nameCtrl  = TextEditingController();
     final descCtrl  = TextEditingController();
     final queryCtrl = TextEditingController();
-    String platform = 'any';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
@@ -85,14 +86,16 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
           const SizedBox(height: 10),
           xField(descCtrl, 'Description'),
           const SizedBox(height: 10),
-          xField(queryCtrl, 'Query', maxLines: 3),
-          const SizedBox(height: 10),
-          xDropdown('Platform', platform, ['any','windows','linux','macos'], (v) => ss(() => platform = v!)),
+          xField(queryCtrl, 'KQL Query', maxLines: 3),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createHuntTemplate({'name': nameCtrl.text.trim(), 'description': descCtrl.text.trim(), 'query': queryCtrl.text.trim(), 'platform': platform});
+              // models.HuntTemplate (backend) has no platform field, and the
+              // query column is kql_query, not query — the platform picker
+              // used to send did nothing, and the query text was silently
+              // discarded on every save.
+              await widget.api.createHuntTemplate({'name': nameCtrl.text.trim(), 'description': descCtrl.text.trim(), 'kql_query': queryCtrl.text.trim()});
               _load();
             },
             child: const Text('Create'),
@@ -146,7 +149,7 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
         return Card(child: ListTile(
           leading: Icon(Icons.check_circle, color: statusColor(str(r['status']))),
           title: Text(str(r['template_name'] ?? r['name'] ?? 'Hunt ${r['id']}')),
-          subtitle: Text('${str(r['status'])}  ·  ${r['results_count'] ?? 0} results  ·  ${timeAgo(r['started_at'] ?? r['created_at'])}'),
+          subtitle: Text('${str(r['status'])}  ·  ${r['hit_count'] ?? 0} hits  ·  ${timeAgo(r['started_at'] ?? r['created_at'])}'),
         ));
       },
     ),
@@ -189,32 +192,38 @@ class _ThreatActorsState extends State<ThreatActorsScreen> {
               leading: CircleAvatar(backgroundColor: Colors.red.shade800, child: Text(str(a['name'], 'A')[0].toUpperCase(), style: const TextStyle(color: Colors.white))),
               title: Text(str(a['name'])),
               subtitle: Text('${str(a['aliases'] ?? '')}  ·  ${str(a['alert_count'] ?? 0)} alerts', maxLines: 1),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () async {
-                  if (await xConfirm(context, 'Delete Actor', 'Delete this threat actor?')) {
-                    await widget.api.deleteThreatActor(id);
-                    _load();
+              trailing: PopupMenuButton<String>(
+                onSelected: (v) async {
+                  if (v == 'edit') { _create(existing: a); return; }
+                  if (v == 'delete') {
+                    if (await xConfirm(context, 'Delete Actor', 'Delete this threat actor?')) {
+                      await widget.api.deleteThreatActor(id);
+                      _load();
+                    }
                   }
                 },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                ],
               ),
             ));
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _create, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(onPressed: () => _create(), child: const Icon(Icons.add)),
     );
   }
 
-  void _create() {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
+  void _create({Map<String,dynamic>? existing}) {
+    final nameCtrl = TextEditingController(text: existing != null ? str(existing['name']) : '');
+    final descCtrl = TextEditingController(text: existing != null ? str(existing['description']) : '');
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('New Threat Actor'),
+          sheetHeader(existing != null ? 'Edit Threat Actor' : 'New Threat Actor'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(descCtrl, 'Description', maxLines: 3),
@@ -222,10 +231,13 @@ class _ThreatActorsState extends State<ThreatActorsScreen> {
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createThreatActor({'name': nameCtrl.text.trim(), 'description': descCtrl.text.trim(), 'aliases': [], 'tags': []});
+              final ok = existing != null
+                ? await widget.api.updateThreatActor(existing['id'] as int? ?? 0, {'name': nameCtrl.text.trim(), 'description': descCtrl.text.trim()})
+                : await widget.api.createThreatActor({'name': nameCtrl.text.trim(), 'description': descCtrl.text.trim(), 'aliases': [], 'tags': []});
+              if (context.mounted) xSnack(context, ok ? (existing != null ? 'Actor updated' : 'Actor created') : 'Failed', error: !ok);
               _load();
             },
-            child: const Text('Create'),
+            child: Text(existing != null ? 'Save' : 'Create'),
           )),
         ]),
       ),
@@ -281,6 +293,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
             subtitle: Text('${str(ioc['type'])}  ·  ${str(ioc['description'] ?? '')}', maxLines: 1),
             trailing: PopupMenuButton<String>(
               onSelected: (v) async {
+                if (v == 'edit')   { _iocForm(existing: ioc); return; }
                 if (v == 'toggle') await widget.api.toggleIoc(id, !enabled);
                 if (v == 'delete') {
                   if (context.mounted && await xConfirm(context, 'Delete IOC', 'Delete this IOC?')) await widget.api.deleteIoc(id);
@@ -288,6 +301,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
                 _load();
               },
               itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 PopupMenuItem(value: 'toggle', child: Text(enabled ? 'Disable' : 'Enable')),
                 const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
               ],
@@ -296,19 +310,20 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
         },
       ),
     ),
-    floatingActionButton: FloatingActionButton(onPressed: _createIoc, child: const Icon(Icons.add)),
+    floatingActionButton: FloatingActionButton(onPressed: () => _iocForm(), child: const Icon(Icons.add)),
   );
 
-  void _createIoc() {
-    final valCtrl  = TextEditingController();
-    final descCtrl = TextEditingController();
-    String type = 'ip', sev = 'high';
+  void _iocForm({Map<String,dynamic>? existing}) {
+    final valCtrl  = TextEditingController(text: existing != null ? str(existing['value']) : '');
+    final descCtrl = TextEditingController(text: existing != null ? str(existing['description']) : '');
+    String type = existing != null ? str(existing['type'], 'ip') : 'ip';
+    String sev  = existing != null ? str(existing['severity'], 'high') : 'high';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('New IOC'),
+          sheetHeader(existing != null ? 'Edit IOC' : 'New IOC'),
           xField(valCtrl, 'Value (IP/Domain/Hash)'),
           const SizedBox(height: 10),
           xDropdown('Type', type, ['ip','domain','hash','url','email'], (v) => ss(() => type = v!)),
@@ -320,10 +335,14 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createIoc({'type': type, 'value': valCtrl.text.trim(), 'severity': sev, 'description': descCtrl.text.trim()});
+              final body = {'type': type, 'value': valCtrl.text.trim(), 'severity': sev, 'description': descCtrl.text.trim()};
+              final ok = existing != null
+                ? await widget.api.updateIoc(existing['id'] as int? ?? 0, body)
+                : await widget.api.createIoc(body);
+              if (context.mounted) xSnack(context, ok ? (existing != null ? 'IOC updated' : 'IOC created') : 'Failed', error: !ok);
               _load();
             },
-            child: const Text('Create'),
+            child: Text(existing != null ? 'Save' : 'Create'),
           )),
         ]),
       )),
@@ -346,13 +365,15 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
             subtitle: Text('${str(f['format'] ?? '')}  ·  Last sync: ${timeAgo(f['last_synced_at'])}'),
             trailing: PopupMenuButton<String>(
               onSelected: (v) async {
-                if (v == 'sync')   { await widget.api.syncThreatFeed(id); xSnack(context, 'Sync started'); }
+                if (v == 'edit')   { _feedForm(existing: f); return; }
+                if (v == 'sync')   { await widget.api.syncThreatFeed(id); if (context.mounted) xSnack(context, 'Sync started'); }
                 if (v == 'delete') {
                   if (context.mounted && await xConfirm(context, 'Delete', 'Delete this feed?')) await widget.api.deleteThreatFeed(id);
                 }
                 _load();
               },
               itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit',   child: Text('Edit')),
                 PopupMenuItem(value: 'sync',   child: Text('Sync Now')),
                 PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
               ],
@@ -361,19 +382,19 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
         },
       ),
     ),
-    floatingActionButton: FloatingActionButton(onPressed: _createFeed, child: const Icon(Icons.add)),
+    floatingActionButton: FloatingActionButton(onPressed: () => _feedForm(), child: const Icon(Icons.add)),
   );
 
-  void _createFeed() {
-    final nameCtrl = TextEditingController();
-    final urlCtrl  = TextEditingController();
-    String format = 'stix';
+  void _feedForm({Map<String,dynamic>? existing}) {
+    final nameCtrl = TextEditingController(text: existing != null ? str(existing['name']) : '');
+    final urlCtrl  = TextEditingController(text: existing != null ? str(existing['url']) : '');
+    String format = existing != null ? str(existing['format'], 'stix') : 'stix';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('New Threat Feed'),
+          sheetHeader(existing != null ? 'Edit Threat Feed' : 'New Threat Feed'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
           xField(urlCtrl, 'URL', keyboardType: TextInputType.url),
@@ -383,10 +404,14 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createThreatFeed({'name': nameCtrl.text.trim(), 'url': urlCtrl.text.trim(), 'format': format, 'enabled': true});
+              final body = {'name': nameCtrl.text.trim(), 'url': urlCtrl.text.trim(), 'format': format, 'enabled': true};
+              final ok = existing != null
+                ? await widget.api.updateThreatFeed(existing['id'] as int? ?? 0, body)
+                : await widget.api.createThreatFeed(body);
+              if (context.mounted) xSnack(context, ok ? (existing != null ? 'Feed updated' : 'Feed created') : 'Failed', error: !ok);
               _load();
             },
-            child: const Text('Create'),
+            child: Text(existing != null ? 'Save' : 'Create'),
           )),
         ]),
       )),
@@ -433,12 +458,14 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
               subtitle: Text('${str(r['severity'] ?? r['level'])}  ·  ${str(r['category'] ?? r['source'] ?? '')}', style: const TextStyle(fontSize: 11)),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
+                  if (v == 'edit')   { _create(existing: r); return; }
                   if (v == 'toggle') { await widget.api.toggleSigma(id, !enabled); _load(); }
                   if (v == 'delete') {
                     if (context.mounted && await xConfirm(context, 'Delete Rule', 'Delete this Sigma rule?')) { await widget.api.deleteSigma(id); _load(); }
                   }
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
                   PopupMenuItem(value: 'toggle', child: Text(enabled ? 'Disable' : 'Enable')),
                   const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
                 ],
@@ -447,20 +474,20 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _create, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(onPressed: () => _create(), child: const Icon(Icons.add)),
     );
   }
 
-  void _create() {
-    final nameCtrl    = TextEditingController();
-    final contentCtrl = TextEditingController();
-    String sev = 'high';
+  void _create({Map<String,dynamic>? existing}) {
+    final nameCtrl    = TextEditingController(text: existing != null ? str(existing['name'] ?? existing['title']) : '');
+    final contentCtrl = TextEditingController(text: existing != null ? str(existing['content']) : '');
+    String sev = existing != null ? str(existing['severity'] ?? existing['level'], 'high') : 'high';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('New Sigma Rule'),
+          sheetHeader(existing != null ? 'Edit Sigma Rule' : 'New Sigma Rule'),
           xField(nameCtrl, 'Rule Name'),
           const SizedBox(height: 10),
           xDropdown('Severity', sev, ['critical','high','medium','low'], (v) => ss(() => sev = v!)),
@@ -470,10 +497,14 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createSigma({'name': nameCtrl.text.trim(), 'content': contentCtrl.text.trim(), 'severity': sev, 'enabled': true});
+              final body = {'name': nameCtrl.text.trim(), 'content': contentCtrl.text.trim(), 'severity': sev, 'enabled': true};
+              final ok = existing != null
+                ? await widget.api.updateSigma(existing['id'] as int? ?? 0, body)
+                : await widget.api.createSigma(body);
+              if (context.mounted) xSnack(context, ok ? (existing != null ? 'Rule updated' : 'Rule created') : 'Failed', error: !ok);
               _load();
             },
-            child: const Text('Create'),
+            child: Text(existing != null ? 'Save' : 'Create'),
           )),
         ]),
       )),
@@ -520,12 +551,14 @@ class _YaraRulesState extends State<YaraRulesScreen> {
               subtitle: Text('${r['match_count'] ?? 0} matches  ·  ${timeAgo(r['created_at'])}'),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
+                  if (v == 'edit')   { _create(existing: r); return; }
                   if (v == 'toggle') { await widget.api.toggleYara(id, !enabled); _load(); }
                   if (v == 'delete') {
                     if (context.mounted && await xConfirm(context, 'Delete Rule', 'Delete this YARA rule?')) { await widget.api.deleteYara(id); _load(); }
                   }
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
                   PopupMenuItem(value: 'toggle', child: Text(enabled ? 'Disable' : 'Enable')),
                   const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
                 ],
@@ -534,19 +567,19 @@ class _YaraRulesState extends State<YaraRulesScreen> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _create, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(onPressed: () => _create(), child: const Icon(Icons.add)),
     );
   }
 
-  void _create() {
-    final nameCtrl    = TextEditingController();
-    final contentCtrl = TextEditingController();
+  void _create({Map<String,dynamic>? existing}) {
+    final nameCtrl    = TextEditingController(text: existing != null ? str(existing['name']) : '');
+    final contentCtrl = TextEditingController(text: existing != null ? str(existing['content']) : '');
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('New YARA Rule'),
+          sheetHeader(existing != null ? 'Edit YARA Rule' : 'New YARA Rule'),
           xField(nameCtrl, 'Rule Name'),
           const SizedBox(height: 10),
           xField(contentCtrl, 'Rule Content', maxLines: 8),
@@ -554,10 +587,14 @@ class _YaraRulesState extends State<YaraRulesScreen> {
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createYara({'name': nameCtrl.text.trim(), 'content': contentCtrl.text.trim(), 'enabled': true});
+              final body = {'name': nameCtrl.text.trim(), 'content': contentCtrl.text.trim(), 'enabled': true};
+              final ok = existing != null
+                ? await widget.api.updateYara(existing['id'] as int? ?? 0, body)
+                : await widget.api.createYara(body);
+              if (context.mounted) xSnack(context, ok ? (existing != null ? 'Rule updated' : 'Rule created') : 'Failed', error: !ok);
               _load();
             },
-            child: const Text('Create'),
+            child: Text(existing != null ? 'Save' : 'Create'),
           )),
         ]),
       ),
@@ -658,6 +695,7 @@ class _LogSearchState extends State<LogSearchScreen> {
   final _qCtrl = TextEditingController();
   List _results = [], _saved = [];
   bool _searching = false;
+  bool _aiBusy    = false;
 
   @override void initState() { super.initState(); _loadSaved(); }
   @override void dispose() { _qCtrl.dispose(); super.dispose(); }
@@ -676,11 +714,77 @@ class _LogSearchState extends State<LogSearchScreen> {
     setState(() { _results = r; _searching = false; });
   }
 
+  Future<void> _askAI() async {
+    final qCtrl = TextEditingController();
+    final question = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ask AI'),
+        content: TextField(controller: qCtrl, maxLines: 2,
+          decoration: const InputDecoration(hintText: 'e.g. failed logins from an unusual country')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, qCtrl.text.trim()), child: const Text('Generate')),
+        ],
+      ),
+    );
+    if (question == null || question.isEmpty) return;
+    setState(() => _aiBusy = true);
+    final r = await widget.api.aiLogQuery(question);
+    if (!mounted) return;
+    setState(() => _aiBusy = false);
+    if (r == null || r['error'] != null) {
+      xSnack(context, r?['error'] != null ? str(r!['error']) : 'AI query failed', error: true);
+      return;
+    }
+    _qCtrl.text = str(r['query']);
+    _search();
+  }
+
+  Future<void> _explainResults() async {
+    if (_results.isEmpty) return;
+    setState(() => _aiBusy = true);
+    final samples = _results.take(10).map((l) => str((l as Map)['message'] ?? l['raw'])).toList();
+    final r = await widget.api.aiLogExplain(_qCtrl.text.trim(), _results.length, samples);
+    if (!mounted) return;
+    setState(() => _aiBusy = false);
+    if (r == null || r['error'] != null) {
+      xSnack(context, r?['error'] != null ? str(r!['error']) : 'Explain failed', error: true);
+      return;
+    }
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('AI Explanation'),
+      content: SingleChildScrollView(child: Text(str(r['explanation']))),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+    ));
+  }
+
+  Future<void> _buildDetectionRule() async {
+    if (_qCtrl.text.trim().isEmpty) return;
+    setState(() => _aiBusy = true);
+    final samples = _results.take(10).map((l) => str((l as Map)['message'] ?? l['raw'])).toList();
+    final r = await widget.api.buildDetection('sigma', _qCtrl.text.trim(), 'Detection from log search', samples);
+    if (!mounted) return;
+    setState(() => _aiBusy = false);
+    if (r == null || r['error'] != null) {
+      xSnack(context, r?['error'] != null ? str(r!['error']) : 'Failed', error: true);
+      return;
+    }
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('Generated Sigma Rule'),
+      content: SingleChildScrollView(child: SelectableText(str(r['rule']), style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
+      actions: [
+        TextButton(onPressed: () => copyToClipboard(context, str(r['rule'])), child: const Text('Copy')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+      ],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(children: [
       Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
         child: Row(children: [
           Expanded(child: TextField(
             controller: _qCtrl,
@@ -689,6 +793,24 @@ class _LogSearchState extends State<LogSearchScreen> {
           )),
           const SizedBox(width: 8),
           FilledButton(onPressed: _search, child: const Text('Search')),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(children: [
+          TextButton.icon(
+            onPressed: _aiBusy ? null : _askAI,
+            icon: const Icon(Icons.psychology_outlined, size: 15),
+            label: const Text('Ask AI', style: TextStyle(fontSize: 12))),
+          TextButton.icon(
+            onPressed: (_aiBusy || _results.isEmpty) ? null : _explainResults,
+            icon: const Icon(Icons.auto_awesome_outlined, size: 15),
+            label: const Text('Explain Results', style: TextStyle(fontSize: 12))),
+          TextButton.icon(
+            onPressed: (_aiBusy || _qCtrl.text.trim().isEmpty) ? null : _buildDetectionRule,
+            icon: const Icon(Icons.rule_outlined, size: 15),
+            label: const Text('Build Rule', style: TextStyle(fontSize: 12))),
+          if (_aiBusy) const Padding(padding: EdgeInsets.only(left: 8), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))),
         ]),
       ),
       if (_saved.isNotEmpty) ...[
@@ -748,6 +870,227 @@ class _LogSearchState extends State<LogSearchScreen> {
   }
 }
 
+// ── ES Query ─────────────────────────────────────────────────────────────────
+// Mobile-appropriate cut of the desktop ES Query workbench (index picker +
+// raw DSL editor + AI Explain + run), not a full syntax-highlighting IDE —
+// see the desktop /elastic-query page for the full-featured version.
+
+class EsQueryScreen extends StatefulWidget {
+  final DashboardApi api;
+  const EsQueryScreen({super.key, required this.api});
+  @override State<EsQueryScreen> createState() => _EsQueryState();
+}
+
+class _EsQueryState extends State<EsQueryScreen> {
+  final _dslCtrl = TextEditingController(
+    text: '{\n  "query": { "match_all": {} },\n  "size": 20\n}');
+
+  List<Map<String,dynamic>> _indices = [];
+  String? _index;
+  Map<String,dynamic>? _health;
+  Map<String,dynamic>? _result;
+  Map<String,dynamic>? _explain;
+  String _error = '';
+  bool _loadingMeta = true;
+  bool _running     = false;
+  bool _explaining  = false;
+
+  @override void initState() { super.initState(); _loadMeta(); }
+  @override void dispose() { _dslCtrl.dispose(); super.dispose(); }
+
+  Future<void> _loadMeta() async {
+    setState(() => _loadingMeta = true);
+    final health  = await widget.api.esHealth();
+    final indices = (await widget.api.esIndices()).cast<Map<String,dynamic>>();
+    if (!mounted) return;
+    setState(() {
+      _health  = health;
+      _indices = indices;
+      if (_index == null && indices.isNotEmpty) {
+        final preferred = indices.firstWhere(
+          (i) => str(i['index']).startsWith('xcloak-logs-'),
+          orElse: () => indices.first);
+        _index = str(preferred['index']);
+      }
+      _loadingMeta = false;
+    });
+  }
+
+  Map<String,dynamic>? _parsedDsl() {
+    try { return jsonDecode(_dslCtrl.text) as Map<String,dynamic>; } catch (_) { return null; }
+  }
+
+  Future<void> _run() async {
+    final dsl = _parsedDsl();
+    if (dsl == null) { setState(() => _error = 'Invalid JSON — fix DSL syntax'); return; }
+    setState(() { _running = true; _error = ''; _result = null; });
+    final r = await widget.api.esQuery(_index ?? '', dsl);
+    if (!mounted) return;
+    setState(() {
+      _running = false;
+      if (r == null) { _error = 'Query failed'; }
+      else if (r['error'] != null) { _error = str(r['error']); }
+      else { _result = r; }
+    });
+  }
+
+  Future<void> _runExplain() async {
+    final dsl = _parsedDsl();
+    if (dsl == null) { setState(() => _error = 'Invalid JSON — fix DSL syntax'); return; }
+    setState(() { _explaining = true; _explain = null; });
+    final r = await widget.api.esExplain(_index ?? '', dsl);
+    if (!mounted) return;
+    setState(() => _explaining = false);
+    if (r != null && r['error'] == null) setState(() => _explain = r);
+    else if (mounted) xSnack(context, r?['error'] != null ? str(r!['error']) : 'Explain failed', error: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loadingMeta) return xLoading();
+    final cs = Theme.of(context).colorScheme;
+    final enabled = str(_health?['status']) != 'not_configured';
+    final hitsObj = _result?['hits'] as Map<String,dynamic>?;
+    final hits    = (hitsObj?['hits'] as List?) ?? [];
+    final total   = _result?['total'] ?? (hitsObj?['total'] as Map?)?['value'] ?? 0;
+
+    return RefreshIndicator(
+      onRefresh: _loadMeta,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Row(children: [
+            Icon(enabled ? Icons.check_circle : Icons.error_outline, size: 14,
+              color: enabled ? const Color(0xFF22C55E) : Colors.grey),
+            const SizedBox(width: 6),
+            Expanded(child: Text(
+              enabled ? 'Elasticsearch connected' : 'Elasticsearch not configured on this server',
+              style: TextStyle(fontSize: 12, color: enabled ? const Color(0xFF22C55E) : Colors.grey))),
+          ]),
+          const SizedBox(height: 12),
+          if (_indices.isEmpty)
+            const XEmptyState('No indices available', icon: Icons.dns_outlined)
+          else
+            DropdownButtonFormField<String>(
+              initialValue: _indices.any((i) => str(i['index']) == _index) ? _index : null,
+              decoration: const InputDecoration(labelText: 'Index', isDense: true),
+              items: _indices.map((i) => DropdownMenuItem(
+                value: str(i['index']),
+                child: Text('${str(i['index'])}  (${str(i['docs_count'], '0')} docs)',
+                  overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: (v) => setState(() => _index = v),
+            ),
+          const SizedBox(height: 14),
+          SectionTitle('Query DSL'),
+          TextField(
+            controller: _dslCtrl,
+            maxLines: 10,
+            minLines: 6,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            decoration: InputDecoration(
+              filled: true, fillColor: cs.surfaceContainerLow,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: FilledButton.icon(
+              onPressed: _running ? null : _run,
+              icon: _running
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.play_arrow, size: 16),
+              label: Text(_running ? 'Running…' : 'Run Query'),
+            )),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: _explaining ? null : _runExplain,
+              icon: _explaining
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.psychology_outlined, size: 16),
+              label: const Text('AI Explain'),
+            ),
+          ]),
+          if (_error.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: .3))),
+              child: Text(_error, style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444))),
+            ),
+          ],
+          if (_explain != null) ...[
+            const SizedBox(height: 14),
+            SectionTitle('AI Explanation'),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(10)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if (str(_explain!['execution_plan'], '').isNotEmpty)
+                  InfoPair('Execution', str(_explain!['execution_plan'])),
+                if (str(_explain!['scoring'], '').isNotEmpty)
+                  InfoPair('Scoring', str(_explain!['scoring'])),
+                if (str(_explain!['analyzer'], '').isNotEmpty)
+                  InfoPair('Analyzer', str(_explain!['analyzer'])),
+                if (_explain!['optimizations'] is List && (_explain!['optimizations'] as List).isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  const Text('Optimizations', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  ...(_explain!['optimizations'] as List).map((o) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• $o', style: const TextStyle(fontSize: 12)),
+                  )),
+                ],
+              ]),
+            ),
+          ],
+          if (_result != null) ...[
+            const SizedBox(height: 14),
+            SectionTitle('Results',
+              trailing: Text('$total hits · ${_result!['took'] ?? 0}ms',
+                style: const TextStyle(fontSize: 11, color: Colors.grey))),
+            if (hits.isEmpty)
+              const XEmptyState('No hits', icon: Icons.search_off)
+            else
+              ...hits.map((h) {
+                final hit    = h as Map<String,dynamic>;
+                final source = (hit['_source'] as Map<String,dynamic>?) ?? {};
+                final pretty = const JsonEncoder.withIndent('  ').convert(source);
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cs.outlineVariant)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Expanded(child: Text(str(hit['_id']),
+                        style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontFamily: 'monospace'))),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 14),
+                        padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                        onPressed: () => copyToClipboard(context, pretty)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(pretty,
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      maxLines: 8, overflow: TextOverflow.ellipsis),
+                  ]),
+                );
+              }),
+          ],
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Log Sources ───────────────────────────────────────────────────────────────
 
 class LogSourcesScreen extends StatefulWidget {
@@ -778,18 +1121,30 @@ class _LogSourcesState extends State<LogSourcesScreen> {
           padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),
           itemCount: _sources.length,
           itemBuilder: (_, i) {
+            // models.LogSource: source_type ("syslog"|"http"), ip_address,
+            // enabled (bool) — there is no port/status/host field.
             final s = _sources[i] as Map<String,dynamic>;
-            final id = s['id'] as int? ?? 0;
+            final id      = s['id'] as int? ?? 0;
+            final enabled = s['enabled'] == true;
             return Card(child: ListTile(
-              leading: Icon(Icons.source, color: statusColor(str(s['status'] ?? 'active'))),
+              leading: Icon(Icons.source, color: enabled ? const Color(0xFF22C55E) : Colors.grey),
               title: Text(str(s['name'])),
-              subtitle: Text('${str(s['type'])}  ·  ${str(s['host'] ?? '')}:${str(s['port'] ?? '')}'),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () async {
-                  if (await xConfirm(context, 'Delete Source', 'Delete this log source?')) { await widget.api.deleteLogSource(id); _load(); }
-                },
-              ),
+              subtitle: Text('${str(s['source_type'])}  ·  ${str(s['ip_address'], 'any')}  ·  ${str(s['event_count'], '0')} events'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                Switch(
+                  value: enabled,
+                  onChanged: (v) async {
+                    await widget.api.updateLogSource(id, {'enabled': v});
+                    _load();
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: () async {
+                    if (await xConfirm(context, 'Delete Source', 'Delete this log source?')) { await widget.api.deleteLogSource(id); _load(); }
+                  },
+                ),
+              ]),
             ));
           },
         ),
@@ -800,9 +1155,11 @@ class _LogSourcesState extends State<LogSourcesScreen> {
 
   void _create() {
     final nameCtrl = TextEditingController();
-    final hostCtrl = TextEditingController();
-    final portCtrl = TextEditingController();
-    String type = 'syslog', proto = 'udp';
+    final ipCtrl   = TextEditingController();
+    // CreateLogSource only accepts source_type "syslog" | "http" — an
+    // earlier version sent an arbitrary type/host/port/protocol shape the
+    // handler doesn't recognize at all, so every create attempt 400'd.
+    String type = 'syslog';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
@@ -811,20 +1168,19 @@ class _LogSourcesState extends State<LogSourcesScreen> {
           sheetHeader('New Log Source'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
-          xDropdown('Type', type, ['syslog','winlog','filebeat','json','csv'], (v) => ss(() => type = v!)),
+          xDropdown('Type', type, ['syslog','http'], (v) => ss(() => type = v!)),
           const SizedBox(height: 10),
-          xField(hostCtrl, 'Host / IP'),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: xField(portCtrl, 'Port', keyboardType: TextInputType.number)),
-            const SizedBox(width: 10),
-            Expanded(child: xDropdown('Protocol', proto, ['udp','tcp','tls'], (v) => ss(() => proto = v!))),
-          ]),
+          xField(ipCtrl, 'Source IP (blank = any, syslog only)'),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await widget.api.createLogSource({'name': nameCtrl.text.trim(), 'type': type, 'host': hostCtrl.text.trim(), 'port': int.tryParse(portCtrl.text) ?? 514, 'protocol': proto});
+              final ok = await widget.api.createLogSource({
+                'name': nameCtrl.text.trim(),
+                'source_type': type,
+                'ip_address': ipCtrl.text.trim(),
+              });
+              if (context.mounted) xSnack(context, ok ? 'Log source created' : 'Failed', error: !ok);
               _load();
             },
             child: const Text('Create'),
@@ -869,8 +1225,8 @@ class _ThreatHuntState extends State<ThreatHuntScreen> {
           return Card(child: ListTile(
             leading: Icon(Icons.travel_explore, color: statusColor(str(r['status']))),
             title: Text(str(r['template_name'] ?? r['name'] ?? 'Hunt ${r['id']}')),
-            subtitle: Text('${str(r['status'])}  ·  ${r['results_count'] ?? 0} results  ·  ${timeAgo(r['started_at'] ?? r['created_at'])}'),
-            trailing: r['results_count'] != null && (r['results_count'] as int) > 0
+            subtitle: Text('${str(r['status'])}  ·  ${r['hit_count'] ?? 0} hits  ·  ${timeAgo(r['started_at'] ?? r['created_at'])}'),
+            trailing: (r['hit_count'] as int? ?? 0) > 0
                 ? const Icon(Icons.warning, color: Colors.orange)
                 : null,
           ));
@@ -880,57 +1236,6 @@ class _ThreatHuntState extends State<ThreatHuntScreen> {
   }
 }
 
-// ── ITDR Threat-Category Screen ───────────────────────────────────────────────
-
-class ItdrScreen extends StatefulWidget {
-  final DashboardApi api;
-  final String       category;
-  final String       title;
-  const ItdrScreen({super.key, required this.api, required this.category, required this.title});
-  @override State<ItdrScreen> createState() => _ItdrState();
-}
-
-class _ItdrState extends State<ItdrScreen> {
-  List _items   = [];
-  bool _loading = true;
-
-  @override void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final r = await widget.api.get('/api/itdr/findings?type=${widget.category}');
-    if (!mounted) return;
-    final list = r is List ? r : (r is Map ? (r['data'] ?? r['items'] ?? []) : []);
-    setState(() { _items = list as List; _loading = false; });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _loading ? xLoading() : _items.isEmpty
-      ? XEmptyState('No ${widget.title} detections', icon: Icons.radar_outlined)
-      : RefreshIndicator(
-          onRefresh: _load,
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
-            itemCount: _items.length,
-            itemBuilder: (_, i) {
-              final d = _items[i] as Map<String,dynamic>;
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: SevChip(str(d['severity'])),
-                  title: Text(str(d['title'] ?? d['name']),
-                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
-                  subtitle: Text('${str(d['status'])}  ·  ${timeAgo(d['created_at'])}',
-                    style: const TextStyle(fontSize: 12)),
-                  trailing: StatusChip(str(d['status'])),
-                ),
-              );
-            },
-          ),
-        );
-  }
-}
 
 // ── Deception / Honeypots Screen ──────────────────────────────────────────────
 
@@ -940,11 +1245,21 @@ class DeceptionScreen extends StatefulWidget {
   @override State<DeceptionScreen> createState() => _DeceptionState();
 }
 
-class _DeceptionState extends State<DeceptionScreen> {
+class _DeceptionState extends State<DeceptionScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
   List _traps   = [];
-  bool _loading = true;
+  List _canaries = [];
+  List _trips    = [];
+  bool _loading  = true;
+  bool _loadingCanaries = true;
 
-  @override void initState() { super.initState(); _load(); }
+  @override void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+    _tabs.addListener(() { if (!_tabs.indexIsChanging && _tabs.index == 1) _loadCanaries(); });
+    _load();
+  }
+  @override void dispose() { _tabs.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -952,6 +1267,49 @@ class _DeceptionState extends State<DeceptionScreen> {
     if (!mounted) return;
     final list = r is List ? r : (r is Map ? (r['data'] ?? r['honeyports'] ?? []) : []);
     setState(() { _traps = list as List; _loading = false; });
+  }
+
+  Future<void> _loadCanaries() async {
+    setState(() => _loadingCanaries = true);
+    final res = await Future.wait([widget.api.canaryTokens(), widget.api.canaryTrips()]);
+    if (!mounted) return;
+    setState(() { _canaries = res[0]; _trips = res[1]; _loadingCanaries = false; });
+  }
+
+  void _createCanary() {
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final deployCtrl = TextEditingController();
+    String type = 'file';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Canary Token'),
+          xField(nameCtrl, 'Name'),
+          const SizedBox(height: 10),
+          xDropdown('Type', type, ['file','url','dns','aws_key'], (v) => ss(() => type = v!)),
+          const SizedBox(height: 10),
+          xField(deployCtrl, 'Deployed To (host/path)'),
+          const SizedBox(height: 10),
+          xField(descCtrl, 'Description'),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createCanary({
+                'token_type': type, 'name': nameCtrl.text.trim(),
+                'description': descCtrl.text.trim(), 'deployed_to': deployCtrl.text.trim(),
+              });
+              if (context.mounted) xSnack(context, ok ? 'Canary created' : 'Failed', error: !ok);
+              _loadCanaries();
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      )),
+    );
   }
 
   void _createTrap() {
@@ -994,53 +1352,118 @@ class _DeceptionState extends State<DeceptionScreen> {
     );
   }
 
+  Widget _honeypotsTab() => Scaffold(
+    body: _loading ? xLoading() : _traps.isEmpty
+      ? const XEmptyState('No deception traps configured', icon: Icons.pest_control)
+      : RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+            itemCount: _traps.length,
+            itemBuilder: (_, i) {
+              final t = _traps[i] as Map<String,dynamic>;
+              final id     = t['id'] as int? ?? 0;
+              final active = t['active'] == true || t['enabled'] == true;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: Icon(Icons.pest_control,
+                    color: active ? const Color(0xFF6366F1) : Colors.grey),
+                  title: Text(str(t['name'] ?? t['hostname']),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('Type: ${str(t['type'] ?? t['trap_type'])}  ·  '
+                    'Interactions: ${t['interactions'] ?? t['hit_count'] ?? 0}'),
+                  // No toggle endpoint exists on the backend — a honeypot
+                  // is either live or gone, so "disable" means delete.
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    tooltip: 'Delete honeypot',
+                    onPressed: () async {
+                      if (!await xConfirm(context, 'Delete Honeypot', 'Stop and remove this trap?')) return;
+                      await widget.api.deleteHoneyport(id);
+                      _load();
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+    floatingActionButton: FloatingActionButton(onPressed: _createTrap, child: const Icon(Icons.add)),
+  );
+
+  Widget _canaryTab() => Scaffold(
+    body: _loadingCanaries ? xLoading() : ListView(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+      children: [
+        SectionTitle('Canary Tokens  (${_canaries.length})'),
+        if (_canaries.isEmpty)
+          const Padding(padding: EdgeInsets.all(16),
+            child: Center(child: Text('No canary tokens', style: TextStyle(color: Colors.grey))))
+        else
+          ..._canaries.map((c) {
+            final tok    = c as Map<String,dynamic>;
+            final id     = tok['id'] as int? ?? 0;
+            final active = tok['is_active'] == true;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: Icon(Icons.egg_outlined, color: active ? const Color(0xFFF59E0B) : Colors.grey),
+                title: Text(str(tok['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('${str(tok['token_type'])}  ·  ${str(tok['deployed_to'], '—')}  ·  '
+                  '${tok['trip_count'] ?? 0} trips'),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (v) async {
+                    if (v == 'toggle') { await widget.api.toggleCanary(id); _loadCanaries(); }
+                    if (v == 'delete') {
+                      if (await xConfirm(context, 'Delete Canary', 'Delete this canary token?')) {
+                        await widget.api.deleteCanary(id);
+                        _loadCanaries();
+                      }
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(value: 'toggle', child: Text(active ? 'Disable' : 'Enable')),
+                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              ),
+            );
+          }),
+        const SizedBox(height: 16),
+        SectionTitle('Trips  (${_trips.length})'),
+        if (_trips.isEmpty)
+          const Padding(padding: EdgeInsets.all(16),
+            child: Center(child: Text('No canary trips recorded', style: TextStyle(color: Colors.grey))))
+        else
+          ..._trips.map((t) {
+            // CanaryTrip only carries token_id — resolve the name from the
+            // already-loaded token list rather than guessing a name field.
+            final trip = t as Map<String,dynamic>;
+            final tokenId = trip['token_id'];
+            final token = _canaries.cast<Map<String,dynamic>>().firstWhere(
+              (c) => c['id'] == tokenId, orElse: () => const {});
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.warning_amber, color: Color(0xFFEF4444)),
+                title: Text(str(token['name'], 'Canary #$tokenId'),
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                subtitle: Text('${str(trip['source_ip'], '—')}  ·  ${timeAgo(trip['tripped_at'])}'),
+              ),
+            );
+          }),
+      ],
+    ),
+    floatingActionButton: FloatingActionButton(onPressed: _createCanary, child: const Icon(Icons.add)),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-          child: SectionTitle('Honeypots & Deception Traps  (${_traps.length})'),
-        ),
-        Expanded(child: _loading ? xLoading() : _traps.isEmpty
-          ? const XEmptyState('No deception traps configured', icon: Icons.pest_control)
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
-                itemCount: _traps.length,
-                itemBuilder: (_, i) {
-                  final t = _traps[i] as Map<String,dynamic>;
-                  final id     = t['id'] as int? ?? 0;
-                  final active = t['active'] == true || t['enabled'] == true;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(Icons.pest_control,
-                        color: active ? const Color(0xFF6366F1) : Colors.grey),
-                      title: Text(str(t['name'] ?? t['hostname']),
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('Type: ${str(t['type'] ?? t['trap_type'])}  ·  '
-                        'Interactions: ${t['interactions'] ?? t['hit_count'] ?? 0}'),
-                      // No toggle endpoint exists on the backend — a honeypot
-                      // is either live or gone, so "disable" means delete.
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                        tooltip: 'Delete honeypot',
-                        onPressed: () async {
-                          if (!await xConfirm(context, 'Delete Honeypot', 'Stop and remove this trap?')) return;
-                          await widget.api.deleteHoneyport(id);
-                          _load();
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            )),
-      ]),
-      floatingActionButton: FloatingActionButton(onPressed: _createTrap, child: const Icon(Icons.add)),
-    );
+    return Column(children: [
+      TabBar(controller: _tabs, tabs: const [Tab(text: 'Honeypots'), Tab(text: 'Canary Tokens')]),
+      Expanded(child: TabBarView(controller: _tabs, children: [_honeypotsTab(), _canaryTab()])),
+    ]);
   }
 }
 
@@ -1053,8 +1476,9 @@ class BehavioralScreen extends StatefulWidget {
 }
 
 class _BehavioralState extends State<BehavioralScreen> {
-  Map  _summary = {};
+  Map  _summary   = {};
   List _baselines = [];
+  List _findings  = [];
   bool _loading   = true;
 
   @override void initState() { super.initState(); _load(); }
@@ -1062,15 +1486,16 @@ class _BehavioralState extends State<BehavioralScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final bRes = await widget.api.get('/api/threat/baselines');
+    // GetAnomaliesHandler returns a bare array of AnomalyFinding.
     final aRes = await widget.api.get('/api/ai/anomalies');
     if (!mounted) return;
     final baselines = bRes is List ? bRes : (bRes is Map ? (bRes['baselines'] ?? bRes['data'] ?? []) : []);
-    final anomalies = aRes is List ? aRes : (aRes is Map ? (aRes['anomalies'] ?? aRes['data'] ?? []) : []);
+    final findings  = aRes is List ? aRes : (aRes is Map ? (aRes['findings'] ?? aRes['data'] ?? []) : []);
     final s = <String,dynamic>{
-      'anomalies_today': (anomalies as List).length,
+      'anomalies_today': (findings as List).length,
       'active_models': baselines is List ? baselines.length : 0,
     };
-    setState(() { _summary = s; _baselines = baselines as List; _loading = false; });
+    setState(() { _summary = s; _baselines = baselines as List; _findings = findings; _loading = false; });
   }
 
   @override
@@ -1107,10 +1532,47 @@ class _BehavioralState extends State<BehavioralScreen> {
           }),
           if (_baselines.isEmpty)
             const Padding(
-              padding: EdgeInsets.all(32),
+              padding: EdgeInsets.all(16),
               child: Center(child: Text('No behavioral baselines yet',
                 style: TextStyle(color: Colors.grey))),
             ),
+          const SizedBox(height: 16),
+          SectionTitle('Anomaly Findings'),
+          if (_findings.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: Text('No anomaly findings',
+                style: TextStyle(color: Colors.grey))),
+            )
+          else
+            ..._findings.map((f) {
+              final finding = f as Map<String,dynamic>;
+              final id  = finding['id'] as int? ?? 0;
+              final ack = finding['acknowledged'] == true;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: SevChip(str(finding['severity'])),
+                  title: Text(str(finding['finding_type'], 'Anomaly'),
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                  subtitle: Text(str(finding['description'], ''),
+                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('${finding['score'] ?? '-'}',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    if (!ack)
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline, size: 18),
+                        onPressed: () async {
+                          final ok = await widget.api.ackThreatFinding(id);
+                          if (context.mounted) xSnack(context, ok ? 'Acknowledged' : 'Failed', error: !ok);
+                          _load();
+                        },
+                      ),
+                  ]),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -1144,12 +1606,40 @@ class _LiveLogsState extends State<LiveLogsScreen> {
 
   @override void dispose() { _live = false; super.dispose(); }
 
-  Color _levelColor(String level) => switch (level.toLowerCase()) {
-    'critical' || 'fatal' => const Color(0xFFEF4444),
-    'error'               => const Color(0xFFF97316),
-    'warn' || 'warning'   => const Color(0xFFF59E0B),
-    'debug'               => Colors.grey,
-    _                     => const Color(0xFF22C55E),
+  void _addToIoc(Map<String,dynamic> log) {
+    final valCtrl = TextEditingController(text: str(log['log_message']));
+    String type = 'ip';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('Add to IOCs'),
+          xField(valCtrl, 'Indicator value'),
+          const SizedBox(height: 10),
+          xDropdown('Type', type, ['ip','domain','hash','url','email'], (v) => ss(() => type = v!)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createIoc({'type': type, 'value': valCtrl.text.trim(), 'severity': 'high', 'description': 'From live log'});
+              if (context.mounted) xSnack(context, ok ? 'IOC created' : 'Failed', error: !ok);
+            },
+            child: const Text('Create IOC'),
+          )),
+        ]),
+      )),
+    );
+  }
+
+  // models.Log has no level/severity field — the raw syslog/log_message text
+  // sometimes embeds one (e.g. "kernel: [UFW BLOCK]") but there's no
+  // structured field to color-code by, so the source tag is shown instead
+  // of a fabricated severity color.
+  Color _sourceColor(String source) => switch (source.toLowerCase()) {
+    'syslog' => const Color(0xFF3B82F6),
+    'http'   => const Color(0xFF8B5CF6),
+    _        => Colors.grey,
   };
 
   @override
@@ -1177,26 +1667,38 @@ class _LiveLogsState extends State<LiveLogsScreen> {
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 80),
           itemCount: _logs.length,
           itemBuilder: (_, i) {
+            // models.Log — log_message/log_source/agent_id/collected_at,
+            // not message/level/source/host/timestamp (those belonged to a
+            // different, unrelated shape and always rendered as em-dashes).
             final log = _logs[i] as Map<String,dynamic>;
-            final level = str(log['level'] ?? log['severity'] ?? 'info');
-            return Container(
+            final source = str(log['log_source'], 'log');
+            return InkWell(
+              onLongPress: () => _addToIoc(log),
+              child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: .08)))),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(level.toUpperCase().padRight(5),
+                Text(source.toUpperCase().padRight(6),
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-                    color: _levelColor(level), fontFamily: 'monospace')),
+                    color: _sourceColor(source), fontFamily: 'monospace')),
                 const SizedBox(width: 8),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(str(log['message'] ?? log['msg']),
+                  Text(str(log['log_message']),
                     style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-                  Text(str(log['source'] ?? log['host'] ?? ''),
+                  Text('Agent ${str(log['agent_id'], '—')}',
                     style: const TextStyle(fontSize: 10, color: Colors.grey)),
                 ])),
-                Text(timeAgo(log['timestamp'] ?? log['created_at']),
+                Text(timeAgo(log['collected_at']),
                   style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                IconButton(
+                  icon: const Icon(Icons.flag_outlined, size: 15),
+                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                  tooltip: 'Add to IOCs',
+                  onPressed: () => _addToIoc(log),
+                ),
               ]),
+              ),
             );
           },
         )),
@@ -1221,10 +1723,9 @@ class _VulnerabilitiesState extends State<VulnerabilitiesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final r = await widget.api.get('/api/vulns/priority-queue${_sevFilter.isNotEmpty ? "?severity=$_sevFilter" : ""}');
+    final r = await widget.api.vmFindings(severity: _sevFilter);
     if (!mounted) return;
-    final list = r is List ? r : (r is Map ? (r['data'] ?? r['vulnerabilities'] ?? []) : []);
-    setState(() { _vulns = list as List; _loading = false; });
+    setState(() { _vulns = r; _loading = false; });
   }
 
   @override
@@ -1246,24 +1747,49 @@ class _VulnerabilitiesState extends State<VulnerabilitiesScreen> {
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
               itemCount: _vulns.length,
               itemBuilder: (_, i) {
+                // vm_findings — cve_id/cvss_score/severity/detected_at are
+                // real; asset_name/kev_listed/exploit_available are new
+                // signal the old priority-queue endpoint didn't carry.
                 final v = _vulns[i] as Map<String,dynamic>;
-                final cvss = (v['cvss_score'] ?? v['score'] ?? 0.0);
+                final id = v['id'] as int? ?? 0;
+                final cvss = v['cvss_score'] ?? 0.0;
                 final sev  = str(v['severity']);
+                final kev  = v['kev_listed'] == true;
+                final status = str(v['status'], 'open');
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     leading: SevChip(sev),
-                    title: Text(str(v['cve_id'] ?? v['vuln_id'] ?? v['title']),
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontFamily: 'monospace')),
+                    title: Row(children: [
+                      Expanded(child: Text(str(v['cve_id']),
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontFamily: 'monospace'))),
+                      if (kev) Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFFEF4444).withValues(alpha: .15), borderRadius: BorderRadius.circular(6)),
+                        child: const Text('KEV', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFFEF4444)))),
+                    ]),
                     subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(str(v['title'] ?? v['description']),
+                      Text('${str(v['vendor'], '')} ${str(v['product'], '')}  ·  ${str(v['asset_name'], '')}',
                         maxLines: 2, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12)),
                       const SizedBox(height: 2),
-                      Text('CVSS: $cvss  ·  ${timeAgo(v['discovered_at'] ?? v['created_at'])}',
+                      Text('CVSS: $cvss  ·  $status  ·  ${timeAgo(v['detected_at'])}',
                         style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ]),
-                    trailing: SevChip(sev),
+                    trailing: status == 'open' ? PopupMenuButton<String>(
+                      child: SevChip(sev),
+                      onSelected: (action) async {
+                        final ok = await widget.api.vmFindingAction(id, action);
+                        if (context.mounted) xSnack(context, ok ? 'Updated' : 'Failed', error: !ok);
+                        _load();
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'mark_patched', child: Text('Mark Patched')),
+                        PopupMenuItem(value: 'accept_risk', child: Text('Accept Risk')),
+                        PopupMenuItem(value: 'defer', child: Text('Defer')),
+                      ],
+                    ) : StatusChip(status),
                     isThreeLine: true,
                   ),
                 );
@@ -1282,11 +1808,38 @@ class FirewallScreen extends StatefulWidget {
   @override State<FirewallScreen> createState() => _FirewallState();
 }
 
-class _FirewallState extends State<FirewallScreen> {
-  List _rules   = [];
-  bool _loading = true;
+class _FirewallState extends State<FirewallScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  List _rules     = [];
+  List _zones     = [];
+  List _nat       = [];
+  List _policies  = [];
+  List _approvals = [];
+  bool _loading   = true;
+  bool _loadingOthers = true;
+  final _loadedTabs = <int>{0};
 
-  @override void initState() { super.initState(); _load(); }
+  @override void initState() {
+    super.initState();
+    _tabs = TabController(length: 5, vsync: this);
+    _tabs.addListener(() { if (!_tabs.indexIsChanging) _loadTab(_tabs.index); });
+    _load();
+  }
+  @override void dispose() { _tabs.dispose(); super.dispose(); }
+
+  Future<void> _loadTab(int i) async {
+    if (_loadedTabs.contains(i)) return;
+    _loadedTabs.add(i);
+    setState(() => _loadingOthers = true);
+    switch (i) {
+      case 1: _zones = await widget.api.fweZones(); break;
+      case 2: _nat = await widget.api.fweNAT(); break;
+      case 3: _policies = await widget.api.fwePolicies(); break;
+      case 4: _approvals = await widget.api.fweApprovals(); break;
+    }
+    if (!mounted) return;
+    setState(() => _loadingOthers = false);
+  }
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -1294,6 +1847,98 @@ class _FirewallState extends State<FirewallScreen> {
     if (!mounted) return;
     final list = r is List ? r : (r is Map ? (r['data'] ?? r['rules'] ?? []) : []);
     setState(() { _rules = list as List; _loading = false; });
+  }
+
+  void _createZone() {
+    final nameCtrl = TextEditingController();
+    String zoneType = 'custom', trust = 'medium';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Zone'),
+          xField(nameCtrl, 'Name'),
+          const SizedBox(height: 10),
+          xDropdown('Type', zoneType, ['trusted','untrusted','dmz','custom'], (v) => ss(() => zoneType = v!)),
+          const SizedBox(height: 10),
+          xDropdown('Trust Level', trust, ['high','medium','low','none'], (v) => ss(() => trust = v!)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createFweZone({'name': nameCtrl.text.trim(), 'zone_type': zoneType, 'trust_level': trust});
+              if (context.mounted) xSnack(context, ok ? 'Zone created' : 'Failed', error: !ok);
+              setState(() => _loadedTabs.remove(1));
+              _loadTab(1);
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      )),
+    );
+  }
+
+  void _createNAT() {
+    final nameCtrl = TextEditingController();
+    final srcCtrl  = TextEditingController();
+    final transCtrl = TextEditingController();
+    String natType = 'snat';
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New NAT Rule'),
+          xField(nameCtrl, 'Name'),
+          const SizedBox(height: 10),
+          xDropdown('Type', natType, ['snat','dnat','masquerade'], (v) => ss(() => natType = v!)),
+          const SizedBox(height: 10),
+          xField(srcCtrl, 'Source IP'),
+          const SizedBox(height: 10),
+          xField(transCtrl, 'Translated IP'),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createFweNAT({'name': nameCtrl.text.trim(), 'nat_type': natType, 'src_ip': srcCtrl.text.trim(), 'translated_ip': transCtrl.text.trim()});
+              if (context.mounted) xSnack(context, ok ? 'NAT rule created' : 'Failed', error: !ok);
+              setState(() => _loadedTabs.remove(2));
+              _loadTab(2);
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      )),
+    );
+  }
+
+  void _createPolicy() {
+    final nameCtrl = TextEditingController();
+    final ownerCtrl = TextEditingController();
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          sheetHeader('New Policy'),
+          xField(nameCtrl, 'Name'),
+          const SizedBox(height: 10),
+          xField(ownerCtrl, 'Owner'),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await widget.api.createFwePolicy({'name': nameCtrl.text.trim(), 'owner': ownerCtrl.text.trim()});
+              if (context.mounted) xSnack(context, ok ? 'Policy created' : 'Failed', error: !ok);
+              setState(() => _loadedTabs.remove(3));
+              _loadTab(3);
+            },
+            child: const Text('Create'),
+          )),
+        ]),
+      ),
+    );
   }
 
   Color _actionColor(String action) => switch (action.toLowerCase()) {
@@ -1349,57 +1994,210 @@ class _FirewallState extends State<FirewallScreen> {
     );
   }
 
+  Widget _rulesTab() => Scaffold(
+    floatingActionButton: FloatingActionButton(
+      onPressed: _createRule,
+      child: const Icon(Icons.add),
+    ),
+    body: _loading ? xLoading() : _rules.isEmpty
+      ? const XEmptyState('No firewall rules configured', icon: Icons.fireplace_outlined)
+      : RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+            itemCount: _rules.length,
+            itemBuilder: (_, i) {
+              final rule = _rules[i] as Map<String, dynamic>;
+              final action = str(rule['action']);
+              final enabled = rule['enabled'] == true || rule['active'] == true;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _actionColor(action).withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(8)),
+                    child: Icon(
+                      action.toLowerCase() == 'block' || action.toLowerCase() == 'deny'
+                        ? Icons.block : Icons.check_circle_outline,
+                      color: _actionColor(action), size: 20),
+                  ),
+                  title: Text(str(rule['name'] ?? rule['description'] ?? 'Rule ${rule['id']}'),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                    '${str(rule['source_ip'] ?? '*')} → '
+                    '${str(rule['destination_ip'] ?? '*')}  '
+                    'Port: ${str(rule['port_range'] ?? '').isNotEmpty ? rule['port_range'] : (rule['port'] ?? '*')}',
+                    style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace')),
+                  trailing: Switch(
+                    value: enabled,
+                    onChanged: (v) async {
+                      await widget.api.patch('/api/firewall/rules/${rule['id']}', {'enabled': v});
+                      _load();
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+  );
+
+  Widget _zonesTab() => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: _createZone, child: const Icon(Icons.add)),
+    body: _loadingOthers ? xLoading() : _zones.isEmpty
+      ? const XEmptyState('No zones configured', icon: Icons.shield_outlined)
+      : ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+          itemCount: _zones.length,
+          itemBuilder: (_, i) {
+            final z = _zones[i] as Map<String,dynamic>;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: Icon(z['enabled'] == true ? Icons.shield : Icons.shield_outlined,
+                  color: z['enabled'] == true ? const Color(0xFF3B82F6) : Colors.grey),
+                title: Text(str(z['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('${str(z['zone_type'])}  ·  trust: ${str(z['trust_level'])}', style: const TextStyle(fontSize: 11.5)),
+              ),
+            );
+          },
+        ),
+  );
+
+  Widget _natTab() => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: _createNAT, child: const Icon(Icons.add)),
+    body: _loadingOthers ? xLoading() : _nat.isEmpty
+      ? const XEmptyState('No NAT rules configured', icon: Icons.swap_horiz)
+      : ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+          itemCount: _nat.length,
+          itemBuilder: (_, i) {
+            final n = _nat[i] as Map<String,dynamic>;
+            final id = n['id'] as int? ?? 0;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.swap_horiz, color: Color(0xFF8B5CF6)),
+                title: Text(str(n['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('${str(n['nat_type'])}  ·  ${n['hit_count'] ?? 0} hits', style: const TextStyle(fontSize: 11.5)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                  onPressed: () async {
+                    if (!await xConfirm(context, 'Delete NAT Rule', 'Delete this NAT rule?')) return;
+                    await widget.api.deleteFweNAT(id);
+                    setState(() => _loadedTabs.remove(2));
+                    _loadTab(2);
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+  );
+
+  Widget _policiesTab() => Scaffold(
+    floatingActionButton: FloatingActionButton(onPressed: _createPolicy, child: const Icon(Icons.add)),
+    body: _loadingOthers ? xLoading() : _policies.isEmpty
+      ? const XEmptyState('No policies configured', icon: Icons.policy_outlined)
+      : ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+          itemCount: _policies.length,
+          itemBuilder: (_, i) {
+            final p = _policies[i] as Map<String,dynamic>;
+            final id = p['id'] as int? ?? 0;
+            final status = str(p['status'], 'active');
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.policy_outlined, color: Color(0xFFF59E0B)),
+                title: Text(str(p['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('${str(p['policy_id'])}  ·  priority ${str(p['priority'])}  ·  ${p['rule_count'] ?? 0} rules  ·  ${str(p['owner'], '—')}',
+                  style: const TextStyle(fontSize: 11)),
+                trailing: PopupMenuButton<String>(
+                  child: StatusChip(status),
+                  onSelected: (v) async {
+                    if (v == 'delete') {
+                      if (!await xConfirm(context, 'Delete Policy', 'Delete this policy?')) return;
+                      await widget.api.deleteFwePolicy(id);
+                    } else {
+                      await widget.api.updateFwePolicy(id, {'status': v});
+                    }
+                    setState(() => _loadedTabs.remove(3));
+                    _loadTab(3);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'active', child: Text('Set Active')),
+                    PopupMenuItem(value: 'disabled', child: Text('Disable')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+  );
+
+  Widget _approvalsTab() => _loadingOthers ? xLoading() : _approvals.isEmpty
+    ? const XEmptyState('No pending approvals', icon: Icons.rule_folder_outlined)
+    : ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
+        itemCount: _approvals.length,
+        itemBuilder: (_, i) {
+          final a = _approvals[i] as Map<String,dynamic>;
+          final id = a['id'] as int? ?? 0;
+          final status = str(a['status'], 'pending');
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: Text(str(a['change_type']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                  StatusChip(status),
+                ]),
+                const SizedBox(height: 4),
+                Text(str(a['description']), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 4),
+                Text('Requested by ${str(a['requester'])}  ·  ${timeAgo(a['created_at'])}',
+                  style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+                if (status == 'pending') ...[
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(child: OutlinedButton(
+                      onPressed: () async {
+                        await widget.api.decideFweApproval(id, 'rejected');
+                        setState(() => _loadedTabs.remove(4));
+                        _loadTab(4);
+                      },
+                      child: const Text('Reject'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: FilledButton(
+                      onPressed: () async {
+                        await widget.api.decideFweApproval(id, 'approved');
+                        setState(() => _loadedTabs.remove(4));
+                        _loadTab(4);
+                      },
+                      child: const Text('Approve'))),
+                  ]),
+                ],
+              ]),
+            ),
+          );
+        },
+      );
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        onPressed: _createRule,
-        child: const Icon(Icons.add),
-      ),
-      body: _loading ? xLoading() : _rules.isEmpty
-        ? const XEmptyState('No firewall rules configured', icon: Icons.fireplace_outlined)
-        : RefreshIndicator(
-            onRefresh: _load,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
-              itemCount: _rules.length,
-              itemBuilder: (_, i) {
-                final rule = _rules[i] as Map<String, dynamic>;
-                final action = str(rule['action']);
-                final enabled = rule['enabled'] == true || rule['active'] == true;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: _actionColor(action).withValues(alpha: .12),
-                        borderRadius: BorderRadius.circular(8)),
-                      child: Icon(
-                        action.toLowerCase() == 'block' || action.toLowerCase() == 'deny'
-                          ? Icons.block : Icons.check_circle_outline,
-                        color: _actionColor(action), size: 20),
-                    ),
-                    title: Text(str(rule['name'] ?? rule['description'] ?? 'Rule ${rule['id']}'),
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(
-                      '${str(rule['source_ip'] ?? '*')} → '
-                      '${str(rule['destination_ip'] ?? '*')}  '
-                      'Port: ${str(rule['port_range'] ?? '').isNotEmpty ? rule['port_range'] : (rule['port'] ?? '*')}',
-                      style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace')),
-                    trailing: Switch(
-                      value: enabled,
-                      onChanged: (v) async {
-                        await widget.api.patch('/api/firewall/rules/${rule['id']}', {'enabled': v});
-                        _load();
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-    );
+    return Column(children: [
+      TabBar(controller: _tabs, isScrollable: true, tabs: const [
+        Tab(text: 'Rules'), Tab(text: 'Zones'), Tab(text: 'NAT'), Tab(text: 'Policies'), Tab(text: 'Approvals'),
+      ]),
+      Expanded(child: TabBarView(controller: _tabs, children: [
+        _rulesTab(), _zonesTab(), _natTab(), _policiesTab(), _approvalsTab(),
+      ])),
+    ]);
   }
 }
 
