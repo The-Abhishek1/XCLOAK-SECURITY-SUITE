@@ -74,12 +74,18 @@ func GetInsiderThreatScores(c *gin.Context) {
 func GetInsiderThreatSummary(c *gin.Context) {
 	tenantID := tenantIDFromContext(c)
 
+	// Each user's most recent score, not strictly today's — the scoring
+	// job runs daily, but if it's delayed or skipped on a given day this
+	// used to go silently empty (score_date = CURRENT_DATE) even though
+	// yesterday's real scores were still perfectly valid.
 	rows, err := database.DB.Query(`
-		SELECT username, score, risk_level
-		FROM insider_threat_scores
-		WHERE tenant_id  = $1
-		  AND score_date = CURRENT_DATE
-		  AND score      >= 30
+		SELECT username, score, risk_level FROM (
+			SELECT DISTINCT ON (username) username, score, risk_level
+			FROM insider_threat_scores
+			WHERE tenant_id = $1
+			ORDER BY username, score_date DESC
+		) latest
+		WHERE score >= 30
 		ORDER BY score DESC
 		LIMIT 20
 	`, tenantID)

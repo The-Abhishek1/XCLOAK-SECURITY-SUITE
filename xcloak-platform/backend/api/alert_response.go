@@ -139,16 +139,22 @@ func GetAlertWithTriage(c *gin.Context) {
 
 	var alert models.Alert
 	var aiSummary, aiAction string
+	// status/acknowledged_by/acknowledged_at/note were never selected here —
+	// this handler always returned a lifecycle-blank alert regardless of
+	// real DB state, so the detail sheet (and anything checking it after an
+	// Ack/Resolve tap) could never see the real status.
 	err := database.DB.QueryRow(`
 		SELECT id, COALESCE(agent_id,0), COALESCE(severity,''), COALESCE(rule_name,''), COALESCE(fingerprint,''),
 		       COALESCE(mitre_tactic,''), COALESCE(mitre_technique,''), COALESCE(mitre_name,''),
 		       COALESCE(log_message,''), created_at,
+		       COALESCE(status,'open'), COALESCE(acknowledged_by,''), acknowledged_at, COALESCE(note,''),
 		       COALESCE(ai_summary,''), COALESCE(ai_action,'')
 		FROM alerts WHERE id=$1 AND tenant_id=$2
 	`, id, tenantIDFromContext(c)).Scan(
 		&alert.ID, &alert.AgentID, &alert.Severity, &alert.RuleName,
 		&alert.Fingerprint, &alert.MitreTactic, &alert.MitreTechnique,
 		&alert.MitreName, &alert.LogMessage, &alert.CreatedAt,
+		&alert.Status, &alert.AcknowledgedBy, &alert.AcknowledgedAt, &alert.Note,
 		&aiSummary, &aiAction,
 	)
 	if err != nil {

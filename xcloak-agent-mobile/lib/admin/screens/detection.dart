@@ -30,10 +30,19 @@ class _AlertsState extends State<AlertsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final r = await widget.api.alerts(sev: _sevFilter, status: _statusFilter, q: _query, per: 100);
+    // Counts must come from the *unfiltered-by-severity* set (still scoped
+    // to the current status tab/search), not from `r` below — once a
+    // severity chip is selected, `r` only contains that severity, so
+    // tallying counts from it made every other severity's badge collapse
+    // to 0 and vanish from the row instead of showing the real total.
+    final countsList =
+        await widget.api.alerts(status: _statusFilter, q: _query, per: 100);
+    final r = _sevFilter.isEmpty
+        ? countsList
+        : await widget.api.alerts(sev: _sevFilter, status: _statusFilter, q: _query, per: 100);
     if (!mounted) return;
     _sevCounts.clear();
-    for (final a in r) {
+    for (final a in countsList) {
       final s = str((a as Map<String,dynamic>)['severity']);
       _sevCounts[s] = (_sevCounts[s] ?? 0) + 1;
     }
