@@ -553,6 +553,15 @@ func PostCaseEvidence(c *gin.Context) {
 	}
 	addedBy := usernameFromContext(c)
 	uid := userIDFromContext(c)
+	// added_by is a nullable int FK to users.id — API-key-authenticated
+	// requests get user_id=0 from context (a key isn't tied to a real
+	// users row), and inserting that raw 0 violated
+	// case_evidence_added_by_fkey on every single "Add Evidence" call made
+	// over an API key.
+	var uidArg *int
+	if uid != 0 {
+		uidArg = &uid
+	}
 	custody, _ := json.Marshal([]map[string]interface{}{
 		{"action": "collected", "from": "", "to": addedBy, "timestamp": time.Now().Format(time.RFC3339)},
 	})
@@ -560,7 +569,7 @@ func PostCaseEvidence(c *gin.Context) {
 	if err := database.DB.QueryRow(`
 		INSERT INTO case_evidence (case_id, evidence_type, title, description, added_by, added_by_name, file_hash, collector, current_owner, verified, custody_chain)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,false,$9) RETURNING id`,
-		cid, body.EvidenceType, body.Title, body.Notes, uid, addedBy, body.FileHash, body.Collector, string(custody),
+		cid, body.EvidenceType, body.Title, body.Notes, uidArg, addedBy, body.FileHash, body.Collector, string(custody),
 	).Scan(&id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -700,9 +709,16 @@ func PostCaseComment(c *gin.Context) {
 	}
 	uid := userIDFromContext(c)
 	username := usernameFromContext(c)
+	// user_id is a nullable int FK to users.id — API-key requests get
+	// user_id=0 from context, and inserting that raw 0 violated
+	// case_comments_user_id_fkey on every comment posted over an API key.
+	var uidArg *int
+	if uid != 0 {
+		uidArg = &uid
+	}
 	var id int
 	if err := database.DB.QueryRow(`INSERT INTO case_comments (case_id, user_id, username, body, is_system) VALUES ($1,$2,$3,$4,false) RETURNING id`,
-		cid, uid, username, body.Content).Scan(&id); err != nil {
+		cid, uidArg, username, body.Content).Scan(&id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

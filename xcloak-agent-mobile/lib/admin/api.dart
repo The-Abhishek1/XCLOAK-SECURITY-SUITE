@@ -519,7 +519,12 @@ class DashboardApi {
   // never actually ran a playbook, only silently re-enabled it.
   Future<List> playbooks() async { try { final r = await _g('/api/pb/library'); return r is List ? r : []; } catch (_) { return []; } }
   Future<bool> createPlaybook(Map<String,dynamic> b) async { try { await _po('/api/pb/library', b); return true; } catch (_) { return false; } }
-  Future<bool> updatePlaybook(int id, Map<String,dynamic> b) async { try { await _pu('/api/playbooks/$id', b); return true; } catch (_) { return false; } }
+  // Every other playbook method (create/delete/enable/trigger) hits
+  // /api/pb/library — this one hit the stale legacy /api/playbooks path,
+  // which either 404s or silently updates a disconnected legacy table, so
+  // editing a playbook from this screen never actually changed the real
+  // pb_playbooks row being displayed.
+  Future<bool> updatePlaybook(int id, Map<String,dynamic> b) async { try { await _pa('/api/pb/library/$id', b); return true; } catch (_) { return false; } }
   Future<bool> deletePlaybook(int id) async { try { await _d('/api/pb/library/$id'); return true; } catch (_) { return false; } }
   Future<bool> enablePlaybook(int id) async { try { await _po('/api/pb/library/$id/publish', {}); return true; } catch (_) { return false; } }
   Future<bool> disablePlaybook(int id) async { try { await _pa('/api/pb/library/$id', {'status': 'archived'}); return true; } catch (_) { return false; } }
