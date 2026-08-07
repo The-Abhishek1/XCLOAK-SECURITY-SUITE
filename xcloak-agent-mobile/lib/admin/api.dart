@@ -728,11 +728,13 @@ class DashboardApi {
   Future<List> users() async { try { final r = await _g('/api/users'); return _list(r, ['users','data']); } catch (_) { return []; } }
   // No POST /api/users route exists — user creation goes through the real
   // invite flow below (email a reset-password link) instead.
-  Future<bool> inviteUser(String email, String role) async { try { await _po('/api/users/invite', {'email': email, 'role': role}); return true; } catch (_) { return false; } }
+  // username, email, and role are all required by the backend
+  Future<bool> inviteUser(String username, String email, String role) async { try { await _po('/api/users/invite', {'username': username, 'email': email, 'role': role}); return true; } catch (_) { return false; } }
   // No admin password reset endpoint — trigger forgot-password flow by email instead
-  Future<bool> resetUserPassword(int id) async { try { await _po('/api/auth/forgot-password', {'user_id': id}); return true; } catch (_) { return false; } }
+  Future<bool> resetUserPassword(String email) async { try { await _po('/api/auth/forgot-password', {'email': email}); return true; } catch (_) { return false; } }
   Future<bool> updateUserRole(int id, String role) async { try { await _pu('/api/users/$id/role', {'role': role}); return true; } catch (_) { return false; } }
-  Future<bool> toggleUser(int id) async { try { await _pa('/api/users/$id/toggle', {}); return true; } catch (_) { return false; } }
+  // Must send the desired state — an empty body binds is_active=false every time.
+  Future<bool> toggleUser(int id, bool active) async { try { await _pa('/api/users/$id/toggle', {'is_active': active}); return true; } catch (_) { return false; } }
   Future<bool> deleteUser(int id) async { try { await _d('/api/users/$id'); return true; } catch (_) { return false; } }
 
   Future<List> apiKeys() async { try { final r = await _g('/api/api-keys'); return _list(r, ['keys','api_keys','data']); } catch (_) { return []; } }
@@ -792,7 +794,8 @@ class DashboardApi {
   // ── Tenants ───────────────────────────────────────────────────────────────
   Future<List> tenants() async { try { final r = await _g('/api/platform/tenants'); return _list(r, ['tenants','data']); } catch (_) { return []; } }
   Future<bool> createTenant(Map<String,dynamic> b) async { try { await _po('/api/platform/tenants', b); return true; } catch (_) { return false; } }
-  Future<bool> toggleTenant(int id) async { try { await _pa('/api/platform/tenants/$id/toggle', {}); return true; } catch (_) { return false; } }
+  // Must send the desired state — an empty body binds is_active=false every time.
+  Future<bool> toggleTenant(int id, bool active) async { try { await _pa('/api/platform/tenants/$id/toggle', {'is_active': active}); return true; } catch (_) { return false; } }
 
   // ── Cloud Security (api/cloud_security_enterprise.go) ─────────────────────
   // Previously this whole category (and 7 siblings under Cloud & Infra) was

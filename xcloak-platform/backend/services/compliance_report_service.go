@@ -12,8 +12,9 @@ import (
 )
 
 // GenerateComplianceReport builds a health snapshot scoped to tenantID,
-// persists it to the DB, and returns the report with its ID.
-func GenerateComplianceReport(reportType, generatedBy string, tenantID int) (*models.ComplianceReport, error) {
+// persists it to the DB, and returns the report with its ID. customTitle
+// overrides the generated default when the caller supplied one.
+func GenerateComplianceReport(reportType, generatedBy string, tenantID int, customTitle string) (*models.ComplianceReport, error) {
 
 	summary, err := buildSummary(tenantID)
 	if err != nil {
@@ -22,7 +23,10 @@ func GenerateComplianceReport(reportType, generatedBy string, tenantID int) (*mo
 
 	summaryJSON, _ := json.Marshal(summary)
 
-	title := reportTitle(reportType)
+	title := customTitle
+	if title == "" {
+		title = reportTitle(reportType)
+	}
 
 	var id int
 	err = database.DB.QueryRow(`
@@ -43,6 +47,7 @@ func GenerateComplianceReport(reportType, generatedBy string, tenantID int) (*mo
 		GeneratedBy: generatedBy,
 		Summary:     summaryJSON,
 		CreatedAt:   time.Now(),
+		Status:      "completed",
 	}, nil
 }
 
@@ -65,6 +70,7 @@ func GetReports(tenantID int) ([]models.ComplianceReport, error) {
 	for rows.Next() {
 		var r models.ComplianceReport
 		if err := rows.Scan(&r.ID, &r.Title, &r.ReportType, &r.GeneratedBy, &r.Summary, &r.CreatedAt); err == nil {
+			r.Status = "completed"
 			reports = append(reports, r)
 		}
 	}
@@ -85,6 +91,7 @@ func GetReportByID(id string, tenantID int) (*models.ComplianceReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.Status = "completed"
 
 	return &r, nil
 }

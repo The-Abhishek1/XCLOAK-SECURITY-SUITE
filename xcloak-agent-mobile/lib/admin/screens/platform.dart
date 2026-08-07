@@ -606,11 +606,12 @@ class _UsersTabState extends State<_UsersTab> with AutomaticKeepAliveClientMixin
                     trailing: PopupMenuButton<String>(
                       onSelected: (action) async {
                         if (action == 'toggle') {
-                          final ok = await widget.api.toggleUser(id);
+                          final ok = await widget.api.toggleUser(id, !active);
                           if (context.mounted) xSnack(context, ok ? 'Updated' : 'Failed', error: !ok);
                           _load();
                         } else if (action == 'reset') {
-                          final ok = await widget.api.resetUserPassword(id);
+                          final email = str(u['email'], '');
+                          final ok = email.isNotEmpty && await widget.api.resetUserPassword(email);
                           if (context.mounted) xSnack(context, ok ? 'Reset link sent' : 'Failed', error: !ok);
                         } else if (action == 'delete') {
                           if (!context.mounted) return;
@@ -640,6 +641,7 @@ class _UsersTabState extends State<_UsersTab> with AutomaticKeepAliveClientMixin
   }
 
   void _showInvite() {
+    final usernameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     String role     = 'analyst';
     showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) =>
@@ -650,6 +652,8 @@ class _UsersTabState extends State<_UsersTab> with AutomaticKeepAliveClientMixin
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             sheetHeader('Invite User'),
             const SizedBox(height: 16),
+            xField(usernameCtrl, 'Username'),
+            const SizedBox(height: 12),
             xField(emailCtrl, 'Email address'),
             const SizedBox(height: 12),
             xDropdown('Role', role, const ['analyst', 'admin', 'viewer'], (v) => ss(() => role = v!)),
@@ -659,7 +663,7 @@ class _UsersTabState extends State<_UsersTab> with AutomaticKeepAliveClientMixin
               label: const Text('Send Invite'),
               onPressed: () async {
                 Navigator.pop(context);
-                final ok = await widget.api.inviteUser(emailCtrl.text, role);
+                final ok = await widget.api.inviteUser(usernameCtrl.text, emailCtrl.text, role);
                 if (context.mounted) xSnack(context, ok ? 'Invite sent' : 'Failed', error: !ok);
                 _load();
               },
@@ -1395,8 +1399,8 @@ class _TenantsState extends State<TenantsScreen> {
                     ]),
                     trailing: Switch(
                       value: active,
-                      onChanged: (_) async {
-                        final ok = await widget.api.toggleTenant(id);
+                      onChanged: (v) async {
+                        final ok = await widget.api.toggleTenant(id, v);
                         if (context.mounted) xSnack(context, ok ? 'Updated' : 'Failed', error: !ok);
                         _load();
                       },

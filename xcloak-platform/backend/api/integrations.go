@@ -51,6 +51,24 @@ func SaveIntegration(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
+	// Callers that only want to flip `enabled` (e.g. the mobile toggle
+	// switch) send no config at all — without this, that request would
+	// wipe out the integration's existing config on every toggle.
+	if body.Config == nil {
+		if existing, err := services.GetIntegrations(tenantIDFromContext(c)); err == nil {
+			for _, row := range existing {
+				if row["name"] != name {
+					continue
+				}
+				if cfg, ok := row["config"].(map[string]any); ok {
+					body.Config = cfg
+				}
+			}
+		}
+		if body.Config == nil {
+			body.Config = map[string]any{}
+		}
+	}
 	// GetIntegrations redacts oidc's client_secret, so the settings UI can
 	// only ever echo back the placeholder, never the real value — if the
 	// admin saves without re-entering it, keep the previously stored secret

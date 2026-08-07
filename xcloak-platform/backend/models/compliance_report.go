@@ -12,6 +12,9 @@ type ComplianceReport struct {
 	GeneratedBy string          `json:"generated_by"`
 	Summary     json.RawMessage `json:"summary"`
 	CreatedAt   time.Time       `json:"created_at"`
+	// Not a DB column — generation is synchronous and the row only ever
+	// exists once fully built, so every report is "completed" by definition.
+	Status string `json:"status"`
 }
 
 // ComplianceSummary is the structured body stored in Summary JSONB.

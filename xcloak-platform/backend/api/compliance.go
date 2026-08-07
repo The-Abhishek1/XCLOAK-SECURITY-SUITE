@@ -18,6 +18,7 @@ func GenerateReport(c *gin.Context) {
 
 	var body struct {
 		ReportType string `json:"report_type"`
+		Title      string `json:"title"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.ReportType == "" {
 		body.ReportType = "full"
@@ -28,7 +29,7 @@ func GenerateReport(c *gin.Context) {
 
 	tenantID := tenantIDFromContext(c)
 
-	report, err := services.GenerateComplianceReport(body.ReportType, generatedBy, tenantID)
+	report, err := services.GenerateComplianceReport(body.ReportType, generatedBy, tenantID, body.Title)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

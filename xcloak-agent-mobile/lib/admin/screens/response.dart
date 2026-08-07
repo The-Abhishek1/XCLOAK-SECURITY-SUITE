@@ -553,7 +553,10 @@ class _PlaybooksState extends State<PlaybooksScreen> {
                   itemCount: _executions.take(10).length,
                   itemBuilder: (_, i) {
                     final ex  = _executions[i] as Map<String,dynamic>;
-                    final ok  = str(ex['status']) == 'completed';
+                    // PostPBExecute/runPBWorkflow (api/playbook_workflow_engine.go)
+                    // only ever write status success/pending/failed — 'completed'
+                    // never occurs, so every execution rendered as failed/red.
+                    final ok  = str(ex['status']) == 'success';
                     final col = ok ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
                     return Container(
                       width: 130,
