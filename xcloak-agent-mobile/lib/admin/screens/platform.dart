@@ -773,8 +773,9 @@ class _ApiKeysTabState extends State<_ApiKeysTab> with AutomaticKeepAliveClientM
 
   void _showCreate() {
     final nameCtrl = TextEditingController();
+    String role    = 'viewer';
     showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) =>
-      Padding(
+      StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -782,13 +783,17 @@ class _ApiKeysTabState extends State<_ApiKeysTab> with AutomaticKeepAliveClientM
             sheetHeader('Create API Key'),
             const SizedBox(height: 16),
             xField(nameCtrl, 'Key name / label'),
+            const SizedBox(height: 12),
+            xDropdown('Role', role, const ['viewer', 'analyst', 'admin'], (v) => ss(() => role = v!)),
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: FilledButton.icon(
               icon: const Icon(Icons.add, size: 16),
               label: const Text('Create'),
               onPressed: () async {
                 Navigator.pop(context);
-                final res = await widget.api.createApiKey({'name': nameCtrl.text});
+                // Backend requires both `label` and `role` — a bare `name`
+                // key always 400'd, so no key was ever actually created.
+                final res = await widget.api.createApiKey({'label': nameCtrl.text, 'role': role});
                 if (!mounted) return;
                 final key = str(res?['key'] ?? res?['api_key'] ?? '');
                 if (key.isNotEmpty) setState(() => _newKeyValue = key);
@@ -798,7 +803,7 @@ class _ApiKeysTabState extends State<_ApiKeysTab> with AutomaticKeepAliveClientM
             )),
           ]),
         ),
-      ),
+      )),
     );
   }
 }
@@ -952,8 +957,8 @@ class _RolesTabState extends State<_RolesTab> with AutomaticKeepAliveClientMixin
                 child: ListTile(
                   leading: const Icon(Icons.admin_panel_settings, size: 18, color: Color(0xFF6366F1)),
                   title: Text(str(role['name']), style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(str(role['description'] ?? ''),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${(role['permissions'] as List? ?? const []).length} permissions',
+                    style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
                     onPressed: () async {
@@ -975,7 +980,6 @@ class _RolesTabState extends State<_RolesTab> with AutomaticKeepAliveClientMixin
 
   void _showCreate() {
     final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
     showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) =>
       Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -985,13 +989,13 @@ class _RolesTabState extends State<_RolesTab> with AutomaticKeepAliveClientMixin
             sheetHeader('New Custom Role'),
             const SizedBox(height: 16),
             xField(nameCtrl, 'Role Name'),
-            const SizedBox(height: 10),
-            xField(descCtrl, 'Description (optional)'),
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: FilledButton(
               onPressed: () async {
                 Navigator.pop(context);
-                final ok = await widget.api.createCustomRole({'name': nameCtrl.text, 'description': descCtrl.text, 'permissions': []});
+                // Backend model has no description column — it was silently
+                // dropped and always rendered blank on reload.
+                final ok = await widget.api.createCustomRole({'name': nameCtrl.text, 'permissions': []});
                 if (context.mounted) xSnack(context, ok ? 'Role created' : 'Failed', error: !ok);
                 _load();
               },
@@ -1414,27 +1418,39 @@ class _TenantsState extends State<TenantsScreen> {
   }
 
   void _showCreate() {
-    final nameCtrl = TextEditingController();
-    final domainCtrl = TextEditingController();
+    final nameCtrl          = TextEditingController();
+    final slugCtrl          = TextEditingController();
+    final adminUsernameCtrl = TextEditingController();
+    final adminEmailCtrl    = TextEditingController();
     showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) =>
       Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             sheetHeader('New Tenant'),
             const SizedBox(height: 16),
-            xField(nameCtrl,   'Tenant Name'),
+            xField(nameCtrl,          'Tenant Name'),
             const SizedBox(height: 10),
-            xField(domainCtrl, 'Domain (optional)'),
+            xField(slugCtrl,          'Slug (e.g. acme-corp)'),
+            const SizedBox(height: 10),
+            xField(adminUsernameCtrl, 'First Admin Username'),
+            const SizedBox(height: 10),
+            xField(adminEmailCtrl,    'First Admin Email'),
             const SizedBox(height: 16),
             SizedBox(width: double.infinity, child: FilledButton.icon(
               icon: const Icon(Icons.add_business, size: 16),
               label: const Text('Create Tenant'),
               onPressed: () async {
                 Navigator.pop(context);
+                // Backend requires name+slug+admin_username+admin_email —
+                // sending just name/domain/plan always 400'd, so no tenant
+                // was ever actually created.
                 final ok = await widget.api.createTenant({
-                  'name': nameCtrl.text, 'domain': domainCtrl.text, 'plan': 'free',
+                  'name': nameCtrl.text,
+                  'slug': slugCtrl.text,
+                  'admin_username': adminUsernameCtrl.text,
+                  'admin_email': adminEmailCtrl.text,
                 });
                 if (context.mounted) xSnack(context, ok ? 'Tenant created' : 'Failed', error: !ok);
                 _load();
