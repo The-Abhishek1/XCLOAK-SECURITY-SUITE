@@ -350,7 +350,12 @@ func GetACEAssets(c *gin.Context) {
 	for rows.Next() {
 		var id, name, at, cat, st, crit, agentSt, patchSt, avSt, discSrc string
 		var host, owner2, bu2, dept, loc, tags, ips, osn, osv, mfr, model string
-		var riskScore, intFacing, managed int
+		var riskScore int
+		// internet_facing/managed are real Postgres booleans — scanning them
+		// into *int (as intFacing==1/managed==1 below implied) fails on
+		// every row for lib/pq, so rows.Scan's err was non-nil every time
+		// and every single asset was silently dropped, regardless of tenant.
+		var intFacing, managed bool
 		var lsa, ca *string
 		if err := rows.Scan(&id, &name, &host, &at, &cat, &st, &owner2, &bu2, &dept, &crit,
 			&riskScore, &loc, &tags, &ips, &intFacing, &managed, &agentSt,
@@ -360,7 +365,7 @@ func GetACEAssets(c *gin.Context) {
 				"category": cat, "status": st, "owner": owner2, "business_unit": bu2,
 				"department": dept, "criticality": crit, "risk_score": riskScore,
 				"location": loc, "tags": tags, "ip_addresses": ips,
-				"internet_facing": intFacing == 1, "managed": managed == 1,
+				"internet_facing": intFacing, "managed": managed,
 				"agent_status": agentSt, "os_name": osn, "os_version": osv,
 				"last_seen_at": lsa, "manufacturer": mfr, "model": model,
 				"patch_status": patchSt, "antivirus_status": avSt,
@@ -395,10 +400,14 @@ func GetACEAssetDetail(c *gin.Context) {
 	var (
 		id, name, at, cat, st, crit, agentSt, patchSt, avSt, fwSt, bkSt, discSrc        string
 		host, owner2, bu2, dept, loc, tags, ips, mac, osn, osv, dom, serial, mfr, model string
-		riskScore, intFacing, managed, cpuCores, memGB, diskGB, diskUsedPct             int
+		riskScore, cpuCores, memGB, diskGB, diskUsedPct                                 int
 		cpuUsage, memUsage, certDays, runningSvcs, swCount                              int
 		openPorts, activeUsers                                                          string
 		lsa, fsa, ca, ua                                                                *string
+		// internet_facing/managed are real Postgres booleans — scanning
+		// them as *int made this row.Scan fail unconditionally, so every
+		// asset detail lookup 404'd regardless of whether the asset existed.
+		intFacing, managed bool
 	)
 	err := row.Scan(&id, &name, &host, &at, &cat, &st, &owner2, &bu2, &dept, &crit, &riskScore, &loc,
 		&tags, &ips, &mac, &intFacing, &managed, &osn, &osv, &dom, &serial, &mfr, &model,
@@ -455,7 +464,7 @@ func GetACEAssetDetail(c *gin.Context) {
 		"category": cat, "status": st, "owner": owner2, "business_unit": bu2,
 		"department": dept, "criticality": crit, "risk_score": riskScore,
 		"location": loc, "tags": tags, "ip_addresses": ips, "mac_address": mac,
-		"internet_facing": intFacing == 1, "managed": managed == 1,
+		"internet_facing": intFacing, "managed": managed,
 		"os_name": osn, "os_version": osv, "domain": dom, "serial_number": serial,
 		"manufacturer": mfr, "model": model,
 		"cpu_cores": cpuCores, "memory_gb": memGB, "disk_gb": diskGB,

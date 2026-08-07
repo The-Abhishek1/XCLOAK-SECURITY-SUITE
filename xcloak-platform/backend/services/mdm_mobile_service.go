@@ -47,13 +47,23 @@ func CreateEnrollmentToken(tenantID int, label, platform string, maxUses *int, e
 	if platform == "" {
 		platform = "android"
 	}
+	// createdBy is 0 for API-key-authenticated requests (middleware sets
+	// user_id=0 since a key isn't tied to a real users row) — inserting 0
+	// straight into this int FK column violates mdm_enrollment_tokens_
+	// created_by_fkey, so every enrollment-token creation over an API key
+	// 500'd. The column is nullable (ON DELETE SET NULL), so pass NULL
+	// instead of a fake user id.
+	var createdByArg *int
+	if createdBy != 0 {
+		createdByArg = &createdBy
+	}
 	var t EnrollmentToken
 	err := database.DB.QueryRow(`
 		INSERT INTO mdm_enrollment_tokens
 			(tenant_id, token, label, platform, max_uses, expires_at, created_by)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)
 		RETURNING id, tenant_id, token, label, platform, used_count, max_uses, expires_at, created_by, created_at
-	`, tenantID, token, label, platform, maxUses, expiresAt, createdBy).Scan(
+	`, tenantID, token, label, platform, maxUses, expiresAt, createdByArg).Scan(
 		&t.ID, &t.TenantID, &t.Token, &t.Label, &t.Platform,
 		&t.UsedCount, &t.MaxUses, &t.ExpiresAt, &t.CreatedBy, &t.CreatedAt,
 	)
