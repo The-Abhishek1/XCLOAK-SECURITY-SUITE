@@ -81,4 +81,5 @@ type AgentBaseline struct {
 	VarPrivEsc   float64   `json:"var_priv_esc"`
 	SampleCount  int       `json:"sample_count"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	Hostname     string    `json:"hostname,omitempty"`
 }

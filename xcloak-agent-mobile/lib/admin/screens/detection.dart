@@ -536,7 +536,10 @@ class IncidentsScreen extends StatefulWidget {
 
 class _IncidentsState extends State<IncidentsScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  final _statuses = ['open', 'investigating', 'contained', 'resolved'];
+  // Must match the backend's valid incident statuses exactly (see
+  // UpdateIncidentStatus in api/incident_update.go) — 'contained' isn't one
+  // of them, so a tab/action using it would always come back empty/rejected.
+  final _statuses = ['open', 'investigating', 'closed', 'resolved'];
   List   _incidents = [];
   bool   _loading   = true;
   String _status    = 'open';
@@ -571,7 +574,7 @@ class _IncidentsState extends State<IncidentsScreen> with SingleTickerProviderSt
         labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         tabs: const [
           Tab(text: 'Open'), Tab(text: 'Investigating'),
-          Tab(text: 'Contained'), Tab(text: 'Resolved'),
+          Tab(text: 'Closed'), Tab(text: 'Resolved'),
         ],
       ),
       Expanded(child: _loading
@@ -660,7 +663,7 @@ class _IncidentCard extends StatelessWidget {
             StatusChip(str(inc['status'])),
             PopupMenuButton<String>(
               onSelected: (action) async {
-                if (['investigating', 'contained', 'resolved'].contains(action)) {
+                if (['investigating', 'closed', 'resolved'].contains(action)) {
                   final ok = await api.updateIncidentStatus(id, action);
                   if (context.mounted) xSnack(context, ok ? 'Status updated' : 'Failed', error: !ok);
                   onAction();
@@ -692,8 +695,8 @@ class _IncidentCard extends StatelessWidget {
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'investigating', child: Text('→ Investigating')),
-                const PopupMenuItem(value: 'contained',    child: Text('→ Contained')),
                 const PopupMenuItem(value: 'resolved',     child: Text('→ Resolved')),
+                const PopupMenuItem(value: 'closed',       child: Text('→ Closed')),
                 const PopupMenuDivider(),
                 const PopupMenuItem(value: 'critical', child: Text('Severity: Critical')),
                 const PopupMenuItem(value: 'high',     child: Text('Severity: High')),
@@ -841,6 +844,18 @@ class _UEBAState extends State<UEBAScreen> {
 // Insider Threat Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
+// insider_threat_scores has no free-text "reason" — build a one-line summary
+// from the scored contributors (e.g. {"off_hours_logins": 20, ...}), falling
+// back to the risk bucket if contributors weren't recorded.
+String _contributorSummary(Map<String,dynamic> score) {
+  final contributors = score['contributors'];
+  if (contributors is Map && contributors.isNotEmpty) {
+    return contributors.keys.take(3).join(', ').replaceAll('_', ' ');
+  }
+  final level = str(score['risk_level'] ?? '', '');
+  return level.isEmpty ? '' : '$level risk';
+}
+
 class InsiderThreatScreen extends StatefulWidget {
   final DashboardApi api;
   const InsiderThreatScreen({super.key, required this.api});
@@ -905,7 +920,7 @@ class _InsiderThreatState extends State<InsiderThreatScreen> {
                   Text(username,
                     style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text(str(score['reason'] ?? score['details'] ?? ''),
+                  Text(_contributorSummary(score),
                     style: const TextStyle(fontSize: 11.5, color: Colors.grey),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 ])),
@@ -1565,8 +1580,8 @@ class _CorrelationState extends State<CorrelationScreen> {
               child: ListTile(
                 leading: Switch(
                   value: enabled,
-                  onChanged: (_) async {
-                    final ok = await widget.api.toggleCorrelationRule(id);
+                  onChanged: (v) async {
+                    final ok = await widget.api.toggleCorrelationRule(id, v);
                     if (context.mounted) xSnack(context, ok ? 'Updated' : 'Failed', error: !ok);
                     _load();
                   },
@@ -1673,15 +1688,21 @@ class _ITDRState extends State<ITDRScreen> {
   Widget build(BuildContext context) {
     if (_loading) return xLoading();
     return Column(children: [
+      // Values must match the real finding_type constants in
+      // services/itdr_service.go — the old chips (active_directory/cloud/mfa/
+      // privilege_escalation) never matched any row the detectors actually write.
       FilterRow(
         selected: _category,
         onSelect: (v) { setState(() => _category = v); _load(); },
         chips: const [
           ('All', '', null),
-          ('AD', 'active_directory', null),
-          ('Cloud', 'cloud', null),
-          ('MFA', 'mfa', null),
-          ('Priv Esc', 'privilege_escalation', null),
+          ('Password Spray', 'password_spray', null),
+          ('Shadow Admin', 'shadow_admin', null),
+          ('Lateral Move', 'lateral_movement_id', null),
+          ('Stale Acct', 'stale_account', null),
+          ('Dormant Admin', 'dormant_admin', null),
+          ('MFA Gap', 'mfa_gap', null),
+          ('MFA Fatigue', 'mfa_fatigue', null),
         ],
       ),
       Expanded(child: RefreshIndicator(

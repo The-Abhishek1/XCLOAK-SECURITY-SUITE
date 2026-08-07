@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -439,20 +440,45 @@ func GetAnomalyScores(agentID, tenantID int, hours int) ([]models.AgentAnomalySc
 	return scores, nil
 }
 
+// GetAgentBaselines returns the 168-bucket hour-of-week baseline for a
+// single agent (agentID != 0), or -- when agentID is 0 -- a tenant-wide
+// summary with the most recently updated bucket per agent, for fleet-level
+// overview screens that don't scope to one agent.
 func GetAgentBaselines(agentID, tenantID int) ([]models.AgentBaseline, error) {
-	rows, err := database.DB.Query(`
-		SELECT agent_id, hour_of_week,
-		       avg_log_count,  var_log_count,
-		       avg_login_fail, var_login_fail,
-		       avg_conn_count, var_conn_count,
-		       avg_proc_count, var_proc_count,
-		       avg_priv_esc,   var_priv_esc,
-		       sample_count, updated_at
-		FROM agent_behavior_baselines
-		WHERE agent_id = $1
-		  AND tenant_id = $2
-		ORDER BY hour_of_week
-	`, agentID, tenantID)
+	var rows *sql.Rows
+	var err error
+	if agentID != 0 {
+		rows, err = database.DB.Query(`
+			SELECT b.agent_id, b.hour_of_week,
+			       b.avg_log_count,  b.var_log_count,
+			       b.avg_login_fail, b.var_login_fail,
+			       b.avg_conn_count, b.var_conn_count,
+			       b.avg_proc_count, b.var_proc_count,
+			       b.avg_priv_esc,   b.var_priv_esc,
+			       b.sample_count, b.updated_at, COALESCE(a.hostname,'')
+			FROM agent_behavior_baselines b
+			LEFT JOIN agents a ON a.id = b.agent_id
+			WHERE b.agent_id = $1
+			  AND b.tenant_id = $2
+			ORDER BY b.hour_of_week
+		`, agentID, tenantID)
+	} else {
+		rows, err = database.DB.Query(`
+			SELECT DISTINCT ON (b.agent_id)
+			       b.agent_id, b.hour_of_week,
+			       b.avg_log_count,  b.var_log_count,
+			       b.avg_login_fail, b.var_login_fail,
+			       b.avg_conn_count, b.var_conn_count,
+			       b.avg_proc_count, b.var_proc_count,
+			       b.avg_priv_esc,   b.var_priv_esc,
+			       b.sample_count, b.updated_at, COALESCE(a.hostname,'')
+			FROM agent_behavior_baselines b
+			LEFT JOIN agents a ON a.id = b.agent_id
+			WHERE b.tenant_id = $1
+			ORDER BY b.agent_id, b.updated_at DESC
+			LIMIT 200
+		`, tenantID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +494,7 @@ func GetAgentBaselines(agentID, tenantID int) ([]models.AgentBaseline, error) {
 			&b.AvgConnCount, &b.VarConnCount,
 			&b.AvgProcCount, &b.VarProcCount,
 			&b.AvgPrivEsc, &b.VarPrivEsc,
-			&b.SampleCount, &b.UpdatedAt,
+			&b.SampleCount, &b.UpdatedAt, &b.Hostname,
 		); err == nil {
 			baselines = append(baselines, b)
 		}

@@ -5,6 +5,18 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../widgets.dart';
 
+// models.Log (from /api/logs/search) carries no top-level severity field --
+// only log_message + parsed_fields (a raw JSON string) -- so severity is
+// derived from the message text, mirroring the web log-search page's real
+// severityOf() (app/log-search/page.tsx).
+String logSevFromMessage(String msg) {
+  final m = msg.toLowerCase();
+  if (m.contains('critical') || m.contains('fatal')) return 'critical';
+  if (m.contains('error') || m.contains('failed') || m.contains('failure')) return 'error';
+  if (m.contains('warn')) return 'warn';
+  return 'info';
+}
+
 // ── Hunt Workbench ────────────────────────────────────────────────────────────
 
 class HuntWorkbenchScreen extends StatefulWidget {
@@ -15,7 +27,7 @@ class HuntWorkbenchScreen extends StatefulWidget {
 
 class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  List _templates = [], _runs = [], _agents = [];
+  List _templates = [], _runs = [];
   bool _loading = true;
 
   @override void initState() { super.initState(); _tabs = TabController(length: 2, vsync: this); _load(); }
@@ -23,9 +35,9 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final res = await Future.wait([widget.api.huntTemplates(), widget.api.huntRuns(), widget.api.agents()]);
+    final res = await Future.wait([widget.api.huntTemplates(), widget.api.huntRuns()]);
     if (!mounted) return;
-    setState(() { _templates = res[0]; _runs = res[1]; _agents = res[2]; _loading = false; });
+    setState(() { _templates = res[0]; _runs = res[1]; _loading = false; });
   }
 
   @override
@@ -52,7 +64,7 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
             subtitle: Text(str(t['description'] ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: PopupMenuButton<String>(
               onSelected: (v) async {
-                if (v == 'run') _executeHunt(id);
+                if (v == 'run') _executeHunt(t);
                 if (v == 'delete') {
                   if (context.mounted && await xConfirm(context, 'Delete Template', 'Delete this hunt template?')) {
                     await widget.api.deleteHuntTemplate(id);
@@ -105,38 +117,18 @@ class _HuntWorkbenchState extends State<HuntWorkbenchScreen> with SingleTickerPr
     );
   }
 
-  void _executeHunt(int templateId) {
-    final selectedAgents = <int>{};
-    showModalBottomSheet(
-      context: context, isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          sheetHeader('Select Agents'),
-          SizedBox(
-            height: 200,
-            child: ListView(children: _agents.map((a) {
-              final m = a as Map<String,dynamic>; final id = m['id'] as int? ?? 0;
-              return CheckboxListTile(
-                title: Text(str(m['hostname'])),
-                value: selectedAgents.contains(id),
-                onChanged: (v) => ss(() { if (v!) selectedAgents.add(id); else selectedAgents.remove(id); }),
-              );
-            }).toList()),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(width: double.infinity, child: FilledButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await widget.api.executeHunt(templateId, selectedAgents.toList());
-              if (context.mounted) xSnack(context, 'Hunt started');
-              _load();
-            },
-            child: const Text('Execute'),
-          )),
-        ]),
-      )),
-    );
+  // ExecuteHunt runs the template's stored KQL query over already-collected
+  // logs -- hunts have no agent-targeting concept (api/hunt_workbench.go's
+  // ExecuteHunt never reads agent_ids at all, and 400s without kql_query),
+  // unlike the agent-picker this used to show.
+  Future<void> _executeHunt(Map<String,dynamic> template) async {
+    final kql = (template['kql_query'] ?? '').toString();
+    if (kql.trim().isEmpty) { xSnack(context, 'This template has no query', error: true); return; }
+    if (!await xConfirm(context, 'Execute Hunt', 'Run "${str(template['name'])}" against collected logs?')) return;
+    final ok = await widget.api.executeHunt(template['id'] as int? ?? 0, str(template['name'], 'Ad-hoc Hunt'), kql);
+    if (!context.mounted) return;
+    xSnack(context, ok ? 'Hunt started' : 'Failed to start hunt', error: !ok);
+    _load();
   }
 
   Widget _runsTab() => _runs.isEmpty ? const XEmptyState('No hunt runs') : RefreshIndicator(
@@ -191,7 +183,7 @@ class _ThreatActorsState extends State<ThreatActorsScreen> {
             return Card(child: ListTile(
               leading: CircleAvatar(backgroundColor: Colors.red.shade800, child: Text(str(a['name'], 'A')[0].toUpperCase(), style: const TextStyle(color: Colors.white))),
               title: Text(str(a['name'])),
-              subtitle: Text('${str(a['aliases'] ?? '')}  ·  ${str(a['alert_count'] ?? 0)} alerts', maxLines: 1),
+              subtitle: Text('${(a['aliases'] as List?)?.join(', ') ?? ''}  ·  ${a['recent_alert_count'] ?? 0} alerts', maxLines: 1),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'edit') { _create(existing: a); return; }
@@ -289,7 +281,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
           final enabled = ioc['enabled'] as bool? ?? ioc['is_enabled'] as bool? ?? false;
           return Card(child: ListTile(
             leading: SevChip(str(ioc['severity'])),
-            title: Text(str(ioc['value']), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+            title: Text(str(ioc['indicator']), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
             subtitle: Text('${str(ioc['type'])}  ·  ${str(ioc['description'] ?? '')}', maxLines: 1),
             trailing: PopupMenuButton<String>(
               onSelected: (v) async {
@@ -314,7 +306,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
   );
 
   void _iocForm({Map<String,dynamic>? existing}) {
-    final valCtrl  = TextEditingController(text: existing != null ? str(existing['value']) : '');
+    final valCtrl  = TextEditingController(text: existing != null ? str(existing['indicator']) : '');
     final descCtrl = TextEditingController(text: existing != null ? str(existing['description']) : '');
     String type = existing != null ? str(existing['type'], 'ip') : 'ip';
     String sev  = existing != null ? str(existing['severity'], 'high') : 'high';
@@ -335,7 +327,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final body = {'type': type, 'value': valCtrl.text.trim(), 'severity': sev, 'description': descCtrl.text.trim()};
+              final body = {'type': type, 'indicator': valCtrl.text.trim(), 'severity': sev, 'description': descCtrl.text.trim()};
               final ok = existing != null
                 ? await widget.api.updateIoc(existing['id'] as int? ?? 0, body)
                 : await widget.api.createIoc(body);
@@ -362,7 +354,7 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
           return Card(child: ListTile(
             leading: Icon(Icons.rss_feed, color: enabled ? Colors.green : Colors.grey),
             title: Text(str(f['name'])),
-            subtitle: Text('${str(f['format'] ?? '')}  ·  Last sync: ${timeAgo(f['last_synced_at'])}'),
+            subtitle: Text('${str(f['feed_type'] ?? '')}  ·  Last sync: ${timeAgo(f['last_sync'])}'),
             trailing: PopupMenuButton<String>(
               onSelected: (v) async {
                 if (v == 'edit')   { _feedForm(existing: f); return; }
@@ -386,9 +378,9 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
   );
 
   void _feedForm({Map<String,dynamic>? existing}) {
-    final nameCtrl = TextEditingController(text: existing != null ? str(existing['name']) : '');
-    final urlCtrl  = TextEditingController(text: existing != null ? str(existing['url']) : '');
-    String format = existing != null ? str(existing['format'], 'stix') : 'stix';
+    final nameCtrl   = TextEditingController(text: existing != null ? str(existing['name']) : '');
+    final sourceCtrl = TextEditingController(text: existing != null ? str(existing['source']) : '');
+    String feedType  = existing != null ? str(existing['feed_type'], 'flatfile') : 'flatfile';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
@@ -397,14 +389,14 @@ class _ThreatIntelState extends State<ThreatIntelScreen> with SingleTickerProvid
           sheetHeader(existing != null ? 'Edit Threat Feed' : 'New Threat Feed'),
           xField(nameCtrl, 'Name'),
           const SizedBox(height: 10),
-          xField(urlCtrl, 'URL', keyboardType: TextInputType.url),
+          xField(sourceCtrl, 'Source URL', keyboardType: TextInputType.url),
           const SizedBox(height: 10),
-          xDropdown('Format', format, ['stix','misp','csv','txt'], (v) => ss(() => format = v!)),
+          xDropdown('Feed Type', feedType, ['flatfile','otx','misp','taxii'], (v) => ss(() => feedType = v!)),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final body = {'name': nameCtrl.text.trim(), 'url': urlCtrl.text.trim(), 'format': format, 'enabled': true};
+              final body = {'name': nameCtrl.text.trim(), 'source': sourceCtrl.text.trim(), 'feed_type': feedType, 'enabled': true};
               final ok = existing != null
                 ? await widget.api.updateThreatFeed(existing['id'] as int? ?? 0, body)
                 : await widget.api.createThreatFeed(body);
@@ -455,7 +447,7 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
             return Card(child: ListTile(
               leading: Icon(Icons.rule, color: enabled ? Colors.green : Colors.grey),
               title: Text(str(r['name'] ?? r['title'])),
-              subtitle: Text('${str(r['severity'] ?? r['level'])}  ·  ${str(r['category'] ?? r['source'] ?? '')}', style: const TextStyle(fontSize: 11)),
+              subtitle: Text('${str(r['severity'] ?? r['level'])}  ·  ${str(r['logsource_cat'] ?? '')}', style: const TextStyle(fontSize: 11)),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'edit')   { _create(existing: r); return; }
@@ -478,9 +470,14 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
     );
   }
 
+  // models.SigmaRule has no name/content fields -- real: title plus a
+  // structured selections/keywords/condition. `name`/`content` used to be
+  // silently dropped by ShouldBindJSON, so every created rule had a blank
+  // title and no real detection logic at all.
   void _create({Map<String,dynamic>? existing}) {
-    final nameCtrl    = TextEditingController(text: existing != null ? str(existing['name'] ?? existing['title']) : '');
-    final contentCtrl = TextEditingController(text: existing != null ? str(existing['content']) : '');
+    final nameCtrl     = TextEditingController(text: existing != null ? str(existing['title'] ?? existing['name']) : '');
+    final keywordsCtrl = TextEditingController(
+      text: existing != null ? ((existing['keywords'] as List?)?.join(', ') ?? '') : '');
     String sev = existing != null ? str(existing['severity'] ?? existing['level'], 'high') : 'high';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
@@ -488,16 +485,25 @@ class _SigmaRulesState extends State<SigmaRulesScreen> {
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           sheetHeader(existing != null ? 'Edit Sigma Rule' : 'New Sigma Rule'),
-          xField(nameCtrl, 'Rule Name'),
+          xField(nameCtrl, 'Rule Title'),
           const SizedBox(height: 10),
           xDropdown('Severity', sev, ['critical','high','medium','low'], (v) => ss(() => sev = v!)),
           const SizedBox(height: 10),
-          xField(contentCtrl, 'YAML Content', maxLines: 6),
+          xField(keywordsCtrl, 'Match keywords (comma-separated)', maxLines: 4),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final body = {'name': nameCtrl.text.trim(), 'content': contentCtrl.text.trim(), 'severity': sev, 'enabled': true};
+              final kws = keywordsCtrl.text.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toList();
+              final body = {
+                'title': nameCtrl.text.trim(),
+                'status': 'experimental',
+                'severity': sev,
+                'enabled': true,
+                'selections': {'selection1': kws},
+                'keywords': kws,
+                'condition': 'selection1',
+              };
               final ok = existing != null
                 ? await widget.api.updateSigma(existing['id'] as int? ?? 0, body)
                 : await widget.api.createSigma(body);
@@ -548,7 +554,7 @@ class _YaraRulesState extends State<YaraRulesScreen> {
             return Card(child: ListTile(
               leading: Icon(Icons.pest_control, color: enabled ? Colors.green : Colors.grey),
               title: Text(str(r['name'])),
-              subtitle: Text('${r['match_count'] ?? 0} matches  ·  ${timeAgo(r['created_at'])}'),
+              subtitle: Text(str(r['description'] ?? '', 'Added ${timeAgo(r['created_at'])}')),
               trailing: PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'edit')   { _create(existing: r); return; }
@@ -571,9 +577,11 @@ class _YaraRulesState extends State<YaraRulesScreen> {
     );
   }
 
+  // models.YaraRule's content column is rule_content, not content -- the
+  // real .yar text was silently discarded on every create/edit.
   void _create({Map<String,dynamic>? existing}) {
     final nameCtrl    = TextEditingController(text: existing != null ? str(existing['name']) : '');
-    final contentCtrl = TextEditingController(text: existing != null ? str(existing['content']) : '');
+    final contentCtrl = TextEditingController(text: existing != null ? str(existing['rule_content']) : '');
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => Padding(
@@ -587,7 +595,7 @@ class _YaraRulesState extends State<YaraRulesScreen> {
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final body = {'name': nameCtrl.text.trim(), 'content': contentCtrl.text.trim(), 'enabled': true};
+              final body = {'name': nameCtrl.text.trim(), 'rule_content': contentCtrl.text.trim(), 'enabled': true};
               final ok = existing != null
                 ? await widget.api.updateYara(existing['id'] as int? ?? 0, body)
                 : await widget.api.createYara(body);
@@ -632,19 +640,26 @@ class _JA3State extends State<JA3Screen> {
           padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),
           itemCount: _fps.length,
           itemBuilder: (_, i) {
+            // GetJA3Fingerprints/CreateJA3Fingerprint (api/ja3.go) real fields
+            // are hash/threat_name/severity/source/is_platform -- none of
+            // fingerprint/label/is_malicious exist, so this used to render
+            // blank hash+label and *always* show "benign" regardless of the
+            // real severity.
             final f = _fps[i] as Map<String,dynamic>;
             final id = f['id'] as int? ?? 0;
-            final bad = f['is_malicious'] as bool? ?? false;
+            final isPlatform = f['is_platform'] as bool? ?? false;
             return Card(child: ListTile(
-              leading: Icon(Icons.fingerprint, color: bad ? Colors.red : Colors.grey),
-              title: Text(str(f['fingerprint']), style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
-              subtitle: Text('${str(f['label'] ?? '')}  ·  ${bad ? "MALICIOUS" : "benign"}'),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () async {
-                  if (await xConfirm(context, 'Delete', 'Delete fingerprint?')) { await widget.api.deleteJa3(id); _load(); }
-                },
-              ),
+              leading: SevChip(str(f['severity'])),
+              title: Text(str(f['hash']), style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+              subtitle: Text('${str(f['threat_name'] ?? '')}  ·  ${str(f['source'] ?? '')}'),
+              trailing: isPlatform
+                ? const Tooltip(message: 'Platform-managed — cannot be deleted', child: Icon(Icons.lock_outline, color: Colors.grey))
+                : IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () async {
+                      if (await xConfirm(context, 'Delete', 'Delete fingerprint?')) { await widget.api.deleteJa3(id); _load(); }
+                    },
+                  ),
             ));
           },
         ),
@@ -654,25 +669,27 @@ class _JA3State extends State<JA3Screen> {
   }
 
   void _create() {
-    final fpCtrl    = TextEditingController();
-    final labelCtrl = TextEditingController();
-    bool malicious  = true;
+    final fpCtrl   = TextEditingController();
+    final nameCtrl = TextEditingController();
+    String sev = 'high';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
         padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           sheetHeader('New JA3 Fingerprint'),
-          xField(fpCtrl, 'JA3 Hash (MD5)'),
+          xField(fpCtrl, 'JA3 Hash (32-char MD5)'),
           const SizedBox(height: 10),
-          xField(labelCtrl, 'Label (e.g. Cobalt Strike)'),
+          xField(nameCtrl, 'Threat Name (e.g. Cobalt Strike)'),
           const SizedBox(height: 10),
-          SwitchListTile(title: const Text('Mark as Malicious'), value: malicious, onChanged: (v) => ss(() => malicious = v)),
+          xDropdown('Severity', sev, ['critical','high','medium','low'], (v) => ss(() => sev = v!)),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
+              final hash = fpCtrl.text.trim();
+              if (hash.length != 32) { xSnack(context, 'Hash must be a 32-character MD5 hex string', error: true); return; }
               Navigator.pop(ctx);
-              await widget.api.createJa3({'fingerprint': fpCtrl.text.trim(), 'label': labelCtrl.text.trim(), 'is_malicious': malicious});
+              await widget.api.createJa3({'hash': hash, 'threat_name': nameCtrl.text.trim(), 'severity': sev, 'source': 'manual'});
               _load();
             },
             child: const Text('Create'),
@@ -744,7 +761,7 @@ class _LogSearchState extends State<LogSearchScreen> {
   Future<void> _explainResults() async {
     if (_results.isEmpty) return;
     setState(() => _aiBusy = true);
-    final samples = _results.take(10).map((l) => str((l as Map)['message'] ?? l['raw'])).toList();
+    final samples = _results.take(10).map((l) => str((l as Map)['log_message'])).toList();
     final r = await widget.api.aiLogExplain(_qCtrl.text.trim(), _results.length, samples);
     if (!mounted) return;
     setState(() => _aiBusy = false);
@@ -762,7 +779,7 @@ class _LogSearchState extends State<LogSearchScreen> {
   Future<void> _buildDetectionRule() async {
     if (_qCtrl.text.trim().isEmpty) return;
     setState(() => _aiBusy = true);
-    final samples = _results.take(10).map((l) => str((l as Map)['message'] ?? l['raw'])).toList();
+    final samples = _results.take(10).map((l) => str((l as Map)['log_message'])).toList();
     final r = await widget.api.buildDetection('sigma', _qCtrl.text.trim(), 'Detection from log search', samples);
     if (!mounted) return;
     setState(() => _aiBusy = false);
@@ -849,19 +866,24 @@ class _LogSearchState extends State<LogSearchScreen> {
         padding: const EdgeInsets.all(8),
         itemCount: _results.length,
         itemBuilder: (_, i) {
+          // models.Log real fields: log_message/log_source/agent_id/
+          // collected_at -- message/level/severity/hostname/timestamp don't
+          // exist, so every result used to render a blank message and a
+          // blank/em-dash severity chip regardless of the real log content.
           final l = _results[i] as Map<String,dynamic>;
+          final msg = str(l['log_message'] ?? l['message'] ?? l['raw']);
           return Card(child: Padding(
             padding: const EdgeInsets.all(10),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                StatusChip(str(l['level'] ?? l['severity'])),
+                StatusChip(logSevFromMessage(msg)),
                 const SizedBox(width: 8),
-                Text(timeAgo(l['timestamp'] ?? l['created_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(timeAgo(l['collected_at'] ?? l['timestamp']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 const Spacer(),
-                Text(str(l['hostname'] ?? l['agent_id']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(str(l['log_source'] ?? l['hostname'] ?? l['agent_id']), style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ]),
               const SizedBox(height: 4),
-              Text(str(l['message'] ?? l['raw']), style: const TextStyle(fontSize: 12, fontFamily: 'monospace'), maxLines: 3, overflow: TextOverflow.ellipsis),
+              Text(msg, style: const TextStyle(fontSize: 12, fontFamily: 'monospace'), maxLines: 3, overflow: TextOverflow.ellipsis),
             ]),
           ));
         },
@@ -1361,18 +1383,22 @@ class _DeceptionState extends State<DeceptionScreen> with SingleTickerProviderSt
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
             itemCount: _traps.length,
             itemBuilder: (_, i) {
+              // models.Honeyport real fields: is_active/port/protocol/
+              // description/hostname -- active/type/trap_type/interactions
+              // don't exist, so this always showed inactive-grey and a
+              // fabricated "Interactions: 0" regardless of real state.
               final t = _traps[i] as Map<String,dynamic>;
               final id     = t['id'] as int? ?? 0;
-              final active = t['active'] == true || t['enabled'] == true;
+              final active = t['is_active'] as bool? ?? false;
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   leading: Icon(Icons.pest_control,
                     color: active ? const Color(0xFF6366F1) : Colors.grey),
-                  title: Text(str(t['name'] ?? t['hostname']),
+                  title: Text(str(t['hostname'], 'Agent #${t['agent_id']}'),
                     style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('Type: ${str(t['type'] ?? t['trap_type'])}  ·  '
-                    'Interactions: ${t['interactions'] ?? t['hit_count'] ?? 0}'),
+                  subtitle: Text('Port ${t['port']}/${str(t['protocol'])}  ·  '
+                    '${str(t['description'] ?? '')}'),
                   // No toggle endpoint exists on the backend — a honeypot
                   // is either live or gone, so "disable" means delete.
                   trailing: IconButton(
@@ -1485,17 +1511,26 @@ class _BehavioralState extends State<BehavioralScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    // agent_id omitted = tenant-wide summary (most recent bucket per agent) --
+    // GetAgentBaselines used to 400 without an agent_id, which this screen
+    // never sent, so the Baselines section was permanently empty.
     final bRes = await widget.api.get('/api/threat/baselines');
     // GetAnomaliesHandler returns a bare array of AnomalyFinding.
     final aRes = await widget.api.get('/api/ai/anomalies');
     if (!mounted) return;
     final baselines = bRes is List ? bRes : (bRes is Map ? (bRes['baselines'] ?? bRes['data'] ?? []) : []);
     final findings  = aRes is List ? aRes : (aRes is Map ? (aRes['findings'] ?? aRes['data'] ?? []) : []);
+    final now = DateTime.now();
+    final today = (findings as List).where((f) {
+      final ts = DateTime.tryParse(str((f as Map<String,dynamic>)['created_at'], ''));
+      return ts != null && now.difference(ts).inHours < 24;
+    }).length;
+    final agentIds = (baselines as List).map((b) => (b as Map<String,dynamic>)['agent_id']).toSet();
     final s = <String,dynamic>{
-      'anomalies_today': (findings as List).length,
-      'active_models': baselines is List ? baselines.length : 0,
+      'anomalies_today': today,
+      'active_models': agentIds.length,
     };
-    setState(() { _summary = s; _baselines = baselines as List; _findings = findings; _loading = false; });
+    setState(() { _summary = s; _baselines = baselines; _findings = findings; _loading = false; });
   }
 
   @override
@@ -1515,17 +1550,20 @@ class _BehavioralState extends State<BehavioralScreen> {
           ]),
           const SizedBox(height: 16),
           SectionTitle('Behavioral Baselines'),
+          // models.AgentBaseline real fields: agent_id/hostname/
+          // sample_count/avg_log_count/updated_at -- entity_type/entity_id/
+          // deviation_score don't exist anywhere on it.
           ..._baselines.map((b) {
             final base = b as Map<String,dynamic>;
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: const Icon(Icons.timeline, color: Color(0xFF6366F1)),
-                title: Text(str(base['entity_type'] ?? base['type']),
+                title: Text(str(base['hostname'], 'Agent #${base['agent_id']}'),
                   style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('Entity: ${str(base['entity_id'])}  ·  '
+                subtitle: Text('Samples: ${base['sample_count'] ?? 0}  ·  '
                   'Last updated: ${timeAgo(base['updated_at'])}'),
-                trailing: Text('${base['deviation_score'] ?? '-'}',
+                trailing: Text('${base['avg_log_count'] ?? '-'}',
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               ),
             );
@@ -1597,7 +1635,7 @@ class _LiveLogsState extends State<LiveLogsScreen> {
   Future<void> _load() async {
     if (!_live) return;
     setState(() => _loading = _logs.isEmpty);
-    final r = await widget.api.get('/api/logs/search?per_page=200&q=');
+    final r = await widget.api.get('/api/logs/search?limit=200&q=');
     if (!mounted) return;
     final list = r is List ? r : (r is Map ? (r['data'] ?? r['logs'] ?? []) : []);
     setState(() { _logs = list as List; _loading = false; });
@@ -1622,7 +1660,7 @@ class _LiveLogsState extends State<LiveLogsScreen> {
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final ok = await widget.api.createIoc({'type': type, 'value': valCtrl.text.trim(), 'severity': 'high', 'description': 'From live log'});
+              final ok = await widget.api.createIoc({'type': type, 'indicator': valCtrl.text.trim(), 'severity': 'high', 'description': 'From live log'});
               if (context.mounted) xSnack(context, ok ? 'IOC created' : 'Failed', error: !ok);
             },
             child: const Text('Create IOC'),
@@ -2032,8 +2070,15 @@ class _FirewallState extends State<FirewallScreen> with SingleTickerProviderStat
                     style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace')),
                   trailing: Switch(
                     value: enabled,
+                    // No PATCH route exists for /api/firewall/rules/:id (only
+                    // PUT, which UpdateRule treats as a full-row overwrite) --
+                    // this used to silently 404 and the switch just snapped
+                    // back on reload. Send the whole rule back with just
+                    // enabled flipped instead of a partial body that would
+                    // otherwise blank out name/source_ip/action/etc.
                     onChanged: (v) async {
-                      await widget.api.patch('/api/firewall/rules/${rule['id']}', {'enabled': v});
+                      final body = Map<String,dynamic>.from(rule)..['enabled'] = v;
+                      await widget.api.updateFirewallRule(rule['id'] as int? ?? 0, body);
                       _load();
                     },
                   ),

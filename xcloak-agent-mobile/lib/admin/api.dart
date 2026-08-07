@@ -356,6 +356,10 @@ class DashboardApi {
       int high = 0, medium = 0, low = 0;
       for (final row in rows) {
         switch ((row['risk_level'] ?? '').toString().toLowerCase()) {
+          // insider_threat_service.go buckets scores into low/medium/high/
+          // critical — folding 'critical' into the default (low) case here
+          // was miscounting the highest-risk users as lowest-risk.
+          case 'critical':
           case 'high':     high++;   break;
           case 'medium':   medium++; break;
           default:         low++;
@@ -458,7 +462,10 @@ class DashboardApi {
   Future<bool> createHuntTemplate(Map<String,dynamic> b) async { try { await _po('/api/hunt/templates', b); return true; } catch (_) { return false; } }
   Future<bool> deleteHuntTemplate(int id) async { try { await _d('/api/hunt/templates/$id'); return true; } catch (_) { return false; } }
   Future<List> huntRuns() async { try { final r = await _g('/api/hunt/runs'); return _list(r, ['runs','data']); } catch (_) { return []; } }
-  Future<bool> executeHunt(int templateId, List<int> agentIds) async { try { await _po('/api/hunt/execute', {'template_id': templateId, 'agent_ids': agentIds}); return true; } catch (_) { return false; } }
+  // ExecuteHunt (api/hunt_workbench.go) runs a stored KQL query over
+  // already-collected logs -- it has no agent-targeting concept and
+  // 400s without kql_query, which this never used to send.
+  Future<bool> executeHunt(int templateId, String name, String kqlQuery) async { try { await _po('/api/hunt/execute', {'template_id': templateId, 'name': name, 'kql_query': kqlQuery}); return true; } catch (_) { return false; } }
 
   // ── Alert Clusters ────────────────────────────────────────────────────────
   Future<List> clusters() async { try { final r = await _g('/api/clusters'); return _list(r, ['clusters','data']); } catch (_) { return []; } }
@@ -470,7 +477,11 @@ class DashboardApi {
   Future<List> correlationRules() async { try { final r = await _g('/api/correlation/rules'); return _list(r, ['rules','data']); } catch (_) { return []; } }
   Future<bool> createCorrelationRule(Map<String,dynamic> b) async { try { await _po('/api/correlation/rules', b); return true; } catch (_) { return false; } }
   Future<bool> updateCorrelationRule(int id, Map<String,dynamic> b) async { try { await _pu('/api/correlation/rules/$id', b); return true; } catch (_) { return false; } }
-  Future<bool> toggleCorrelationRule(int id) async { try { await _pa('/api/correlation/rules/$id/toggle', {}); return true; } catch (_) { return false; } }
+  // ToggleCorrelationRule (api/correlation_rules.go:309) writes body.Enabled
+  // verbatim (default false on an empty body) instead of flipping the
+  // current value server-side — the caller must send the desired new state,
+  // same contract the web frontend already uses (correlationAPI.toggle).
+  Future<bool> toggleCorrelationRule(int id, bool enable) async { try { await _pa('/api/correlation/rules/$id/toggle', {'enabled': enable}); return true; } catch (_) { return false; } }
   Future<bool> deleteCorrelationRule(int id) async { try { await _d('/api/correlation/rules/$id'); return true; } catch (_) { return false; } }
   Future<List> correlationMatches() async { try { final r = await _g('/api/correlation/matches'); return _list(r, ['matches','data']); } catch (_) { return []; } }
 

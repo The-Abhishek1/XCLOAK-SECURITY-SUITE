@@ -50,13 +50,12 @@ func GetFleetAnomalySummary(c *gin.Context) {
 }
 
 // GetAgentBaselines — GET /api/threat/baselines?agent_id=N
-// Returns the 168-bucket hour-of-week baseline for an agent.
+// Returns the 168-bucket hour-of-week baseline for an agent. agent_id is
+// optional — when omitted, returns a tenant-wide summary (most-recently
+// updated bucket per agent) so the mobile "Behavioral Analytics" screen can
+// show a fleet overview without picking an agent first.
 func GetAgentBaselines(c *gin.Context) {
-	agentID, err := strconv.Atoi(c.Query("agent_id"))
-	if err != nil || agentID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id required"})
-		return
-	}
+	agentID, _ := strconv.Atoi(c.Query("agent_id"))
 	baselines, err := services.GetAgentBaselines(agentID, tenantIDFromContext(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
