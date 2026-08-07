@@ -1265,11 +1265,19 @@ class _TimelineState extends State<TimelineScreen> {
     setState(() => _loading = false);
   }
 
+  // The backing endpoint (/api/audit-events/threats -> models.AuditEvent)
+  // has no event_type/message/description/source fields at all — it's a
+  // feed of threat-tagged process-execution audit rows (threat_tag/comm/
+  // exe/cmdline/username), not a generic multi-source timeline. Every one
+  // of those old field reads returned null, so every row rendered as a
+  // blank "event" and none of the filter chips (which matched against the
+  // now-empty type string) ever returned a non-empty list.
   List get _filtered {
     if (_filter.isEmpty) return _events;
+    final keys = _filter.split('|');
     return _events.where((e) {
-      final t = (e['event_type'] ?? e['type'] ?? '').toString().toLowerCase();
-      return t.contains(_filter);
+      final t = str(e['threat_tag']).toLowerCase();
+      return keys.any((k) => t.contains(k));
     }).toList();
   }
 
@@ -1277,7 +1285,7 @@ class _TimelineState extends State<TimelineScreen> {
   Map<String, List> _grouped() {
     final result = <String, List>{};
     for (final e in _filtered) {
-      final ts = e['created_at'] ?? e['timestamp'] ?? '';
+      final ts = e['created_at'] ?? '';
       String label;
       try {
         final dt   = DateTime.parse(ts.toString()).toLocal();
@@ -1301,9 +1309,11 @@ class _TimelineState extends State<TimelineScreen> {
         selected: _filter,
         onSelect: (v) => setState(() => _filter = v == _filter ? '' : v),
         chips: const [
-          ('All', '', null), ('Alerts', 'alert', null),
-          ('Check-ins', 'checkin', null), ('Tasks', 'task', null),
-          ('Commands', 'command', null),
+          ('All', '', null),
+          ('Execution', 'exec|shell|dropper', null),
+          ('Persistence', 'persistence|ssh_key', null),
+          ('Credential', 'credential', null),
+          ('Recon/Lateral', 'scan|enum|discovery|lateral|tunnel|exfil', null),
         ],
       ),
       Expanded(child: _events.isEmpty
@@ -1322,13 +1332,13 @@ class _TimelineState extends State<TimelineScreen> {
                   ),
                   ...entry.value.asMap().entries.map((ev) {
                     final e    = ev.value as Map<String,dynamic>;
-                    final type = (e['event_type'] ?? e['type'] ?? 'event').toString();
-                    final desc = (e['description'] ?? e['message'] ?? '').toString();
-                    final ts   = (e['created_at'] ?? e['timestamp'] ?? '').toString();
+                    final type = str(e['threat_tag'], 'event');
+                    final cmd  = str(e['cmdline'], str(e['exe'], str(e['comm'], '')));
+                    final desc = '${str(e['username'], '')} · $cmd';
                     final isLast = ev.key == entry.value.length - 1;
                     return TimelineEntry(
                       icon: _evIcon(type), color: _evColor(type),
-                      title: _evLabel(type), subtitle: desc, time: timeAgo(ts), isLast: isLast,
+                      title: _evLabel(type), subtitle: desc, time: timeAgo(e['created_at']), isLast: isLast,
                     );
                   }),
                 ],
@@ -1338,32 +1348,24 @@ class _TimelineState extends State<TimelineScreen> {
     ]);
   }
 
-  IconData _evIcon(String t) => switch (t) {
-    'checkin' || 'check_in' => Icons.sync,
-    'alert'   || 'threat'   => Icons.warning_amber,
-    'command' || 'task'     => Icons.terminal,
-    'scan'                  => Icons.bug_report_outlined,
-    'enrollment'            => Icons.phone_android,
-    _                       => Icons.circle_outlined,
-  };
+  IconData _evIcon(String t) {
+    if (t.contains('shell') || t.contains('exec')) return Icons.terminal;
+    if (t.contains('credential'))                  return Icons.key_outlined;
+    if (t.contains('persistence') || t.contains('ssh_key') || t.contains('cron')) return Icons.push_pin_outlined;
+    if (t.contains('scan') || t.contains('enum') || t.contains('discovery'))      return Icons.travel_explore;
+    if (t.contains('exfil') || t.contains('tunnel') || t.contains('lateral'))     return Icons.compare_arrows;
+    if (t.contains('tamper') || t.contains('disabled'))                          return Icons.visibility_off_outlined;
+    return Icons.warning_amber;
+  }
 
-  Color _evColor(String t) => switch (t) {
-    'alert'  || 'threat'     => const Color(0xFFEF4444),
-    'checkin'|| 'check_in'   => const Color(0xFF22C55E),
-    'command'|| 'task'       => const Color(0xFF3B82F6),
-    _                        => Colors.grey,
-  };
+  Color _evColor(String t) {
+    if (t.contains('shell') || t.contains('exec') || t.contains('dropper')) return const Color(0xFFEF4444);
+    if (t.contains('credential'))                                          return const Color(0xFFF97316);
+    if (t.contains('persistence') || t.contains('ssh_key') || t.contains('cron')) return const Color(0xFFF59E0B);
+    return const Color(0xFF3B82F6);
+  }
 
-  String _evLabel(String t) => switch (t) {
-    'checkin' || 'check_in' => 'Check-in completed',
-    'alert'                 => 'Alert generated',
-    'threat'                => 'Threat detected',
-    'command'               => 'Command received',
-    'task'                  => 'Task executed',
-    'scan'                  => 'Vulnerability scan',
-    'enrollment'            => 'Device enrolled',
-    _                       => t.replaceAll('_', ' '),
-  };
+  String _evLabel(String t) => t.replaceAll('_', ' ');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

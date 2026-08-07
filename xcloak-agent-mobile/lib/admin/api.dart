@@ -623,7 +623,11 @@ class DashboardApi {
   Future<List> mdmTokens() async { try { final r = await _g('/api/mdm/enrollment-tokens'); return _list(r, ['tokens','data']); } catch (_) { return []; } }
   Future<List> mdmEnrollments() => mdmTokens();
   Future<bool> createMdmToken(String label, String platform) async { try { await _po('/api/mdm/enrollment-tokens', {'label': label, 'platform': platform}); return true; } catch (_) { return false; } }
-  Future<Map<String,dynamic>?> createEnrollmentToken(String type) async { try { return await _po('/api/mdm/enrollment-tokens', {'label': 'Mobile Admin', 'platform': 'android', 'enrollment_type': type}); } catch (_) { return null; } }
+  // CreateEnrollmentToken (api/mdm_mobile.go) only binds label/platform/
+  // max_uses/expires_in — an `enrollment_type` field was previously sent
+  // here but silently ignored, since that concept doesn't exist on
+  // mdm_enrollment_tokens (only agent-enrolled MDMDevice rows have one).
+  Future<Map<String,dynamic>?> createEnrollmentToken() async { try { return await _po('/api/mdm/enrollment-tokens', {'label': 'Mobile Admin', 'platform': 'android'}); } catch (_) { return null; } }
   Future<bool> revokeMdmToken(int id) async { try { await _d('/api/mdm/enrollment-tokens/$id'); return true; } catch (_) { return false; } }
   Future<bool> revokeEnrollment(int id) => revokeMdmToken(id);
 

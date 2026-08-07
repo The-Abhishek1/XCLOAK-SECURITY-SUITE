@@ -205,7 +205,7 @@ class _MDMState extends State<MDMScreen> with SingleTickerProviderStateMixin {
               title: Text(str(d['device_name'] ?? d['name'] ?? 'Device $id'), style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
                 '${str(d['platform'])} ${str(d['os_version'])}  ·  ${str(d['status'])}'
-                '\n${str(d['imei'] ?? d['serial'] ?? '')}',
+                '\n${str(d['serial_number'], '')}',
                 style: const TextStyle(fontSize: 11),
               ),
               isThreeLine: true,
@@ -241,15 +241,18 @@ class _MDMState extends State<MDMScreen> with SingleTickerProviderStateMixin {
   );
 
   void _showDeviceDetail(Map<String,dynamic> d) {
+    // MDMDevice (services/mdm_service.go) has no `imei` field and no
+    // `serial`/`last_checkin`/`last_seen` — the real columns are
+    // `serial_number` and `last_check_in`, so those two rows always
+    // rendered blank/never before this fix.
     showDetailSheet(context, str(d['device_name'] ?? d['name']), [
       ('Platform',      str(d['platform'])),
       ('OS Version',    str(d['os_version'])),
       ('Model',         str(d['model'] ?? '')),
-      ('IMEI',          str(d['imei'] ?? '')),
-      ('Serial',        str(d['serial'] ?? '')),
+      ('Serial',        str(d['serial_number'], '')),
       ('Status',        str(d['status'])),
       ('Enrolled',      timeAgo(d['enrolled_at'] ?? d['created_at'])),
-      ('Last Check-in', timeAgo(d['last_checkin'] ?? d['last_seen'])),
+      ('Last Check-in', timeAgo(d['last_check_in'])),
     ]);
   }
 
@@ -260,16 +263,24 @@ class _MDMState extends State<MDMScreen> with SingleTickerProviderStateMixin {
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),
         itemCount: _enrollments.length,
         itemBuilder: (_, i) {
+          // EnrollmentToken (services/mdm_mobile_service.go) has no `used`
+          // bool or `enrollment_type` string — those fields don't exist on
+          // this model, so this row always read "Unused" for every token
+          // regardless of real usage. Real fields: `used_count` (int) and
+          // `max_uses` (nullable int, null = unlimited).
           final e  = _enrollments[i] as Map<String,dynamic>;
           final id = e['id'] as int? ?? 0;
-          final used = e['used'] as bool? ?? false;
+          final usedCount = (e['used_count'] as num?)?.toInt() ?? 0;
+          final maxUses = (e['max_uses'] as num?)?.toInt();
+          final exhausted = maxUses != null && usedCount >= maxUses;
+          final usageLabel = maxUses != null ? 'Used $usedCount/$maxUses' : 'Used $usedCount×';
           return Card(
             margin: const EdgeInsets.only(bottom: 4),
             child: ListTile(
-              leading: Icon(Icons.qr_code, color: used ? Colors.grey : Colors.blue),
-              title: Text(str(e['token'] ?? e['enrollment_token']), style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
-              subtitle: Text('${used ? "Used" : "Unused"}  ·  ${str(e['enrollment_type'] ?? '')}  ·  ${timeAgo(e['created_at'])}'),
-              trailing: used ? null : IconButton(
+              leading: Icon(Icons.qr_code, color: exhausted ? Colors.grey : Colors.blue),
+              title: Text(str(e['token']), style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+              subtitle: Text('$usageLabel  ·  ${str(e['platform'], '')}  ·  ${timeAgo(e['created_at'])}'),
+              trailing: IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                 onPressed: () async {
                   if (await xConfirm(context, 'Revoke Token', 'Revoke this enrollment token?')) { await widget.api.revokeEnrollment(id); _load(); }
@@ -284,13 +295,13 @@ class _MDMState extends State<MDMScreen> with SingleTickerProviderStateMixin {
   );
 
   void _generateToken() async {
-    final token = await widget.api.createEnrollmentToken('corporate');
+    final token = await widget.api.createEnrollmentToken();
     if (!mounted) return;
     if (token != null) {
       showDetailSheet(context, 'Enrollment Token', [
-        ('Token', str(token['token'] ?? token['enrollment_token'])),
-        ('Type',  str(token['enrollment_type'] ?? 'corporate')),
-        ('Expires', timeAgo(token['expires_at'])),
+        ('Token', str(token['token'])),
+        ('Platform', str(token['platform'], 'android')),
+        ('Expires', token['expires_at'] == null ? 'Never' : timeAgo(token['expires_at'])),
       ]);
     }
     _load();
