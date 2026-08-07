@@ -51,6 +51,13 @@ func CreateRule(rule models.FirewallRule, tenantID int) error {
 	if rule.CreatedBy == "" {
 		rule.CreatedBy = "system"
 	}
+	// firewall_rules.tags is NOT NULL — a nil rule.Tags (the real create
+	// dialog never sends one) turns into pq.StringArray(nil), which sends
+	// an explicit SQL NULL instead of an empty array and violates the
+	// constraint on every single rule create.
+	if rule.Tags == nil {
+		rule.Tags = []string{}
+	}
 	tags := pq.StringArray(rule.Tags)
 	_, err := database.DB.Exec(`
 		INSERT INTO firewall_rules

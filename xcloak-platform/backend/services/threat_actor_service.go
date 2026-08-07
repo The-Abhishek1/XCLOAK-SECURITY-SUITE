@@ -115,6 +115,20 @@ func GetThreatActors(tenantID int) ([]models.ThreatActor, error) {
 }
 
 func CreateThreatActor(a models.ThreatActor) (models.ThreatActor, error) {
+	// aliases/targeted_sectors/mitre_techniques are NOT NULL text[] columns
+	// with a '{}' default — but pq.Array(nil) sends an explicit SQL NULL
+	// that overrides the column default, so any caller that omits one of
+	// these (the real create form only ever sends aliases, never the other
+	// two) violated the constraint on every single create.
+	if a.Aliases == nil {
+		a.Aliases = []string{}
+	}
+	if a.TargetedSectors == nil {
+		a.TargetedSectors = []string{}
+	}
+	if a.MitreTechniques == nil {
+		a.MitreTechniques = []string{}
+	}
 	err := database.DB.QueryRow(`
 		INSERT INTO threat_actors
 		  (tenant_id, name, aliases, origin_country, motivation, sophistication,

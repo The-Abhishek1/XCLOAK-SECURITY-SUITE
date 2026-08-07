@@ -1990,7 +1990,10 @@ class _FirewallState extends State<FirewallScreen> with SingleTickerProviderStat
     final srcCtrl  = TextEditingController(text: '*');
     final dstCtrl  = TextEditingController(text: '*');
     final portCtrl = TextEditingController();
-    String action = 'block', protocol = 'tcp';
+    // Backend validValidActions (validators/firewall_validators.go) only
+    // accepts allow/deny/drop/reject/log — 'block' isn't one of them, so
+    // every rule create with the (previously) default action always 400'd.
+    String action = 'deny', protocol = 'tcp';
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, ss) => Padding(
@@ -2007,7 +2010,7 @@ class _FirewallState extends State<FirewallScreen> with SingleTickerProviderStat
           const SizedBox(height: 10),
           xDropdown('Protocol', protocol, ['tcp','udp','icmp','any'], (v) => ss(() => protocol = v!)),
           const SizedBox(height: 10),
-          xDropdown('Action', action, ['block','allow'], (v) => ss(() => action = v!)),
+          xDropdown('Action', action, ['deny','allow','drop','reject','log'], (v) => ss(() => action = v!)),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: () async {

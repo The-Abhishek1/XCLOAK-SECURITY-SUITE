@@ -169,14 +169,23 @@ func CreateLogSource(src *models.LogSource) (id int, plaintextKey string, err er
 		osLabel = "network"
 	}
 	ipVal := src.IPAddress
+	// agents.token has a UNIQUE index — every virtual agent used to hardcode
+	// token='', so the first CreateLogSource ever call claimed that value
+	// and every subsequent one violated idx_agent_token and 500'd. Virtual
+	// agents don't authenticate via this token, but it still has to be
+	// unique like a real one.
+	virtualToken, _, err := generateAPIKey()
+	if err != nil {
+		return 0, "", fmt.Errorf("generating virtual agent token: %w", err)
+	}
 	var agentID int
 	err = database.DB.QueryRow(`
 		INSERT INTO agents (machine_id, hostname, os, ip_address, status, token, tenant_id)
-		VALUES ($1, $2, $3, $4, 'online', '', $5)
+		VALUES ($1, $2, $3, $4, 'online', $5, $6)
 		ON CONFLICT (machine_id) DO UPDATE
 		    SET hostname = EXCLUDED.hostname, status = 'online', ip_address = EXCLUDED.ip_address
 		RETURNING id
-	`, machineID, src.Name, osLabel, ipVal, src.TenantID).Scan(&agentID)
+	`, machineID, src.Name, osLabel, ipVal, virtualToken, src.TenantID).Scan(&agentID)
 	if err != nil {
 		return 0, "", fmt.Errorf("creating virtual agent: %w", err)
 	}
