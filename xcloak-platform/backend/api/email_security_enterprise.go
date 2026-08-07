@@ -167,6 +167,15 @@ func GetEmailMessages(c *gin.Context) {
 		FROM email_messages WHERE tenant_id=$1`
 	args := []interface{}{tid}
 	i := 2
+	// q is a free-text search across subject OR sender (the mobile search box) —
+	// kept separate from the sender/subject filters below, which AND together
+	// and would otherwise only match messages where the same term appears in
+	// both fields at once.
+	if v := c.Query("q"); v != "" {
+		q += fmt.Sprintf(" AND (subject ILIKE $%d OR sender ILIKE $%d)", i, i)
+		args = append(args, "%"+v+"%")
+		i++
+	}
 	if v := c.Query("sender"); v != "" {
 		q += fmt.Sprintf(" AND sender ILIKE $%d", i)
 		args = append(args, "%"+v+"%")
@@ -965,16 +974,36 @@ func GetUserReported(c *gin.Context) {
 }
 
 // PatchUserReported — PATCH /api/email/reported/:id
+// Partial update: only columns actually present in the JSON body are set —
+// this used to unconditionally overwrite both columns from a Go struct with
+// zero-value defaults, so a caller that only meant to change triage_status
+// (like the mobile "Mark Reviewed" button, which never sends analyst_notes)
+// silently wiped out any existing analyst_notes on every call.
 func PatchUserReported(c *gin.Context) {
 	createEmailSecurityTables()
-	var body struct {
-		TriageStatus string `json:"triage_status"`
-		AnalystNotes string `json:"analyst_notes"`
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	c.ShouldBindJSON(&body)
-	_, err := database.DB.Exec(`
-		UPDATE email_reported SET triage_status=$1, analyst_notes=$2 WHERE id=$3 AND tenant_id=$4
-	`, body.TriageStatus, body.AnalystNotes, c.Param("id"), tenantIDFromContext(c))
+	allowed := map[string]bool{"triage_status": true, "analyst_notes": true}
+	setClauses, args := []string{}, []interface{}{}
+	i := 1
+	for k, v := range body {
+		if allowed[k] {
+			setClauses = append(setClauses, fmt.Sprintf("%s=$%d", k, i))
+			args = append(args, v)
+			i++
+		}
+	}
+	if len(setClauses) == 0 {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+	args = append(args, c.Param("id"), tenantIDFromContext(c))
+	_, err := database.DB.Exec(
+		fmt.Sprintf("UPDATE email_reported SET %s WHERE id=$%d AND tenant_id=$%d", strings.Join(setClauses, ","), i, i+1),
+		args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

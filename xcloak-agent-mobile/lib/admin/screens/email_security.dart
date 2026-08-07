@@ -92,7 +92,7 @@ class _EmailSecurityState extends State<EmailSecurityScreen> with SingleTickerPr
 
   Future<void> _searchMessages() async {
     final q = _msgSearchCtrl.text.trim();
-    final msgs = await widget.api.emailMessages(subject: q, sender: q);
+    final msgs = await widget.api.emailMessages(search: q);
     if (!mounted) return;
     setState(() => _messages = msgs);
   }

@@ -870,9 +870,10 @@ class DashboardApi {
   // that had never been wired to any mobile screen at all.
   Future<Map<String,dynamic>?> emailDashboard() async { try { return await _g('/api/email/dashboard'); } catch (_) { return null; } }
   Future<Map<String,dynamic>?> emailMailFlow() async { try { return await _g('/api/email/mail-flow'); } catch (_) { return null; } }
-  Future<List> emailMessages({String sender='', String recipient='', String subject='', String status='', String threatType='', String messageId=''}) async {
+  Future<List> emailMessages({String search='', String sender='', String recipient='', String subject='', String status='', String threatType='', String messageId=''}) async {
     try {
       final qs = <String,String>{};
+      if (search.isNotEmpty) qs['q'] = search;
       if (sender.isNotEmpty) qs['sender'] = sender;
       if (recipient.isNotEmpty) qs['recipient'] = recipient;
       if (subject.isNotEmpty) qs['subject'] = subject;
@@ -926,8 +927,14 @@ class DashboardApi {
   Future<bool> updateEmailPolicy(int id, Map<String,dynamic> b) async { try { await _pa('/api/email/policies/$id', b); return true; } catch (_) { return false; } }
   Future<bool> deleteEmailPolicy(int id) async { try { await _d('/api/email/policies/$id'); return true; } catch (_) { return false; } }
   Future<List> emailReported() async { try { final r = await _g('/api/email/reported'); return _list(r, []); } catch (_) { return []; } }
-  Future<bool> patchEmailReported(int id, {String triageStatus='', String analystNotes=''}) async {
-    try { await _pa('/api/email/reported/$id', {'triage_status': triageStatus, 'analyst_notes': analystNotes}); return true; } catch (_) { return false; }
+  Future<bool> patchEmailReported(int id, {String? triageStatus, String? analystNotes}) async {
+    try {
+      final body = <String,dynamic>{};
+      if (triageStatus != null) body['triage_status'] = triageStatus;
+      if (analystNotes != null) body['analyst_notes'] = analystNotes;
+      await _pa('/api/email/reported/$id', body);
+      return true;
+    } catch (_) { return false; }
   }
   Future<Map<String,dynamic>?> emailRespond(Map<String,dynamic> body) async { try { return await _po('/api/email/response', body); } catch (e) { return {'error': e.toString()}; } }
 
