@@ -12,9 +12,9 @@
     fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
   }}}
 </script>
-<title>XCloak Blog — Technical notes, releases, and detection engineering</title>
-<meta name="description" content="Technical writeups, release notes, and detection engineering notes from the team building XCloak." />
-<link rel="canonical" href="https://blog.xcloak.tech/" />
+<title>Security Suite posts — XCloak Blog</title>
+<meta name="description" content="Detection engineering writeups, architecture decisions, and release notes for XCloak Security Suite." />
+<link rel="canonical" href="https://blog.xcloak.tech/security-suite.html" />
 <link rel="alternate" type="application/rss+xml" title="XCloak Blog" href="https://blog.xcloak.tech/rss.xml" />
 <style>
   body { background:#fff; }
@@ -45,39 +45,18 @@
 </header>
 
 <main class="max-w-4xl mx-auto px-5 sm:px-8 py-16">
-  <div class="mb-10">
-    <span class="text-xs font-mono text-brand">BLOG</span>
-    <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4">Technical notes &amp; releases.</h1>
-    <p class="text-sub leading-relaxed max-w-xl">Detection engineering writeups, architecture decisions, and what shipped — written by the person building it, not a marketing team.</p>
-  </div>
+  <a href="index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
 
-  <div class="grid sm:grid-cols-2 gap-4 mb-14">
-    <a href="security-suite.html" class="lift glass rounded-2xl p-5 block">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-semibold text-ink">Security Suite posts</span>
-        <span class="text-[10px] font-mono uppercase tracking-wider text-emerald-600 bg-emerald-50 rounded-full px-2 py-0.5">Open Source</span>
-      </div>
-      <p class="text-xs text-sub leading-relaxed">Detection engineering, architecture, and release notes.</p>
-    </a>
-    <a href="recon.html" class="lift glass rounded-2xl p-5 block">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-semibold text-ink">Recon posts</span>
-        <span class="text-[10px] font-mono uppercase tracking-wider text-brand bg-blue-50 rounded-full px-2 py-0.5">Beta</span>
-      </div>
-      <p class="text-xs text-sub leading-relaxed">AI-orchestrated pentesting — product updates and write-ups.</p>
-    </a>
+  <div class="mt-6 mb-14">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xs font-mono text-brand">SECURITY SUITE</span>
+      <span class="text-[10px] font-mono uppercase tracking-wider text-emerald-600 bg-emerald-50 rounded-full px-2 py-0.5">Open Source</span>
+    </div>
+    <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-4">Security Suite posts.</h1>
+    <p class="text-sub leading-relaxed max-w-xl">Detection engineering writeups, architecture decisions, and release notes for XCloak Security Suite — our open-source NGFW/SIEM/EDR/SOAR/ITDR/MDM platform.</p>
   </div>
 
   <div class="space-y-4">
-    <a href="posts/introducing-xcloak-recon.html" class="lift glass rounded-2xl p-6 block">
-      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
-        <span>2026-08-08</span>
-        <span>&middot;</span>
-        <span class="text-brand">Product</span>
-      </div>
-      <h2 class="text-xl font-semibold text-ink mb-2">Introducing XCloak Recon: AI-orchestrated pentesting</h2>
-      <p class="text-sm text-sub leading-relaxed">XCloak's second product: describe a target in plain English, and an AI planner runs a real penetration test with industry-standard tools, then reports on what it found. Now in beta.</p>
-    </a>
     <a href="posts/kafka-optional-by-design.html" class="lift glass rounded-2xl p-6 block">
       <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
         <span>2026-08-07</span>

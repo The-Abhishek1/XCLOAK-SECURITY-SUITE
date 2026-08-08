@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>XCloak Recon — AI-Orchestrated Penetration Testing (Beta)</title>
+<meta name="description" content="XCloak Recon is an AI-orchestrated penetration testing platform (beta) — describe a goal in plain English, and it plans, runs, and reports a real security assessment using industry-standard tools. From XCloak, the makers of XCloak Security Suite." />
+<link rel="canonical" href="https://xcloak.tech/recon.html" />
+<meta name="theme-color" content="#2563eb" />
+
+<!-- favicons -->
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+<link rel="shortcut icon" href="assets/favicon.ico" />
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+<link rel="manifest" href="assets/manifest.json" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://xcloak.tech/recon.html" />
+<meta property="og:site_name" content="XCloak" />
+<meta property="og:title" content="XCloak Recon — Describe a target. Get a pentest report." />
+<meta property="og:description" content="AI-orchestrated penetration testing, in beta. From XCloak, the makers of XCloak Security Suite." />
+<meta property="og:image" content="https://xcloak.tech/assets/og-image.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="XCloak Recon — AI-orchestrated penetration testing" />
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="XCloak Recon — Describe a target. Get a pentest report." />
+<meta name="twitter:description" content="AI-orchestrated penetration testing, in beta. From XCloak, the makers of XCloak Security Suite." />
+<meta name="twitter:image" content="https://xcloak.tech/assets/og-image.jpg" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<!--
+  Analytics (optional, cookieless — no consent banner needed):
+  1. Create a free account at https://www.goatcounter.com/ (free for open-source/non-commercial)
+  2. Replace YOURCODE below with the site code GoatCounter gives you
+  3. Uncomment the script tag
+  <script data-goatcounter="https://YOURCODE.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+-->
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: '#0f172a', sub: '#475569', faint: '#94a3b8', line: '#e2e8f0',
+          brand: '#2563eb', brand2: '#0ea5e9',
+        },
+        fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] },
+      }
+    }
+  }
+</script>
+<style>
+  html { scroll-behavior: smooth; }
+  body { background: #ffffff; color: #0f172a; }
+  .bg-mesh {
+    background-image:
+      radial-gradient(circle at 10% 10%, rgba(37,99,235,0.10), transparent 38%),
+      radial-gradient(circle at 90% 0%, rgba(14,165,233,0.10), transparent 35%),
+      radial-gradient(circle at 50% 100%, rgba(139,92,246,0.07), transparent 40%);
+  }
+  .grid-lines {
+    background-image:
+      linear-gradient(rgba(15,23,42,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15,23,42,0.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+    -webkit-mask-image: radial-gradient(ellipse 65% 55% at 50% 20%, black 30%, transparent 85%);
+    mask-image: radial-gradient(ellipse 65% 55% at 50% 20%, black 30%, transparent 85%);
+  }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .glass-strong { background: rgba(255,255,255,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(226,232,240,0.9); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #f8fafc; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -20px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  .shot-frame { transition: transform .4s ease; }
+  .shot-frame:hover { transform: translateY(-4px); }
+  .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  .flow-line { stroke-dasharray: 6 6; animation: dash 1.4s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -24; } }
+  .type-caret { animation: caret 1s step-end infinite; }
+  @keyframes caret { 50% { opacity: 0; } }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .pulse-dot { animation: none; }
+    .flow-line { animation: none; }
+    .type-caret { animation: none; }
+  }
+
+  /* staggered cascade for the recon pipeline strip */
+  #pipeline .reveal:nth-child(1)  { transition-delay: 0.00s; }
+  #pipeline .reveal:nth-child(2)  { transition-delay: 0.06s; }
+  #pipeline .reveal:nth-child(3)  { transition-delay: 0.12s; }
+  #pipeline .reveal:nth-child(4)  { transition-delay: 0.18s; }
+  #pipeline .reveal:nth-child(5)  { transition-delay: 0.24s; }
+  #pipeline .reveal:nth-child(6)  { transition-delay: 0.30s; }
+  #pipeline .reveal:nth-child(7)  { transition-delay: 0.36s; }
+  #pipeline .reveal:nth-child(8)  { transition-delay: 0.42s; }
+  #pipeline .reveal:nth-child(9)  { transition-delay: 0.48s; }
+  #pipeline .reveal:nth-child(10) { transition-delay: 0.54s; }
+  #pipeline .reveal:nth-child(11) { transition-delay: 0.60s; }
+  #pipeline .reveal:nth-child(12) { transition-delay: 0.66s; }
+  #pipeline .reveal:nth-child(13) { transition-delay: 0.72s; }
+  #pipeline .reveal:nth-child(14) { transition-delay: 0.78s; }
+  #pipeline .reveal:nth-child(15) { transition-delay: 0.84s; }
+</style>
+</head>
+<body class="antialiased selection:bg-blue-100">
+
+<!-- ============ NAV ============ -->
+<header class="fixed top-0 inset-x-0 z-50 glass-strong">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
+    <a href="/" class="flex items-center gap-2.5 shrink-0">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z" fill="#2563eb" fill-opacity="0.1" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M9 9l6 6M15 9l-6 6" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px] text-ink">XCloak</span>
+    </a>
+    <nav class="hidden xl:flex items-center gap-5 text-[13px] text-sub whitespace-nowrap">
+      <a href="#recon" class="hover:text-brand transition-colors">Recon</a>
+      <a href="#how-it-works" class="hover:text-brand transition-colors">How It Works</a>
+      <a href="#features" class="hover:text-brand transition-colors">Capabilities</a>
+      <a href="#recon-pricing" class="hover:text-brand transition-colors">Pricing</a>
+      <a href="https://docs.xcloak.tech" target="_blank" rel="noopener" class="hover:text-brand transition-colors">Docs</a>
+      <a href="https://blog.xcloak.tech" target="_blank" rel="noopener" class="hover:text-brand transition-colors">Blog</a>
+      <a href="/" class="hover:text-brand transition-colors">Security Suite ↗</a>
+    </nav>
+    <div class="hidden sm:flex items-center gap-3 shrink-0">
+      <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend" target="_blank" rel="noopener" class="flex items-center gap-1.5 text-[13px] font-medium text-sub hover:text-ink transition-colors">
+        GitHub
+        <span id="ghStars" class="hidden items-center gap-1 text-[12px] font-mono text-faint bg-slate-100 rounded-full px-2 py-0.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 15 8.5 22 9.5 17 14.3 18.2 21 12 17.8 5.8 21 7 14.3 2 9.5 9 8.5 12 2Z"/></svg>
+          <span id="ghStarsCount">–</span>
+        </span>
+      </a>
+      <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="text-[13px] font-medium px-4 py-2 rounded-full bg-ink text-white hover:bg-brand transition-colors">Try Recon — Beta</a>
+    </div>
+    <button id="menuBtn" class="xl:hidden p-2 text-ink" aria-label="Toggle menu" aria-expanded="false">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div id="mobileMenu" class="hidden xl:hidden border-t border-line bg-white px-5 py-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[13px] text-sub max-h-[70vh] overflow-y-auto">
+    <a href="#recon" class="hover:text-brand">Recon</a>
+    <a href="#how-it-works" class="hover:text-brand">How It Works</a>
+    <a href="#features" class="hover:text-brand">Capabilities</a>
+    <a href="#recon-pricing" class="hover:text-brand">Pricing</a>
+    <a href="https://docs.xcloak.tech" target="_blank" rel="noopener" class="hover:text-brand">Documentation</a>
+    <a href="https://blog.xcloak.tech" target="_blank" rel="noopener" class="hover:text-brand">Blog</a>
+    <a href="/" class="hover:text-brand">Security Suite ↗</a>
+    <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="hover:text-brand">Try Recon — Beta ↗</a>
+    <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend" target="_blank" rel="noopener" class="hover:text-brand">GitHub (Frontend) ↗</a>
+    <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Backend" target="_blank" rel="noopener" class="hover:text-brand">GitHub (Backend) ↗</a>
+  </div>
+</header>
+
+<main id="home" class="pt-16">
+
+<!-- ============ BREADCRUMB ============ -->
+<div class="border-b border-line bg-slate-50/60">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8 py-2.5 text-xs font-mono text-faint">
+    <a href="/" class="hover:text-brand transition-colors">XCloak</a>
+    <span class="mx-1.5">/</span>
+    <span class="text-ink">Recon</span>
+    <span class="mx-3 text-line">|</span>
+    <a href="/" class="hover:text-brand transition-colors">Looking for XCloak Security Suite? →</a>
+  </div>
+</div>
+
+<!-- ============ HERO ============ -->
+<section class="relative overflow-hidden border-b border-line">
+  <div class="absolute inset-0 bg-mesh pointer-events-none"></div>
+  <div class="absolute inset-0 grid-lines pointer-events-none"></div>
+
+  <div class="relative max-w-7xl mx-auto px-5 sm:px-8 pt-16 pb-16 lg:pt-24 lg:pb-20">
+    <div class="max-w-3xl mx-auto text-center mb-12">
+      <div class="inline-flex items-center gap-2 text-xs font-mono text-brand glass rounded-full px-3.5 py-1.5 mb-7">
+        <span class="w-1.5 h-1.5 rounded-full bg-brand pulse-dot"></span>
+        XCloak Recon — Beta, in active testing
+      </div>
+
+      <h1 class="text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold tracking-tight leading-[1.1] mb-6 text-ink">
+        Describe a target.<br class="hidden sm:block"/> Get a pentest report.
+      </h1>
+
+      <p class="text-base sm:text-lg text-sub max-w-xl mx-auto leading-relaxed mb-9">
+        XCloak Recon is an AI-orchestrated penetration testing platform — describe a goal in plain
+        English, and it plans, runs, and reports a real security assessment using industry-standard
+        tools. Built by the makers of <a href="/" class="text-brand hover:underline">XCloak Security Suite</a>.
+      </p>
+
+      <div class="flex flex-wrap justify-center gap-3">
+        <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="px-6 py-3 rounded-full bg-brand text-white font-medium text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200/60">
+          Try Recon — Beta →
+        </a>
+        <a href="#recon" class="px-6 py-3 rounded-full glass text-ink font-medium text-sm hover:border-brand/40 transition-colors">
+          See how it works
+        </a>
+        <a href="/" class="px-6 py-3 rounded-full glass text-ink font-medium text-sm hover:border-brand/40 transition-colors">
+          Explore Security Suite
+        </a>
+      </div>
+    </div>
+
+    <!-- live-terminal style visual (no product screenshot yet — Recon is in beta) -->
+    <div class="reveal max-w-3xl mx-auto">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl shadow-slate-300/40 overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800">
+          <span class="w-2.5 h-2.5 rounded-full bg-red-400/70"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-yellow-400/70"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-green-400/70"></span>
+          <span class="ml-3 text-xs font-mono text-slate-400">app.xcloak.tech/new-scan</span>
+        </div>
+        <pre class="overflow-x-auto p-5 text-[12.5px] leading-relaxed font-mono text-slate-200"><code><span class="text-slate-500">&gt; describe your goal</span>
+"Scan example.com for vulnerabilities"<span class="type-caret">▌</span>
+
+<span class="text-sky-400">🧠 AI Planner</span>   selecting tools: nmap → nuclei → gobuster
+<span class="text-sky-400">🐳 Docker</span>       running each tool in an isolated container
+<span class="text-sky-400">📊 AI Analysis</span>  validating findings, removing false positives
+<span class="text-amber-400">⚖️  CVSS Scoring</span> 1 critical (9.8) · 2 medium · 4 low
+<span class="text-violet-400">⏸  Approval</span>    2 follow-up tasks proposed — waiting on you
+<span class="text-emerald-400">📄 Report</span>      report_example-com.pdf ready</code></pre>
+      </div>
+      <p class="text-center text-xs text-faint mt-3 font-mono">Illustrative example of the Recon pipeline — see app.xcloak.tech for the live beta</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECON: WHAT IS IT ============ -->
+<section id="recon" class="border-b border-line py-20 sm:py-28">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="reveal max-w-2xl mb-6">
+      <span class="text-xs font-mono text-brand">XCLOAK RECON</span>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">Pentesting, AI-orchestrated.</h2>
+      <p class="text-sub leading-relaxed">
+        Traditional scanners run one tool at a time and dump raw output. Recon's AI planner reads
+        your goal, decides which tools to run and in what order, executes each one in an isolated
+        Docker container, then re-analyzes the combined output to strip false positives before
+        scoring and reporting on what's actually there.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECON: HOW IT WORKS ============ -->
+<section class="border-b border-line py-20 sm:py-28 bg-slate-50/60">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="reveal max-w-2xl mb-14">
+      <span class="text-xs font-mono text-brand">HOW IT WORKS</span>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">One goal, eight steps, one report.</h2>
+      <p class="text-sub leading-relaxed">Every scan follows the same auditable pipeline — nothing happens off to the side.</p>
+    </div>
+
+    <div class="reveal glass rounded-2xl p-6 sm:p-10 overflow-x-auto">
+      <div id="pipeline" class="flex lg:justify-between items-start gap-6 lg:gap-2 min-w-[880px] lg:min-w-0">
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">You describe a goal</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8"><path d="M12 2a4 4 0 0 0-4 4v1a3 3 0 0 0-2 2.8V15a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-5.2A3 3 0 0 0 16 7V6a4 4 0 0 0-4-4Z" stroke-linejoin="round"/><path d="M9 21h6" stroke-linecap="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">AI Planner breaks it into tasks</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8"><path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">Plan validated</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="1.8"><path d="M22 12c0 1-4 2-10 2S2 13 2 12s4-2 10-2 10 1 10 2Z"/><path d="M2 12v4c0 1 4 2 10 2s10-1 10-2v-4"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">Docker tools execute</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 16h5M8 8h3" stroke-linecap="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">AI analysis removes false positives</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.8"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke-linecap="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">CVSS risk scoring</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-violet-50 border border-violet-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2" stroke-linecap="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">Follow-ups proposed — you approve</p>
+        </div>
+
+        <div class="reveal flex-1 flex items-center justify-center pt-5"><svg width="40" height="12" viewBox="0 0 40 12"><line x1="0" y1="6" x2="34" y2="6" stroke="#cbd5e1" stroke-width="2" class="flow-line"/><path d="M30 2 36 6 30 10" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+        <div class="reveal flex flex-col items-center text-center w-32 shrink-0">
+          <div class="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h6" stroke-linecap="round"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">PDF report generated</p>
+        </div>
+
+      </div>
+    </div>
+    <p class="text-xs text-faint mt-4 font-mono text-center">Every step streams live over WebSocket — you watch it happen, not just the result.</p>
+  </div>
+</section>
+
+<!-- ============ RECON: FEATURES ============ -->
+<section class="border-b border-line py-20 sm:py-28">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="reveal max-w-2xl mb-14">
+      <span class="text-xs font-mono text-brand">CAPABILITIES</span>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">Built for real assessments, not toy scans.</h2>
+      <p class="text-sub leading-relaxed">Core scanning, real-time visibility, and the enterprise controls a real engagement needs.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div class="reveal lift glass rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.7"><path d="M12 2a4 4 0 0 0-4 4v1a3 3 0 0 0-2 2.8V15a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-5.2A3 3 0 0 0 16 7V6a4 4 0 0 0-4-4Z" stroke-linejoin="round"/></svg>
+        </div>
+        <h3 class="font-semibold text-ink mb-2.5">Core</h3>
+        <ul class="text-sm text-sub space-y-1.5 leading-relaxed">
+          <li>AI planning — GPT-4o, Claude, or local Ollama</li>
+          <li>7 tools: nmap, nuclei, gobuster, sqlmap, nikto, ffuf, whatweb</li>
+          <li>Every tool isolated in its own Docker container</li>
+          <li>Human-in-the-loop approval before follow-ups run</li>
+          <li>CVSS risk scoring with automatic stop conditions</li>
+        </ul>
+      </div>
+
+      <div class="reveal lift glass rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2" stroke-linecap="round"/></svg>
+        </div>
+        <h3 class="font-semibold text-ink mb-2.5">Real-Time</h3>
+        <ul class="text-sm text-sub space-y-1.5 leading-relaxed">
+          <li>WebSocket streaming — output appears line-by-line</li>
+          <li>Visual 6-step execution pipeline</li>
+          <li>Live terminal with colored event stream</li>
+          <li>Risk score updates as findings come in</li>
+        </ul>
+      </div>
+
+      <div class="reveal lift glass rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3 class="font-semibold text-ink mb-2.5">Data &amp; Reports</h3>
+        <ul class="text-sm text-sub space-y-1.5 leading-relaxed">
+          <li>Professional downloadable PDF reports</li>
+          <li>All findings stored and searchable across scans</li>
+          <li>Full scan history — risk trends, duration, tool usage</li>
+        </ul>
+      </div>
+
+      <div class="reveal lift glass rounded-2xl p-6">
+        <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.7"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3 class="font-semibold text-ink mb-2.5">Enterprise</h3>
+        <ul class="text-sm text-sub space-y-1.5 leading-relaxed">
+          <li>JWT + API key auth, target allow/deny lists</li>
+          <li>Full audit log, queryable</li>
+          <li>Scheduled scans with reusable templates</li>
+          <li>Switch LLM provider at runtime — no restart</li>
+          <li>Webhook notifications — Slack, Discord, HTTP</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECON: PLATFORM ============ -->
+<section class="border-b border-line py-20 sm:py-28 bg-slate-50/60">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="reveal max-w-2xl mb-14">
+      <span class="text-xs font-mono text-brand">BEYOND SCANNING</span>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">A full platform around every scan.</h2>
+      <p class="text-sub leading-relaxed">Threat intel, a community exploit database, and hands-on learning — all in the same dashboard.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div class="reveal lift glass rounded-2xl p-6">
+        <h3 class="font-semibold text-ink mb-2">Live Threat Intelligence</h3>
+        <p class="text-sm text-sub leading-relaxed">Real-time CVE feed from NVD, threat events from AlienVault OTX, and a live threat map.</p>
+      </div>
+      <div class="reveal lift glass rounded-2xl p-6">
+        <h3 class="font-semibold text-ink mb-2">Exploit Database</h3>
+        <p class="text-sm text-sub leading-relaxed">Community-submitted PoC exploits with DNA analysis, AI explanation, voting, and comments.</p>
+      </div>
+      <div class="reveal lift glass rounded-2xl p-6">
+        <h3 class="font-semibold text-ink mb-2">CTF Platform</h3>
+        <p class="text-sm text-sub leading-relaxed">Challenge submission, flag hashing, solve tracking, and a live leaderboard.</p>
+      </div>
+      <div class="reveal lift glass rounded-2xl p-6">
+        <h3 class="font-semibold text-ink mb-2">Security Learning</h3>
+        <p class="text-sm text-sub leading-relaxed">A structured curriculum from beginner to red team, linked to real resources with progress tracking.</p>
+      </div>
+      <div class="reveal lift glass rounded-2xl p-6">
+        <h3 class="font-semibold text-ink mb-2">Vulnerable Lab Playground</h3>
+        <p class="text-sm text-sub leading-relaxed">Docker-based lab setup guides — DVWA, WebGoat, Juice Shop, Metasploitable — to practice safely.</p>
+      </div>
+      <div class="reveal lift glass-strong rounded-2xl p-6 ring-1 ring-amber-200/70 bg-amber-50/40">
+        <h3 class="font-semibold text-ink mb-2">Authorized use only</h3>
+        <p class="text-sm text-sub leading-relaxed">Recon only scans targets you own or have explicit written permission to test. Target allowlisting is enforced at the platform level, not just policy.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECON: ARCHITECTURE + STACK ============ -->
+<section class="border-b border-line py-20 sm:py-28">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="reveal max-w-2xl mb-14">
+      <span class="text-xs font-mono text-brand">ARCHITECTURE</span>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">What runs under the hood.</h2>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-5">
+      <div class="reveal glass rounded-2xl p-6 sm:p-8">
+        <div class="space-y-3 font-mono text-xs">
+          <div class="rounded-xl border border-line bg-slate-50 p-4 text-center"><span class="text-ink font-medium">Next.js Frontend</span><span class="text-faint"> — dashboard, scans, findings, schedules</span></div>
+          <div class="flex justify-center"><svg width="14" height="18" viewBox="0 0 14 18"><line x1="7" y1="0" x2="7" y2="10" stroke="#cbd5e1" stroke-width="2"/><path d="M3 8 7 14 11 8" stroke="#cbd5e1" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="rounded-xl border border-line bg-slate-50 p-4 text-center"><span class="text-ink font-medium">FastAPI Backend</span><span class="text-faint"> — REST + WebSocket + JWT auth + rate limiting</span></div>
+          <div class="flex justify-center"><svg width="14" height="18" viewBox="0 0 14 18"><line x1="7" y1="0" x2="7" y2="10" stroke="#cbd5e1" stroke-width="2"/><path d="M3 8 7 14 11 8" stroke="#cbd5e1" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="rounded-xl border border-line bg-blue-50 p-4 text-center"><span class="text-brand font-medium">Execution Engine</span><span class="text-faint"> — planner → validator → controller → parser → analyzer → risk engine → proposer → report generator</span></div>
+          <div class="flex justify-center"><svg width="14" height="18" viewBox="0 0 14 18"><line x1="7" y1="0" x2="7" y2="10" stroke="#cbd5e1" stroke-width="2"/><path d="M3 8 7 14 11 8" stroke="#cbd5e1" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="rounded-xl border border-line bg-slate-50 p-4 text-center"><span class="text-ink font-medium">Docker Workers</span><span class="text-faint"> — 7 isolated security-tool containers</span></div>
+          <div class="flex justify-center"><svg width="14" height="18" viewBox="0 0 14 18"><line x1="7" y1="0" x2="7" y2="10" stroke="#cbd5e1" stroke-width="2"/><path d="M3 8 7 14 11 8" stroke="#cbd5e1" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="rounded-xl border border-line bg-slate-50 p-4 text-center"><span class="text-ink font-medium">PostgreSQL · Redis · Queue · Ollama / OpenAI / Claude</span></div>
+        </div>
+      </div>
+
+      <div class="reveal glass rounded-2xl overflow-hidden self-start">
+        <table class="w-full text-sm">
+          <tbody>
+            <tr class="border-b border-line"><td class="p-4 font-mono text-xs text-faint uppercase w-36">Frontend</td><td class="p-4 text-ink">Next.js 15, TypeScript, Tailwind CSS</td></tr>
+            <tr class="border-b border-line bg-white/50"><td class="p-4 font-mono text-xs text-faint uppercase">Database</td><td class="p-4 text-ink">Supabase (PostgreSQL via Prisma)</td></tr>
+            <tr class="border-b border-line"><td class="p-4 font-mono text-xs text-faint uppercase">Storage</td><td class="p-4 text-ink">Supabase Storage</td></tr>
+            <tr class="border-b border-line bg-white/50"><td class="p-4 font-mono text-xs text-faint uppercase">Scan Engine</td><td class="p-4 text-ink">FastAPI, Python 3.12</td></tr>
+            <tr class="border-b border-line"><td class="p-4 font-mono text-xs text-faint uppercase">Scan Tools</td><td class="p-4 text-ink">Docker — nmap, nuclei, gobuster, nikto, ffuf, sqlmap, whatweb</td></tr>
+            <tr class="border-b border-line bg-white/50"><td class="p-4 font-mono text-xs text-faint uppercase">AI</td><td class="p-4 text-ink">Ollama (local) / OpenAI GPT-4o / Anthropic Claude</td></tr>
+            <tr class="border-b border-line"><td class="p-4 font-mono text-xs text-faint uppercase">Threat Intel</td><td class="p-4 text-ink">NVD API, AlienVault OTX</td></tr>
+            <tr><td class="p-4 font-mono text-xs text-faint uppercase">Payments</td><td class="p-4 text-ink">Razorpay</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECON: PRICING ============ -->
+<section id="recon-pricing" class="border-b border-line py-20 sm:py-28 bg-slate-50/60">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="reveal max-w-2xl mb-14">
+      <span class="text-xs font-mono text-brand">PRICING</span>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 mb-4 text-ink">Start free. Scale when you need to.</h2>
+      <p class="text-sub leading-relaxed">Beta pricing — subject to change as Recon moves out of testing.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-5">
+      <div class="reveal lift glass rounded-2xl p-7">
+        <h3 class="font-semibold text-ink mb-1">Free</h3>
+        <div class="text-3xl font-semibold text-ink mb-4">₹0</div>
+        <ul class="text-sm text-sub space-y-2 mb-6">
+          <li>3 scans / day</li>
+          <li class="text-faint">✗ AI analysis</li>
+          <li class="text-faint">✗ Reports</li>
+        </ul>
+        <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="block text-center px-5 py-2.5 rounded-full glass text-ink text-sm font-medium hover:border-brand/40 transition-colors">Start free</a>
+      </div>
+      <div class="reveal lift glass-strong rounded-2xl p-7 ring-2 ring-brand/30 relative">
+        <span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono uppercase tracking-wider text-white bg-brand rounded-full px-3 py-1">Most popular</span>
+        <h3 class="font-semibold text-ink mb-1">Pro</h3>
+        <div class="text-3xl font-semibold text-ink mb-4">₹999<span class="text-sm font-normal text-faint">/mo</span></div>
+        <ul class="text-sm text-sub space-y-2 mb-6">
+          <li>20 scans / day</li>
+          <li class="text-emerald-600">✓ AI analysis</li>
+          <li class="text-emerald-600">✓ Reports</li>
+        </ul>
+        <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="block text-center px-5 py-2.5 rounded-full bg-brand text-white text-sm font-medium hover:bg-blue-700 transition-colors">Get Pro</a>
+      </div>
+      <div class="reveal lift glass rounded-2xl p-7">
+        <h3 class="font-semibold text-ink mb-1">Enterprise</h3>
+        <div class="text-3xl font-semibold text-ink mb-4">₹4,999<span class="text-sm font-normal text-faint">/mo</span></div>
+        <ul class="text-sm text-sub space-y-2 mb-6">
+          <li>Unlimited scans</li>
+          <li class="text-emerald-600">✓ AI analysis</li>
+          <li class="text-emerald-600">✓ Reports</li>
+        </ul>
+        <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="block text-center px-5 py-2.5 rounded-full glass text-ink text-sm font-medium hover:border-brand/40 transition-colors">Contact us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECON: API + CTA ============ -->
+<section class="border-b border-line py-20 sm:py-24">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8">
+    <div class="reveal rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden mb-10">
+      <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-800">
+        <span class="text-xs font-mono text-slate-400">terminal</span>
+        <span class="text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-400/10 border border-emerald-400/20">REST API</span>
+      </div>
+      <pre class="overflow-x-auto p-5 text-[12.5px] leading-relaxed font-mono text-slate-200"><code><span class="text-slate-500"># or skip the UI and start a scan directly</span>
+curl -X POST https://app.xcloak.tech/api/v1/hybrid/execute \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "Scan scanme.nmap.org for open ports and vulnerabilities", "target": "scanme.nmap.org"}'</code></pre>
+    </div>
+
+    <div class="reveal text-center">
+      <h2 class="text-2xl sm:text-3xl font-semibold tracking-tight text-ink mb-4">Try XCloak Recon.</h2>
+      <p class="text-sub leading-relaxed mb-7">Currently in beta and under active testing — expect rapid changes.</p>
+      <div class="flex flex-wrap justify-center gap-3">
+        <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="inline-block px-6 py-3 rounded-full bg-brand text-white font-medium text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200/60">Try Recon — Beta →</a>
+        <a href="/" class="inline-block px-6 py-3 rounded-full glass text-ink font-medium text-sm hover:border-brand/40 transition-colors">Looking for Security Suite? →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-line py-14 bg-slate-50/60">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8">
+    <div class="flex flex-col sm:flex-row justify-between gap-8 pb-8 border-b border-line">
+      <div class="max-w-xs">
+        <a href="/" class="flex items-center gap-2.5 mb-3">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z" fill="#2563eb" fill-opacity="0.1" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+            <path d="M9 9l6 6M15 9l-6 6" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span class="font-semibold tracking-tight text-ink">XCloak</span>
+        </a>
+        <p class="text-sm text-sub leading-relaxed">XCloak Security Suite (open-source NGFW/SIEM/EDR/SOAR/MDM) and XCloak Recon (AI pentesting, beta).</p>
+      </div>
+      <div class="flex flex-wrap gap-x-12 gap-y-6">
+        <div>
+          <div class="text-xs font-mono text-faint mb-3 uppercase">Products</div>
+          <div class="flex flex-col gap-2 text-sm">
+            <a href="/" class="text-ink hover:text-brand transition-colors">Security Suite</a>
+            <a href="https://suite.xcloak.tech/demo" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">Security Suite Demo</a>
+            <a href="#recon" class="text-ink hover:text-brand transition-colors">XCloak Recon</a>
+            <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">Try Recon (Beta)</a>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-mono text-faint mb-3 uppercase">Resources</div>
+          <div class="flex flex-col gap-2 text-sm">
+            <a href="https://docs.xcloak.tech" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">Documentation</a>
+            <a href="https://blog.xcloak.tech" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">Blog</a>
+            <a href="https://blog.xcloak.tech/changelog.html" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">Changelog</a>
+            <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">GitHub (Frontend)</a>
+            <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Backend" target="_blank" rel="noopener" class="text-ink hover:text-brand transition-colors">GitHub (Backend)</a>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-mono text-faint mb-3 uppercase">Contact</div>
+          <div class="flex flex-col gap-2 text-sm">
+            <a href="mailto:abhishekn1003@gmail.com" class="text-ink hover:text-brand transition-colors">abhishekn1003@gmail.com</a>
+            <a href="tel:+916366652685" class="text-ink hover:text-brand transition-colors">+91 63666 52685</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pt-6 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+      <span>© 2025–2026 Abhishek N. XCloak.</span>
+      <span>Security Suite: AGPL-3.0 · Recon: Beta</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const menuBtn = document.getElementById('menuBtn');
+  const mobileMenu = document.getElementById('mobileMenu');
+  menuBtn.addEventListener('click', () => {
+    const isHidden = mobileMenu.classList.contains('hidden');
+    mobileMenu.classList.toggle('hidden');
+    menuBtn.setAttribute('aria-expanded', String(isHidden));
+  });
+  mobileMenu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => mobileMenu.classList.add('hidden')));
+
+  // live GitHub star count — cached for an hour to avoid refetching on every page view
+  (function () {
+    const badge = document.getElementById('ghStars');
+    const countEl = document.getElementById('ghStarsCount');
+    if (!badge || !countEl) return;
+    const CACHE_KEY = 'xcloak_gh_stars_recon';
+    const CACHE_MS = 60 * 60 * 1000;
+    const format = (n) => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+    const show = (n) => { countEl.textContent = format(n); badge.classList.remove('hidden'); badge.classList.add('inline-flex'); };
+    try {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (cached && Date.now() - cached.t < CACHE_MS) { show(cached.n); return; }
+    } catch (e) {}
+    fetch('https://api.github.com/repos/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || typeof data.stargazers_count !== 'number') return;
+        show(data.stargazers_count);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ n: data.stargazers_count, t: Date.now() })); } catch (e) {}
+      })
+      .catch(() => {}); // fails silent — badge just stays hidden, no broken UI
+  })();
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+
+</body>
+</html>

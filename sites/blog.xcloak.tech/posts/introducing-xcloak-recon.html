@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Introducing XCloak Recon: AI-orchestrated pentesting — XCloak Blog</title>
+<meta name="description" content="XCloak's second product: describe a target in plain English, and an AI planner runs a real penetration test with industry-standard tools, then reports on what it found. Now in beta." />
+<link rel="canonical" href="https://blog.xcloak.tech/posts/introducing-xcloak-recon.html" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Introducing XCloak Recon: AI-orchestrated pentesting" />
+<meta property="og:description" content="XCloak's second product: describe a target in plain English, and an AI planner runs a real penetration test with industry-standard tools, then reports on what it found. Now in beta." />
+<meta property="og:url" content="https://blog.xcloak.tech/posts/introducing-xcloak-recon.html" />
+<meta name="twitter:card" content="summary" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+  article :is(p, ul, ol) { color: #334155; line-height: 1.75; margin-bottom: 1.25rem; font-size: 16px; }
+  article h2 { font-size: 1.4rem; font-weight: 600; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+  article h3 { font-size: 1.15rem; font-weight: 600; color: #0f172a; margin-top: 2rem; margin-bottom: 0.75rem; }
+  article ul { list-style: disc; padding-left: 1.4rem; }
+  article ol { list-style: decimal; padding-left: 1.4rem; }
+  article li { margin-bottom: 0.5rem; }
+  article code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f1f5f9; padding: 0.15em 0.4em; border-radius: 4px; color: #0f172a; }
+  article pre { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; overflow-x: auto; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.7; }
+  article pre code { background: none; padding: 0; color: inherit; }
+  article blockquote { border-left: 3px solid #2563eb; padding-left: 1rem; color: #475569; font-style: italic; margin-bottom: 1.25rem; }
+  article a { color: #2563eb; text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 14px; display:block; overflow-x:auto; }
+  article th { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 8px 12px; font-family: ui-monospace, monospace; font-size: 11px; text-transform: uppercase; color: #94a3b8; }
+  article td { border-bottom: 1px solid #e2e8f0; padding: 8px 12px; }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z" fill="#2563eb" fill-opacity="0.1" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M9 9l6 6M15 9l-6 6" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="../index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="../changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech/security-suite.html" class="hover:text-brand transition-colors hidden sm:inline">Security Suite</a>
+      <a href="https://xcloak.tech/recon.html" class="hover:text-brand transition-colors hidden sm:inline">Recon</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-2xl mx-auto px-5 sm:px-8 py-16">
+  <a href="../index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="flex items-center gap-3 text-xs font-mono text-faint mt-6 mb-4">
+    <span>2026-08-08</span>
+    <span>&middot;</span>
+    <span class="text-brand">Product</span>
+    <span>&middot;</span>
+    <span>4 min read</span>
+  </div>
+
+  <h1 class="text-3xl sm:text-[2.3rem] font-semibold tracking-tight leading-tight mb-8">Introducing XCloak Recon: AI-orchestrated pentesting</h1>
+
+  <article>
+    <p>Everything we've written on this blog so far has been about XCloak Security Suite — detection, response, multi-tenancy, the parts of the product that watch a system that's already deployed. Today we're introducing something different: <a href="https://xcloak.tech/recon.html">XCloak Recon</a>, a second product, currently in beta, that answers a question Security Suite doesn't try to: what's wrong with this system <em>before</em> someone attacks it.</p>
+    <p>You describe a target in plain English — <code>"Scan example.com for vulnerabilities"</code> — and an AI planner turns that into a real penetration test: it selects tools, runs them in isolated containers, re-analyzes the combined output to strip false positives, scores what's left by severity, and generates a report. It's not a wrapper around a single scanner with a chat interface bolted on; it's an orchestration layer over seven separate tools that most pentesters already trust individually, with the tedious parts — sequencing, correlating output formats, filtering noise — handled automatically.</p>
+
+    <h2>Why an AI planner, not a script</h2>
+    <p>The naive version of this idea is a fixed pipeline: always run nmap, then always run nuclei against whatever ports came back, then always run gobuster. That works until the target doesn't match the assumptions the pipeline was written for — no open web ports, an unusual service on a nonstandard port, a subdomain structure that needs enumeration before anything else is useful. A fixed pipeline either runs irrelevant tools anyway (wasted time, wasted noise) or misses the tools that would've actually mattered for this specific target.</p>
+    <p>Recon's planner reads the stated goal and the target's actual characteristics, then decides what to run and in what order — nmap before nuclei because nuclei needs to know what's open first, gobuster only if there's a web server worth enumerating. After the tools run, a second AI pass looks at the combined output specifically to remove false positives, which matters more than it sounds: raw tool output from seven different scanners run against the same target contains a lot of duplicate and noisy findings that a human would otherwise have to manually triage before the report is trustworthy.</p>
+
+    <h2>Docker isolation, not shared execution</h2>
+    <p>Each of the seven tools — nmap, nuclei, gobuster, sqlmap, nikto, ffuf, whatweb — runs in its own container, not in a shared execution environment. These are tools with real capability to send traffic, brute-force paths, and in sqlmap's case, attempt actual injection payloads against a target. Running them in a shared process space means one tool's failure mode (a bad flag, an unexpected timeout, a crash) can affect the others mid-scan. Per-tool isolation means a single container can be killed, resource-limited, or restarted without disturbing the rest of the pipeline, and it keeps each tool's blast radius — network access, filesystem access — scoped to exactly what that one tool needs.</p>
+
+    <h2>The same approval philosophy as Security Suite</h2>
+    <p>We wrote before about <a href="soar-human-approval.html">why every destructive SOAR playbook action in Security Suite requires a human click</a> instead of running automatically. Recon follows the same principle in a different context: after the initial scan, the AI proposes follow-up tasks — deeper enumeration on a port that looked interesting, a targeted check against a service that returned an unusual banner — and those proposals sit and wait for your approval before anything runs. The initial scan you asked for executes; anything beyond that is a suggestion, not an autonomous decision. It's the same reasoning as the SOAR gate: an AI system that's right most of the time still shouldn't get to expand its own scope unattended, especially when "expand scope" here means "send more traffic at a target."</p>
+    <p>CVSS risk scoring includes stop conditions for the same reason — a scan that's escalating toward something that looks like it needs explicit sign-off doesn't get to keep escalating on its own.</p>
+
+    <h2>Where it stands today</h2>
+    <p>Recon is in beta and under active testing — the pipeline, the tool set, and the pricing tiers described here may all change before general availability. What's live right now: the full eight-step pipeline (plan &rarr; validate &rarr; execute &rarr; analyze &rarr; score &rarr; propose &rarr; approve &rarr; report), WebSocket streaming of tool output as it happens, PDF report generation, a searchable findings database, scheduled/recurring scans, and a runtime-switchable LLM provider (Ollama locally, or OpenAI/Claude).</p>
+    <p>You can try it at <a href="https://app.xcloak.tech" target="_blank" rel="noopener">app.xcloak.tech</a>. As with any scanning tool: only point it at targets you own or have explicit written permission to test — target allowlisting is enforced at the platform level, not left as policy.</p>
+  </article>
+
+  <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="kafka-optional-by-design.html" class="text-sub hover:text-brand transition-colors">&larr; Kafka is optional: designing for graceful degradation</a><span></span></div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Development Setup — XCloak Docs</title>
-<meta name="description" content="Run the backend and frontend locally, and where to contribute." />
-<link rel="canonical" href="https://docs.xcloak.tech/development.html" />
+<title>Recon API Reference — XCloak Docs</title>
+<meta name="description" content="Every XCloak Recon REST and WebSocket endpoint &mdash; authentication, scanning, findings, schedules, and system." />
+<link rel="canonical" href="https://docs.xcloak.tech/recon-api-reference.html" />
 <link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
 <meta name="theme-color" content="#2563eb" />
 <script src="https://cdn.tailwindcss.com"></script>
@@ -75,7 +75,7 @@ body { background:#fff; color:var(--ink); }
       <a href="https://xcloak.tech/security-suite.html" class="hover:text-brand transition-colors hidden sm:inline">Security Suite</a>
       <a href="https://xcloak.tech/recon.html" class="hover:text-brand transition-colors hidden sm:inline">Recon</a>
       <a href="https://blog.xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Blog</a>
-      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
+      <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
     </nav>
   </div>
 </header>
@@ -97,23 +97,12 @@ body { background:#fff; color:var(--ink); }
 
     <!-- sidebar -->
     <aside class="hidden lg:block w-60 shrink-0 border-r border-line h-[calc(100vh-56px)] sticky top-14 overflow-y-auto py-8 pr-4">
-<a href="index.html" class="sidebar-link" style="font-size:12px">&larr; All docs</a>
-<a href="recon-overview.html" class="sidebar-link" style="font-size:12px">Recon docs &rarr;</a>
-      <div class="sidebar-group-title">Security Suite &middot; Getting Started</div>
-<a href="overview.html" class="sidebar-link">Overview</a>
-<a href="installation.html" class="sidebar-link">Installation</a>
-<div class="sidebar-group-title">Security Suite &middot; Core Concepts</div>
-<a href="architecture.html" class="sidebar-link">Architecture</a>
-<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
-<div class="sidebar-group-title">Security Suite &middot; Guides</div>
-<a href="deployment.html" class="sidebar-link">Deployment</a>
-<a href="configuration.html" class="sidebar-link">Configuration</a>
-<a href="agent.html" class="sidebar-link">Agent</a>
-<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
-<div class="sidebar-group-title">Security Suite &middot; Reference</div>
-<a href="api-reference.html" class="sidebar-link">API Reference</a>
-<div class="sidebar-group-title">Security Suite &middot; Contributing</div>
-<a href="development.html" class="sidebar-link active">Development Setup</a>
+      <a href="index.html" class="sidebar-link" style="font-size:12px">&larr; All docs</a>
+<a href="overview.html" class="sidebar-link" style="font-size:12px">Security Suite docs &rarr;</a>
+<div class="sidebar-group-title">Recon</div>
+<a href="recon-overview.html" class="sidebar-link">Overview</a>
+<a href="recon-quickstart.html" class="sidebar-link">Quickstart</a>
+<a href="recon-api-reference.html" class="sidebar-link active">API Reference</a>
     </aside>
 
     <!-- mobile sidebar toggle -->
@@ -128,68 +117,73 @@ body { background:#fff; color:var(--ink); }
         <button id="mobileNavClose" class="p-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M6 18 18 6" stroke-linecap="round"/></svg></button>
       </div>
       <a href="index.html" class="sidebar-link" style="font-size:12px">&larr; All docs</a>
-<a href="recon-overview.html" class="sidebar-link" style="font-size:12px">Recon docs &rarr;</a>
-      <div class="sidebar-group-title">Security Suite &middot; Getting Started</div>
-<a href="overview.html" class="sidebar-link">Overview</a>
-<a href="installation.html" class="sidebar-link">Installation</a>
-<div class="sidebar-group-title">Security Suite &middot; Core Concepts</div>
-<a href="architecture.html" class="sidebar-link">Architecture</a>
-<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
-<div class="sidebar-group-title">Security Suite &middot; Guides</div>
-<a href="deployment.html" class="sidebar-link">Deployment</a>
-<a href="configuration.html" class="sidebar-link">Configuration</a>
-<a href="agent.html" class="sidebar-link">Agent</a>
-<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
-<div class="sidebar-group-title">Security Suite &middot; Reference</div>
-<a href="api-reference.html" class="sidebar-link">API Reference</a>
-<div class="sidebar-group-title">Security Suite &middot; Contributing</div>
-<a href="development.html" class="sidebar-link active">Development Setup</a>
+<a href="overview.html" class="sidebar-link" style="font-size:12px">Security Suite docs &rarr;</a>
+<div class="sidebar-group-title">Recon</div>
+<a href="recon-overview.html" class="sidebar-link">Overview</a>
+<a href="recon-quickstart.html" class="sidebar-link">Quickstart</a>
+<a href="recon-api-reference.html" class="sidebar-link active">API Reference</a>
     </div>
 
     <!-- content -->
     <main class="flex-1 min-w-0 px-0 lg:px-10 py-10 max-w-3xl">
       <div class="prose">
-        
-<h1>Development Setup</h1>
-<p class="lead">This is for working on XCloak itself, not just running it — local dev setup for the backend and frontend, plus where contributions are most useful.</p>
+<h1>Recon API Reference</h1>
+<p class="lead">Base URL: the hosted beta at <code>https://app.xcloak.tech</code>, or <code>http://localhost:8000</code> if self-hosting. Bearer-token auth via <code>POST /api/v1/auth/login</code> unless noted.</p>
 
-<h2>Backend</h2>
-<pre><code>cd xcloak-platform/backend
-cp .env.example .env
-# edit .env — DB credentials, JWT_SECRET, METRICS_TOKEN, SMTP settings
+<div style="margin: 2rem 0;">
+  <p style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#94a3b8;margin-bottom:0.75rem;">Jump to category</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
+    <a href="#auth" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Authentication</span><span class="text-xs font-mono text-faint">4</span></a><a href="#scanning" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Scanning</span><span class="text-xs font-mono text-faint">6</span></a><a href="#findings" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Findings</span><span class="text-xs font-mono text-faint">3</span></a><a href="#schedules" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">Scheduled Scans</span><span class="text-xs font-mono text-faint">5</span></a><a href="#system" class="flex items-center justify-between rounded-lg border border-line bg-white hover:border-brand/40 hover:bg-blue-50/40 transition-colors px-3.5 py-2.5 no-underline"><span class="text-sm font-medium text-ink">System</span><span class="text-xs font-mono text-faint">5</span></a>
+  </div>
+</div>
 
-# migrations run automatically on startup (golang-migrate)
-air   # hot reload</code></pre>
+<h2 id="auth">Authentication</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Account creation and JWT/API-key issuance</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/auth/register</code></td><td>Create account</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/auth/login</code></td><td>Get JWT tokens</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/auth/me</code></td><td>Current user</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/auth/api-keys</code></td><td>Create API key</td></tr>
+  </tbody>
+</table>
 
-<h2>Frontend</h2>
-<pre><code>cd xcloak-platform/frontend
-npm install
-npm run dev</code></pre>
+<h2 id="scanning">Scanning</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Start scans, watch them live, and approve AI-proposed follow-ups</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/hybrid/execute</code></td><td>Start a scan</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/hybrid/status/{id}</code></td><td>Scan status + report</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/hybrid/proposals/{id}</code></td><td>Pending AI proposals</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/hybrid/approve/{id}</code></td><td>Approve/reject proposals</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/hybrid/report/{id}/pdf</code></td><td>Download PDF report</td></tr><tr><td style="width:78px"><span class="badge" style="background:#f5f3ff;color:#7c3aed;">WS</span></td><td><code>/api/v1/ws/scan/{id}</code></td><td>Live scan events</td></tr>
+  </tbody>
+</table>
 
-<h2>Observability stack (optional, for local testing)</h2>
-<pre><code>docker compose up -d</code></pre>
+<h2 id="findings">Findings</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Search and aggregate findings across scans</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/auth/findings</code></td><td>Search findings (filters: severity, source, port, search)</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/auth/findings/stats</code></td><td>Aggregated stats</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/auth/scans/{id}/findings</code></td><td>Findings for a scan</td></tr>
+  </tbody>
+</table>
 
-<h2>Running tests</h2>
-<p>The backend has 416+ Go test functions covering auth, middleware, Sigma rule parsing, and select detectors. Run the full suite from <code>xcloak-platform/backend</code>:</p>
-<pre><code>go test ./...</code></pre>
-<div class="callout note">Test coverage is uneven across the 23 behavioral detectors — most don't have dedicated test files yet. This is one of the highest-value places to contribute: even coarse table-driven tests (known-benign input → no alert, known-malicious input → alert) materially de-risk future changes.</div>
+<h2 id="schedules">Scheduled Scans</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Cron-like recurring scans built from reusable templates</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/schedules/templates</code></td><td>Create scan template</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/schedules/templates</code></td><td>List templates</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/schedules/</code></td><td>Create scheduled scan</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/schedules/</code></td><td>List schedules</td></tr><tr><td style="width:78px"><span class="badge put">PUT</span></td><td><code>/api/v1/schedules/{id}/toggle</code></td><td>Pause/resume</td></tr>
+  </tbody>
+</table>
 
-<h2>Where contributions help most</h2>
-<ul>
-  <li>Detector test coverage (see above)</li>
-  <li>Additional Sigma rules for the seeded library</li>
-  <li>Kubernetes NetworkPolicy manifests for the Helm chart</li>
-  <li>Documentation — including this site</li>
-</ul>
-
-<h2>Code style</h2>
-<p>No ORM in the backend — write explicit, parameterized SQL in the repository layer, matching the existing pattern. Keep services free of direct HTTP concerns (those belong in the <code>api</code> layer) and free of direct SQL (that belongs in <code>repositories</code>).</p>
-
-<h2>Reporting issues</h2>
-<p>Open an issue on <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/issues" class="text-brand hover:underline">GitHub Issues</a> for bugs and feature requests. For general questions, deployment help, or showing off what you've built, use <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/discussions" class="text-brand hover:underline">GitHub Discussions</a> instead.</p>
+<h2 id="system">System</h2>
+<p style="margin-top:-0.5rem;margin-bottom:1rem;color:#64748b;font-size:14px;">Runtime info, LLM provider switching, audit log, and target allowlist</p>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/system/info</code></td><td>System info + current LLM provider</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/system/llm/switch</code></td><td>Switch LLM provider</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/system/audit</code></td><td>Query audit logs</td></tr><tr><td style="width:78px"><span class="badge get">GET</span></td><td><code>/api/v1/system/targets</code></td><td>List target allowlist</td></tr><tr><td style="width:78px"><span class="badge post">POST</span></td><td><code>/api/v1/system/targets</code></td><td>Add a target to the allowlist</td></tr>
+  </tbody>
+</table>
 
       </div>
-      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="api-reference.html" class="text-sub hover:text-brand transition-colors">&larr; API Reference</a></div>
+      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="recon-quickstart.html" class="text-sub hover:text-brand transition-colors">&larr; Quickstart</a></div>
     </main>
   </div>
 </div>

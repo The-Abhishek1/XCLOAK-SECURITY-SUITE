@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#2563eb" />
+<link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { ink:'#0f172a', sub:'#475569', faint:'#94a3b8', line:'#e2e8f0', brand:'#2563eb' },
+    fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] }
+  }}}
+</script>
+<title>Recon posts — XCloak Blog</title>
+<meta name="description" content="Product updates and write-ups for XCloak Recon, our AI-orchestrated penetration testing platform (beta)." />
+<link rel="canonical" href="https://blog.xcloak.tech/recon.html" />
+<link rel="alternate" type="application/rss+xml" title="XCloak Blog" href="https://blog.xcloak.tech/rss.xml" />
+<style>
+  body { background:#fff; }
+  .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(226,232,240,0.9); }
+  .lift { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lift:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(15,23,42,0.18); border-color: rgba(37,99,235,0.25); }
+</style>
+</head>
+<body class="antialiased text-ink">
+
+<header class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="https://xcloak.tech" class="flex items-center gap-2.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5 3 7v5c0 5.5 3.8 9.5 9 10.5 5.2-1 9-5 9-10.5V7Z" fill="#2563eb" fill-opacity="0.1" stroke="#2563eb" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M9 9l6 6M15 9l-6 6" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="font-semibold tracking-tight text-[15px]">XCloak</span>
+      <span class="text-faint font-mono text-xs ml-1">/ blog</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-5 text-[13px] text-sub">
+      <a href="index.html" class="hover:text-brand transition-colors">Posts</a>
+      <a href="changelog.html" class="hover:text-brand transition-colors">Changelog</a>
+      <a href="https://xcloak.tech/security-suite.html" class="hover:text-brand transition-colors hidden sm:inline">Security Suite</a>
+      <a href="https://xcloak.tech/recon.html" class="hover:text-brand transition-colors hidden sm:inline">Recon</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-5 sm:px-8 py-16">
+  <a href="index.html" class="text-xs font-mono text-brand hover:underline">&larr; All posts</a>
+
+  <div class="mt-6 mb-14">
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xs font-mono text-brand">RECON</span>
+      <span class="text-[10px] font-mono uppercase tracking-wider text-brand bg-blue-50 rounded-full px-2 py-0.5">Beta</span>
+    </div>
+    <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-4">Recon posts.</h1>
+    <p class="text-sub leading-relaxed max-w-xl">Product updates and write-ups for XCloak Recon, our AI-orchestrated penetration testing platform — currently in beta.</p>
+  </div>
+
+  <div class="space-y-4">
+    <a href="posts/introducing-xcloak-recon.html" class="lift glass rounded-2xl p-6 block">
+      <div class="flex items-center gap-3 text-xs font-mono text-faint mb-3">
+        <span>2026-08-08</span>
+        <span>&middot;</span>
+        <span class="text-brand">Product</span>
+      </div>
+      <h2 class="text-xl font-semibold text-ink mb-2">Introducing XCloak Recon: AI-orchestrated pentesting</h2>
+      <p class="text-sm text-sub leading-relaxed">XCloak's second product: describe a target in plain English, and an AI planner runs a real penetration test with industry-standard tools, then reports on what it found. Now in beta.</p>
+    </a>
+  </div>
+
+  <div class="mt-10 glass rounded-2xl p-6 text-center">
+    <p class="text-sm text-sub">More Recon write-ups land here as the beta develops. Meanwhile, try it yourself at <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="text-brand hover:underline">app.xcloak.tech</a>.</p>
+  </div>
+
+  <div class="mt-16 pt-10 border-t border-line text-center">
+    <p class="text-sm text-faint">Subscribe via <a href="rss.xml" class="text-brand hover:underline">RSS</a> to get new posts as they publish.</p>
+  </div>
+</main>
+
+<footer class="border-t border-line py-10">
+  <div class="max-w-3xl mx-auto px-5 sm:px-8 flex flex-col sm:flex-row justify-between gap-3 text-xs text-faint font-mono">
+    <span>© 2025–2026 Abhishek N. XCloak.</span>
+    <a href="https://xcloak.tech" class="hover:text-brand transition-colors">xcloak.tech</a>
+  </div>
+</footer>
+
+</body>
+</html>

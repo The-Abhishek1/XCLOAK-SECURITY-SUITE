@@ -6,6 +6,13 @@
   <description>Technical notes, releases, and detection engineering from XCloak.</description>
   <language>en-us</language>
   <item>
+    <title>Introducing XCloak Recon: AI-orchestrated pentesting</title>
+    <link>https://blog.xcloak.tech/posts/introducing-xcloak-recon.html</link>
+    <guid>https://blog.xcloak.tech/posts/introducing-xcloak-recon.html</guid>
+    <description>XCloak's second product: describe a target in plain English, and an AI planner runs a real penetration test with industry-standard tools, then reports on what it found. Now in beta.</description>
+    <pubDate>Sat, 08 Aug 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
     <title>Kafka is optional: designing for graceful degradation</title>
     <link>https://blog.xcloak.tech/posts/kafka-optional-by-design.html</link>
     <guid>https://blog.xcloak.tech/posts/kafka-optional-by-design.html</guid>
@@ -73,6 +80,13 @@
     <link>https://blog.xcloak.tech/posts/redis-rate-limiter-toctou.html</link>
     <guid>https://blog.xcloak.tech/posts/redis-rate-limiter-toctou.html</guid>
     <description>Rate limiters look simple but contain a subtle concurrency trap. Here's how we found it and closed it with an atomic Lua script.</description>
+    <pubDate>Fri, 03 Jul 2026 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Building a real-time eBPF connection collector in Go</title>
+    <link>https://blog.xcloak.tech/posts/ebpf-connection-collector.html</link>
+    <guid>https://blog.xcloak.tech/posts/ebpf-connection-collector.html</guid>
+    <description>How XCloak's Linux agent streams outbound-connection events through a kprobe and a ring buffer instead of polling.</description>
     <pubDate>Fri, 03 Jul 2026 00:00:00 GMT</pubDate>
   </item>
 </channel>

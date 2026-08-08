@@ -1,0 +1,319 @@
+How It Works
+"Scan example.com for vulnerabilities"
+        ↓
+   🧠 AI Planner (GPT-4 / Ollama)
+        ↓
+   ✅ Plan Validation
+        ↓
+   🐳 Docker Tool Execution (nmap → nuclei → ...)
+        ↓
+   📊 AI Analysis (validate findings, remove false positives)
+        ↓
+   ⚖️ CVSS Risk Scoring
+        ↓
+   💡 AI Task Proposals → ⏸️ Your Approval
+        ↓
+   📄 AI Report Generation → 📥 PDF Export
+Features
+Core
+AI-Powered Planning — GPT-4 or Ollama breaks your goal into executable tasks
+7 Security Tools — nmap, nuclei, gobuster, sqlmap, nikto, ffuf, whatweb
+Docker Isolation — each tool runs in its own container
+Human-in-the-Loop — AI proposes follow-up tasks, you approve before execution
+CVSS Risk Scoring — automated severity assessment with stop conditions
+Real-Time
+WebSocket Streaming — watch tool output appear line-by-line as it happens
+Execution Workflow — visual 6-step pipeline (plan → validate → execute → analyze → propose → report)
+Live Terminal — colored event stream with tool output, analysis results, risk updates
+Data & Reports
+PDF Reports — professional downloadable pentest reports
+Findings Database — all findings stored in PostgreSQL, searchable across scans
+Scan History — full history with risk trends, duration, tool usage
+Enterprise
+Auth System — JWT + API keys, user registration
+Target Allowlist/Denylist — prevent unauthorized scanning (legal compliance)
+Audit Log — every action persisted to PostgreSQL, queryable
+Scheduled Scans — cron-like recurring scans with templates
+Scan Templates — save and reuse scan configurations
+LLM Provider Switch — toggle OpenAI ↔ Ollama at runtime (no restart)
+Webhook Notifications — Slack, Discord, HTTP (built, ready to wire)
+Frontend
+Next.js 14 Dashboard — glassmorphism design, responsive
+7 Pages — Dashboard, New Scan, Findings, Schedules, History, Audit, Settings
+Mobile-Friendly — responsive sidebar with hamburger menu
+Quick Start
+Prerequisites
+Docker & Docker Compose
+Python 3.11+
+Node.js 18+ (for frontend)
+Ollama (free, local LLM) OR OpenAI API key
+1. Clone & Configure
+git clone https://github.com/yourusername/enterprise-security-orchestrator.git
+cd enterprise-security-orchestrator
+cp .env.example .env
+# Edit .env — set LLM_PROVIDER=local for free Ollama, or add OPENAI_API_KEY
+2. Start Infrastructure
+docker compose up -d
+3. Build Tool Images
+bash build_workers.sh
+4. Install & Run Backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+5. Install & Run Frontend
+cd eso-frontend
+npm install
+npm run dev
+# Opens at http://localhost:3000
+6. Run Your First Scan
+Open http://localhost:3000, register an account, and launch a scan!
+
+Or via API:
+
+curl -X POST http://localhost:8000/api/v1/hybrid/execute \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "Scan scanme.nmap.org for open ports and vulnerabilities", "target": "scanme.nmap.org"}'
+LLM Providers
+Ollama (Free, Local)
+# Install
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Pull a model
+ollama pull qwen2.5:7b
+
+# Set in .env
+LLM_PROVIDER=local
+LOCAL_LLM_URL=http://localhost:11434
+LOCAL_LLM_MODEL=qwen2.5:7b
+OpenAI
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_MODEL=gpt-4
+Switch at runtime from the Settings page — no restart needed.
+
+API Reference
+Authentication
+Method	Endpoint	Description
+POST	/api/v1/auth/register	Create account
+POST	/api/v1/auth/login	Get JWT tokens
+GET	/api/v1/auth/me	Current user
+POST	/api/v1/auth/api-keys	Create API key
+Scanning
+Method	Endpoint	Description
+POST	/api/v1/hybrid/execute	Start a scan
+GET	/api/v1/hybrid/status/{id}	Scan status + report
+GET	/api/v1/hybrid/proposals/{id}	Pending AI proposals
+POST	/api/v1/hybrid/approve/{id}	Approve/reject proposals
+GET	/api/v1/hybrid/report/{id}/pdf	Download PDF report
+WS	/api/v1/ws/scan/{id}	WebSocket live events
+Findings
+Method	Endpoint	Description
+GET	/api/v1/auth/findings	Search findings (filters: severity, source, port, search)
+GET	/api/v1/auth/findings/stats	Aggregated stats
+GET	/api/v1/auth/scans/{id}/findings	Findings for a scan
+Scheduled Scans
+Method	Endpoint	Description
+POST	/api/v1/schedules/templates	Create scan template
+GET	/api/v1/schedules/templates	List templates
+POST	/api/v1/schedules/	Create scheduled scan
+GET	/api/v1/schedules/	List schedules
+PUT	/api/v1/schedules/{id}/toggle	Pause/resume
+System
+Method	Endpoint	Description
+GET	/api/v1/system/info	System info + LLM provider
+POST	/api/v1/system/llm/switch	Switch LLM provider
+GET	/api/v1/system/audit	Query audit logs
+GET/POST	/api/v1/system/targets	Manage target allowlist
+Architecture
+┌─────────────────────────────────────────────────────────┐
+│              Next.js Frontend (port 3000)                │
+│  Dashboard │ Scan │ Findings │ Schedules │ Settings      │
+├─────────────────────────────────────────────────────────┤
+│              FastAPI Backend (port 8000)                  │
+│  REST API + WebSocket + JWT Auth + Rate Limiting         │
+├─────────────────────────────────────────────────────────┤
+│                 Execution Engine                          │
+│  Planner → Validator → Controller → Parser → Analyzer   │
+│  Risk Engine → Task Proposer → Report Generator          │
+├─────────────────────────────────────────────────────────┤
+│           Docker Workers (7 security tools)               │
+│  nmap │ nuclei │ gobuster │ nikto │ ffuf │ whatweb │ sql │
+├─────────────────────────────────────────────────────────┤
+│  PostgreSQL │ Redis │ RabbitMQ │ Ollama/OpenAI           │
+└─────────────────────────────────────────────────────────┘
+Adding New Tools
+Each tool needs 3 files — great first contribution!
+
+1. Dockerfile (docker/workers/mytool/Dockerfile) 2. Config (config/tools/mytool.yaml) 3. Parser (add method to src/engine/result_parser.py)
+
+See CONTRIBUTING.md for the full guide.
+
+Tools we'd love to see added: amass, subfinder, httpx, wpscan, testssl.sh, feroxbuster, dnsrecon
+
+Adding Demo Screenshots
+To add screenshots for the README:
+
+mkdir -p docs/screenshots
+
+# Take screenshots of each page and save:
+# docs/screenshots/dashboard.png
+# docs/screenshots/live-scan.png
+# docs/screenshots/report.png
+# docs/screenshots/findings.png
+# docs/screenshots/schedules.png
+# docs/screenshots/workflow.png
+
+# For video demo, record with OBS Studio and save:
+# docs/demo.mp4
+Or use a tool like Flameshot for annotated screenshots.
+
+Contributing
+We welcome contributions! See CONTRIBUTING.md for guidelines.
+
+Good First Issues:
+
+Add a new security tool
+Improve result parsers
+Write tests
+Add output formats (SARIF, CSV)
+License
+MIT License — see LICENSE for details.
+
+Disclaimer
+This tool is for authorized security testing only. Always obtain proper authorization before scanning any target. The authors are not responsible for misuse.
+
+
+AI-Orchestrated Scanning — describe a goal in plain English, the AI plans and runs nmap, nuclei, gobuster, nikto, ffuf, sqlmap, and whatweb against your target, then synthesizes the results into a risk report
+Live Threat Intelligence — real-time CVE feed from NVD, threat events from AlienVault OTX, live threat map
+Exploit Database — community-submitted PoC exploits with DNA analysis, AI explanation, voting, and comments
+CTF Platform — challenge submission, flag hashing, solve tracking, and leaderboard
+Security Learning — structured curriculum from beginner to red team, with links to real resources and progress tracking
+Vulnerable Lab Playground — Docker-based lab setup guide (DVWA, WebGoat, Juice Shop, Metasploitable)
+Stack
+Layer	Tech
+Frontend	Next.js 15, TypeScript, Tailwind CSS
+Database	Supabase (PostgreSQL via Prisma)
+Storage	Supabase Storage
+Backend	ESO — FastAPI, Python 3.12
+Scan Engine	Docker (nmap, nuclei, gobuster, nikto, ffuf, sqlmap, whatweb)
+AI	Ollama (local) / OpenAI GPT-4o / Anthropic Claude
+Payments	Razorpay
+Threat Intel	NVD API, AlienVault OTX
+Getting Started
+Prerequisites
+Node.js 20+
+A Supabase project (free tier works)
+Enterprise Security Orchestrator running on port 8000
+Installation
+git clone https://github.com/0xidiot/xcloak
+cd xcloak
+npm install
+Environment Setup
+cp .env.local.example .env.local
+Fill in your values in .env.local:
+
+# Supabase
+DATABASE_URL="postgresql://postgres.YOUR_PROJECT:PASSWORD@pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.YOUR_PROJECT:PASSWORD@pooler.supabase.com:5432/postgres"
+NEXT_PUBLIC_SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
+SUPABASE_SERVICE_KEY="your-service-role-key"
+
+# Threat Intelligence (both free)
+NVD_API_KEY="your-nvd-key"        # nvd.nist.gov/developers/request-an-api-key
+OTX_API_KEY="your-otx-key"        # otx.alienvault.com/api
+
+# ESO Backend
+ESO_BACKEND_URL=http://localhost:8000
+NEXT_PUBLIC_ESO_WS_URL=ws://localhost:8000
+
+# JWT — must match ESO's JWT_SECRET_KEY
+JWT_SECRET_KEY=your-64-char-secret
+ESO_JWT_SECRET=your-64-char-secret
+Database Setup
+npx prisma db push
+node prisma/seed.js
+Run
+npm run dev       # development
+npm run build     # production build
+npm start         # production server
+Open http://localhost:3000.
+
+Project Structure
+src/
+├── app/
+│   ├── (pages)/          # 35+ pages: dashboard, scan, exploits, ctf, admin...
+│   ├── api/v1/           # Next.js API routes (Prisma-backed)
+│   └── api/eso/          # Proxy → ESO backend
+├── components/
+│   ├── layout/           # Topbar, Sidebar, StatCards, LiveFeed
+│   ├── exploit/          # ExploitDetail, ExploitGrid
+│   ├── scan/             # LiveTerminal, WorkflowTimeline, ReportViewer
+│   ├── map/              # ThreatMapPanel (live globe)
+│   └── ai/               # AIPanel
+├── lib/
+│   ├── eso/              # ESO API client, WebSocket hooks
+│   ├── prisma.ts         # Prisma client
+│   ├── adminAuth.ts      # Admin JWT verification
+│   ├── nvd.ts            # NVD CVE fetching
+│   └── otx.ts            # OTX threat intel
+├── hooks/
+│   ├── use-scan-ws.ts    # WebSocket hook for live scan terminal
+│   └── use-poll.ts       # Polling hook
+└── prisma/
+    ├── schema.prisma     # 12 models
+    └── seed.js           # 10 exploits + 8 CTF challenges
+Features
+Scanning
+Scans require the ESO backend + Docker installed locally. Users describe their goal in plain text, ESO's AI planner selects and sequences tools, results stream live to the terminal via WebSocket, and a PDF report is generated on completion.
+
+Tiers
+Tier	Price	Scans/day	AI Analysis	Reports
+Free	₹0	3	✗	✗
+Pro	₹999/mo	20	✓	✓
+Enterprise	₹4,999/mo	Unlimited	✓	✓
+Admin Panel
+Full admin panel at /admin — manage users, review exploit/CTF submissions, view scan history, manage tiers, view payment records, and leaderboard management. Authenticated via ESO JWT.
+
+Deployment
+XCloak (Frontend) → Vercel
+# Push to GitHub, then connect to Vercel
+# Set all .env.local variables in Vercel dashboard
+# Set:
+#   ESO_BACKEND_URL=https://api.yourdomain.com
+#   NEXT_PUBLIC_ESO_WS_URL=wss://api.yourdomain.com
+#   NODE_ENV=production
+ESO (Backend) → VPS
+See ESO deployment guide.
+
+Minimum server spec: 2 vCPU, 8GB RAM (runs PostgreSQL + Redis + RabbitMQ + ESO + Docker tools).
+
+Environment Variables Reference
+Variable	Required	Description
+DATABASE_URL	✅	Supabase pooled connection string
+DIRECT_URL	✅	Supabase direct connection (for migrations)
+NEXT_PUBLIC_SUPABASE_URL	✅	Supabase project URL
+SUPABASE_SERVICE_KEY	✅	Supabase service role key
+NVD_API_KEY	✅	NIST NVD API key (free)
+OTX_API_KEY	✅	AlienVault OTX key (free)
+ESO_BACKEND_URL	✅	ESO backend URL
+NEXT_PUBLIC_ESO_WS_URL	✅	ESO WebSocket URL
+JWT_SECRET_KEY	✅	Must match ESO's JWT_SECRET_KEY
+ESO_JWT_SECRET	✅	Same value as JWT_SECRET_KEY
+ADMIN_SECRET	✅	Admin panel signing secret
+RAZORPAY_KEY_ID	⚡ Payments	Razorpay key (test or live)
+RAZORPAY_KEY_SECRET	⚡ Payments	Razorpay secret
+Contributing
+Fork the repo
+Create a branch: git checkout -b feature/your-feature
+Submit exploits and CTF challenges through the platform itself (goes through admin review)
+For code contributions: open a PR with a clear description
+Legal
+Only scan targets you own or have explicit written permission to test. Unauthorized scanning is illegal. XCloak and its contributors are not responsible for misuse.
+
+See Terms of Service and Privacy Policy.
+
+License
+MIT — see LICENSE
+
+Built by 0xIdiot · India 🇮🇳

@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Development Setup — XCloak Docs</title>
-<meta name="description" content="Run the backend and frontend locally, and where to contribute." />
-<link rel="canonical" href="https://docs.xcloak.tech/development.html" />
+<title>Recon Quickstart — XCloak Docs</title>
+<meta name="description" content="Use the hosted XCloak Recon beta, or self-host the scan engine yourself." />
+<link rel="canonical" href="https://docs.xcloak.tech/recon-quickstart.html" />
 <link rel="icon" type="image/svg+xml" href="https://xcloak.tech/assets/favicon.svg" />
 <meta name="theme-color" content="#2563eb" />
 <script src="https://cdn.tailwindcss.com"></script>
@@ -75,7 +75,7 @@ body { background:#fff; color:var(--ink); }
       <a href="https://xcloak.tech/security-suite.html" class="hover:text-brand transition-colors hidden sm:inline">Security Suite</a>
       <a href="https://xcloak.tech/recon.html" class="hover:text-brand transition-colors hidden sm:inline">Recon</a>
       <a href="https://blog.xcloak.tech" class="hover:text-brand transition-colors hidden sm:inline">Blog</a>
-      <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
+      <a href="https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend" target="_blank" rel="noopener" class="hover:text-brand transition-colors">GitHub</a>
     </nav>
   </div>
 </header>
@@ -97,23 +97,12 @@ body { background:#fff; color:var(--ink); }
 
     <!-- sidebar -->
     <aside class="hidden lg:block w-60 shrink-0 border-r border-line h-[calc(100vh-56px)] sticky top-14 overflow-y-auto py-8 pr-4">
-<a href="index.html" class="sidebar-link" style="font-size:12px">&larr; All docs</a>
-<a href="recon-overview.html" class="sidebar-link" style="font-size:12px">Recon docs &rarr;</a>
-      <div class="sidebar-group-title">Security Suite &middot; Getting Started</div>
-<a href="overview.html" class="sidebar-link">Overview</a>
-<a href="installation.html" class="sidebar-link">Installation</a>
-<div class="sidebar-group-title">Security Suite &middot; Core Concepts</div>
-<a href="architecture.html" class="sidebar-link">Architecture</a>
-<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
-<div class="sidebar-group-title">Security Suite &middot; Guides</div>
-<a href="deployment.html" class="sidebar-link">Deployment</a>
-<a href="configuration.html" class="sidebar-link">Configuration</a>
-<a href="agent.html" class="sidebar-link">Agent</a>
-<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
-<div class="sidebar-group-title">Security Suite &middot; Reference</div>
-<a href="api-reference.html" class="sidebar-link">API Reference</a>
-<div class="sidebar-group-title">Security Suite &middot; Contributing</div>
-<a href="development.html" class="sidebar-link active">Development Setup</a>
+      <a href="index.html" class="sidebar-link" style="font-size:12px">&larr; All docs</a>
+<a href="overview.html" class="sidebar-link" style="font-size:12px">Security Suite docs &rarr;</a>
+<div class="sidebar-group-title">Recon</div>
+<a href="recon-overview.html" class="sidebar-link">Overview</a>
+<a href="recon-quickstart.html" class="sidebar-link active">Quickstart</a>
+<a href="recon-api-reference.html" class="sidebar-link">API Reference</a>
     </aside>
 
     <!-- mobile sidebar toggle -->
@@ -128,68 +117,87 @@ body { background:#fff; color:var(--ink); }
         <button id="mobileNavClose" class="p-2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M6 18 18 6" stroke-linecap="round"/></svg></button>
       </div>
       <a href="index.html" class="sidebar-link" style="font-size:12px">&larr; All docs</a>
-<a href="recon-overview.html" class="sidebar-link" style="font-size:12px">Recon docs &rarr;</a>
-      <div class="sidebar-group-title">Security Suite &middot; Getting Started</div>
-<a href="overview.html" class="sidebar-link">Overview</a>
-<a href="installation.html" class="sidebar-link">Installation</a>
-<div class="sidebar-group-title">Security Suite &middot; Core Concepts</div>
-<a href="architecture.html" class="sidebar-link">Architecture</a>
-<a href="detection-engine.html" class="sidebar-link">Detection Engine</a>
-<div class="sidebar-group-title">Security Suite &middot; Guides</div>
-<a href="deployment.html" class="sidebar-link">Deployment</a>
-<a href="configuration.html" class="sidebar-link">Configuration</a>
-<a href="agent.html" class="sidebar-link">Agent</a>
-<a href="usage.html" class="sidebar-link">Using the Dashboard</a>
-<div class="sidebar-group-title">Security Suite &middot; Reference</div>
-<a href="api-reference.html" class="sidebar-link">API Reference</a>
-<div class="sidebar-group-title">Security Suite &middot; Contributing</div>
-<a href="development.html" class="sidebar-link active">Development Setup</a>
+<a href="overview.html" class="sidebar-link" style="font-size:12px">Security Suite docs &rarr;</a>
+<div class="sidebar-group-title">Recon</div>
+<a href="recon-overview.html" class="sidebar-link">Overview</a>
+<a href="recon-quickstart.html" class="sidebar-link active">Quickstart</a>
+<a href="recon-api-reference.html" class="sidebar-link">API Reference</a>
     </div>
 
     <!-- content -->
     <main class="flex-1 min-w-0 px-0 lg:px-10 py-10 max-w-3xl">
       <div class="prose">
-        
-<h1>Development Setup</h1>
-<p class="lead">This is for working on XCloak itself, not just running it — local dev setup for the backend and frontend, plus where contributions are most useful.</p>
+<h1>Recon Quickstart</h1>
+<p class="lead">Two ways to use Recon: the hosted beta at app.xcloak.tech, or self-hosting the underlying open engine yourself.</p>
 
-<h2>Backend</h2>
-<pre><code>cd xcloak-platform/backend
+<h2>Try the hosted beta</h2>
+<p>The fastest way to run a scan is the hosted beta at <a href="https://app.xcloak.tech" target="_blank" rel="noopener" class="text-brand hover:underline">app.xcloak.tech</a>. Sign in, describe a target you're authorized to test, and the AI planner takes it from there &mdash; live tool output streams into the dashboard as it runs.</p>
+<div class="callout warn">Only scan targets you own or have explicit written permission to test.</div>
+
+<h2>Self-host the engine (optional)</h2>
+<p>The scan engine (planner, Docker workers, risk scoring, reporting) can also be run yourself.</p>
+
+<h3>Prerequisites</h3>
+<table>
+  <thead><tr><th>Tool</th><th>Required for</th></tr></thead>
+  <tbody>
+    <tr><td>Docker &amp; Docker Compose</td><td>Infrastructure + tool workers</td></tr>
+    <tr><td>Python 3.11+</td><td>Backend</td></tr>
+    <tr><td>Node.js 18+</td><td>Frontend</td></tr>
+    <tr><td>Ollama (free) or an OpenAI API key</td><td>AI planning</td></tr>
+  </tbody>
+</table>
+
+<h3>1. Clone &amp; configure the backend</h3>
+<pre><code>git clone https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Backend.git
+cd Xcloak-AI-powered-cybersecurity-platform-Backend
 cp .env.example .env
-# edit .env — DB credentials, JWT_SECRET, METRICS_TOKEN, SMTP settings
+# Edit .env — set LLM_PROVIDER=local for free Ollama, or add OPENAI_API_KEY</code></pre>
 
-# migrations run automatically on startup (golang-migrate)
-air   # hot reload</code></pre>
-
-<h2>Frontend</h2>
-<pre><code>cd xcloak-platform/frontend
-npm install
-npm run dev</code></pre>
-
-<h2>Observability stack (optional, for local testing)</h2>
+<h3>2. Start infrastructure</h3>
 <pre><code>docker compose up -d</code></pre>
 
-<h2>Running tests</h2>
-<p>The backend has 416+ Go test functions covering auth, middleware, Sigma rule parsing, and select detectors. Run the full suite from <code>xcloak-platform/backend</code>:</p>
-<pre><code>go test ./...</code></pre>
-<div class="callout note">Test coverage is uneven across the 23 behavioral detectors — most don't have dedicated test files yet. This is one of the highest-value places to contribute: even coarse table-driven tests (known-benign input → no alert, known-malicious input → alert) materially de-risk future changes.</div>
+<h3>3. Build tool worker images</h3>
+<pre><code>bash build_workers.sh</code></pre>
 
-<h2>Where contributions help most</h2>
-<ul>
-  <li>Detector test coverage (see above)</li>
-  <li>Additional Sigma rules for the seeded library</li>
-  <li>Kubernetes NetworkPolicy manifests for the Helm chart</li>
-  <li>Documentation — including this site</li>
-</ul>
+<h3>4. Install &amp; run the backend</h3>
+<pre><code>python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload</code></pre>
 
-<h2>Code style</h2>
-<p>No ORM in the backend — write explicit, parameterized SQL in the repository layer, matching the existing pattern. Keep services free of direct HTTP concerns (those belong in the <code>api</code> layer) and free of direct SQL (that belongs in <code>repositories</code>).</p>
+<h3>5. Clone, install &amp; run the frontend</h3>
+<pre><code>git clone https://github.com/The-Abhishek1/Xcloak-AI-powered-cybersecurity-platform-Frontend.git
+cd Xcloak-AI-powered-cybersecurity-platform-Frontend
+npm install
+npm run dev
+# Opens at http://localhost:3000</code></pre>
 
-<h2>Reporting issues</h2>
-<p>Open an issue on <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/issues" class="text-brand hover:underline">GitHub Issues</a> for bugs and feature requests. For general questions, deployment help, or showing off what you've built, use <a href="https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/discussions" class="text-brand hover:underline">GitHub Discussions</a> instead.</p>
+<h3>6. Run your first scan</h3>
+<p>Open <code>http://localhost:3000</code>, register an account, and launch a scan &mdash; or call the API directly:</p>
+<pre><code>curl -X POST http://localhost:8000/api/v1/hybrid/execute \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "Scan scanme.nmap.org for open ports and vulnerabilities", "target": "scanme.nmap.org"}'</code></pre>
+
+<h2>LLM providers</h2>
+<p>Recon supports three interchangeable providers, switchable at runtime from Settings &mdash; no restart needed.</p>
+<h3>Ollama (free, local)</h3>
+<pre><code>curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull qwen2.5:7b
+
+# in .env
+LLM_PROVIDER=local
+LOCAL_LLM_URL=http://localhost:11434
+LOCAL_LLM_MODEL=qwen2.5:7b</code></pre>
+<h3>OpenAI</h3>
+<pre><code>LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_MODEL=gpt-4</code></pre>
+
+<div class="callout note">Next: <a href="recon-api-reference.html" class="text-brand hover:underline">API Reference</a> for the full endpoint list.</div>
 
       </div>
-      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="api-reference.html" class="text-sub hover:text-brand transition-colors">&larr; API Reference</a></div>
+      <div class="mt-16 pt-8 border-t border-line flex items-center justify-between text-sm"><a href="recon-overview.html" class="text-sub hover:text-brand transition-colors">&larr; Overview</a><a href="recon-api-reference.html" class="text-brand hover:underline">API Reference &rarr;</a></div>
     </main>
   </div>
 </div>
