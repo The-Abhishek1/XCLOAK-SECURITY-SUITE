@@ -20,6 +20,10 @@
 #   # Replica auto-promotes in ~15s; HAProxy detects and re-routes writes.
 #   # Restart the old primary — it rejoins as a replica automatically.
 
+# Distinct project name — see docker-compose.yml's "name:" comment for why
+# every compose flavor in this repo needs one of its own.
+name: xcloak-ha
+
 services:
 
   # ── Distributed Coordination Store ─────────────────────────────────────────

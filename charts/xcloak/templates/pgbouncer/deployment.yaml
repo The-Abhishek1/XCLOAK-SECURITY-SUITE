@@ -32,6 +32,14 @@ spec:
               value: {{ include "xcloak.fullname" . }}-postgresql
             - name: POSTGRESQL_DATABASE
               value: {{ .Values.postgresql.auth.database | quote }}
+            # PGBOUNCER_DATABASE controls the [databases] alias clients
+            # connect through, not just the real target dbname — Bitnami's
+            # image defaults it to the literal string "postgres" if unset,
+            # which silently breaks every client connecting with DB_NAME
+            # set to the real database name (rejected with "no such
+            # database"). Must match the backend's DB_NAME env var.
+            - name: PGBOUNCER_DATABASE
+              value: {{ .Values.postgresql.auth.database | quote }}
             - name: POSTGRESQL_USERNAME
               value: {{ .Values.postgresql.auth.username | quote }}
             - name: POSTGRESQL_PASSWORD
@@ -43,6 +51,8 @@ spec:
             - name: POSTGRESQL_HOST
               value: {{ .Values.postgresqlExternal.host | quote }}
             - name: POSTGRESQL_DATABASE
+              value: {{ .Values.postgresqlExternal.database | quote }}
+            - name: PGBOUNCER_DATABASE
               value: {{ .Values.postgresqlExternal.database | quote }}
             - name: POSTGRESQL_USERNAME
               value: {{ .Values.postgresqlExternal.username | quote }}

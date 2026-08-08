@@ -186,7 +186,7 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 **Production stack** (Kafka, MinIO, PgBouncer, Grafana, Prometheus):
 
 ```bash
-cd XCLOAK-SECURITY-SUITE/xcloak-platform
+cd XCLOAK-SECURITY-SUITE
 cp .env.example .env   # fill in JWT_SECRET, DB_PASSWORD, METRICS_TOKEN
 docker compose up -d --build
 ```
@@ -196,11 +196,9 @@ docker compose up -d --build
 Go backend running with synthetic data pre-loaded. Good for testing backend features with realistic data.
 
 ```bash
-cd XCLOAK-SECURITY-SUITE/xcloak-platform
+cd XCLOAK-SECURITY-SUITE
 docker compose -f docker-compose.demo.yml up -d
-
-# Seed demo data (first time only)
-docker exec xcloak-demo-backend ./seed-demo
+# demo-seeder service seeds automatically on first startup — no manual step needed
 
 # Frontend: http://localhost:3000 — visit /demo to start a session
 ```
@@ -235,8 +233,8 @@ helm dependency update charts/xcloak
 helm install xcloak charts/xcloak \
   --namespace xcloak --create-namespace \
   --set global.ingress.host=xcloak.yourdomain.com \
-  --set backend.env.JWT_SECRET=$(openssl rand -hex 32) \
-  --set backend.env.METRICS_TOKEN=$(openssl rand -hex 32)
+  --set backend.secrets.jwtSecret=$(openssl rand -hex 32) \
+  --set backend.secrets.metricsToken=$(openssl rand -hex 32)
 ```
 
 ### Pre-built binaries

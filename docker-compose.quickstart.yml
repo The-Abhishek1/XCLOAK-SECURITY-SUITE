@@ -13,6 +13,10 @@
 # For the full production stack (Kafka, MinIO, Grafana, PgBouncer):
 #   docker compose up -d --build
 
+# Distinct project name — see docker-compose.yml's "name:" comment for why
+# every compose flavor in this repo needs one of its own.
+name: xcloak-quickstart
+
 services:
 
   postgres:

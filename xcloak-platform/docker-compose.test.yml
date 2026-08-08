@@ -1,5 +1,9 @@
 version: "3.9"
 
+# Distinct project name — see ../docker-compose.yml's "name:" comment for why
+# every compose flavor in this repo needs one of its own.
+name: xcloak-test
+
 # Lightweight test environment — Postgres + Redis only.
 # Start with:  docker compose -f docker-compose.test.yml up -d
 # Run tests:   TEST_DB_URL="postgres://xcloak:testpassword@localhost:5433/xcloak_test?sslmode=disable" \

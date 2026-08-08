@@ -25,6 +25,46 @@ spec:
             - sh
             - -c
             - until nc -z {{ include "xcloak.postgresql.host" . }} 5432; do echo waiting for postgresql; sleep 2; done
+        - name: grant-createrole
+          # migrations/000050_rls_tenant_isolation.up.sql (a) self-provisions
+          # a dedicated least-privilege xcloak_app role via CREATE ROLE, and
+          # (b) backfills tenant_id on pre-existing rows with a bulk UPDATE
+          # under the very RLS policies it just created. Both run using the
+          # backend's own connection role (DB_USER, "xcloak" by default) —
+          # (a) needs CREATEROLE, (b) needs to bypass RLS entirely, since an
+          # UPDATE with no session app.tenant_id set matches zero rows under
+          # policy and Postgres rejects it outright. The plain `postgres`
+          # Docker image's POSTGRES_USER is always a superuser (bypasses RLS
+          # implicitly, hence docker-compose deployments never hit this),
+          # but the bundled Bitnami postgresql chart's auth.username role
+          # gets neither privilege by default. Granting exactly these two
+          # (not full superuser) matches docker-compose's existing behavior
+          # without going further. Runs every pod start — both ALTER ROLE
+          # forms are idempotent, so re-running is a no-op once granted.
+          # (A post-install/post-upgrade hook Job was tried first instead of
+          # an initContainer here — Helm runs those AFTER the main install's
+          # resources are already created, so it raced the backend pod's own
+          # first connection attempt instead of reliably preceding it.)
+          image: postgres:16-alpine
+          env:
+            - name: PGHOST
+              value: {{ include "xcloak.fullname" . }}-postgresql
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "xcloak.fullname" . }}-postgresql
+                  key: postgres-password
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              until pg_isready -q; do echo waiting for postgresql to accept connections; sleep 2; done
+              psql -v ON_ERROR_STOP=1 -c "ALTER ROLE {{ .Values.postgresql.auth.username }} CREATEROLE BYPASSRLS;"
       {{- end }}
       containers:
         - name: backend

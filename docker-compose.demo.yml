@@ -13,7 +13,7 @@
 #   ✅ Demo seeder (one-shot: seeds demo tenant 9999 with realistic threat data)
 #   ✅ Prometheus  (scrapes backend metrics)
 #   ✅ Grafana     (dashboards, shows real observability data to demo visitors)
-#   ❌ Kafka/Zookeeper — disabled (KAFKA_ENABLED=false), saves ~700 MB RAM
+#   ❌ Kafka       — disabled (KAFKA_ENABLED=false), saves ~700 MB RAM
 #   ❌ MinIO       — not needed for demo
 #   ❌ PgBouncer   — not needed (single demo tenant, low concurrency)
 #   ❌ Vault       — not needed (demo secrets in env vars)
@@ -24,6 +24,10 @@
 #   /api/*    → proxy to http://localhost:8080
 #   Grafana   → proxy to http://localhost:3001  (optional, nice to expose)
 #   Use Caddy or certbot for HTTPS — see scripts/demo-caddy.txt
+
+# Distinct project name — see docker-compose.yml's "name:" comment for why
+# every compose flavor in this repo needs one of its own.
+name: xcloak-demo
 
 services:
 

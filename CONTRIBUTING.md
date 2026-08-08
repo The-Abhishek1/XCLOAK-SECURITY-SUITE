@@ -47,12 +47,13 @@ If you're new to the codebase, these areas are well-scoped and documented:
 ### Backend
 
 ```bash
+# Start dependencies (from repo root — docker-compose.dev.yml is infra-only:
+# postgres, redis, kafka, kafka-ui)
+docker compose -f docker-compose.dev.yml up -d postgres redis
+
 cd xcloak-platform/backend
 cp .env.example .env
 # Fill in DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET
-
-# Start dependencies
-docker compose up -d postgres redis
 
 # Run with hot reload (install air: go install github.com/air-verse/air@latest)
 air

@@ -9,6 +9,11 @@
 #
 # Kafka UI → http://localhost:8090
 
+# Distinct project name so this never collides with docker-compose.yml (or
+# any other compose flavor in this repo) when run from the same checkout —
+# see docker-compose.yml's "name:" comment for the collision this prevents.
+name: xcloak-dev
+
 services:
 
   postgres:

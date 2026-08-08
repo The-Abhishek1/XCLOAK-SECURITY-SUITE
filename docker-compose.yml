@@ -12,6 +12,15 @@
 #   Kafka UI    → http://localhost:8090
 #   MinIO       → http://localhost:9001   (xcloak-minio / xcloak-minio-secret-dev)
 
+# Explicit project name — without this, Compose defaults to the checkout's
+# directory name, which every other docker-compose.*.yml in this repo also
+# defaults to. Two files sharing an implicit project name means running one
+# after another silently recreates (stops+removes) the other's containers
+# whenever a service key collides (e.g. postgres/redis), even with distinct
+# container_names. Keeping each file's project isolated makes `docker compose
+# -f X down` only ever affect what X itself started.
+name: xcloak
+
 services:
 
   # ── Infrastructure ────────────────────────────────────────────

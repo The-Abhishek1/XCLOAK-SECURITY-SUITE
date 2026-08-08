@@ -32,7 +32,7 @@ For operators deploying and maintaining XCloak in production.
 
 | Component | Minimum version | Notes |
 |-----------|----------------|-------|
-| Go | 1.21 | Backend |
+| Go | 1.25 | Backend |
 | Node.js | 18 | Frontend |
 | PostgreSQL | 16 | Partitioning and RLS features required |
 | Redis | 7 | Token revocation, rate limiting, pub/sub |
@@ -119,7 +119,7 @@ APP_BASE_URL=https://xcloak.yourdomain.com
 docker compose up -d --build
 ```
 
-This starts: PostgreSQL, Redis, Zookeeper, Kafka, Kafka UI, MinIO, PgBouncer, backend, seeder, frontend, Prometheus, Grafana.
+This starts: PostgreSQL, Redis, Kafka (KRaft mode, no Zookeeper), Kafka UI, MinIO, PgBouncer, backend, seeder, frontend, Prometheus, Grafana.
 
 ### 3. TLS
 
@@ -142,8 +142,8 @@ helm dependency update charts/xcloak
 helm install xcloak charts/xcloak \
   --namespace xcloak --create-namespace \
   --set global.ingress.host=xcloak.yourdomain.com \
-  --set backend.env.JWT_SECRET=$(openssl rand -hex 32) \
-  --set backend.env.METRICS_TOKEN=$(openssl rand -hex 32)
+  --set backend.secrets.jwtSecret=$(openssl rand -hex 32) \
+  --set backend.secrets.metricsToken=$(openssl rand -hex 32)
 ```
 
 ### Minimal values file
@@ -181,18 +181,16 @@ redis:
 pgbouncer:
   enabled: true
 
+global:
+  ingress:
+    host: xcloak.yourdomain.com
+
 ingress:
   enabled: true
   className: nginx
-  hosts:
-    - host: xcloak.yourdomain.com
-      paths:
-        - path: /
-          pathType: Prefix
   tls:
-    - secretName: xcloak-tls
-      hosts:
-        - xcloak.yourdomain.com
+    enabled: true
+    secretName: xcloak-tls
 ```
 
 ### Create secrets

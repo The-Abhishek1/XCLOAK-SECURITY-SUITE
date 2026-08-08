@@ -160,7 +160,12 @@ pgbouncer:
   # When enabled, the backend's DB_HOST is set to the pgbouncer Service
   # instead of pointing directly at the postgresql pod.
   image:
-    repository: bitnami/pgbouncer
+    # Broadcom pulled bitnami/pgbouncer off Docker Hub entirely in 2025 (no
+    # tags at all remain, not even :latest) as part of the Bitnami Secure
+    # Images migration. bitnamilegacy/* is Broadcom's own continuation of
+    # the pre-migration images, still versioned the same way — this is the
+    # only currently-pullable source for this exact image.
+    repository: bitnamilegacy/pgbouncer
     tag: "1.23.1"
     pullPolicy: IfNotPresent
   pool:
@@ -177,6 +182,20 @@ pgbouncer:
 
 postgresql:
   enabled: true
+  # Un-pinned defaults to the subchart's own :latest, which is PostgreSQL 18
+  # — two majors ahead of what this repo's migrations are written/tested
+  # against (docker-compose.yml runs timescale/timescaledb-ha:pg16, and the
+  # README/deployment-guide both state "PostgreSQL 16" as the requirement).
+  # PG18 tightened partition/primary-key DDL validation enough to break a
+  # real migration (000058, "multiple primary keys ... not allowed") that
+  # runs cleanly on 16. bitnami/postgresql itself was pulled from Docker Hub
+  # entirely in 2025 (Bitnami Secure Images migration, no tags at all
+  # remain) — bitnamilegacy/* is Broadcom's continuation of the pre-migration
+  # images, same versioning, still pullable.
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: "16"
   auth:
     username: xcloak
     password: "" # blank = Bitnami chart auto-generates, stored in <release>-postgresql Secret
