@@ -17,43 +17,58 @@ This is a living document. Items are not promises — they represent current pri
 
 ---
 
-## v0.2.0 (Current) — July 2026
+## Shipped
 
-✅ Backend security hardening (Phases 4–6)  
-✅ Go agent enterprise upgrade — 15 collectors, slog, connection enrichment  
-✅ Mobile agent enterprise upgrade — enriched posture, retry backoff, 11 MDM commands  
-✅ Kafka event bus wired end-to-end (7 consumer groups)  
-✅ FIM + YARA auto-quarantine with approval queue  
-✅ Splunk HEC real-time streaming  
-✅ Atomic rate limiter (TOCTOU closed)  
-✅ PostgreSQL RLS load-bearing for all queries  
-✅ httpOnly cookie auth + refresh token rotation  
-✅ Exponential retry on all webhook deliveries  
+**v0.4.0 — August 2026**
+✅ 4 GitHub Actions workflows fixed (a job-level `if:` bug that broke every push and every prior release; missing test services; CI scoped to the right test suite)
+✅ Helm chart published to GitHub Pages — `helm repo add xcloak https://the-abhishek1.github.io/XCLOAK-SECURITY-SUITE`
+✅ GitHub Release binaries — Linux/Windows agent binaries + Android APK attached to the release tag
+✅ Mobile enrollment token generation wired into the Deploy Agent UI (API existed, no page ever called it)
+✅ Real IPv6 connection decoding in the desktop agent (was a raw-hex stub)
+✅ `golang.org/x/text` CVE fix (GO-2026-5970)
+✅ Independent technical audit published ([docs/TECHNICAL_AUDIT_2026-08-08.md](docs/TECHNICAL_AUDIT_2026-08-08.md))
+
+**v0.3.0 / v0.3.1 — July 2026**
+✅ Enterprise Firewall — direction-aware rules, port ranges, 12 built-in templates, CIDR conflict detection, atomic agent sync
+✅ Deep Packet Inspection — DGA scoring, TLS anomaly detection, HTTP inspection, protocol anomaly detection (4 new detector services)
+✅ CI stabilized across 5 workflows; `xcloak-agent` Docker image published to GHCR
+
+**v0.2.0 — July 2026**
+✅ Backend security hardening (Phases 4–6)
+✅ Go agent enterprise upgrade — 15 collectors, slog, connection enrichment
+✅ Mobile agent enterprise upgrade — enriched posture, retry backoff, 11 MDM commands
+✅ Kafka event bus wired end-to-end (7 consumer groups)
+✅ FIM + YARA auto-quarantine with approval queue
+✅ Splunk HEC real-time streaming
+✅ Atomic rate limiter (TOCTOU closed)
+✅ httpOnly cookie auth + refresh token rotation
+✅ Exponential retry on all webhook deliveries
+
+See [CHANGELOG.md](CHANGELOG.md) for full per-release detail.
 
 ---
 
-## v0.3.0 — Q3 2026
+## Next — targeting v0.5.0
 
 ### High Priority
 
-📋 **GitHub Release binaries** — pre-built Linux/Windows agent binaries + Android APK attached to each GitHub Release tag  
-📋 **Helm chart v0.2** published to GitHub Pages OCI registry (installable via `helm install xcloak oci://ghcr.io/the-abhishek1/charts/xcloak`)  
-📋 **CI/CD pipeline** — GitHub Actions: Go build + test, Flutter build, Docker push to GHCR, Helm release  
-📋 **Agent token rotation UI** — one-click rotation from agent detail page with audit trail  
-📋 **PII masking** — configurable field-level masking on log ingest for email/IP/username fields  
-📋 **Alert suppression tuning** — false-positive rate tracking per rule + one-click suppress from alert  
+📋 **Row-Level Security rollout** — currently 6 of 248 tables have RLS; extend to the highest-sensitivity remainder (credentials, PII, cross-tenant data) first, not all at once. Flagged as the top finding in the [technical audit](docs/TECHNICAL_AUDIT_2026-08-08.md).
+📋 **Agent token rotation UI** — one-click rotation from agent detail page with audit trail
+📋 **PII masking** — configurable field-level masking on log ingest for email/IP/username fields
+📋 **Alert suppression tuning** — false-positive rate tracking per rule + one-click suppress from alert
+📋 **OpenAPI spec + generated TypeScript client** — closes the field-mismatch bug class found repeatedly during live testing (payload key mismatches, dead-code API endpoints with no caller)
 
 ### Medium Priority
 
-📋 **macOS agent** — port heartbeat, packages (`brew`), processes, connections, FIM to macOS  
-📋 **iOS mobile agent** — minimal posture + MDM check-in (Android feature-parity is the target)  
-📋 **Live Demo instance** — self-hosted demo at `demo.xcloak.tech` on a cheap VPS with sample data  
-📋 **OpenAPI docs** — expand [docs.xcloak.tech](https://docs.xcloak.tech) with full API reference, rule examples, interactive tutorials  
-📋 **Agent fleet health dashboard** — backend overview of agent version distribution, offline count, disk/battery critical  
+📋 **Repository-layer test coverage** — currently 5% (3 of 56 files), vs. 18% for services/ — this is the layer where a missing `tenant_id` clause would land
+📋 **gosec HIGH-severity findings promoted to a blocking CI gate** — currently advisory (`continue-on-error: true`); 22 HIGH findings identified in the technical audit need triage first
+📋 **macOS agent** — port heartbeat, packages (`brew`), processes, connections, FIM to macOS
+📋 **iOS mobile agent** — minimal posture + MDM check-in (Android feature-parity is the target)
+📋 **Agent fleet health dashboard** — backend overview of agent version distribution, offline count, disk/battery critical
 
 ---
 
-## v0.4.0 — Q4 2026
+## Later
 
 ### Detection
 
@@ -64,10 +79,11 @@ This is a living document. Items are not promises — they represent current pri
 
 ### Platform
 
+💡 **Android Enterprise (Device Owner) support** — real MDM enforcement (force-wipe, app blocklisting) instead of the current monitor/request-only model
 💡 **SOC shift handoff notes** — per-tenant case handoff screen with shift-change workflow  
-💡 **Mobile agent iOS port** — full parity with Android  
 💡 **Agent self-update via UI** — push new agent binaries to enrolled endpoints from the dashboard  
 💡 **HashiCorp Vault auto-unseal** — automated Vault init + unseal for Kubernetes deployments  
+💡 **External penetration test** — highest-leverage move for enterprise credibility per the technical audit; no third-party validation exists yet
 
 ### Integrations
 
@@ -93,7 +109,9 @@ This is a living document. Items are not promises — they represent current pri
 These are the current honest limitations of the platform:
 
 - **Single maintainer** — response times and release cadence reflect a one-person project
+- **Row-Level Security covers 6 of 248 tables** — the rest rely on application-level `tenant_id` filtering with no database-level backstop; see the [technical audit](docs/TECHNICAL_AUDIT_2026-08-08.md) for detail
 - **Android-only mobile** — iOS agent does not exist yet
+- **No Android Enterprise (Device Owner) enforcement** — MDM today is monitor/request-based, not OS-enforced
 - **No official production SLA** — this is not a commercial product; use at your own risk
 - **Screen lock detection requires Device Owner (DPC)** — BYOD Android mode cannot programmatically detect screen lock status
 - **eBPF requires Linux kernel 5.8+** — degrades gracefully on older kernels
@@ -103,5 +121,5 @@ These are the current honest limitations of the platform:
 
 ---
 
-*Last updated: 2026-07-20*  
+*Last updated: 2026-08-08*  
 *Maintainer: Abhishek N — abhishekn1003@gmail.com · [xcloak.tech](https://xcloak.tech)*

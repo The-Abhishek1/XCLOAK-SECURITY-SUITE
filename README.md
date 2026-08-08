@@ -3,7 +3,7 @@
 [![Build](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/actions/workflows/build.yml/badge.svg)](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/actions/workflows/build.yml)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24-02569B?logo=flutter)](https://flutter.dev)
-[![Helm](https://img.shields.io/badge/Helm-v0.2.0-0F1689?logo=helm)](charts/xcloak)
+[![Helm](https://img.shields.io/badge/Helm-v0.4.0-0F1689?logo=helm)](charts/xcloak)
 [![License](https://img.shields.io/badge/License-AGPL_v3-blue)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/The-Abhishek1/XCLOAK-SECURITY-SUITE)](https://github.com/The-Abhishek1/XCLOAK-SECURITY-SUITE/releases)
 
@@ -133,19 +133,20 @@ docker compose -f docker-compose.quickstart.yml up -d --build
 
 ## Current Status
 
-### What works (v0.2.0)
+### What works (v0.4.0)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Backend API | ✅ Production-grade | Go/Gin, 71 migrations, RLS, httpOnly cookies, refresh rotation |
+| Backend API | ✅ Production-grade | Go/Gin, 76 migrations, 248 tables, httpOnly cookies, refresh rotation |
 | Detection engines | ✅ Working | 23 behavioral detectors (incl. DPI: DGA, TLS anomaly, HTTP inspection, protocol anomaly), 102 Sigma rules, YARA, IOC |
 | Go agent (Linux) | ✅ Production-grade | 15 autonomous collectors, slog, eBPF (optional) |
 | Go agent (Windows) | ✅ Working | Same collectors, Windows-native telemetry |
 | Mobile agent (Android) | ✅ Working | Posture, MDM, 11 commands, retry backoff, 53-section admin console |
 | SOAR / Playbooks | ✅ Working | AI-recommended, human-approval gate, FIM/YARA auto-quarantine |
 | Kafka event bus | ✅ Working | 7 consumer groups wired end-to-end |
-| Helm chart | ✅ Working | v0.2.0, tested on kind and GKE |
-| Multi-tenancy | ✅ Working | PostgreSQL RLS, custom roles, OIDC/SSO, per-tenant SMTP |
+| Helm chart | ✅ Working | v0.4.0, published to GitHub Pages (`helm repo add xcloak https://the-abhishek1.github.io/XCLOAK-SECURITY-SUITE`) |
+| Multi-tenancy | ✅ Working | App-level `tenant_id` scoping on every query, PostgreSQL RLS on the 6 highest-sensitivity tables, custom roles, OIDC/SSO, per-tenant SMTP |
+| CI/CD | ✅ Working | 9 GitHub Actions workflows (build, test, security scan, Docker, Helm lint, agent/release build) — all green as of v0.4.0 |
 
 ### Known Limitations
 
@@ -353,6 +354,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | [User Guide](docs/user-guide.md) | SOC analysts — alerts, incidents, threat hunting, MDM, AI tools |
 | [Agent Deployment](docs/agent-deployment.md) | Sysadmins — installing the Go agent on Linux/Windows |
 | [Security Audit Prep](docs/security-audit-prep.md) | Security team — controls inventory, pentest scope, known gaps |
+| [Technical Audit (2026-08-08)](docs/TECHNICAL_AUDIT_2026-08-08.md) | Everyone — independent code-level review: architecture, security audit, enterprise-readiness scorecard, rating vs. commercial EDR/SIEM products |
 | [Roadmap](roadmap.md) | Everyone — planned features and honest limitations |
 | [Changelog](CHANGELOG.md) | Everyone — what changed in each release |
 | [Contributing](CONTRIBUTING.md) | Contributors — dev setup, code guidelines, PR process |
@@ -364,7 +366,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.25, Gin, golang-migrate (71 migrations) |
+| Backend | Go 1.25, Gin, golang-migrate (76 migrations) |
 | Database | PostgreSQL 16 with Row-Level Security (tenant isolation) |
 | Cache / State | Redis 7 (rate limiting, session revocation, Lua atomic scripts) |
 | Event bus | Apache Kafka (optional; 7 consumer groups) |
@@ -375,7 +377,7 @@ Root detection · Developer options · USB debugging · Unknown sources · Disk 
 | Frontend | Next.js + TypeScript (`xcloak-platform/frontend`) |
 | Go Agent | Go 1.25, `golang.org/x/sys`, `github.com/cilium/ebpf` (optional) |
 | Mobile Agent | Flutter 3.24.5 (Dart), Android API 26+ |
-| Infrastructure | Docker Compose (dev), Helm v0.2.0 (production), GitHub Actions (CI/CD) |
+| Infrastructure | Docker Compose (dev), Helm v0.4.0 (production), GitHub Actions (CI/CD) |
 
 ---
 
