@@ -310,6 +310,15 @@ jobs:
           helm repo update
           helm dependency update charts/xcloak
 
+      # chart-releaser-action commits the generated index.yaml to the
+      # gh-pages branch itself — without a git identity that commit fails
+      # with "empty ident name ... not allowed" (the runner has none by
+      # default).
+      - name: Configure git identity for chart-releaser
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         with:
