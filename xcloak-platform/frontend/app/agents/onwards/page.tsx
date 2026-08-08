@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { RootLayout } from '@/components/layout/RootLayout';
-import { integrationsAPI, agentsAPI } from '@/lib/api';
-import { ArrowLeft, Check, CheckCircle, ChevronRight, Copy, Cpu, FileText, Key, Play, RefreshCw, Shield, Terminal } from '@/lib/icon-stubs';
+import { integrationsAPI, agentsAPI, mdmAPI } from '@/lib/api';
+import { ArrowLeft, Check, CheckCircle, ChevronRight, Copy, Cpu, FileText, Key, Play, RefreshCw, Shield, Smartphone, Terminal } from '@/lib/icon-stubs';
 
 const STEPS = [
   { id: 1, label: 'Generate Token', icon: Key      },
@@ -12,7 +12,10 @@ const STEPS = [
   { id: 4, label: 'Verify',         icon: Shield   },
 ];
 
+type Platform = 'desktop' | 'mobile';
+
 export default function OnboardPage() {
+  const [platform, setPlatform]     = useState<Platform>('desktop');
   const [step, setStep]             = useState(1);
   const [token, setToken]           = useState('');
   const [label, setLabel]           = useState('');
@@ -27,6 +30,13 @@ export default function OnboardPage() {
   const [checking, setChecking]     = useState(false);
   const [found, setFound]           = useState(false);
 
+  const switchPlatform = (p: Platform) => {
+    setPlatform(p);
+    setStep(1);
+    setToken('');
+    setFound(false);
+  };
+
   const copyText = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopied(key);
@@ -36,7 +46,13 @@ export default function OnboardPage() {
   const generate = async () => {
     setGenerating(true);
     try {
-      const r = await integrationsAPI.createInstallToken(label);
+      // Mobile devices enroll against a completely separate token system
+      // (POST /api/mdm/enrollment-tokens, "xck-enroll-…") from desktop
+      // agents (POST /api/integrations/install-tokens) — the mobile app's
+      // Setup screen only accepts the former.
+      const r = platform === 'mobile'
+        ? await mdmAPI.createToken(label, 'android')
+        : await integrationsAPI.createInstallToken(label);
       setToken(r.data.token);
       setStep(2);
     } catch {
@@ -49,8 +65,16 @@ export default function OnboardPage() {
   const checkForAgent = async () => {
     setChecking(true);
     try {
-      const r = await agentsAPI.getAll();
-      const agents = r.data || [];
+      if (platform === 'mobile') {
+        const r = await mdmAPI.getDevices();
+        const devices = r.data?.devices || [];
+        const recent = devices.find((d: any) => {
+          const created = new Date(d.enrolled_at).getTime();
+          return Date.now() - created < 2 * 60 * 1000;
+        });
+        if (recent) setFound(true);
+        return;
+      }
       // Look for a recently registered agent (within last 2 minutes) — this
       // used to fall back to `|| agents.length > 0`, which made the check
       // meaningless for any tenant with pre-existing agents (the overwhelming
@@ -58,13 +82,13 @@ export default function OnboardPage() {
       // would unconditionally report "Agent detected!" on the very first
       // click regardless of whether the agent from *this* onboarding session
       // ever actually registered.
+      const r = await agentsAPI.getAll();
+      const agents = r.data || [];
       const recent = agents.find((a: any) => {
         const created = new Date(a.created_at || a.last_seen).getTime();
         return Date.now() - created < 2 * 60 * 1000;
       });
-      if (recent) {
-        setFound(true);
-      }
+      if (recent) setFound(true);
     } finally {
       setChecking(false);
     }
@@ -98,6 +122,26 @@ export default function OnboardPage() {
         </a>
       }>
       <div className="max-w-2xl space-y-6">
+
+        {/* Platform toggle */}
+        <div className="flex rounded-lg overflow-hidden w-fit" style={{ border: '1px solid var(--border)' }}>
+          <button onClick={() => switchPlatform('desktop')}
+            className="px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all"
+            style={{
+              background: platform === 'desktop' ? 'var(--accent-glow)' : 'transparent',
+              color: platform === 'desktop' ? 'var(--accent)' : 'var(--text-3)',
+            }}>
+            <Cpu className="h-3.5 w-3.5" /> Desktop (Linux / Windows)
+          </button>
+          <button onClick={() => switchPlatform('mobile')}
+            className="px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all"
+            style={{
+              background: platform === 'mobile' ? 'var(--accent-glow)' : 'transparent',
+              color: platform === 'mobile' ? 'var(--accent)' : 'var(--text-3)',
+            }}>
+            <Smartphone className="h-3.5 w-3.5" /> Mobile (Android)
+          </button>
+        </div>
 
         {/* Step indicator */}
         <div className="flex items-center">
@@ -136,91 +180,158 @@ export default function OnboardPage() {
           <div className="g-card p-6 space-y-4">
             <div>
               <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-1)' }}>
-                Generate an install token
+                {platform === 'mobile' ? 'Generate an enrollment token' : 'Generate an install token'}
               </p>
               <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                A one-time token that lets the agent register securely. Expires in 24 hours and can only be used once.
+                {platform === 'mobile'
+                  ? 'A token the XCloak mobile app uses to self-enroll this device. Does not expire unless you set a limit.'
+                  : 'A one-time token that lets the agent register securely. Expires in 24 hours and can only be used once.'}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>Agent label</label>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>
+                  {platform === 'mobile' ? 'Device / batch label' : 'Agent label'}
+                </label>
                 <input value={label} onChange={e => setLabel(e.target.value)}
-                  placeholder="e.g. prod-web-01"
+                  placeholder={platform === 'mobile' ? 'e.g. sales-team-phones' : 'e.g. prod-web-01'}
                   className="g-input w-full" />
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: 'var(--text-3)' }}>XCloak server URL</label>
                 <input value={serverURL} onChange={e => setServerURL(e.target.value)}
                   className="g-input w-full mono" />
+                {platform === 'mobile' && (
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-3)' }}>
+                    Must be reachable from the phone — not <code className="mono">localhost</code>.
+                  </p>
+                )}
               </div>
             </div>
 
             <button onClick={generate} disabled={generating}
               className="g-btn g-btn-primary w-full justify-center">
               <Key className="h-4 w-4" />
-              {generating ? 'Generating…' : 'Generate Install Token'}
+              {generating ? 'Generating…' : platform === 'mobile' ? 'Generate Enrollment Token' : 'Generate Install Token'}
             </button>
           </div>
         )}
 
-        {/* ── Step 2: Configure .env ────────────────────────── */}
+        {/* ── Step 2: Configure ─────────────────────────────── */}
         {step === 2 && (
           <div className="g-card p-6 space-y-4">
-            <div>
-              <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-1)' }}>
-                Configure the agent
-              </p>
-              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                Create a <code className="mono">.env</code> file in the agent directory with these values.
-                The agent reads this file automatically on startup — no shell exports needed.
-              </p>
-            </div>
-
-            {/* Token highlight */}
-            <div className="rounded-xl p-3 flex items-start gap-2"
-              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
-              <Key className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--accent)' }}>
-                  Your install token — shown once, copy it now
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-[11px] font-mono break-all" style={{ color: 'var(--text-1)' }}>
-                    {token}
-                  </code>
-                  <button onClick={() => copyText(token, 'token-raw')}
-                    className="shrink-0" style={{ color: 'var(--accent)' }}>
-                    {copied === 'token-raw'
-                      ? <Check className="h-4 w-4" />
-                      : <Copy className="h-4 w-4" />}
-                  </button>
+            {platform === 'mobile' ? (
+              <>
+                <div>
+                  <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-1)' }}>
+                    Configure the mobile app
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    Open the XCloak app on the device, go to the Setup screen, and enter these two values by hand
+                    — there's no config file on mobile.
+                  </p>
                 </div>
-              </div>
-            </div>
 
-            <div>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
-                1. Create <code className="mono">xcloak-agent-desktop/.env</code>
-              </p>
-              <CodeBlock
-                code={`XCLOAK_INSTALL_TOKEN=${token}\nXCLOAK_SERVER_URL=${serverURL}`}
-                copyKey="dotenv"
-              />
-            </div>
+                <div className="rounded-xl p-3 flex items-start gap-2"
+                  style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                  <Key className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--accent)' }}>
+                      Your enrollment token — shown once, copy it now
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[11px] font-mono break-all" style={{ color: 'var(--text-1)' }}>
+                        {token}
+                      </code>
+                      <button onClick={() => copyText(token, 'token-raw')}
+                        className="shrink-0" style={{ color: 'var(--accent)' }}>
+                        {copied === 'token-raw'
+                          ? <Check className="h-4 w-4" />
+                          : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="rounded-xl p-3 text-xs space-y-1"
-              style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-              <p className="font-semibold" style={{ color: 'var(--text-1)' }}>How token persistence works:</p>
-              <p style={{ color: 'var(--text-3)' }}>
-                On first run the agent reads <code className="mono">XCLOAK_INSTALL_TOKEN</code> from <code className="mono">.env</code>,
-                registers with the server, then saves a permanent session token to{' '}
-                <code className="mono">~/.config/xcloak-agent-desktop/token</code>.
-                On every subsequent restart it loads the saved token automatically —
-                no <code className="mono">.env</code> or shell exports needed again.
-              </p>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>Server URL field</p>
+                    <CodeBlock code={serverURL} copyKey="mobile-url" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>Enrollment Token field</p>
+                    <CodeBlock code={token} copyKey="mobile-token" />
+                  </div>
+                </div>
+
+                <div className="rounded-xl p-3 text-xs space-y-1"
+                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                  <p className="font-semibold" style={{ color: 'var(--text-1)' }}>How token persistence works:</p>
+                  <p style={{ color: 'var(--text-3)' }}>
+                    On enroll, the app posts device posture (model, OS version, security patch, root/encryption
+                    status, storage, RAM) to <code className="mono">/api/mdm/self-enroll</code> along with this
+                    token, then saves the returned session credentials to secure on-device storage. You won't
+                    need to re-enter this token unless the app is reinstalled.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-1)' }}>
+                    Configure the agent
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    Create a <code className="mono">.env</code> file in the agent directory with these values.
+                    The agent reads this file automatically on startup — no shell exports needed.
+                  </p>
+                </div>
+
+                <div className="rounded-xl p-3 flex items-start gap-2"
+                  style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent-border)' }}>
+                  <Key className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold mb-1" style={{ color: 'var(--accent)' }}>
+                      Your install token — shown once, copy it now
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[11px] font-mono break-all" style={{ color: 'var(--text-1)' }}>
+                        {token}
+                      </code>
+                      <button onClick={() => copyText(token, 'token-raw')}
+                        className="shrink-0" style={{ color: 'var(--accent)' }}>
+                        {copied === 'token-raw'
+                          ? <Check className="h-4 w-4" />
+                          : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
+                    1. Create <code className="mono">xcloak-agent-desktop/.env</code>
+                  </p>
+                  <CodeBlock
+                    code={`XCLOAK_INSTALL_TOKEN=${token}\nXCLOAK_SERVER_URL=${serverURL}`}
+                    copyKey="dotenv"
+                  />
+                </div>
+
+                <div className="rounded-xl p-3 text-xs space-y-1"
+                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                  <p className="font-semibold" style={{ color: 'var(--text-1)' }}>How token persistence works:</p>
+                  <p style={{ color: 'var(--text-3)' }}>
+                    On first run the agent reads <code className="mono">XCLOAK_INSTALL_TOKEN</code> from <code className="mono">.env</code>,
+                    registers with the server, then saves a permanent session token to{' '}
+                    <code className="mono">~/.config/xcloak-agent-desktop/token</code>.
+                    On every subsequent restart it loads the saved token automatically —
+                    no <code className="mono">.env</code> or shell exports needed again.
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="flex gap-3">
               <button onClick={() => setStep(1)} className="g-btn g-btn-ghost flex-1 justify-center">Back</button>
@@ -231,49 +342,87 @@ export default function OnboardPage() {
           </div>
         )}
 
-        {/* ── Step 3: Build & Run ───────────────────────────── */}
+        {/* ── Step 3: Run ────────────────────────────────────── */}
         {step === 3 && (
           <div className="g-card p-6 space-y-4">
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
-              Build and run the agent
-            </p>
+            {platform === 'mobile' ? (
+              <>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Install and enroll
+                </p>
 
-            <div>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
-                1. Build from source
-              </p>
-              <CodeBlock
-                code={`cd xcloak-agent-desktop\ngo build -o xcloak-agent-desktop ./main.go`}
-                copyKey="build"
-              />
-            </div>
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
+                    1. Get the APK onto the device
+                  </p>
+                  <CodeBlock
+                    code={`cd xcloak-agent-mobile\nflutter build apk --release\n# Output: build/app/outputs/flutter-apk/app-release.apk\n# Sideload it, or distribute via your MDM of choice.`}
+                    copyKey="apk"
+                  />
+                </div>
 
-            <div>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
-                2. Run (first time — reads token from .env and registers)
-              </p>
-              <CodeBlock code={`./xcloak-agent-desktop`} copyKey="run" />
-            </div>
+                <div className="rounded-xl p-3 text-xs"
+                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                  <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>2. In the app:</p>
+                  <ol className="list-decimal ml-4 space-y-1" style={{ color: 'var(--text-2)' }}>
+                    <li>Open XCloak — you'll land on the Setup screen (not yet enrolled)</li>
+                    <li>Paste the <strong>Server URL</strong> and <strong>Enrollment Token</strong> from Step 2</li>
+                    <li>Optionally enter an owner email</li>
+                    <li>Tap <strong>Enroll</strong></li>
+                  </ol>
+                </div>
 
-            <div className="rounded-xl p-3 text-xs"
-              style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
-              <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Expected output:</p>
-              <pre className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--green)' }}>{
+                <div className="rounded-xl p-3 text-xs"
+                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                  <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Expected result:</p>
+                  <p style={{ color: 'var(--text-3)' }}>
+                    The app switches to Agent Mode / Admin Console selection — enrollment succeeded and the
+                    device now appears under MDM devices.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Build and run the agent
+                </p>
+
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
+                    1. Build from source
+                  </p>
+                  <CodeBlock
+                    code={`cd xcloak-agent-desktop\ngo build -o xcloak-agent-desktop ./main.go`}
+                    copyKey="build"
+                  />
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
+                    2. Run (first time — reads token from .env and registers)
+                  </p>
+                  <CodeBlock code={`./xcloak-agent-desktop`} copyKey="run" />
+                </div>
+
+                <div className="rounded-xl p-3 text-xs"
+                  style={{ background: 'var(--glass-bg)', border: '1px solid var(--border)' }}>
+                  <p className="font-semibold mb-1" style={{ color: 'var(--text-1)' }}>Expected output:</p>
+                  <pre className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--green)' }}>{
 `✓ Agent token saved to ~/.config/xcloak-agent-desktop/token
 ✓ Registered as agent #2 (hostname: your-machine)
 ✓ Agent #2 running`
-              }</pre>
-              <p className="mt-2" style={{ color: 'var(--text-3)' }}>
-                On every restart after this, it loads the saved token automatically.
-              </p>
-            </div>
+                  }</pre>
+                  <p className="mt-2" style={{ color: 'var(--text-3)' }}>
+                    On every restart after this, it loads the saved token automatically.
+                  </p>
+                </div>
 
-            <div>
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
-                Optional: run as a persistent systemd service
-              </p>
-              <CodeBlock
-                code={`# Create service file
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>
+                    Optional: run as a persistent systemd service
+                  </p>
+                  <CodeBlock
+                    code={`# Create service file
 sudo tee /etc/systemd/system/xcloak-agent-desktop.service << EOF
 [Unit]
 Description=XCloak Security Agent
@@ -293,9 +442,11 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now xcloak-agent-desktop
 sudo systemctl status xcloak-agent-desktop`}
-                copyKey="service"
-              />
-            </div>
+                    copyKey="service"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="flex gap-3">
               <button onClick={() => setStep(2)} className="g-btn g-btn-ghost flex-1 justify-center">Back</button>
@@ -310,19 +461,31 @@ sudo systemctl status xcloak-agent-desktop`}
         {step === 4 && (
           <div className="g-card p-6 space-y-4">
             <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
-              Verify the agent is connected
+              {platform === 'mobile' ? 'Verify the device is enrolled' : 'Verify the agent is connected'}
             </p>
 
             <div className="rounded-xl p-5 text-center"
               style={{ background: found ? 'rgba(52,211,153,0.08)' : 'var(--accent-glow)', border: `1px solid ${found ? 'var(--green)' : 'var(--accent-border)'}` }}>
               {found
                 ? <><CheckCircle className="h-10 w-10 mx-auto mb-2" style={{ color: 'var(--green)' }} />
-                    <p className="text-sm font-semibold" style={{ color: 'var(--green)' }}>Agent detected!</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Your agent is registered and running.</p>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--green)' }}>
+                      {platform === 'mobile' ? 'Device detected!' : 'Agent detected!'}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                      {platform === 'mobile' ? 'Your device is enrolled and reporting.' : 'Your agent is registered and running.'}
+                    </p>
                   </>
-                : <><Terminal className="h-10 w-10 mx-auto mb-2" style={{ color: 'var(--accent)' }} />
-                    <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Waiting for agent…</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Run the agent on the target machine. It will appear here within 30 seconds.</p>
+                : <>{platform === 'mobile'
+                      ? <Smartphone className="h-10 w-10 mx-auto mb-2" style={{ color: 'var(--accent)' }} />
+                      : <Terminal className="h-10 w-10 mx-auto mb-2" style={{ color: 'var(--accent)' }} />}
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+                      {platform === 'mobile' ? 'Waiting for device…' : 'Waiting for agent…'}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                      {platform === 'mobile'
+                        ? 'Complete enrollment on the device. It will appear here within 30 seconds.'
+                        : 'Run the agent on the target machine. It will appear here within 30 seconds.'}
+                    </p>
                   </>
               }
             </div>
@@ -335,15 +498,25 @@ sudo systemctl status xcloak-agent-desktop`}
             </button>
 
             <div className="space-y-1.5 text-xs" style={{ color: 'var(--text-2)' }}>
-              <p className="font-semibold" style={{ color: 'var(--text-1)' }}>What this agent will collect every 30s:</p>
-              {[
-                ['Processes', 'Running process list with PIDs'],
-                ['Connections', 'Active network connections + remote IPs'],
-                ['Packages', 'Installed packages and versions (for CVE scanning)'],
-                ['Users', 'Local user accounts and shells'],
-                ['Auth logs', '/var/log/auth.log — login attempts, sudo usage'],
-                ['File hashes', 'SHA256/MD5 of watched files (FIM)'],
-              ].map(([title, desc]) => (
+              <p className="font-semibold" style={{ color: 'var(--text-1)' }}>
+                {platform === 'mobile' ? 'What this device reports at enrollment and check-in:' : 'What this agent will collect every 30s:'}
+              </p>
+              {(platform === 'mobile'
+                ? [
+                    ['Device posture', 'Model, OS version, security patch level, manufacturer'],
+                    ['Security state', 'Root status, encryption, passcode, developer mode, USB debugging'],
+                    ['Storage & battery', 'Total/free storage, RAM, battery level, network type'],
+                    ['Apps', 'Installed app inventory, sideload + dangerous-permission flags'],
+                  ]
+                : [
+                    ['Processes', 'Running process list with PIDs'],
+                    ['Connections', 'Active network connections + remote IPs'],
+                    ['Packages', 'Installed packages and versions (for CVE scanning)'],
+                    ['Users', 'Local user accounts and shells'],
+                    ['Auth logs', '/var/log/auth.log — login attempts, sudo usage'],
+                    ['File hashes', 'SHA256/MD5 of watched files (FIM)'],
+                  ]
+              ).map(([title, desc]) => (
                 <div key={title} className="flex items-start gap-2">
                   <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: 'var(--green)' }} />
                   <span><span className="font-medium" style={{ color: 'var(--text-1)' }}>{title}</span> — {desc}</span>
@@ -351,8 +524,8 @@ sudo systemctl status xcloak-agent-desktop`}
               ))}
             </div>
 
-            <a href="/agents" className="g-btn g-btn-primary w-full justify-center">
-              <Cpu className="h-4 w-4" /> Go to Agents →
+            <a href={platform === 'mobile' ? '/mdm' : '/agents'} className="g-btn g-btn-primary w-full justify-center">
+              {platform === 'mobile' ? <><Smartphone className="h-4 w-4" /> Go to MDM Devices →</> : <><Cpu className="h-4 w-4" /> Go to Agents →</>}
             </a>
           </div>
         )}

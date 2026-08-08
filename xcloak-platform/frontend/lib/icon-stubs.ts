@@ -126,6 +126,7 @@ export {
   _I as ShieldCheck,
   _I as ShieldOff,
   _I as SlidersHorizontal,
+  _I as Smartphone,
   _I as Sparkles,
   _I as Square,
   _I as Star,

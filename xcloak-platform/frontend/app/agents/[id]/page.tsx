@@ -462,7 +462,12 @@ export default function AgentDetailPage() {
     setLrRunning(true);
     const ts = new Date().toLocaleTimeString();
     try {
-      const res = await tasksAPI.create({ agent_id: agentId, task_type: 'execute_script', payload: { command: cmd } });
+      // Wire format is { script, shell, label } — see ExecuteScriptPayload in
+      // the Go agent (agent/execute_script.go). This used to send `command`,
+      // which doesn't match any field on that struct, so json.Unmarshal left
+      // Script empty and every dispatched command silently ran as a no-op.
+      const shell = agent?.os?.toLowerCase().includes('windows') ? 'powershell' : 'bash';
+      const res = await tasksAPI.create({ agent_id: agentId, task_type: 'execute_script', payload: { script: cmd, shell } });
       const taskId = res.data?.id;
       let output = 'Task dispatched, polling for result…';
       if (taskId) {

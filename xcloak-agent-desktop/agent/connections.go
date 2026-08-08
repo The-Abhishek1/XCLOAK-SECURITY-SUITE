@@ -4,8 +4,10 @@ package agent
 
 import (
 	"bufio"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -172,7 +174,8 @@ func parseProcNetFile(path, proto string, agentID int, inodeMap map[string]int, 
 }
 
 // hexToAddr converts a /proc/net hex address "0100007F:1F90" → "127.0.0.1:8080".
-// IPv6 addresses are 32 hex chars in little-endian word order.
+// IPv6 addresses are 32 hex chars: four little-endian 32-bit words, so each
+// 8-char (4-byte) group must be byte-reversed to get the real address bytes.
 func hexToAddr(s string) string {
 	parts := strings.SplitN(s, ":", 2)
 	if len(parts) != 2 {
@@ -192,6 +195,20 @@ func hexToAddr(s string) string {
 			strconv.Itoa(int((n>>24)&0xff)) +
 			":" + strconv.Itoa(int(port))
 	}
-	// IPv6 — return raw hex for now
+
+	if len(addrHex) == 32 {
+		raw, err := hex.DecodeString(addrHex)
+		if err == nil && len(raw) == 16 {
+			ip := make(net.IP, 16)
+			for word := 0; word < 4; word++ {
+				for b := 0; b < 4; b++ {
+					ip[word*4+b] = raw[word*4+(3-b)]
+				}
+			}
+			return "[" + ip.String() + "]:" + strconv.Itoa(int(port))
+		}
+	}
+
+	// Unrecognized length — fall back to raw hex rather than guessing.
 	return "[" + addrHex + "]:" + strconv.Itoa(int(port))
 }

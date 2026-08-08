@@ -6,7 +6,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import { agentsAPI, tasksAPI, agentGroupsAPI } from '@/lib/api';
 import { Agent, AgentGroup } from '@/types';
 import { timeAgo } from '@/lib/utils';
-import { Activity, AlertTriangle, Bug, CheckSquare, ChevronRight, Cpu, Heart, Layers, Minus, Play, Plus, Power, RotateCcw, Search, ShieldCheck, ShieldOff, Square, Terminal, Upload, X } from '@/lib/icon-stubs';
+import { Activity, AlertTriangle, Bug, CheckSquare, ChevronRight, Cpu, Heart, Layers, Play, Plus, Power, RotateCcw, Search, ShieldCheck, ShieldOff, Terminal, Upload, X } from '@/lib/icon-stubs';
 
 interface AgentHealth {
   agent_id: number;
@@ -199,11 +199,21 @@ export default function AgentsPage() {
         if (statusTab === 'offline' && a.status === 'online') return false;
       }
       if (osFilter !== 'all') {
-        const os = (a.os || '').toLowerCase();
-        if (osFilter === 'windows' && !os.includes('windows')) return false;
-        if (osFilter === 'linux' && !os.includes('linux')) return false;
-        if (osFilter === 'macos' && !os.includes('mac')) return false;
-        if (osFilter === 'android' && !os.includes('android')) return false;
+        // platform_category is derived server-side (services/platform_classifier.go)
+        // from the full distro/OS name — e.g. Ubuntu's os-release PRETTY_NAME is
+        // literally "Ubuntu 26.04 LTS" with no "Linux" substring, so matching on
+        // the raw `os` string here missed most real Linux agents. Fall back to
+        // the old substring check only for pre-classifier rows with no category.
+        const category = a.platform_category?.toLowerCase();
+        if (category) {
+          if (category !== osFilter) return false;
+        } else {
+          const os = (a.os || '').toLowerCase();
+          if (osFilter === 'windows' && !os.includes('windows')) return false;
+          if (osFilter === 'linux' && !os.includes('linux')) return false;
+          if (osFilter === 'macos' && !os.includes('mac')) return false;
+          if (osFilter === 'android' && !os.includes('android')) return false;
+        }
       }
       if (riskFilter !== 'all') {
         const rs = a.risk_score ?? 0;
@@ -417,10 +427,13 @@ export default function AgentsPage() {
                     <div className="flex items-start justify-between mb-3">
                       {/* Bulk checkbox */}
                       {bulkMode && (
-                        <button onClick={() => toggleSelect(agent.id)} className="shrink-0 mr-2 mt-0.5">
-                          {isSelected
-                            ? <CheckSquare className="h-4 w-4" style={{ color: 'var(--accent)' }} />
-                            : <Square className="h-4 w-4" style={{ color: 'var(--text-3)' }} />}
+                        <button onClick={() => toggleSelect(agent.id)}
+                          className="shrink-0 mr-2 mt-0.5 flex h-4 w-4 items-center justify-center rounded"
+                          style={{
+                            background: isSelected ? 'var(--accent-glow)' : 'transparent',
+                            border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border-md)'}`,
+                          }}>
+                          {isSelected && <span style={{ color: 'var(--accent)', fontSize: 10 }}>✓</span>}
                         </button>
                       )}
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -553,7 +566,7 @@ export default function AgentsPage() {
                         title="Network isolate this agent"
                         className="g-btn text-xs"
                         style={{ background: 'rgba(248,81,73,0.08)', color: 'var(--red)', border: '1px solid rgba(248,81,73,0.25)', fontSize: 11 }}>
-                        <ShieldOff className="h-3 w-3" />
+                        <ShieldOff className="h-3 w-3" /> Isolate
                       </button>
                     )}
                     <div className="flex-1" />
@@ -585,7 +598,7 @@ export default function AgentsPage() {
                 </h2>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{modal.ip_address} · {modal.os}</p>
               </div>
-              <button onClick={() => setModal(null)} style={{ color: 'var(--text-2)' }}><X className="h-4 w-4" /></button>
+              <button onClick={() => setModal(null)} style={{ color: 'var(--text-2)', fontSize: 18, lineHeight: 1 }} title="Close">×</button>
             </div>
 
             <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
@@ -618,10 +631,11 @@ export default function AgentsPage() {
                           </select>
                           {tasks.length > 1 && (
                             <button onClick={() => removeTask(task.id)} className="shrink-0 p-1 rounded"
-                              style={{ color: 'var(--text-3)' }}
+                              style={{ color: 'var(--text-3)', fontSize: 14, lineHeight: 1 }}
                               onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--red)'}
-                              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}>
-                              <Minus className="h-3.5 w-3.5" />
+                              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'}
+                              title="Remove">
+                              ×
                             </button>
                           )}
                         </div>

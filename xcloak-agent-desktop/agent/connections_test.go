@@ -33,6 +33,34 @@ func TestHexToAddr_IPv4(t *testing.T) {
 	}
 }
 
+// TestHexToAddr_IPv6 verifies the /proc/net hex-address decoder for IPv6.
+// The IPv6 branch used to just wrap the raw undecoded hex in brackets
+// ("return raw hex for now"), so every IPv6 connection showed as an
+// unreadable string of zeros/hex digits instead of a real address.
+func TestHexToAddr_IPv6(t *testing.T) {
+	cases := []struct {
+		hex  string
+		want string
+	}{
+		// All-zero — IN6ADDR_ANY, common for unconnected UDP sockets.
+		{"00000000000000000000000000000000:0000", "[::]:0"},
+		// Loopback ::1, port 0x1F90 = 8080.
+		{"00000000000000000000000001000000:1F90", "[::1]:8080"},
+		// A real link-local address captured from this machine's
+		// /proc/net/udp6 — verifies the byte-reversal is correct, not
+		// just symmetric-with-itself on all-zero/loopback inputs.
+		// 000080FE 00000000 FFAA7A48 337B27FE -> fe80::487a:aaff:fe27:7b33
+		{"000080FE00000000FFAA7A48337B27FE:0E76", "[fe80::487a:aaff:fe27:7b33]:3702"},
+	}
+
+	for _, tc := range cases {
+		got := hexToAddr(tc.hex)
+		if got != tc.want {
+			t.Errorf("hexToAddr(%q) = %q, want %q", tc.hex, got, tc.want)
+		}
+	}
+}
+
 // TestHexToAddr_MalformedInput verifies that malformed tokens don't panic —
 // the scanner may see partial lines during high-load /proc reads.
 func TestHexToAddr_MalformedInput(t *testing.T) {
