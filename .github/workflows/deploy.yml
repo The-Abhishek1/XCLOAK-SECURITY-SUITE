@@ -45,6 +45,25 @@ on:
 
 jobs:
 
+  # The `secrets` context can't be referenced in a job-level `if:` (only
+  # github/inputs/needs/vars are allowed there) — so we evaluate secret
+  # presence in a step here and gate downstream jobs on `needs.*.outputs`.
+  check-secrets:
+    name: Check deploy secrets
+    runs-on: ubuntu-latest
+    outputs:
+      demo_configured: ${{ steps.check.outputs.demo_configured }}
+    steps:
+      - id: check
+        env:
+          DEMO_SSH_HOST: ${{ secrets.DEMO_SSH_HOST }}
+        run: |
+          if [ -n "$DEMO_SSH_HOST" ]; then
+            echo "demo_configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "demo_configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Demo VPS (staging) ──────────────────────────────────────────────────────
   # Runs on every successful docker-build on main, or on manual dispatch to staging.
   # Pulls the freshly-pushed :latest images and restarts the demo stack on the VPS.
@@ -52,9 +71,10 @@ jobs:
     name: Deploy → demo VPS
     runs-on: ubuntu-latest
     environment: staging
+    needs: check-secrets
 
     if: >-
-      secrets.DEMO_SSH_HOST != '' && (
+      needs.check-secrets.outputs.demo_configured == 'true' && (
         (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
       )

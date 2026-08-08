@@ -15,6 +15,14 @@ import os from 'os';
 export const SHARED_STORAGE_STATE = path.join(os.tmpdir(), 'xcloak-shared-spec-auth.json');
 
 export default async function globalSetup(config: FullConfig) {
+  // frontend-ci's Playwright job runs only the 3 stub-based smoke specs
+  // (auth-guard/login/signup), none of which import SHARED_STORAGE_STATE —
+  // so there's nothing here for them to consume, and this real login would
+  // just fail/timeout against the backend-less CI environment. The other 56
+  // live-integration specs (which DO need this) only run locally against a
+  // real docker-compose.dev.yml stack, where PLAYWRIGHT_SKIP_LOGIN is unset.
+  if (process.env.PLAYWRIGHT_SKIP_LOGIN === '1') return;
+
   const baseURL = config.projects[0]?.use?.baseURL || 'http://localhost:3000';
   const browser = await chromium.launch();
   const page = await browser.newPage({ baseURL });

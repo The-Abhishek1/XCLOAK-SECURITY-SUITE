@@ -95,10 +95,15 @@ jobs:
           done
           curl -sf http://localhost:3000 || { echo "Server failed to start"; exit 1; }
 
-      - name: Run Playwright tests
-        run: npx playwright test
+      # Only the 3 stub-based smoke specs run here — the other ~56 spec files
+      # are live-integration tests that need a real backend + seeded DB (see
+      # docker-compose.dev.yml + `go run ./cmd/seed`); each of those spec
+      # files' header comment explains how to run them locally.
+      - name: Run Playwright smoke tests
+        run: npx playwright test tests/e2e/auth-guard.spec.ts tests/e2e/login.spec.ts tests/e2e/signup.spec.ts
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_SKIP_LOGIN: '1'
           CI: true
 
       - name: Upload Playwright report

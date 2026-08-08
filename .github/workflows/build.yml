@@ -15,6 +15,44 @@ jobs:
       run:
         working-directory: xcloak-platform/backend
 
+    # Mirrors backend-ci.yml's services/env — several tests (e.g. the Redis
+    # session-blacklist middleware test) need real Postgres/Redis, not mocks.
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: xcloak
+          POSTGRES_PASSWORD: xcloak_ci_password
+          POSTGRES_DB: ngfw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: xcloak
+      DB_PASSWORD: xcloak_ci_password
+      DB_NAME: ngfw
+      REDIS_ADDR: localhost:6379
+      JWT_SECRET: ci-test-secret-do-not-use-in-prod-32chars-min
+      METRICS_TOKEN: ci-test-metrics-token
+      RUN_INTEGRATION_TESTS: '1'
+
     steps:
       - uses: actions/checkout@v4
 
