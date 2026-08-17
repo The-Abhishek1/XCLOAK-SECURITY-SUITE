@@ -47,7 +47,7 @@ We may update this policy as the App evolves. Material changes will be reflected
 
 ## Contact
 
-Questions about this policy can be sent to: **[your contact email here]**
+Questions about this policy can be sent to: **idiot63666@gmail.com**
 
 ---
 *AirFlux is developed by XCloak.*
