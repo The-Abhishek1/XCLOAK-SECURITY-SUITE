@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "AirFlux Privacy Policy",
-  description: "Privacy policy for the AirFlux app by XCloak.",
+  description: "Privacy policy for the AirFlux app by Abhishek.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
 
         <Section title="Overview">
           <p>
-            AirFlux (&quot;the App&quot;) is developed by XCloak
+            AirFlux (&quot;the App&quot;) is developed by Abhishek
             (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;). This policy
             explains what information the App accesses, how it&apos;s used,
             and what it never does.
@@ -43,7 +43,7 @@ export default function PrivacyPolicyPage() {
           </p>
           <ul className="space-y-3 list-disc list-inside">
             <li>
-              <strong className="text-[#F5F7FA]">Camera</strong> — used
+              <strong className="text-[#F5F7FA]">Camera</strong> - used
               exclusively to scan QR codes for pairing with another device
               (file sharing and chat). The camera feed is never recorded,
               stored, or transmitted anywhere.
@@ -52,23 +52,23 @@ export default function PrivacyPolicyPage() {
               <strong className="text-[#F5F7FA]">
                 Storage / Media access
               </strong>{" "}
-              — used to let you select files to share and to save files you
+              - used to let you select files to share and to save files you
               download or receive. Files stay on your device.
             </li>
             <li>
-              <strong className="text-[#F5F7FA]">Bluetooth</strong> — used
+              <strong className="text-[#F5F7FA]">Bluetooth</strong> - used
               only for Bluetooth Chat, to connect directly to another paired
               device. No data is sent to us or any third party.
             </li>
             <li>
-              <strong className="text-[#F5F7FA]">Notifications</strong> —
+              <strong className="text-[#F5F7FA]">Notifications</strong> -
               used to show download and transfer progress.
             </li>
             <li>
               <strong className="text-[#F5F7FA]">
                 Local network / Wi-Fi state
               </strong>{" "}
-              — used to run the local file-sharing server and Wi-Fi Chat,
+              - used to run the local file-sharing server and Wi-Fi Chat,
               which operate entirely on your local network.
             </li>
           </ul>
@@ -91,7 +91,7 @@ export default function PrivacyPolicyPage() {
             The free version of AirFlux shows ads served through Google
             AdMob. AdMob may collect device identifiers and usage data to
             serve and measure ads, in accordance with{" "}
-            
+            <a
               href="https://policies.google.com/privacy"
               className="text-[#00E5FF] underline underline-offset-2"
               target="_blank"
@@ -100,7 +100,7 @@ export default function PrivacyPolicyPage() {
               Google&apos;s Privacy Policy
             </a>{" "}
             and{" "}
-            
+            <a
               href="https://support.google.com/admob/answer/6128543"
               className="text-[#00E5FF] underline underline-offset-2"
               target="_blank"
@@ -118,8 +118,8 @@ export default function PrivacyPolicyPage() {
           <p>
             AirFlux Pro is a one-time purchase processed entirely through
             Google Play Billing. We do not receive or store your payment
-            information — that is handled by Google in accordance with{" "}
-            
+            information - that is handled by Google in accordance with{" "}
+            <a
               href="https://play.google/developer-content-policy/"
               className="text-[#00E5FF] underline underline-offset-2"
               target="_blank"
@@ -161,18 +161,18 @@ export default function PrivacyPolicyPage() {
         <Section title="Contact">
           <p>
             Questions about this policy can be sent to:{" "}
-            
+            <a
               href="mailto:your-email@xcloak.tech"
               className="text-[#00E5FF] underline underline-offset-2"
             >
-              your-email@xcloak.tech
+              idiot63666@gmail.com
             </a>
           </p>
         </Section>
 
         <hr className="border-[#26344a] my-10" />
         <p className="text-sm text-[#5C6478]">
-          AirFlux is developed by XCloak.
+          AirFlux is developed by Abhishek.
         </p>
       </div>
     </main>
