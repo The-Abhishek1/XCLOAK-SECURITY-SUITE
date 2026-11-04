@@ -1,1 +1,96 @@
-a
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="StoreVia Privacy Policy">
+  <title>Privacy Policy | StoreVia</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #17212b;
+      background: #f4f7f8;
+    }
+    body { margin: 0; line-height: 1.65; }
+    header { padding: 3rem 1.25rem 2rem; color: #fff; background: #123b46; }
+    header div, main { width: min(100% - 2rem, 880px); margin-inline: auto; }
+    h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; }
+    header p { margin: .75rem 0 0; color: #d3e7e9; }
+    main { box-sizing: border-box; margin-block: 2rem; padding: clamp(1.25rem, 4vw, 2.5rem); background: #fff; border-radius: 1rem; box-shadow: 0 8px 30px #102a3610; }
+    h2 { margin-top: 2rem; font-size: 1.25rem; }
+    h2:first-child { margin-top: 0; }
+    a { color: #075c72; }
+    .notice { padding: 1rem; border-left: 4px solid #d08b19; background: #fff8e9; }
+    footer { padding: 0 1rem 2rem; text-align: center; color: #52616b; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Privacy Policy</h1>
+      <p>StoreVia · Effective date: November 4, 2026</p>
+    </div>
+  </header>
+  <main>
+    <p>This policy explains how StoreVia handles information when you use the StoreVia mobile application. StoreVia is an inventory, sales, and store-management app for businesses.</p>
+
+    <p class="notice"><strong>Before publishing:</strong> Replace <strong>[Publisher legal name]</strong> and <strong>[Privacy contact email]</strong> below with monitored, valid contact details. Review this policy against your final app, Supabase project configuration, Google Play setup, and applicable laws.</p>
+
+    <h2>Information you enter</h2>
+    <p>Depending on the features you use, StoreVia may store information you provide, including:</p>
+    <ul>
+      <li>Cloud account details, such as your email address and authentication credentials. Passwords are handled by the authentication provider and are not included in the store records synchronized by the app.</li>
+      <li>Store and branch details, such as business and owner names, address, city, state, phone number, and optional tax registration information.</li>
+      <li>Business records you create, such as products, barcodes, suppliers, customers, staff details, inventory and batch records, purchases, sales, returns, payment method/amount/reference entries, and audit history.</li>
+      <li>Information needed to manage a subscription, such as subscription status and purchase verification data.</li>
+    </ul>
+    <p>Please only enter customer, staff, and supplier information that you are authorized to provide and use. You are responsible for providing any required notices to those individuals.</p>
+
+    <h2>Information stored on your device</h2>
+    <p>StoreVia stores your store database on your device so that core features can work offline. The app can create automatic backups in its private app storage and manual backup files at a location you select. Automatic local backups are removed when the app is uninstalled or its data is cleared. Exported files may remain wherever you save or share them.</p>
+
+    <h2>Cloud account, sync, and backups</h2>
+    <p>If you create or sign in to a cloud account and connect a store, StoreVia sends the store records needed for sync to its Supabase-hosted cloud service. This can include the business records listed above. Sync allows connected devices in the same store to share records. Some device-specific settings and staff PIN/lockout values are kept on the device and are not synced.</p>
+    <p>Cloud backup is optional and requires a connected cloud store. Before uploading, StoreVia encrypts the backup file using the passphrase you provide. Keep that passphrase secure; StoreVia cannot recover an encrypted backup without it. Cloud backup files are stored in the StoreVia Supabase storage project and can contain the local store database.</p>
+    <p>Supabase processes cloud authentication, database, storage, and server-function requests on our behalf. Its processing is also subject to <a href="https://supabase.com/privacy">Supabase's Privacy Policy</a>. Cloud data may be processed in the regions configured for the StoreVia Supabase project.</p>
+
+    <h2>Camera, files, and notifications</h2>
+    <ul>
+      <li><strong>Camera:</strong> If you grant camera permission, the app uses the camera to scan product barcodes. Scanning is processed for that feature; StoreVia does not use the camera for advertising or facial recognition.</li>
+      <li><strong>Files:</strong> When you choose to import or export data, Android's system file picker lets you select a file or destination. StoreVia accesses the selected file for that action.</li>
+      <li><strong>Notifications:</strong> If enabled, StoreVia may show local operational alerts, such as stock or expiry alerts. Notification permission can be controlled in Android settings.</li>
+    </ul>
+
+    <h2>Subscriptions and payments</h2>
+    <p>StoreVia Pro subscriptions are offered through Google Play Billing. Google processes the purchase and payment details under Google's terms and privacy policy. StoreVia receives subscription or purchase-verification information needed to validate access to paid features. StoreVia does not receive your full payment card details through the app.</p>
+
+    <h2>How information is used</h2>
+    <p>Information is used to provide local store management, cloud sign-in and synchronization, backup and restore, support, subscription verification, security, and service operation. StoreVia does not sell personal information or use it for third-party advertising. The current app does not include third-party advertising or analytics SDKs.</p>
+
+    <h2>Sharing</h2>
+    <p>We share information only as needed to provide the features you request, including with Supabase for cloud services and Google Play for subscription processing, or where disclosure is required by law or needed to protect the service and its users. Platform administrators can view limited cloud account and subscription information for administration; they do not have access to your store's business records through the admin account list.</p>
+
+    <h2>Retention and deletion</h2>
+    <p>Local records remain on your device until you delete them, clear StoreVia's app data, or uninstall the app. Signing out does not delete the local database or cloud data. Cloud records and backups remain associated with the connected store until deleted or an account/store deletion request is processed, subject to technical backups and any retention required by law.</p>
+    <p>To request deletion of your cloud account, synced store data, or cloud backup, contact us using the address below from the account email and identify the store/account you want deleted. We may ask for information needed to verify the request. Export any records you want to keep before requesting deletion. Removing the app from a device does not delete cloud records.</p>
+
+    <h2>Security</h2>
+    <p>StoreVia uses Android app-private storage for local data and authenticated access controls for cloud services. Cloud sync uses secure network connections. Optional passphrase-protected backup files are encrypted before upload. No method of storage or transmission is completely secure, so protect your device, account credentials, and backup passphrase.</p>
+
+    <h2>Children's privacy</h2>
+    <p>StoreVia is a business tool and is not designed for children. We do not knowingly seek personal information directly from children.</p>
+
+    <h2>Your choices and rights</h2>
+    <p>You can use StoreVia in offline mode without creating a cloud account. You can manage camera and notification permissions in Android settings, choose whether to use cloud sync or cloud backups, and export your business data using the app's available export features. Depending on where you live, you may have rights to access, correct, or delete personal information. Contact us to make a privacy request.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>We may update this policy when StoreVia or its data practices change. The effective date at the top indicates when this version was last updated. Material changes will be reflected on this page.</p>
+
+    <h2>Contact</h2>
+    <p><strong>Publisher:</strong> [Publisher legal name]<br>
+      <strong>Email:</strong> <a href="mailto:[Privacy contact email]">[Privacy contact email]</a></p>
+  </main>
+  <footer>© 2026 StoreVia</footer>
+</body>
+</html>
